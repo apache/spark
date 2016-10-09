@@ -82,21 +82,37 @@ class ExpressionSetSuite extends SparkFunSuite {
 
   setTest(1, aUpper > bUpper && aUpper <= 10, aUpper <= 10 && aUpper > bUpper)
   setTest(1,
-    aUpper > bUpper &&
-      bUpper > 100 &&
-      aUpper <= 10,
-    bUpper > 100 &&
-      aUpper <= 10 &&
-      aUpper > bUpper)
+    aUpper > bUpper && bUpper > 100 && aUpper <= 10,
+    bUpper > 100 && aUpper <= 10 && aUpper > bUpper)
 
   setTest(1, aUpper > bUpper || aUpper <= 10, aUpper <= 10 || aUpper > bUpper)
   setTest(1,
-    aUpper > bUpper ||
-      bUpper > 100 ||
-      aUpper <= 10,
-    bUpper > 100 ||
-      aUpper <= 10 ||
-      aUpper > bUpper)
+    aUpper > bUpper || bUpper > 100 || aUpper <= 10,
+    bUpper > 100 || aUpper <= 10 || aUpper > bUpper)
+
+  setTest(1,
+    bUpper > 100 || aUpper <= 10 && aUpper > bUpper,
+    bUpper > 100 || (aUpper <= 10 && aUpper > bUpper))
+
+  setTest(1,
+    aUpper > 10 && bUpper < 10 || aUpper >= bUpper,
+    (bUpper < 10 && aUpper > 10) || aUpper >= bUpper)
+
+  setTest(1,
+    bUpper > 100 || aUpper < 100 && bUpper <= aUpper || aUpper >= 10 && bUpper >= 50,
+    (aUpper >= 10 && bUpper >= 50) || bUpper > 100 || (aUpper < 100 && bUpper <= aUpper),
+    (bUpper >= 50 && aUpper >= 10) || (bUpper <= aUpper && aUpper < 100) || bUpper > 100)
+
+  setTest(1,
+    bUpper > 100 && aUpper < 100 && bUpper <= aUpper || aUpper >= 10 && bUpper >= 50,
+    (aUpper >= 10 && bUpper >= 50) || (aUpper < 100 && bUpper > 100 && bUpper <= aUpper),
+    (bUpper >= 50 && aUpper >= 10) || (bUpper <= aUpper && aUpper < 100 && bUpper > 100))
+
+  setTest(1,
+    aUpper >= 10 || bUpper <= 10 && aUpper === bUpper && aUpper < 100 || bUpper >= 100,
+    aUpper === bUpper && aUpper < 100 && bUpper <= 10 || bUpper >= 100 || aUpper >= 10,
+    aUpper < 100 && bUpper <= 10 && aUpper === bUpper || aUpper >= 10 || bUpper >= 100,
+    ((bUpper <= 10 && aUpper === bUpper) && aUpper < 100) || (aUpper >= 10 || bUpper >= 100))
 
   // Don't reorder non-deterministic expression in AND/OR.
   setTest(2, Rand(1L) > aUpper && aUpper <= 10, aUpper <= 10 && Rand(1L) > aUpper)
