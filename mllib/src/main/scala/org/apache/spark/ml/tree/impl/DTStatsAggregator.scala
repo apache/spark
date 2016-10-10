@@ -95,6 +95,64 @@ private[spark] class DTStatsAggregator(
   }
 
   /**
+   * Calculate gain for a given (featureOffset, leftBin, parentBin).
+   *
+   * @param featureOffset  This is a pre-computed (node, feature) offset
+   *                           from [[getFeatureOffset]].
+   * @param leftBinIndex  Index of the leftChild in allStats
+   *                          Given by featureOffset + leftBinIndex * statsSize
+   * @param parentBinIndex  Index of the parent in allStats
+   *                            Given by featureOffset + parentBinIndex * statsSize
+   */
+  def calculateGain(
+      featureOffset: Int,
+      leftBinIndex: Int,
+      parentBinIndex: Int): Double = {
+    val leftChildOffset = featureOffset + leftBinIndex * statsSize
+    val parentOffset = featureOffset + parentBinIndex * statsSize
+    val gain = metadata.impurity match {
+      case Gini => Gini.calculateGain(
+        allStats, leftChildOffset, allStats, parentOffset, statsSize,
+        metadata.minInstancesPerNode, metadata.minInfoGain)
+      case Entropy => Entropy.calculateGain(
+        allStats, leftChildOffset, allStats, parentOffset, statsSize,
+        metadata.minInstancesPerNode, metadata.minInfoGain)
+      case Variance => Variance.calculateGain(
+        allStats, leftChildOffset, allStats, parentOffset, statsSize,
+        metadata.minInstancesPerNode, metadata.minInfoGain)
+      case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
+    }
+    gain
+  }
+
+  /**
+   * Calculate gain for a given (featureOffset, leftBin).
+   * The stats of the parent are inferred from parentStats.
+   * @param featureOffset  This is a pre-computed (node, feature) offset
+   *                           from [[getFeatureOffset]].
+   * @param leftBinIndex  Index of the leftChild in allStats
+   *                          Given by featureOffset + leftBinIndex * statsSize
+   */
+  def calculateGain(
+      featureOffset: Int,
+      leftBinIndex: Int): Double = {
+    val leftChildOffset = featureOffset + leftBinIndex * statsSize
+    val gain = metadata.impurity match {
+      case Gini => Gini.calculateGain(
+        allStats, leftChildOffset, parentStats, 0, statsSize, metadata.minInstancesPerNode,
+        metadata.minInfoGain)
+      case Entropy => Entropy.calculateGain(
+        allStats, leftChildOffset, parentStats, 0, statsSize, metadata.minInstancesPerNode,
+        metadata.minInfoGain)
+      case Variance => Variance.calculateGain(
+        allStats, leftChildOffset, parentStats, 0, statsSize, metadata.minInstancesPerNode,
+        metadata.minInfoGain)
+      case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
+    }
+    gain
+  }
+
+  /**
    * Get an [[ImpurityCalculator]] for the parent node.
    */
   def getParentImpurityCalculator(): ImpurityCalculator = {

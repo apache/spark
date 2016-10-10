@@ -71,6 +71,75 @@ object Gini extends Impurity {
   @Since("1.1.0")
   def instance: this.type = this
 
+  /**
+   * Information gain calculation.
+   * allStats(leftChildOffset: leftChildOffset + statsSize) contains the impurity
+   * information of the leftChild.
+   * parentsStats(parentOffset: parentOffset + statsSize) contains the impurity
+   * information of the parent.
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param leftChildOffset  Start index of stats for the left child.
+   * @param parentStats  Flat stats array for impurity calculation of the parent.
+   * @param parentOffset  Start index of stats for the parent.
+   * @param statsSize  Size of the stats for the left child and the parent.
+   * @param minInstancePerNode  minimum no. of instances in the child nodes for non-zero gain.
+   * @param minInfoGain  return zero if gain < minInfoGain.
+   * @return information gain.
+   */
+  override def calculateGain(
+      allStats: Array[Double],
+      leftChildOffset: Int,
+      parentStats: Array[Double],
+      parentOffset: Int,
+      statsSize: Int,
+      minInstancesPerNode: Int,
+      minInfoGain: Double): Double = {
+
+    var leftCount = 0.0
+    var totalCount = 0.0
+    var i = 0
+    while (i < statsSize) {
+      leftCount += allStats(leftChildOffset + i)
+      totalCount += parentStats(parentOffset + i)
+      i += 1
+    }
+    val rightCount = totalCount - leftCount
+
+    if ((leftCount < minInstancesPerNode) ||
+      (rightCount < minInstancesPerNode)) {
+      return Double.MinValue
+    }
+
+    var leftImpurity = 1.0
+    var rightImpurity = 1.0
+    var parentImpurity = 1.0
+
+    i = 0
+    while (i < statsSize) {
+      val leftStats = allStats(leftChildOffset + i)
+      val totalStats = parentStats(parentOffset + i)
+
+      val leftFreq = leftStats / leftCount
+      val rightFreq = (totalStats - leftStats) / rightCount
+      val parentFreq = totalStats / totalCount
+
+      leftImpurity -= leftFreq * leftFreq
+      rightImpurity -= rightFreq * rightFreq
+      parentImpurity -= parentFreq * parentFreq
+
+      i += 1
+    }
+
+    val leftWeighted = leftCount / totalCount * leftImpurity
+    val rightWeighted = rightCount / totalCount * rightImpurity
+    val gain = parentImpurity - leftWeighted - rightWeighted
+
+    if (gain < minInfoGain) {
+      return Double.MinValue
+    }
+    gain
+  }
+
 }
 
 /**

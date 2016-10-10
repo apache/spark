@@ -627,65 +627,6 @@ private[spark] object RandomForest extends Logging {
   }
 
   /**
-   * Calculate the impurity statistics for a given (feature, split) based upon left/right
-   * aggregates.
-   *
-   * @param stats the recycle impurity statistics for this feature's all splits,
-   *              only 'impurity' and 'impurityCalculator' are valid between each iteration
-   * @param leftImpurityCalculator left node aggregates for this (feature, split)
-   * @param rightImpurityCalculator right node aggregate for this (feature, split)
-   * @param metadata learning and dataset metadata for DecisionTree
-   * @return Impurity statistics for this (feature, split)
-   */
-  private def calculateImpurityStats(
-      stats: ImpurityStats,
-      leftImpurityCalculator: ImpurityCalculator,
-      rightImpurityCalculator: ImpurityCalculator,
-      metadata: DecisionTreeMetadata): ImpurityStats = {
-
-    val parentImpurityCalculator: ImpurityCalculator = if (stats == null) {
-      leftImpurityCalculator.copy.add(rightImpurityCalculator)
-    } else {
-      stats.impurityCalculator
-    }
-
-    val impurity: Double = if (stats == null) {
-      parentImpurityCalculator.calculate()
-    } else {
-      stats.impurity
-    }
-
-    val leftCount = leftImpurityCalculator.count
-    val rightCount = rightImpurityCalculator.count
-
-    val totalCount = leftCount + rightCount
-
-    // If left child or right child doesn't satisfy minimum instances per node,
-    // then this split is invalid, return invalid information gain stats.
-    if ((leftCount < metadata.minInstancesPerNode) ||
-      (rightCount < metadata.minInstancesPerNode)) {
-      return ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator)
-    }
-
-    val leftImpurity = leftImpurityCalculator.calculate() // Note: This equals 0 if count = 0
-    val rightImpurity = rightImpurityCalculator.calculate()
-
-    val leftWeight = leftCount / totalCount.toDouble
-    val rightWeight = rightCount / totalCount.toDouble
-
-    val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-
-    // if information gain doesn't satisfy minimum information gain,
-    // then this split is invalid, return invalid information gain stats.
-    if (gain < metadata.minInfoGain) {
-      return ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator)
-    }
-
-    new ImpurityStats(gain, impurity, parentImpurityCalculator,
-      leftImpurityCalculator, rightImpurityCalculator)
-  }
-
-  /**
    * Find the best split for a node.
    *
    * @param binAggregates Bin statistics.
@@ -697,16 +638,10 @@ private[spark] object RandomForest extends Logging {
       featuresForNode: Option[Array[Int]],
       node: LearningNode): (Split, ImpurityStats) = {
 
-    // Calculate InformationGain and ImpurityStats if current node is top node
     val level = LearningNode.indexToLevel(node.id)
-    var gainAndImpurityStats: ImpurityStats = if (level == 0) {
-      null
-    } else {
-      node.stats
-    }
 
     // For each (feature, split), calculate the gain, and select the best (feature, split).
-    val (bestSplit, bestSplitStats) =
+    val (bestSplit, bestGain, bestFeatureOffset, bestSplitIndex) =
       Range(0, binAggregates.metadata.numFeaturesPerNode).map { featureIndexIdx =>
         val featureIndex = if (featuresForNode.nonEmpty) {
           featuresForNode.get.apply(featureIndexIdx)
@@ -725,30 +660,23 @@ private[spark] object RandomForest extends Logging {
             splitIndex += 1
           }
           // Find best split.
-          val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { case splitIdx =>
-              val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
-              val rightChildStats =
-                binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
-              rightChildStats.subtract(leftChildStats)
-              gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
-                leftChildStats, rightChildStats, binAggregates.metadata)
-              (splitIdx, gainAndImpurityStats)
-            }.maxBy(_._2.gain)
-          (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+          val (bestFeatureSplitIndex, maxGain) =
+            Range(0, numSplits).map { splitIdx =>
+              val gain = binAggregates.calculateGain(nodeFeatureOffset, splitIdx, numSplits)
+              (splitIdx, gain)
+            }.maxBy(_._2)
+          val bestFeatureSplit = splits(featureIndex)(bestFeatureSplitIndex)
+          (bestFeatureSplit, maxGain, nodeFeatureOffset, bestFeatureSplitIndex)
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
           val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
-          val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { splitIndex =>
-              val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
-              val rightChildStats = binAggregates.getParentImpurityCalculator()
-                .subtract(leftChildStats)
-              gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
-                leftChildStats, rightChildStats, binAggregates.metadata)
-              (splitIndex, gainAndImpurityStats)
-            }.maxBy(_._2.gain)
-          (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+          val (bestFeatureSplitIndex, maxGain) =
+            Range(0, numSplits).map { splitIdx =>
+              val gain = binAggregates.calculateGain(leftChildOffset, splitIdx)
+              (splitIdx, gain)
+            }.maxBy(_._2)
+          val bestFeatureSplit = splits(featureIndex)(bestFeatureSplitIndex)
+          (bestFeatureSplit, maxGain, leftChildOffset, bestFeatureSplitIndex)
         } else {
           // Ordered categorical feature
           val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)
@@ -807,27 +735,37 @@ private[spark] object RandomForest extends Logging {
           // lastCategory = index of bin with total aggregates for this (node, feature)
           val lastCategory = categoriesSortedByCentroid.last._1
           // Find best split.
-          val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { splitIndex =>
-              val featureValue = categoriesSortedByCentroid(splitIndex)._1
-              val leftChildStats =
-                binAggregates.getImpurityCalculator(nodeFeatureOffset, featureValue)
-              val rightChildStats =
-                binAggregates.getImpurityCalculator(nodeFeatureOffset, lastCategory)
-              rightChildStats.subtract(leftChildStats)
-              gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
-                leftChildStats, rightChildStats, binAggregates.metadata)
-              (splitIndex, gainAndImpurityStats)
-            }.maxBy(_._2.gain)
+          val (bestFeatureSplitIndex, maxGain) =
+            Range(0, numSplits).map { splitIdx =>
+              val featureValue = categoriesSortedByCentroid(splitIdx)._1
+              val gain = binAggregates.calculateGain(nodeFeatureOffset, featureValue, lastCategory)
+              (splitIdx, gain)
+            }.maxBy(_._2)
+          val bestFeatureValue = categoriesSortedByCentroid(bestFeatureSplitIndex)._1
           val categoriesForSplit =
             categoriesSortedByCentroid.map(_._1.toDouble).slice(0, bestFeatureSplitIndex + 1)
           val bestFeatureSplit =
             new CategoricalSplit(featureIndex, categoriesForSplit.toArray, numCategories)
-          (bestFeatureSplit, bestFeatureGainStats)
+          (bestFeatureSplit, maxGain, nodeFeatureOffset, bestFeatureValue)
         }
-      }.maxBy(_._2.gain)
+      }.maxBy(_._2)
 
-    (bestSplit, bestSplitStats)
+    val leftImpurityCalculator = binAggregates.getImpurityCalculator(
+      bestFeatureOffset, bestSplitIndex)
+    val parentImpurityCalculator = binAggregates.getParentImpurityCalculator()
+    val rightImpurityCalculator = parentImpurityCalculator.copy.subtract(
+      leftImpurityCalculator)
+    val bestFeatureGainStats = {
+      if (bestGain == Double.MinValue) {
+        ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator)
+      }
+      else {
+        new ImpurityStats(bestGain, parentImpurityCalculator.calculate(),
+          parentImpurityCalculator, leftImpurityCalculator,
+          rightImpurityCalculator)
+      }
+    }
+    (bestSplit, bestFeatureGainStats)
   }
 
   /**

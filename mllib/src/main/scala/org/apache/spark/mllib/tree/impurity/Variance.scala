@@ -62,6 +62,59 @@ object Variance extends Impurity {
   @Since("1.0.0")
   def instance: this.type = this
 
+  /**
+   * Information gain calculation.
+   * allStats(leftChildOffset: leftChildOffset + statsSize) contains the impurity
+   * information of the leftChild.
+   * parentsStats(parentOffset: parentOffset + statsSize) contains the impurity
+   * information of the parent.
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param leftChildOffset  Start index of stats for the left child.
+   * @param parentStats  Flat stats array for impurity calculation of the parent.
+   * @param parentOffset  Start index of stats for the parent.
+   * @param statsSize  Size of the stats for the left child and the parent.
+   * @param minInstancePerNode  minimum no. of instances in the child nodes for non-zero gain.
+   * @param minInfoGain  return zero if gain < minInfoGain.
+   * @return information gain.
+   */
+  override def calculateGain(
+      allStats: Array[Double],
+      leftChildOffset: Int,
+      parentStats: Array[Double],
+      parentOffset: Int,
+      statsSize: Int,
+      minInstancesPerNode: Int,
+      minInfoGain: Double): Double = {
+    val leftCount = allStats(leftChildOffset)
+    val totalCount = allStats(parentOffset)
+    val rightCount = totalCount - leftCount
+
+    if ((leftCount < minInstancesPerNode) ||
+      (rightCount < minInstancesPerNode)) {
+      return Double.MinValue
+    }
+
+    val leftSum = allStats(leftChildOffset + 1)
+    val leftSumSquares = allStats(leftChildOffset + 2)
+
+    val parentSum = parentStats(parentOffset + 1)
+    val parentSumSquares = parentStats(parentOffset + 2)
+
+    val rightSum = parentSum - leftSum
+    val rightSumSquares = parentSumSquares - leftSumSquares
+
+    val parentImpurity = (parentSumSquares - (parentSum * parentSum) / totalCount) / totalCount
+    val leftWeighted = (leftSumSquares - (leftSum * leftSum) / leftCount) / totalCount
+    val rightWeighted = (rightSumSquares - (rightSum * rightSum) / rightCount) / totalCount
+    val gain = parentImpurity - leftWeighted - rightWeighted
+
+    if (gain < minInfoGain) {
+      return Double.MinValue
+    }
+    gain
+
+  }
+
 }
 
 /**

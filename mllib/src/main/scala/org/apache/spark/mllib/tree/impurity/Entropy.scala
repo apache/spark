@@ -25,7 +25,13 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 @Since("1.0.0")
 object Entropy extends Impurity {
 
-  private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+  private[tree] def log2(x: Double): Double = {
+    if (x == 0) {
+      return 0.0
+    } else {
+      return scala.math.log(x) / scala.math.log(2)
+    }
+  }
 
   /**
    * :: DeveloperApi ::
@@ -45,10 +51,8 @@ object Entropy extends Impurity {
     var classIndex = 0
     while (classIndex < numClasses) {
       val classCount = counts(classIndex)
-      if (classCount != 0) {
-        val freq = classCount / totalCount
-        impurity -= freq * log2(freq)
-      }
+      val freq = classCount / totalCount
+      impurity -= freq * log2(freq)
       classIndex += 1
     }
     impurity
@@ -74,6 +78,72 @@ object Entropy extends Impurity {
   @Since("1.1.0")
   def instance: this.type = this
 
+  /**
+   * Information gain calculation.
+   * allStats(leftChildOffset: leftChildOffset + statsSize) contains the impurity
+   * information of the leftChild.
+   * parentsStats(parentOffset: parentOffset + statsSize) contains the impurity
+   * information of the parent.
+   * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
+   * @param leftChildOffset  Start index of stats for the left child.
+   * @param parentStats  Flat stats array for impurity calculation of the parent.
+   * @param parentOffset  Start index of stats for the parent.
+   * @param statsSize  Size of the stats for the left child and the parent.
+   * @param minInstancePerNode  minimum no. of instances in the child nodes for non-zero gain.
+   * @param minInfoGain  return zero if gain < minInfoGain.
+   * @return information gain.
+   */
+  override def calculateGain(
+      allStats: Array[Double],
+      leftChildOffset: Int,
+      parentStats: Array[Double],
+      parentOffset: Int,
+      statsSize: Int,
+      minInstancesPerNode: Int,
+      minInfoGain: Double): Double = {
+    var leftCount = 0.0
+    var totalCount = 0.0
+    var i = 0
+    while (i < statsSize) {
+      leftCount += allStats(leftChildOffset + i)
+      totalCount += parentStats(parentOffset + i)
+      i += 1
+    }
+    val rightCount = totalCount - leftCount
+
+    if ((leftCount < minInstancesPerNode) ||
+      (rightCount < minInstancesPerNode)) {
+      return Double.MinValue
+    }
+
+    var leftImpurity = 0.0
+    var rightImpurity = 0.0
+    var parentImpurity = 0.0
+
+    i = 0
+    while (i < statsSize) {
+      val leftStats = allStats(leftChildOffset + i)
+      val totalStats = parentStats(parentOffset + i)
+
+      val leftFreq = leftStats / leftCount
+      val rightFreq = (totalStats - leftStats) / rightCount
+      val parentFreq = totalStats / totalCount
+
+      leftImpurity -= leftFreq * log2(leftFreq)
+      rightImpurity -= rightFreq * log2(rightFreq)
+      parentImpurity -= parentFreq * log2(parentFreq)
+
+      i += 1
+    }
+    val leftWeighted = leftCount / totalCount * leftImpurity
+    val rightWeighted = rightCount / totalCount * rightImpurity
+    val gain = parentImpurity - leftWeighted - rightWeighted
+
+    if (gain < minInfoGain) {
+      return Double.MinValue
+    }
+    gain
+  }
 }
 
 /**
