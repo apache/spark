@@ -230,6 +230,10 @@ class ExchangeCoordinator(
     mapOutputStatistics: Array[MapOutputStatistics],
     prePartitionNum: Array[Int],
     partitionStartIndices: Option[Array[Int]] = None) : Array[(Int, Array[(Int, Int, Int)])] = {
+
+   if (mapOutputStatistics.length != 2 || !isJoin) {
+     return (0 until numExchanges).map(_ => (0, Array[(Int, Int, Int)]((-1, 0, 0)))).toArray
+   }
     // find which partition is skew
     var skewPartition = mapOutputStatistics.map(ms =>
       ms.bytesByPartitionId.zipWithIndex
@@ -240,10 +244,8 @@ class ExchangeCoordinator(
     skewPartition = skewPartition.zipWithIndex.map(sti => {
       val index = if (sti._2 == 0) 1 else 0
       sti._1.filterNot(
-        p => skewPartition(index).find(p1 => p1._2 == p._2 && p._1 < p1._1).isDefined)
+        p => skewPartition(index).exists(p1 => p1._2 == p._2 && p._1 < p1._1))
     })
-    skewPartition.flatMap(arr => arr).foreach(a =>
-      logError(s"find dataskew in partition $a"))
 
     // skewSize must great than TargetPostShuffleInputSize
     val isSkew = skewPartition.flatten.length > 0 && isJoin &&
@@ -261,35 +263,40 @@ class ExchangeCoordinator(
         var otherPos = 0
         val skewPartitionIdx = ArrayBuffer[(Int, Int, Int)]()
         for (i <- 0 until  partStartIndices.length) {
-          val endIdx = partStartIndices(partStartIndices.length - 1)
-          val posIdx = partStartIndices(i)
           val thisPartitionSkew = if (skewPartition(k).isDefinedAt(thisPos)) {
             skewPartition(k)(thisPos)
+          } else {
+            (-1, -1)
           }
-          else {
+          val otherPartitionSkew = if (skewPartition(otherPart).isDefinedAt(otherPos)) {
+            skewPartition(otherPart)(otherPos)
+          } else {
             (-1, -1)
           }
 
-          val otherPartitionSkew = if (skewPartition(otherPart).isDefinedAt(otherPos)) {
-            skewPartition(otherPart)(otherPos)
-          }
-          else {
-            (-1, -1)
-          }
           if (partStartIndices(i) == thisPartitionSkew._2 ) {
+            // this skew partition on the partStartIndices,
+            // usually at begin or end of partStartIndices
+            // for example: partStartIndices is [1,3,5,7] and skew partition is 1 or 7
             skewPartitionIdx.append((1, thisPartitionSkew._2, prePartitionNum(k)))
             partitionNum += prePartitionNum(k)
             thisPos += 1
           } else if (partStartIndices(i) > thisPartitionSkew._2 && thisPartitionSkew._2 > -1) {
+            // skew partition in the range of partStartIndices,
+            // usually at middle of partStartIndices
+            // for example: partStartIndices is [1,3,5,7] and skew partition is 2 or 4 etc..
             skewPartitionIdx.append((1, thisPartitionSkew._2, prePartitionNum(k)))
             partitionNum += prePartitionNum(k)
             thisPos += 1
-            if (!skewPartition.flatten.find(m => m._2 == partStartIndices(i)).isDefined) {
+            if (!skewPartition.flatten.exists(m => m._2 == partStartIndices(i))) {
+              // one range of partStartIndices only have one skew partition
+              // so when partStartIndices(i) not equal to other side skew, need add skew partition
+              // to  partStartIndices(i) as normal partition
               skewPartitionIdx.append((-1, partStartIndices(i), 1))
               partitionNum += 1
             }
-
           } else if (partStartIndices(i) == otherPartitionSkew._2) {
+            // As same comment above, but other side parition skew
             skewPartitionIdx.append((2, otherPartitionSkew._2, prePartitionNum(otherPart)))
             partitionNum += prePartitionNum(otherPart)
             otherPos += 1
@@ -297,7 +304,7 @@ class ExchangeCoordinator(
             skewPartitionIdx.append((2, otherPartitionSkew._2, prePartitionNum(otherPart)))
             partitionNum += prePartitionNum(otherPart)
             otherPos += 1
-            if (!skewPartition.flatten.find(m => m._2 == partStartIndices(i)).isDefined) {
+            if (!skewPartition.flatten.exists(m => m._2 == partStartIndices(i))) {
               skewPartitionIdx.append((-1, partStartIndices(i), 1))
               partitionNum += 1
             }
@@ -307,6 +314,7 @@ class ExchangeCoordinator(
           }
         }
         if (otherPos == skewPartition(otherPart).length - 1) {
+          // for example : partStartIndices is [1,3,5,7], but skew partition is 9
           skewPartitionIdx.
             append((2, skewPartition(otherPart)(otherPos)._2, prePartitionNum(otherPart)))
           partitionNum += prePartitionNum(otherPart)
@@ -375,6 +383,7 @@ class ExchangeCoordinator(
         exchanges.map(e => e.prepareShuffleDependency().rdd.partitions.length).toArray
       val skewPartitionIndices =
         skewPartitionIdx(mapOutputStatistics, prePartitionNum, partitionStartIndices)
+
       while (k < numExchanges) {
         val exchange = exchanges(k)
         val rdd = if (skewPartitionIndices(k)._1 > 0) {
