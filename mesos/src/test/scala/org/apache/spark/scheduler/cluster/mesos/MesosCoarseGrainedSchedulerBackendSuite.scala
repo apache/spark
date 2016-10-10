@@ -463,6 +463,21 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(launchedTasks.head.getCommand.getUrisList.asScala(0).getValue == url)
   }
 
+  test("mesos supports setting fetcher") {
+    val url = "spark.spark.spark.com"
+    setBackend(Map(
+      "spark.mesos.fetchCache.enable" -> "true",
+      "spark.executor.uri" -> url
+    ), false)
+    val offers = List(Resources(backend.executorMemory(sc), 1))
+    offerResources(offers)
+    // Don't crash!
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+    val uris = launchedTasks.head.getCommand.getUrisList
+    assert(uris.size() == 1)
+    assert(uris.asScala.head.getCache)
+  }
+
   private case class Resources(mem: Int, cpus: Int, gpus: Int = 0)
 
   private def verifyDeclinedOffer(driver: SchedulerDriver,
