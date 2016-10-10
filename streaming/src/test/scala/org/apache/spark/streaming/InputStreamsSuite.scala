@@ -222,12 +222,12 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         // not enough to trigger a batch
         clock.advance(batchDuration.milliseconds / 2)
 
-        def createFileAndAdvenceTime(data: Int, dir: File): Unit = {
+        def createFileAndAdvanceTime(data: Int, dir: File): Unit = {
           val file = new File(testSubDir1, data.toString)
           Files.write(data + "\n", file, StandardCharsets.UTF_8)
           assert(file.setLastModified(clock.getTimeMillis()))
           assert(file.lastModified === clock.getTimeMillis())
-          logInfo("Created file " + file)
+          logInfo(s"Created file $file")
           // Advance the clock after creating the file to avoid a race when
           // setting its modification time
           clock.advance(batchDuration.milliseconds)
@@ -237,18 +237,20 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         }
         // Over time, create files in the temp directory 1
         val input1 = Seq(1, 2, 3, 4, 5)
-        input1.foreach(i => createFileAndAdvenceTime(i, testSubDir1))
+        input1.foreach(i => createFileAndAdvanceTime(i, testSubDir1))
 
         // Over time, create files in the temp directory 1
         val input2 = Seq(6, 7, 8, 9, 10)
-        input2.foreach(i => createFileAndAdvenceTime(i, testSubDir2))
+        input2.foreach(i => createFileAndAdvanceTime(i, testSubDir2))
 
         // Verify that all the files have been read
         val expectedOutput = (input1 ++ input2).map(_.toString).toSet
         assert(outputQueue.asScala.flatten.toSet === expectedOutput)
       }
     } finally {
-      if (testDir != null) Utils.deleteRecursively(testDir)
+      if (testDir != null) {
+        Utils.deleteRecursively(testDir)
+      }
     }
   }
 

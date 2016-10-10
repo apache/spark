@@ -631,7 +631,8 @@ methods for creating DStreams from files as input sources.
 
 	Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory.
 
-     + A simple directory can be supplied, such as `hdfs://namenode:8040/logs/`.
+     ++ The files must have the same data format.
+     + A simple directory can be monitored, such as `hdfs://namenode:8040/logs/`.
        All files directly such a path will be processed as they are discovered.
      + A POSIX glob pattern can be supplied, such as
        `hdfs://namenode:8040/logs/2016-??-31`.
@@ -646,25 +647,31 @@ methods for creating DStreams from files as input sources.
        into the data directory from another part of the same filesystem.
      * If a wildcard is used to identify directories, such as `hdfs://namenode:8040/logs/2016-*`,
        renaming an entire directory to match the path will add the directory to the list of
-       monitored directories. Unless the modification time of the directory's files
-       are within that of the current window, they will not be recognized as new files.
+       monitored directories. Only the files in the directory whose modification time is
+       within the current window will be included in the stream.
      + Once processed, changes to a file within the current window will not cause the file to be reread.
-       That is: Updates are ignored.
+       That is: *updates are ignored*.
      + The more files under a directory/wildcard pattern, the longer it will take to
        scan for changes —even if no files have actually changed.
      + Calling `FileSystem.setTimes()` to fix the timestamp is a way to have the file picked
        up in a later window, even if its contents have not changed.
 
+
+	For simple text files, there is an easier method `streamingContext.textFileStream(dataDirectory)`. And file streams do not require running a receiver, hence does not require allocating cores.
+
+	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
+
+
     Special points for HDFS
-    
-    For performance and scalability, the HDFS filesystem does not update the modification
-    time while it is being written to. Specifically
-    
+
+    The HDFS filesystem does not update the modification time while it is being written to.
+    Specifically
+
     + `FileSystem.create()` creation: a zero-byte file is listed; creation and modification time is
       set to the current time as seen on the NameNode.
     * Writes to a file via the output stream returned in the `create()` call: the modification
       time *does not change*.
-    * When `OutputStream.close()` is called, remaining data is written, the file closed and
+    * When `OutputStream.close()` is called, all remaining data is written, the file closed and
       the NameNode updated with the final size of the file. The modification time is set to
       the time the file was closed.
     * File opened for appends via an `append()` operation. This does not change the modification
@@ -673,26 +680,26 @@ methods for creating DStreams from files as input sources.
     * The rarely used operations:  `FileSystem.concat()`, `createSnapshot()`, `createSymlink()` and
       `truncate()` all update the modification time.  
  
-    This means that when a file is opened, even before data has been written, it may be
-    seen —and if so, read and added to the list of files to convert to an RDD.
-    At this point the fact it is empty will be observed, and so the file omitted from the RDD.
-    However, it will already have been considered to have been seen, *and any updates to the
-    file within the same window will be ignored*. That means that if a file is created and
-    then written to within the same streaming window, its contents may actually be missed. 
+    Together, this means that when a file is opened, even before data has been completely written,
+    it may be included in the DStream -after which updates to the file within the same window
+    will be ignored. That is: changes may be missed, and data omitted from the stream. 
     To guarantee that changes are picked up in a window, write the file
-    to a directory which is not being monitored, then, after the file is closed, `rename()` it into
-    the destination directory. 
-     
-    Object stores
-    
+    to an unmonitored directory, then immediately after the output stream is closed,
+    rename it into the destination directory. 
+    Provided the renamed file appears in the scanned destination directory during the window
+    of its creation, the new data will be picked up.
+
     Object stores have a different set of limitations.
 
      + Wildcard directory enumeration can very slow, especially if there are many directories
        or files to scan.
-     + A file's creation time is also its modification time.
+     * The file only becomes visible at the end of the write operation; this also defines.
+       the creation time of the file.
+     + A file's  modification time is always the same as its creation time.
      + The `FileSystem.setTimes()` command to set file timestamps will be ignored.
-     + `FileSystem.rename(file)` of a single file will update the modification time —but the time to rename is
-       `O(length(file))`.
+     + `FileSystem.rename(file)` of a single file will update the modification time.
+       The time to rename a file is generally `O(length(file))`: the bigger the file, the longer
+       it takes. 
      + `FileSystem.rename(directory)` is not atomic, and slower the more data there is to rename. 
        It may update the modification times of renamed files.
      + Object creation directly though a PUT operation is atomic, irrespective of
@@ -700,15 +707,12 @@ methods for creating DStreams from files as input sources.
      + Writing a file to an object store using Hadoop's APIs is an atomic operation;
        the object is only created via a PUT operation in the final `OutputStream.close()` call.
 
-    For this reason, applications using an object store as the direct destination of data
-    can use PUT operations to directly publish data for a DStream to pick up —even though this
-    is not the mechanism to use when writing to HDFS or other filesystem. If `rename()` is used,
-    to place the completed files into a monitored directory, expect the operation to be slow.
-
-	For simple text files, there is an easier method `streamingContext.textFileStream(dataDirectory)`. And file streams do not require running a receiver, hence does not require allocating cores.
-
-	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
-
+    Applications using an object store as the direct destination of data
+    should use PUT operations to directly publish data for a DStream to pick up —even though this
+    is not the mechanism to use when writing to HDFS or other filesystem. When using the Hadoop
+    FileSystem API in Spark that means: write the data directory directly to the target directory,
+    knowing that it is the final `close()` call will make the file visible and set its creation &
+    modified times.
 - **Streams based on Custom Receivers:** DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
   Guide](streaming-custom-receivers.html) for more details.
 
