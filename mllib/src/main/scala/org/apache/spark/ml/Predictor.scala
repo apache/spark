@@ -87,7 +87,8 @@ abstract class Predictor[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
-    copyValues(train(dataset).setParent(this))
+    val casted = castPoints(dataset)
+    copyValues(train(casted).setParent(this))
   }
 
   override def copy(extra: ParamMap): Learner
@@ -121,10 +122,18 @@ abstract class Predictor[
    * and put it in an RDD with strong types.
    */
   protected def extractLabeledPoints(dataset: Dataset[_]): RDD[LabeledPoint] = {
-    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+    dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
       case Row(label: Double, features: Vector) => LabeledPoint(label, features)
     }
   }
+
+  /**
+   * Return the given DataFrame, with [[labelCol]] casted to DoubleType.
+   */
+    protected def castPoints(dataset: Dataset[_]): DataFrame = {
+      val labelColMeta = dataset.schema.fields.filter(_.name == $(labelCol)).head.metadata
+      dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelColMeta)
+    }
 }
 
 /**
