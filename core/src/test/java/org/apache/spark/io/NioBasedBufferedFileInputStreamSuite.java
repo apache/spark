@@ -33,9 +33,9 @@ import static org.junit.Assert.assertEquals;
  */
 public class NioBasedBufferedFileInputStreamSuite {
 
-  byte[] randomBytes;
+  private byte[] randomBytes;
 
-  File inputFile;
+  private File inputFile;
 
   @Before
   public void setUp() throws IOException {
@@ -89,6 +89,39 @@ public class NioBasedBufferedFileInputStreamSuite {
     }
     assertEquals(1024, inputStream.skip(1024));
     for (int i = 2048; i < randomBytes.length; i++) {
+      assertEquals(randomBytes[i], (byte) inputStream.read());
+    }
+  }
+
+  @Test
+  public void testNegativeBytesSkippedAfterRead() throws IOException {
+    InputStream inputStream = new NioBasedBufferedFileInputStream(inputFile);
+    for (int i = 0; i < 1024; i++) {
+      assertEquals(randomBytes[i], (byte) inputStream.read());
+    }
+    // Skipping negative bytes should essential be a no-op
+    assertEquals(0, inputStream.skip(-1));
+    assertEquals(0, inputStream.skip(-1024));
+    assertEquals(0, inputStream.skip(Long.MIN_VALUE));
+    assertEquals(1024, inputStream.skip(1024));
+    for (int i = 2048; i < randomBytes.length; i++) {
+      assertEquals(randomBytes[i], (byte) inputStream.read());
+    }
+  }
+
+  @Test
+  public void testSkipFromFileChannel() throws IOException {
+    InputStream inputStream = new NioBasedBufferedFileInputStream(inputFile, 10);
+    // Since the buffer is smaller than the skipped bytes, this will guarantee
+    // we skip from underlying file channel.
+    assertEquals(1024, inputStream.skip(1024));
+    for (int i = 1024; i < 2048; i++) {
+      assertEquals(randomBytes[i], (byte) inputStream.read());
+    }
+    assertEquals(256, inputStream.skip(256));
+    assertEquals(256, inputStream.skip(256));
+    assertEquals(512, inputStream.skip(512));
+    for (int i = 3072; i < randomBytes.length; i++) {
       assertEquals(randomBytes[i], (byte) inputStream.read());
     }
   }

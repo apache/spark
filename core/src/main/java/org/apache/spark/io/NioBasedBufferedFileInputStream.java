@@ -31,22 +31,27 @@ import java.nio.file.StandardOpenOption;
  */
 public final class NioBasedBufferedFileInputStream extends InputStream {
 
-  private static int DEFAULT_BUFFER_SIZE = 8192;
+  private static int DEFAULT_BUFFER_SIZE_BYTES = 8192;
 
   private final ByteBuffer byteBuffer;
 
   private final FileChannel fileChannel;
 
-  public NioBasedBufferedFileInputStream(File file, int bufferSize) throws IOException {
-    byteBuffer = ByteBuffer.allocateDirect(bufferSize);
+  public NioBasedBufferedFileInputStream(File file, int bufferSizeInBytes) throws IOException {
+    byteBuffer = ByteBuffer.allocateDirect(bufferSizeInBytes);
     fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
     byteBuffer.flip();
   }
 
   public NioBasedBufferedFileInputStream(File file) throws IOException {
-    this(file, DEFAULT_BUFFER_SIZE);
+    this(file, DEFAULT_BUFFER_SIZE_BYTES);
   }
 
+  /**
+   * Checks weather data is left to be read from the input stream.
+   * @return true if data is left, false otherwise
+   * @throws IOException
+   */
   private boolean refill() throws IOException {
     if (!byteBuffer.hasRemaining()) {
       byteBuffer.clear();
@@ -68,12 +73,12 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
   }
 
   @Override
-  public int read(byte[] b, int off, int len) throws IOException {
+  public int read(byte[] b, int offset, int len) throws IOException {
     if (!refill()) {
       return -1;
     }
     len = Math.min(len, byteBuffer.remaining());
-    byteBuffer.get(b, off, len);
+    byteBuffer.get(b, offset, len);
     return len;
   }
 
@@ -82,10 +87,9 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
     return byteBuffer.remaining();
   }
 
-
   @Override
   public long skip(long n) throws IOException {
-    if(n < 0L) {
+    if (n < 0L) {
       return 0L;
     }
     if (byteBuffer.remaining() > n) {
@@ -93,11 +97,12 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
       byteBuffer.position(byteBuffer.position() + (int) n);
       return n;
     }
-    long toSkip = n - byteBuffer.remaining();
+    long skippedFromBuffer = byteBuffer.remaining();
+    long toSkipFromFileChannel = n - skippedFromBuffer;
     // Discard everything we have read in the buffer.
     byteBuffer.position(0);
     byteBuffer.flip();
-    return skipFromFileChannel(toSkip);
+    return skippedFromBuffer + skipFromFileChannel(toSkipFromFileChannel);
   }
 
   private long skipFromFileChannel(long n) throws IOException {
@@ -106,8 +111,7 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
     if (currentFilePosition + n > size) {
       fileChannel.position(size);
       return size - currentFilePosition;
-    }
-    else {
+    } else {
       fileChannel.position(currentFilePosition + n);
       return n;
     }

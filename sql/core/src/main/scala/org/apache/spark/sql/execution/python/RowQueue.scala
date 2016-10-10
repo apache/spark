@@ -22,6 +22,7 @@ import java.io._
 import com.google.common.io.Closeables
 
 import org.apache.spark.SparkException
+import org.apache.spark.io.NioBasedBufferedFileInputStream
 import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.Platform
@@ -130,7 +131,7 @@ private[python] case class DiskRowQueue(file: File, fields: Int) extends RowQueu
     if (out != null) {
       out.close()
       out = null
-      in = new DataInputStream(new BufferedInputStream(new FileInputStream(file.toString)))
+      in = new DataInputStream(new NioBasedBufferedFileInputStream(file))
     }
 
     if (unreadBytes > 0) {
