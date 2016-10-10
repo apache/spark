@@ -2189,6 +2189,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-17849: grouping set throws NPE") {
+    val data = Seq(
+      ("1", "2", "3", 1),
+      ("4", "5", "6", 1),
+      ("7", "8", "9", 1)
+    )
+    data.toDF("a", "b", "c", "d").createOrReplaceTempView("point_table")
+    checkAnswer(
+      sql("select a, b, c, count(d) from point_table group by a, b, c GROUPING SETS (())"),
+      Row(null, null, null, 3) :: Nil)
+  }
+
+
   test("hash function") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
     withTempView("tbl") {
