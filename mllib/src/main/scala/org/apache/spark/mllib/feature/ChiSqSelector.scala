@@ -41,6 +41,19 @@ import org.apache.spark.sql.{Row, SparkSession}
 class ChiSqSelectorModel @Since("1.3.0") (
   @Since("1.3.0") val selectedFeatures: Array[Int]) extends VectorTransformer with Saveable {
 
+  private val filterIndices = selectedFeatures.sorted
+
+  @deprecated("not intended for subclasses to use", "2.1.0")
+  protected def isSorted(array: Array[Int]): Boolean = {
+    var i = 1
+    val len = array.length
+    while (i < len) {
+      if (array(i) < array(i-1)) return false
+      i += 1
+    }
+    true
+  }
+
   /**
    * Applies transformation on a vector.
    *
@@ -49,7 +62,7 @@ class ChiSqSelectorModel @Since("1.3.0") (
    */
   @Since("1.3.0")
   override def transform(vector: Vector): Vector = {
-    compress(vector, selectedFeatures)
+    compress(vector)
   }
 
   /**
@@ -57,22 +70,20 @@ class ChiSqSelectorModel @Since("1.3.0") (
    * Preserves the order of filtered features the same as their indices are stored.
    * Might be moved to Vector as .slice
    * @param features vector
-   * @param filterIndices indices of features to filter
    */
-  private def compress(features: Vector, filterIndices: Array[Int]): Vector = {
-    val orderedIndices = filterIndices.sorted
+  private def compress(features: Vector): Vector = {
     features match {
       case SparseVector(size, indices, values) =>
-        val newSize = orderedIndices.length
+        val newSize = filterIndices.length
         val newValues = new ArrayBuilder.ofDouble
         val newIndices = new ArrayBuilder.ofInt
         var i = 0
         var j = 0
         var indicesIdx = 0
         var filterIndicesIdx = 0
-        while (i < indices.length && j < orderedIndices.length) {
+        while (i < indices.length && j < filterIndices.length) {
           indicesIdx = indices(i)
-          filterIndicesIdx = orderedIndices(j)
+          filterIndicesIdx = filterIndices(j)
           if (indicesIdx == filterIndicesIdx) {
             newIndices += j
             newValues += values(i)
@@ -90,7 +101,7 @@ class ChiSqSelectorModel @Since("1.3.0") (
         Vectors.sparse(newSize, newIndices.result(), newValues.result())
       case DenseVector(values) =>
         val values = features.toArray
-        Vectors.dense(orderedIndices.map(i => values(i)))
+        Vectors.dense(filterIndices.map(i => values(i)))
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")
@@ -172,9 +183,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 class ChiSqSelector @Since("2.1.0") () extends Serializable {
   var numTopFeatures: Int = 50
   var percentile: Double = 0.1
-  var alphaFPR: Double = 0.05
-  var alphaFDR: Double = 0.05
-  var alphaFWE: Double = 0.05
+  var alpha: Double = 0.05
   var selectorType = ChiSqSelector.KBest
 
   /**
@@ -200,23 +209,9 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   }
 
   @Since("2.1.0")
-  def setAlphaFPR(value: Double): this.type = {
+  def setAlpha(value: Double): this.type = {
     require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
-    alphaFPR = value
-    this
-  }
-
-  @Since("2.1.0")
-  def setAlphaFDR(value: Double): this.type = {
-    require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
-    alphaFDR = value
-    this
-  }
-
-  @Since("2.1.0")
-  def setAlphaFWE(value: Double): this.type = {
-    require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
-    alphaFWE = value
+    alpha = value
     this
   }
 
@@ -237,29 +232,32 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
    */
   @Since("1.3.0")
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
-    val chiSqTestResult = Statistics.chiSqTest(data)
-      .zipWithIndex
+    val chiSqTestResult = Statistics.chiSqTest(data).zipWithIndex
     val features = selectorType match {
-      case ChiSqSelector.KBest => chiSqTestResult
-        .sortBy { case (res, _) => -res.statistic }
-        .take(numTopFeatures)
-      case ChiSqSelector.Percentile => chiSqTestResult
-        .sortBy { case (res, _) => -res.statistic }
-        .take((chiSqTestResult.length * percentile).toInt)
-      case ChiSqSelector.FPR => chiSqTestResult
-        .filter{ case (res, _) => res.pValue < alphaFPR }
+      case ChiSqSelector.KBest =>
+        chiSqTestResult
+          .sortBy { case (res, _) => -res.statistic }
+          .take(numTopFeatures)
+      case ChiSqSelector.Percentile =>
+        chiSqTestResult
+          .sortBy { case (res, _) => -res.statistic }
+          .take((chiSqTestResult.length * percentile).toInt)
+      case ChiSqSelector.FPR =>
+        chiSqTestResult
+          .filter{ case (res, _) => res.pValue < alpha }
       case ChiSqSelector.FDR =>
         val tempRDD = chiSqTestResult
           .sortBy{ case (res, _) => res.pValue }
         val maxIndex = tempRDD
           .zipWithIndex
           .filter{ case ((res, _), index) =>
-            res.pValue <= alphaFDR * (index + 1) / chiSqTestResult.length }
+            res.pValue <= alpha * (index + 1) / chiSqTestResult.length }
           .map{ case (_, index) => index}
           .max
         tempRDD.take(maxIndex + 1)
-      case ChiSqSelector.FWE => chiSqTestResult
-        .filter{ case (res, _) => res.pValue < alphaFWE/chiSqTestResult.length }
+      case ChiSqSelector.FWE =>
+        chiSqTestResult
+          .filter{ case (res, _) => res.pValue < alpha/chiSqTestResult.length }
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
@@ -288,7 +286,7 @@ object ChiSqSelector {
 
   /** Set of selector type and param pairs that ChiSqSelector supports. */
   private[spark] val supportedTypeAndParamPairs = Set(KBest -> "numTopFeatures",
-    Percentile -> "percentile", FPR -> "alphaFPR", FDR -> "alphaFDR", FWE -> "alphaFWE")
+    Percentile -> "percentile", FPR -> "alpha", FDR -> "alpha", FWE -> "alpha")
 
   /** Set of selector types that ChiSqSelector supports. */
   private[spark] val supportedSelectorTypes = supportedTypeAndParamPairs.map(_._1)

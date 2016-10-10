@@ -77,19 +77,19 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
       .map(x => (x._1.label, x._1.features, x._2))
       .toDF("label", "data", "preFilteredData")
 
-    selector.setSelectorType("fpr").setAlphaFPR(0.2).fit(df2).transform(df2)
+    selector.setSelectorType("fpr").setAlpha(0.2).fit(df2).transform(df2)
       .select("filtered", "preFilteredData").collect().foreach {
         case Row(vec1: Vector, vec2: Vector) =>
           assert(vec1 ~== vec2 absTol 1e-1)
       }
 
-    selector.setSelectorType("fwe").setAlphaFWE(0.5).fit(df2).transform(df2)
+    selector.setSelectorType("fwe").setAlpha(0.5).fit(df2).transform(df2)
       .select("filtered", "preFilteredData").collect().foreach {
       case Row(vec1: Vector, vec2: Vector) =>
         assert(vec1 ~== vec2 absTol 1e-1)
     }
 
-    selector.setSelectorType("fdr").setAlphaFDR(0.21).fit(df2).transform(df2)
+    selector.setSelectorType("fdr").setAlpha(0.21).fit(df2).transform(df2)
       .select("filtered", "preFilteredData").collect().foreach {
       case Row(vec1: Vector, vec2: Vector) =>
         assert(vec1 ~== vec2 absTol 1e-1)

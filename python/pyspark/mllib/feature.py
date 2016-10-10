@@ -305,20 +305,17 @@ class ChiSqSelector(object):
     ...     LabeledPoint(1.0, [0.0, 9.0, 8.0, 4.0]),
     ...     LabeledPoint(2.0, [8.0, 9.0, 5.0, 9.0])
     ... ]
-    >>> model = ChiSqSelector().setSelectorType("fpr").setAlphaFPR(0.1).fit(sc.parallelize(data))
+    >>> model = ChiSqSelector().setSelectorType("fpr").setAlpha(0.1).fit(sc.parallelize(data))
     >>> model.transform(DenseVector([1.0,2.0,3.0,4.0]))
     DenseVector([4.0])
 
     .. versionadded:: 1.4.0
     """
-    def __init__(self, numTopFeatures=50, selectorType="kbest", percentile=0.1, alphaFPR=0.05,
-                 alphaFDR=0.05, alphaFWE=0.05):
+    def __init__(self, numTopFeatures=50, selectorType="kbest", percentile=0.1, alpha=0.05):
         self.numTopFeatures = numTopFeatures
         self.selectorType = selectorType
         self.percentile = percentile
-        self.alphaFPR = alphaFPR
-        self.alphaFDR = alphaFDR
-        self.alphaFWE = alphaFWE
+        self.alpha = alpha
 
     @since('2.1.0')
     def setNumTopFeatures(self, numTopFeatures):
@@ -339,37 +336,20 @@ class ChiSqSelector(object):
         return self
 
     @since('2.1.0')
-    def setAlphaFPR(self, alpha):
+    def setAlpha(self, alpha):
         """
-        set alpha [0.0, 1.0] for feature selection by FPR.
-        Only applicable when selectorType = "fpr".
+        set alpha [0.0, 1.0] for feature selection by FPR, FDR and FWE.
         """
-        self.alphaFPR = float(alpha)
+        self.alpha = float(alpha)
         return self
 
     @since('2.1.0')
     def setSelectorType(self, selectorType):
         """
         set the selector type of the ChisqSelector.
-        Supported options: "kbest" (default), "percentile" and "fpr".
+        Supported options: "kbest" (default), "percentile", "fpr", "fdr" and "fwe".
         """
         self.selectorType = str(selectorType)
-        return self
-
-    @since('2.1.0')
-    def setAlphaFDR(self, alpha):
-        """
-        set alpha [0.0, 1.0] for feature selection by FDR.
-        """
-        self.alphaFPR = float(alpha)
-        return self
-
-    @since('2.1.0')
-    def setAlphaFWE(self, alpha):
-        """
-        set alpha [0.0, 1.0] for feature selection by FWE.
-        """
-        self.alphaFWE = float(alpha)
         return self
 
     @since('1.4.0')
@@ -383,7 +363,7 @@ class ChiSqSelector(object):
                      Apply feature discretizer before using this function.
         """
         jmodel = callMLlibFunc("fitChiSqSelector", self.selectorType, self.numTopFeatures,
-                               self.percentile, self.alphaFPR, self.alphaFDR, self.alphaFWE, data)
+                               self.percentile, self.alpha, data)
         return ChiSqSelectorModel(jmodel)
 
 

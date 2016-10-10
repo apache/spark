@@ -2588,7 +2588,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
 
     selectorType = Param(Params._dummy(), "selectorType",
                          "The selector type of the ChisqSelector. " +
-                         "Supported options: kbest (default), percentile and fpr.",
+                         "Supported options: kbest (default), percentile, fpr, fdr and fwe.",
                          typeConverter=TypeConverters.toString)
 
     numTopFeatures = \
@@ -2601,40 +2601,31 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
                        "will select, ordered by statistics value descending.",
                        typeConverter=TypeConverters.toFloat)
 
-    alphaFPR = Param(Params._dummy(), "alphaFPR", "The highest p-value for features to be kept.",
-                     typeConverter=TypeConverters.toFloat)
-
-    alphaFDR = Param(Params._dummy(), "alphaFDR", "The highest uncorrected p-value for " +
-                     "features to be kept.", typeConverter=TypeConverters.toFloat)
-
-    alphaFWE = Param(Params._dummy(), "alphaFWE", "The highest uncorrected p-value for " +
-                     "features to be kept.", typeConverter=TypeConverters.toFloat)
+    alpha = Param(Params._dummy(), "alpha", "alpha means the highest p-value for features " +
+                  "to be kept when select type is fpr, alpha means the highest uncorrected " +
+                  "p-value for features to to kept when select type is fdr and fwe.",
+                  typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                 labelCol="label", selectorType="kbest", percentile=0.1, alphaFPR=0.05,
-                 alphaFDR=0.05, alphaFWE=0.05):
+                 labelCol="label", selectorType="kbest", percentile=0.1, alpha=0.05):
         """
         __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                 labelCol="label", selectorType="kbest", percentile=0.1, alphaFPR=0.05, \
-                 alphaFDR=0.05, alphaFWE=0.05)
+                 labelCol="label", selectorType="kbest", percentile=0.1, alpha=0.05)
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        self._setDefault(numTopFeatures=50, selectorType="kbest", percentile=0.1, alphaFPR=0.05,
-                         alphaFDR=0.05, alphaFWE=0.05)
+        self._setDefault(numTopFeatures=50, selectorType="kbest", percentile=0.1, alpha=0.05)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels", selectorType="kbest", percentile=0.1, alphaFPR=0.05,
-                  alphaFDR=0.05, alphaFWE=0.05):
+                  labelCol="labels", selectorType="kbest", percentile=0.1, alpha=0.05):
         """
         setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectorType="kbest", percentile=0.1, alphaFPR=0.05, \
-                  alphaFDR=0.05, alphaFWE=0.05)
+                  labelCol="labels", selectorType="kbest", percentile=0.1, alpha=0.05)
         Sets params for this ChiSqSelector.
         """
         kwargs = self.setParams._input_kwargs
@@ -2685,49 +2676,18 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         return self.getOrDefault(self.percentile)
 
     @since("2.1.0")
-    def setAlphaFPR(self, value):
+    def setAlpha(self, value):
         """
-        Sets the value of :py:attr:`alphaFPR`.
-        Only applicable when selectorType = "fpr".
+        Sets the value of :py:attr:`alpha`.
         """
-        return self._set(alphaFPR=value)
+        return self._set(alpha=value)
 
     @since("2.1.0")
-    def getAlphaFPR(self):
+    def getAlpha(self):
         """
-        Gets the value of alphaFPR or its default value.
+        Gets the value of alpha or its default value.
         """
-        return self.getOrDefault(self.alphaFPR)
-
-    @since("2.1.0")
-    def setAlphaFDR(self, value):
-        """
-        Sets the value of :py:attr:`alphaFDR`.
-        Only applicable when selectorType = "fdr".
-        """
-        return self._set(alphaFDR=value)
-
-    @since("2.1.0")
-    def getAlphaFDR(self):
-        """
-        Gets the value of alphaFDR or its default value.
-        """
-        return self.getOrDefault(self.alphaFDR)
-
-    @since("2.1.0")
-    def setAlphaFWE(self, value):
-        """
-        Sets the value of :py:attr:`alphaFWE`.
-        Only applicable when selectorType = "fwe".
-        """
-        return self._set(alphaFWE=value)
-
-    @since("2.1.0")
-    def getAlphaFWE(self):
-        """
-        Gets the value of alphaFWE or its default value.
-        """
-        return self.getOrDefault(self.alphaFWE)
+        return self.getOrDefault(self.alpha)
 
     def _create_model(self, java_model):
         return ChiSqSelectorModel(java_model)
@@ -2746,7 +2706,7 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
     @since("2.0.0")
     def selectedFeatures(self):
         """
-        List of indices to select (filter). Must be ordered asc.
+        List of indices to select (filter).
         """
         return self._call_java("selectedFeatures")
 

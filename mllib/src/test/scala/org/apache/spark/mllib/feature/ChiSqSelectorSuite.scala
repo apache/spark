@@ -76,7 +76,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
         LabeledPoint(1.0, Vectors.dense(Array(4.0))),
         LabeledPoint(1.0, Vectors.dense(Array(4.0))),
         LabeledPoint(2.0, Vectors.dense(Array(9.0))))
-    val model = new ChiSqSelector().setSelectorType("fpr").setAlphaFPR(0.1).fit(labeledDiscreteData)
+    val model = new ChiSqSelector().setSelectorType("fpr").setAlpha(0.1).fit(labeledDiscreteData)
     val filteredData = labeledDiscreteData.map { lp =>
       LabeledPoint(lp.label, model.transform(lp.features))
     }.collect().toSet

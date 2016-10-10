@@ -1015,7 +1015,8 @@ class DAGScheduler(
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, stage.latestInfo.taskMetrics, properties)
+              taskBinary, part, locs, stage.latestInfo.taskMetrics, properties, Option(jobId),
+              Option(sc.applicationId), sc.applicationAttemptId)
           }
 
         case stage: ResultStage =>
@@ -1024,7 +1025,8 @@ class DAGScheduler(
             val part = stage.rdd.partitions(p)
             val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, id, properties, stage.latestInfo.taskMetrics)
+              taskBinary, part, locs, id, properties, stage.latestInfo.taskMetrics,
+              Option(jobId), Option(sc.applicationId), sc.applicationAttemptId)
           }
       }
     } catch {
@@ -1261,18 +1263,20 @@ class DAGScheduler(
               s"has failed the maximum allowable number of " +
               s"times: ${Stage.MAX_CONSECUTIVE_FETCH_FAILURES}. " +
               s"Most recent failure reason: ${failureMessage}", None)
-          } else if (failedStages.isEmpty) {
-            // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-            // in that case the event will already have been scheduled.
-            // TODO: Cancel running tasks in the stage
-            logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
-              s"$failedStage (${failedStage.name}) due to fetch failure")
-            messageScheduler.schedule(new Runnable {
-              override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-            }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+          } else {
+            if (failedStages.isEmpty) {
+              // Don't schedule an event to resubmit failed stages if failed isn't empty, because
+              // in that case the event will already have been scheduled.
+              // TODO: Cancel running tasks in the stage
+              logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
+                s"$failedStage (${failedStage.name}) due to fetch failure")
+              messageScheduler.schedule(new Runnable {
+                override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+              }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+            }
+            failedStages += failedStage
+            failedStages += mapStage
           }
-          failedStages += failedStage
-          failedStages += mapStage
           // Mark the map whose fetch failed as broken in the map stage
           if (mapId != -1) {
             mapStage.removeOutputLoc(mapId, bmAddress)

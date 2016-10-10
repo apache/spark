@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 
 import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericMutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.expressions.Window
@@ -64,7 +64,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     assert(agg.eval(mergeBuffer) == data.map(_._1).max)
 
     // Tests low level eval(row: InternalRow) API.
-    val row = new GenericMutableRow(Array(mergeBuffer): Array[Any])
+    val row = new GenericInternalRow(Array(mergeBuffer): Array[Any])
 
     // Evaluates directly on row consist of aggregation buffer object.
     assert(agg.eval(row) == data.map(_._1).max)
@@ -73,7 +73,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
   test("supports SpecificMutableRow as mutable row") {
     val aggregationBufferSchema = Seq(IntegerType, LongType, BinaryType, IntegerType)
     val aggBufferOffset = 2
-    val buffer = new SpecificMutableRow(aggregationBufferSchema)
+    val buffer = new SpecificInternalRow(aggregationBufferSchema)
     val agg = new TypedMax(BoundReference(ordinal = 1, dataType = IntegerType, nullable = false))
       .withNewMutableAggBufferOffset(aggBufferOffset)
 

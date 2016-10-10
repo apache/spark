@@ -72,43 +72,20 @@ private[feature] trait ChiSqSelectorParams extends Params
   def getPercentile: Double = $(percentile)
 
   /**
-   * The highest p-value for features to be kept.
-   * Only applicable when selectorType = "fpr".
+   * alpha means the highest p-value for features to be kept when select type is "fpr".
+   * alpha means the highest uncorrected p-value for features to be kept when select type
+   * is "fdr" and "fwe".
    * Default value is 0.05.
    */
-  final val alphaFPR = new DoubleParam(this, "alphaFPR",
-    "The highest p-value for features to be kept.",
+  final val alpha = new DoubleParam(this, "alpha",
+    "alpha means the highest p-value for features to be kept when select type is fpr, " +
+      "alpha means the highest uncorrected p-value for features to be kept when select type " +
+      "is fdr and fwe.",
     ParamValidators.inRange(0, 1))
-  setDefault(alphaFPR -> 0.05)
+  setDefault(alpha -> 0.05)
 
   /** @group getParam */
-  def getAlphaFPR: Double = $(alphaFPR)
-
-  final val alphaFDR = new DoubleParam(this, "alphaFDR",
-    "The highest uncorrected p-value for features to be kept.",
-    ParamValidators.inRange(0, 1))
-  setDefault(alphaFDR -> 0.05)
-
-  /**
-   * The highest uncorrected p-value for features to be kept.
-   * Only applicable when selectorType = "fdr".
-   * Default value is 0.05.
-   */
-  /** @group getParam */
-  def getAlphaFDR: Double = $(alphaFDR)
-
-  /**
-   * The highest uncorrected p-value for features to be kept.
-   * Only applicable when selectorType = "fwe".
-   * Default value is 0.05.
-   */
-  final val alphaFWE = new DoubleParam(this, "alphaFWE",
-    "The highest uncorrected p-value for features to be kept.",
-    ParamValidators.inRange(0, 1))
-  setDefault(alphaFWE -> 0.05)
-
-  /** @group getParam */
-  def getAlphaFWE: Double = $(alphaFWE)
+  def getAlpha: Double = $(alpha)
 
   /**
    * The selector type of the ChisqSelector.
@@ -116,7 +93,7 @@ private[feature] trait ChiSqSelectorParams extends Params
    */
   final val selectorType = new Param[String](this, "selectorType",
     "The selector type of the ChisqSelector. " +
-      "Supported options: kbest (default), percentile and fpr.",
+      "Supported options: kbest (default), percentile, fpr, fdr and fwe.",
     ParamValidators.inArray[String](OldChiSqSelector.supportedSelectorTypes.toArray))
   setDefault(selectorType -> OldChiSqSelector.KBest)
 
@@ -157,18 +134,8 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
 
   /** @group setParam */
   @Since("2.1.0")
-  def setAlphaFPR(value: Double): this.type = {
-    set(alphaFPR, value)
-  }
-
-  @Since("2.1.0")
-  def setAlphaFDR(value: Double): this.type = {
-    set(alphaFDR, value)
-  }
-
-  @Since("2.1.0")
-  def setAlphaFWE(value: Double): this.type = {
-    set(alphaFWE, value)
+  def setAlpha(value: Double): this.type = {
+    set(alpha, value)
   }
 
   /** @group setParam */
@@ -195,9 +162,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
       .setSelectorType($(selectorType))
       .setNumTopFeatures($(numTopFeatures))
       .setPercentile($(percentile))
-      .setAlphaFPR($(alphaFPR))
-      .setAlphaFDR($(alphaFDR))
-      .setAlphaFWE($(alphaFWE))
+      .setAlpha($(alpha))
     val model = selector.fit(input)
     copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
   }
@@ -237,7 +202,7 @@ final class ChiSqSelectorModel private[ml] (
 
   import ChiSqSelectorModel._
 
-  /** list of indices to select (filter). Must be ordered asc */
+  /** list of indices to select (filter). */
   @Since("1.6.0")
   val selectedFeatures: Array[Int] = chiSqSelector.selectedFeatures
 

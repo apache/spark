@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
@@ -182,12 +183,42 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Aggregate function: returns the approximate number of distinct items in a group.
-   *
    * @group agg_funcs
    * @since 1.3.0
    */
-  def approxCountDistinct(e: Column): Column = withAggregateFunction {
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(e: Column): Column = approx_count_distinct(e)
+
+  /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(columnName: String): Column = approx_count_distinct(columnName)
+
+  /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(e: Column, rsd: Double): Column = approx_count_distinct(e, rsd)
+
+  /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(columnName: String, rsd: Double): Column = {
+    approx_count_distinct(Column(columnName), rsd)
+  }
+
+  /**
+   * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  def approx_count_distinct(e: Column): Column = withAggregateFunction {
     HyperLogLogPlusPlus(e.expr)
   }
 
@@ -195,9 +226,9 @@ object functions {
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.1.0
    */
-  def approxCountDistinct(columnName: String): Column = approxCountDistinct(column(columnName))
+  def approx_count_distinct(columnName: String): Column = approx_count_distinct(column(columnName))
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
@@ -205,9 +236,9 @@ object functions {
    * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.1.0
    */
-  def approxCountDistinct(e: Column, rsd: Double): Column = withAggregateFunction {
+  def approx_count_distinct(e: Column, rsd: Double): Column = withAggregateFunction {
     HyperLogLogPlusPlus(e.expr, rsd, 0, 0)
   }
 
@@ -217,10 +248,10 @@ object functions {
    * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.1.0
    */
-  def approxCountDistinct(columnName: String, rsd: Double): Column = {
-    approxCountDistinct(Column(columnName), rsd)
+  def approx_count_distinct(columnName: String, rsd: Double): Column = {
+    approx_count_distinct(Column(columnName), rsd)
   }
 
   /**
@@ -1949,36 +1980,64 @@ object functions {
   def tanh(columnName: String): Column = tanh(Column(columnName))
 
   /**
-   * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
-   *
    * @group math_funcs
    * @since 1.4.0
    */
-  def toDegrees(e: Column): Column = withExpr { ToDegrees(e.expr) }
+  @deprecated("Use degrees", "2.1.0")
+  def toDegrees(e: Column): Column = degrees(e)
+
+  /**
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use degrees", "2.1.0")
+  def toDegrees(columnName: String): Column = degrees(Column(columnName))
 
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
    * @group math_funcs
+   * @since 2.1.0
+   */
+  def degrees(e: Column): Column = withExpr { ToDegrees(e.expr) }
+
+  /**
+   * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
+   *
+   * @group math_funcs
+   * @since 2.1.0
+   */
+  def degrees(columnName: String): Column = degrees(Column(columnName))
+
+  /**
+   * @group math_funcs
    * @since 1.4.0
    */
-  def toDegrees(columnName: String): Column = toDegrees(Column(columnName))
+  @deprecated("Use radians", "2.1.0")
+  def toRadians(e: Column): Column = radians(e)
+
+  /**
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use radians", "2.1.0")
+  def toRadians(columnName: String): Column = radians(Column(columnName))
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 2.1.0
    */
-  def toRadians(e: Column): Column = withExpr { ToRadians(e.expr) }
+  def radians(e: Column): Column = withExpr { ToRadians(e.expr) }
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 2.1.0
    */
-  def toRadians(columnName: String): Column = toRadians(Column(columnName))
+  def radians(columnName: String): Column = radians(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
@@ -2819,6 +2878,63 @@ object functions {
   }
 
   /**
+   * (Scala-specific) Parses a column containing a JSON string into a [[StructType]] with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   * @param e a string column containing JSON data.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def from_json(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
+    JsonToStruct(schema, options, e.expr)
+  }
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a [[StructType]] with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def from_json(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
+    from_json(e, schema, options.asScala.toMap)
+
+  /**
+   * Parses a column containing a JSON string into a [[StructType]] with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def from_json(e: Column, schema: StructType): Column =
+    from_json(e, schema, Map.empty[String, String])
+
+  /**
+   * Parses a column containing a JSON string into a [[StructType]] with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string as a json string
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column =
+    from_json(e, DataType.fromJson(schema).asInstanceOf[StructType], options)
+
+  /**
    * Returns length of array or map.
    *
    * @group collection_funcs
@@ -3038,5 +3154,4 @@ object functions {
   def callUDF(udfName: String, cols: Column*): Column = withExpr {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
-
 }
