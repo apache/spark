@@ -54,7 +54,7 @@ class TaskMetrics private[spark] () extends Serializable {
   private val _memoryBytesSpilled = new LongAccumulator
   private val _diskBytesSpilled = new LongAccumulator
   private val _peakExecutionMemory = new LongAccumulator
-  private val _updatedBlockStatuses = new BlockStatusesAccumulator
+  private val _updatedBlockStatuses = new CollectionAccumulator[(BlockId, BlockStatus)]
 
   /**
    * Time taken on the executor to deserialize this task.
@@ -319,18 +319,5 @@ private[spark] object TaskMetrics extends Logging {
 
     tm.externalAccums ++= externalAccums
     tm
-  }
-}
-
-
-private[spark] class BlockStatusesAccumulator
-  extends CollectionAccumulator[(BlockId, BlockStatus)] {
-
-  override def copyAndReset(): BlockStatusesAccumulator = new BlockStatusesAccumulator
-
-  override def copy(): BlockStatusesAccumulator = {
-    val newAcc = new BlockStatusesAccumulator
-    newAcc.setValue(this.value)
-    newAcc
   }
 }
