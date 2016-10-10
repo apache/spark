@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  * Options for the JDBC data source.
  */
@@ -119,30 +121,23 @@ class JDBCOptions(
 }
 
 object JDBCOptions {
-  val JDBC_URL = "url"
-  val JDBC_TABLE_NAME = "dbtable"
-  val JDBC_DRIVER_CLASS = "driver"
-  val JDBC_PARTITION_COLUMN = "partitionColumn"
-  val JDBC_LOWER_BOUND = "lowerBound"
-  val JDBC_UPPER_BOUND = "upperBound"
-  val JDBC_NUM_PARTITIONS = "numPartitions"
-  val JDBC_BATCH_FETCH_SIZE = "fetchsize"
-  val JDBC_TRUNCATE = "truncate"
-  val JDBC_CREATE_TABLE_OPTIONS = "createTableOptions"
-  val JDBC_BATCH_INSERT_SIZE = "batchsize"
-  val JDBC_TXN_ISOLATION_LEVEL = "isolationLevel"
+  private val jdbcOptionNames = ArrayBuffer.empty[String]
 
-  private val jdbcOptionNames = Seq(
-    JDBC_URL,
-    JDBC_TABLE_NAME,
-    JDBC_DRIVER_CLASS,
-    JDBC_PARTITION_COLUMN,
-    JDBC_LOWER_BOUND,
-    JDBC_UPPER_BOUND,
-    JDBC_NUM_PARTITIONS,
-    JDBC_BATCH_FETCH_SIZE,
-    JDBC_TRUNCATE,
-    JDBC_CREATE_TABLE_OPTIONS,
-    JDBC_BATCH_INSERT_SIZE,
-    JDBC_TXN_ISOLATION_LEVEL)
+  private def newOption(name: String): String = {
+    jdbcOptionNames += name
+    name
+  }
+
+  val JDBC_URL = newOption("url")
+  val JDBC_TABLE_NAME = newOption("dbtable")
+  val JDBC_DRIVER_CLASS = newOption("driver")
+  val JDBC_PARTITION_COLUMN = newOption("partitionColumn")
+  val JDBC_LOWER_BOUND = newOption("lowerBound")
+  val JDBC_UPPER_BOUND = newOption("upperBound")
+  val JDBC_NUM_PARTITIONS = newOption("numPartitions")
+  val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
+  val JDBC_TRUNCATE = newOption("truncate")
+  val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
+  val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
+  val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
 }
