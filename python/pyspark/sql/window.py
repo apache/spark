@@ -82,6 +82,10 @@ class Window(object):
         :param end: boundary end, inclusive.
                     The frame is unbounded if this is ``sys.maxsize`` (or higher).
         """
+        if start <= -sys.maxsize:
+            start = WindowSpec._JAVA_MIN_LONG
+        if end >= sys.maxsize:
+            end = WindowSpec._JAVA_MAX_LONG
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
         return WindowSpec(jspec)
@@ -102,6 +106,10 @@ class Window(object):
         :param end: boundary end, inclusive.
                     The frame is unbounded if this is ``sys.maxsize`` (or higher).
         """
+        if start <= -sys.maxsize:
+            start = WindowSpec._JAVA_MIN_LONG
+        if end >= sys.maxsize:
+            end = WindowSpec._JAVA_MAX_LONG
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
         return WindowSpec(jspec)
