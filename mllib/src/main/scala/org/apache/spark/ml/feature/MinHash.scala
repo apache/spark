@@ -21,11 +21,34 @@ import scala.util.Random
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.param.{BooleanParam, Params}
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql.types.StructType
 
 /**
+ * :: Experimental ::
+ * Params for [[MinHash]].
+ */
+@Since("2.1.0")
+private[ml] trait MinHashParams extends Params {
+
+  /**
+   * If true, set the random seed to 0. Otherwise, use default setting in scala.util.Random
+   * @group param
+   */
+  @Since("2.1.0")
+  val hasSeed: BooleanParam = new BooleanParam(this, "hasSeed",
+    "If true, set the random seed to 0.")
+
+  /** @group getParam */
+  @Since("2.1.0")
+  final def getHasSeed: Boolean = $(hasSeed)
+}
+
+/**
+ * :: Experimental ::
  * Model produced by [[MinHash]]
+ * @param hashFunctions A seq of hash functions, mapping elements to their hash values.
  */
 @Experimental
 @Since("2.1.0")
@@ -36,8 +59,9 @@ class MinHashModel private[ml] (override val uid: String, hashFunctions: Seq[Int
   override protected[this] val hashFunction: Vector => Vector = {
     elems: Vector =>
       require(elems.numNonzeros > 0, "Must have at least 1 non zero entry.")
+      val elemsList = elems.toSparse.indices.toList
       Vectors.dense(hashFunctions.map(
-        func => elems.toSparse.indices.toList.map(func).min.toDouble
+        func => elemsList.map(func).min.toDouble
       ).toArray)
   }
 
@@ -45,7 +69,10 @@ class MinHashModel private[ml] (override val uid: String, hashFunctions: Seq[Int
   override protected[ml] def keyDistance(x: Vector, y: Vector): Double = {
     val xSet = x.toSparse.indices.toSet
     val ySet = y.toSparse.indices.toSet
-    1 - xSet.intersect(ySet).size.toDouble / xSet.union(ySet).size.toDouble
+    val intersectionSize = xSet.intersect(ySet).size.toDouble
+    val unionSize = xSet.union(ySet).size.toDouble
+    assert(unionSize > 0, "The union of two input sets must have at least 1 elements")
+    1 - intersectionSize / unionSize
   }
 
   @Since("2.1.0")
@@ -56,15 +83,20 @@ class MinHashModel private[ml] (override val uid: String, hashFunctions: Seq[Int
 }
 
 /**
- * LSH class for Jaccard distance
- * The input set should be represented in sparse vector form. For example,
- *    Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])
- * means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5
+ * :: Experimental ::
+ * LSH class for Jaccard distance.
+ *
+ * The input can be dense or sparse vectors, but it is more efficient if it is sparse. For example,
+ *    `Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])`
+ * means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5.
+ * Also, any input vector must have at least 1 non-zero indices, and all non-zero values are treated
+ * as binary "1" values.
  */
 @Experimental
 @Since("2.1.0")
-class MinHash private[ml] (override val uid: String) extends LSH[MinHashModel] {
+class MinHash(override val uid: String) extends LSH[MinHashModel] with MinHashParams {
 
+  // A large prime smaller than sqrt(2^63 − 1)
   private[this] val prime = 2038074743
 
   @Since("2.1.0")
@@ -76,19 +108,24 @@ class MinHash private[ml] (override val uid: String) extends LSH[MinHashModel] {
   @Since("2.1.0")
   override def setOutputDim(value: Int): this.type = super.setOutputDim(value)
 
-  private[this] lazy val randSeq: Seq[Int] = {
-    Seq.fill($(outputDim))(1 + Random.nextInt(prime - 1)).take($(outputDim))
-  }
-
   @Since("2.1.0")
-  private[ml] def this() = {
+  def this() = {
     this(Identifiable.randomUID("min hash"))
   }
 
+  setDefault(outputDim -> 1, outputCol -> "lshFeatures", hasSeed -> false)
+
+  @Since("2.1.0")
+  def setHasSeed(value: Boolean): this.type = set(hasSeed, value)
+
   @Since("2.1.0")
   override protected[this] def createRawLSHModel(inputDim: Int): MinHashModel = {
+    require(inputDim <= prime / 2, "The input vector dimension is too large for MinHash to handle.")
+    if ($(hasSeed)) Random.setSeed(0)
     val numEntry = inputDim * 2
-    require(numEntry < prime, "The input vector dimension is too large for MinHash to handle.")
+    val randSeq: Seq[Int] = {
+      Seq.fill($(outputDim))(1 + Random.nextInt(prime - 1))
+    }
     val hashFunctions: Seq[Int => Long] = {
       (0 until $(outputDim)).map { i: Int =>
         // Perfect Hash function, use 2n buckets to reduce collision.
@@ -100,8 +137,7 @@ class MinHash private[ml] (override val uid: String) extends LSH[MinHashModel] {
 
   @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    require(schema.apply($(inputCol)).dataType.sameType(new VectorUDT),
-      s"${$(inputCol)} must be vectors")
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     validateAndTransformSchema(schema)
   }
 }

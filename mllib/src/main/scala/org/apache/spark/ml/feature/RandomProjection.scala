@@ -23,20 +23,40 @@ import breeze.linalg.normalize
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.param.{DoubleParam, Params, ParamValidators}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.param.{BooleanParam, DoubleParam, Params, ParamValidators}
+import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql.types.StructType
 
 /**
+ * :: Experimental ::
  * Params for [[RandomProjection]].
  */
-@Experimental
 @Since("2.1.0")
 private[ml] trait RandomProjectionParams extends Params {
+
+  /**
+   * The length of each hash bucket, a larger bucket lowers the false negative rate.
+   *
+   * If input vectors are normalized, 1-10 times of pow(numRecords, -1/inputDim) would be a
+   * reasonable value
+   * @group param
+   */
   @Since("2.1.0")
   val bucketLength: DoubleParam = new DoubleParam(this, "bucketLength",
     "the length of each hash bucket, a larger bucket lowers the false negative rate.",
     ParamValidators.gt(0))
+
+  /**
+   * If true, set the random seed to 0. Otherwise, use default setting in scala.util.Random
+   * @group param
+   */
+  @Since("2.1.0")
+  val hasSeed: BooleanParam = new BooleanParam(this, "hasSeed",
+    "If true, set the random seed to 0.")
+
+  /** @group getParam */
+  @Since("2.1.0")
+  final def getHasSeed: Boolean = $(hasSeed)
 
   /** @group getParam */
   @Since("2.1.0")
@@ -44,13 +64,15 @@ private[ml] trait RandomProjectionParams extends Params {
 }
 
 /**
+ * :: Experimental ::
  * Model produced by [[RandomProjection]]
+ * @param randUnitVectors An array of random unit vectors. Each vector represents a hash function.
  */
 @Experimental
 @Since("2.1.0")
 class RandomProjectionModel private[ml] (
-    @Since("2.1.0") override val uid: String,
-    @Since("2.1.0") val randUnitVectors: Array[Vector])
+    override val uid: String,
+    val randUnitVectors: Array[Vector])
   extends LSHModel[RandomProjectionModel] with RandomProjectionParams {
 
   @Since("2.1.0")
@@ -76,8 +98,13 @@ class RandomProjectionModel private[ml] (
 }
 
 /**
- * This [[RandomProjection]] implements Locality Sensitive Hashing functions with 2-stable
- * distributions.
+ * :: Experimental ::
+ * This [[RandomProjection]] implements Locality Sensitive Hashing functions for Euclidean
+ * distance metrics.
+ *
+ * The input is dense or sparse vectors, each of which represents a point in the Euclidean
+ * distance space. The output will be vectors of configurable dimension. Hash value in the same
+ * dimension is calculated by the same hash function.
  *
  * References:
  * Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
@@ -85,8 +112,7 @@ class RandomProjectionModel private[ml] (
  */
 @Experimental
 @Since("2.1.0")
-class RandomProjection private[ml] (
-      @Since("2.1.0") override val uid: String) extends LSH[RandomProjectionModel]
+class RandomProjection(override val uid: String) extends LSH[RandomProjectionModel]
   with RandomProjectionParams {
 
   @Since("2.1.0")
@@ -99,16 +125,23 @@ class RandomProjection private[ml] (
   override def setOutputDim(value: Int): this.type = super.setOutputDim(value)
 
   @Since("2.1.0")
-  private[ml] def this() = {
+  def this() = {
     this(Identifiable.randomUID("random projection"))
   }
+
+  setDefault(outputDim -> 1, outputCol -> "lshFeatures", hasSeed -> false)
 
   /** @group setParam */
   @Since("2.1.0")
   def setBucketLength(value: Double): this.type = set(bucketLength, value)
 
+  /** @group setParam */
+  @Since("2.1.0")
+  def setHasSeed(value: Boolean): this.type = set(hasSeed, value)
+
   @Since("2.1.0")
   override protected[this] def createRawLSHModel(inputDim: Int): RandomProjectionModel = {
+    if ($(hasSeed)) Random.setSeed(0)
     val randUnitVectors: Array[Vector] = {
       Array.fill($(outputDim)) {
         val randArray = Array.fill(inputDim)(Random.nextGaussian())
@@ -120,8 +153,7 @@ class RandomProjection private[ml] (
 
   @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    require(schema.apply($(inputCol)).dataType.sameType(new VectorUDT),
-      s"${$(inputCol)} must be vectors")
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     validateAndTransformSchema(schema)
   }
 }

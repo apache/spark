@@ -37,10 +37,11 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
+      .setHasSeed(true)
 
     val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, rp, 8.0, 2.0)
-    assert(falsePositive < 0.1)
-    assert(falseNegative < 0.1)
+    assert(falsePositive < 0.07)
+    assert(falseNegative < 0.05)
   }
 
   test("RandomProjection with high dimension data") {
@@ -57,10 +58,11 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(2.5)
+      .setHasSeed(true)
 
     val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, rp, 3.0, 2.0)
-    assert(falsePositive < 0.1)
-    assert(falseNegative < 0.1)
+    assert(falsePositive == 0.0)
+    assert(falseNegative < 0.03)
   }
 
   test("approxNearestNeighbors for random projection") {
@@ -75,11 +77,12 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
+      .setHasSeed(true)
 
-    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, df, key, 10,
+    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, df, key, 100,
       singleProbing = true)
-    assert(precision >= 0.6)
-    assert(recall >= 0.6)
+    assert(precision >= 0.7)
+    assert(recall >= 0.7)
   }
 
   test("approxNearestNeighbors with multiple probing") {
@@ -94,11 +97,12 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
+      .setHasSeed(true)
 
     val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, df, key, 100,
       singleProbing = false)
-    assert(precision >= 0.6)
-    assert(recall >= 0.6)
+    assert(precision >= 0.75)
+    assert(recall >= 0.75)
   }
 
   test("approxSimilarityJoin for random projection on different dataset") {
@@ -117,10 +121,11 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
+      .setHasSeed(true)
 
     val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(rp, dfA, dfB, 1.0)
     assert(precision == 1.0)
-    assert(recall >= 0.8)
+    assert(recall >= 0.95)
   }
 
   test("approxSimilarityJoin for self join") {
@@ -134,9 +139,10 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
+      .setHasSeed(true)
 
     val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(rp, df, df, 3.0)
     assert(precision == 1.0)
-    assert(recall >= 0.7)
+    assert(recall == 1.0)
   }
 }

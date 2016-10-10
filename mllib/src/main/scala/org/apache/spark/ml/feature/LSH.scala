@@ -26,14 +26,13 @@ import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql._
-import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
+ * :: Experimental ::
  * Params for [[LSH]].
  */
-@Experimental
 @Since("2.1.0")
 private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   /**
@@ -52,9 +51,6 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   @Since("2.1.0")
   final def getOutputDim: Int = $(outputDim)
 
-  // TODO: Decide about this default. It should probably depend on the particular LSH algorithm.
-  setDefault(outputDim -> 1, outputCol -> "lshFeatures")
-
   /**
    * Transform the Schema for LSH
    * @param schema The schema of the input dataset without [[outputCol]]
@@ -67,6 +63,7 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
 }
 
 /**
+ * :: Experimental ::
  * Model produced by [[LSH]].
  */
 @Experimental
@@ -87,8 +84,8 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
   /**
    * Calculate the distance between two different keys using the distance metric corresponding
    * to the hashFunction
-   * @param x One of the point in the metric space
-   * @param y Another the point in the metric space
+   * @param x One input vector in the metric space
+   * @param y One input vector in the metric space
    * @return The distance between x and y
    */
   @Since("2.1.0")
@@ -186,7 +183,9 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
 
   /**
    * Preprocess step for approximate similarity join. Transform and explode the [[outputCol]] to
-   * explodeCols.
+   * two explodeCols: entry and value. "entry" is the index in hash vector, and "value" is the
+   * value of corresponding value of the index in the vector.
+   *
    * @param dataset The dataset to transform and explode.
    * @param explodeCols The alias for the exploded columns, must be a seq of two strings.
    * @return A dataset containing idCol, inputCol and explodeCols
@@ -194,19 +193,12 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
   @Since("2.1.0")
   private[this] def processDataset(
       dataset: Dataset[_],
-      inputName: String,
       explodeCols: Seq[String]): Dataset[_] = {
-    require(explodeCols.size == 2, "explodeCols must be two strings.")
-    val vectorToMap: UserDefinedFunction = udf((x: Vector) => x.asBreeze.iterator.toMap,
-      MapType(DataTypes.IntegerType, DataTypes.DoubleType))
-    val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
+    if (!dataset.columns.contains($(outputCol))) {
       transform(dataset)
     } else {
       dataset.toDF()
     }
-    modelDataset.select(
-      struct(col("*")).as(inputName),
-      explode(vectorToMap(col($(outputCol)))).as(explodeCols))
   }
 
   /**
@@ -249,31 +241,32 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
       distCol: String): Dataset[_] = {
 
     val explodeCols = Seq("entry", "hashValue")
-    val inputName = "input"
-    val explodedA = processDataset(datasetA, inputName, explodeCols)
+    val explodedA = processDataset(datasetA, explodeCols)
 
     // If this is a self join, we need to recreate the inputCol of datasetB to avoid ambiguity.
     // TODO: Remove recreateCol logic once SPARK-17154 is resolved.
     val explodedB = if (datasetA != datasetB) {
-      processDataset(datasetB, inputName, explodeCols)
+      processDataset(datasetB, explodeCols)
     } else {
       val recreatedB = recreateCol(datasetB, $(inputCol), s"${$(inputCol)}#${Random.nextString(5)}")
-      processDataset(recreatedB, inputName, explodeCols)
+      processDataset(recreatedB, explodeCols)
     }
 
+    val shareBucketUDF = udf((x: Vector, y: Vector) => hashDistance(x, y) == 0,
+      DataTypes.BooleanType)
+
     // Do a hash join on where the exploded hash values are equal.
-    val joinedDataset = explodedA.join(explodedB, explodeCols)
-      .drop(explodeCols: _*)
+    val joinedDataset = explodedA.join(explodedB, shareBucketUDF(explodedA($(outputCol)), explodedB($(outputCol))))
 
     // Add a new column to store the distance of the two records.
     val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y), DataTypes.DoubleType)
     val joinedDatasetWithDist = joinedDataset.select(col("*"),
-      distUDF(explodedA(s"$inputName.${$(inputCol)}"),
-        explodedB(s"$inputName.${$(inputCol)}")).as(distCol)
+      distUDF(explodedA(s"${$(inputCol)}"),
+        explodedB(s"${$(inputCol)}")).as(distCol)
     )
 
     // Filter the joined datasets where the distance are smaller than the threshold.
-    joinedDatasetWithDist.filter(col(distCol) < threshold).distinct()
+    joinedDatasetWithDist.filter(col(distCol) < threshold)
   }
 
   /**
@@ -289,9 +282,14 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
 }
 
 /**
+ * :: Experimental ::
  * Locality Sensitive Hashing for different metrics space. Support basic transformation with a new
  * hash column, approximate nearest neighbor search with a dataset and a key, and approximate
  * similarity join of two datasets.
+ *
+ * This LSH class implements OR-amplification: more than 1 hash functions can be chosen, and each
+ * input vector are hashed by all hash functions. Two input vectors are defined to be in the same
+ * bucket as long as ANY one of the hash value matches.
  *
  * References:
  * (1) Gionis, Aristides, Piotr Indyk, and Rajeev Motwani. "Similarity search in high dimensions

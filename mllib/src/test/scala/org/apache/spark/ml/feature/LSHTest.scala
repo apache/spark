@@ -27,26 +27,31 @@ private[ml] object LSHTest {
    * For any locality sensitive function h in a metric space, we meed to verify whether
    * the following property is satisfied.
    *
-   * There exist d1, d2, p1, p2, so that for any two elements e1 and e2,
-   * If dist(e1, e2) >= dist1, then Pr{h(x) == h(y)} >= p1
-   * If dist(e1, e2) <= dist2, then Pr{h(x) != h(y)} <= p2
+   * There exist dist1, dist2, p1, p2, so that for any two elements e1 and e2,
+   * If dist(e1, e2) <= dist1, then Pr{h(x) == h(y)} >= p1
+   * If dist(e1, e2) >= dist2, then Pr{h(x) == h(y)} <= p2
    *
    * This is called locality sensitive property. This method checks the property on an
    * existing dataset and calculate the probabilities.
    * (https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Definition)
    *
+   * This method hashes each elements to hash buckets using LSH, and calculate the false positive
+   * and false negative:
+   * False positive: Of all (e1, e2) sharing any bucket, the probability of dist(e1, e2) > distFP
+   * False positive: Of all (e1, e2) not sharing buckets, the probability of dist(e1, e2) < distFN
+   *
    * @param dataset The dataset to verify the locality sensitive hashing property.
    * @param lsh The lsh instance to perform the hashing
-   * @param dist1 Distance threshold for false positive
-   * @param dist2 Distance threshold for false negative
+   * @param distFP Distance threshold for false positive
+   * @param distFN Distance threshold for false negative
    * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing the false positive and false negative rate
    */
   def calculateLSHProperty[T <: LSHModel[T]](
       dataset: Dataset[_],
       lsh: LSH[T],
-      dist1: Double,
-      dist2: Double): (Double, Double) = {
+      distFP: Double,
+      distFN: Double): (Double, Double) = {
     val model = lsh.fit(dataset)
     val inputCol = model.getInputCol
     val outputCol = model.getOutputCol
@@ -64,8 +69,8 @@ private[ml] object LSHTest {
     // Compute the probabilities based on the join result
     val positive = result.filter(col("same_bucket"))
     val negative = result.filter(!col("same_bucket"))
-    val falsePositiveCount = positive.filter(col("distance") > dist1).count().toDouble
-    val falseNegativeCount = negative.filter(col("distance") < dist2).count().toDouble
+    val falsePositiveCount = positive.filter(col("distance") > distFP).count().toDouble
+    val falseNegativeCount = negative.filter(col("distance") < distFN).count().toDouble
     (falsePositiveCount / positive.count(), falseNegativeCount / negative.count())
   }
 
