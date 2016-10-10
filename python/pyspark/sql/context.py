@@ -386,7 +386,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlContext.tables()
         >>> df2.filter("tableName = 'table1'").first()
-        Row(tableName=u'table1', isTemporary=True)
+        Row(database=u'', tableName=u'table1', isTemporary=True)
         """
         if dbName is None:
             return DataFrame(self._ssql_ctx.tables(), self)
