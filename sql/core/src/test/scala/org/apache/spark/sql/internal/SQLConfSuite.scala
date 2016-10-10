@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.WholeStageCodegenExec
-import org.apache.spark.sql.internal.GlobalSQLConf._
+import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -266,7 +266,9 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("cannot set/unset global SQL conf") {
-    intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
-    intercept[AnalysisException](sql(s"UNSET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
+    val e1 = intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
+    assert(e1.message.contains("Cannot modify the value of a static config"))
+    val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
+    assert(e2.message.contains("Cannot modify the value of a static config"))
   }
 }

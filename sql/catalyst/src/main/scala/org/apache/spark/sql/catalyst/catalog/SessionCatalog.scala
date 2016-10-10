@@ -25,7 +25,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -63,7 +62,7 @@ class SessionCatalog(
       conf: CatalystConf) {
     this(
       externalCatalog,
-      new GlobalTempViewManager(GLOBAL_TEMP_DATABASE.defaultValueString),
+      new GlobalTempViewManager("global_temp"),
       DummyFunctionResourceLoader,
       functionRegistry,
       conf,
