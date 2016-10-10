@@ -110,6 +110,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
    * If the formula was used by classification algorithms,
    * we can force to index label even it is numeric type by setting this param with true.
    * Default: false.
+   * @group param
    */
   @Since("2.1.0")
   val forceIndexLabel: BooleanParam = new BooleanParam(this, "forceIndexLabel",
