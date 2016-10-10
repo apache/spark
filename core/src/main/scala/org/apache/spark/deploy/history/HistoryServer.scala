@@ -305,7 +305,6 @@ class HistoryServer(
 private[history] class HistoryMetrics(val owner: HistoryServer, prefix: String)
     extends HistoryMetricSource(prefix) {
   override val sourceName = "history"
-
 }
 
 /**

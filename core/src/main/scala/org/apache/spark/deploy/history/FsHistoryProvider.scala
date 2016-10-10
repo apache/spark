@@ -245,16 +245,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  /**
-   * Bind to the History Server: start update and cleaner threads; perform any metric registration
-   *
-   * @param binding binding information
-   */
-  override def start(binding: ApplicationHistoryBinding): Unit = {
-    super.start(binding)
-    historyMetrics.registerMetrics(binding.metrics, binding.health)
-  }
-
   override def getListing(): Iterator[FsApplicationHistoryInfo] = applications.values.iterator
 
   override def getApplicationInfo(appId: String): Option[FsApplicationHistoryInfo] = {
@@ -288,10 +278,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             if (appListener.appId.isDefined) {
               ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
               // make sure to set admin acls before view acls so they are properly picked up
-              val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")
-              ui.getSecurityManager.setAdminAcls(adminAcls)
-              ui.getSecurityManager.setViewAcls(attempt.sparkUser, appListener.viewAcls.getOrElse(""))
-              val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
+              val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
                 appListener.adminAclsGroups.getOrElse("")
               ui.getSecurityManager.setAdminAclsGroups(adminAclsGroups)
               ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))

@@ -24,7 +24,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import com.codahale.metrics.{Counter, Counting, Metric, MetricRegistry, Timer}
+import com.codahale.metrics.{Counter, Counting, Metric, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 import org.eclipse.jetty.servlet.FilterHolder
 
