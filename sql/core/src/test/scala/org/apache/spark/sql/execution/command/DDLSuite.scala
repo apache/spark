@@ -969,17 +969,17 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         """.stripMargin)
       checkAnswer(
         sql("SHOW TABLES IN default 'show1*'"),
-        Row("show1a", true) :: Nil)
+        Row("", "show1a", true) :: Nil)
 
       checkAnswer(
         sql("SHOW TABLES IN default 'show1*|show2*'"),
-        Row("show1a", true) ::
-          Row("show2b", true) :: Nil)
+        Row("", "show1a", true) ::
+          Row("", "show2b", true) :: Nil)
 
       checkAnswer(
         sql("SHOW TABLES 'show1*|show2*'"),
-        Row("show1a", true) ::
-          Row("show2b", true) :: Nil)
+        Row("", "show1a", true) ::
+          Row("", "show2b", true) :: Nil)
 
       assert(
         sql("SHOW TABLES").count() >= 2)

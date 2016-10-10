@@ -220,6 +220,41 @@ The `sql` function enables applications to run SQL queries programmatically and 
 </div>
 
 
+## Global Temporary View
+
+Temporay views in Spark SQL are session-scoped and will disappear if the session that creates it
+terminates. If you want to have a temporary view that is shared among all sessions and keep alive
+until the Spark application terminiates, you can create a global temporary view. Global temporary
+view is tied to a system preserved database `global_temp`, and we must use the qualified name to
+refer it, e.g. `SELECT * FROM global_temp.view1`.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example global_temp_view scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% include_example global_temp_view java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example global_temp_view python/sql/basic.py %}
+</div>
+
+<div data-lang="sql"  markdown="1">
+
+{% highlight sql %}
+
+CREATE GLOBAL TEMPORARY VIEW temp_view AS SELECT a + 1, b * 2 FROM tbl
+
+SELECT * FROM global_temp.temp_view
+
+{% endhighlight %}
+
+</div>
+</div>
+
+
 ## Creating Datasets
 
 Datasets are similar to RDDs, however, instead of using Java serialization or Kryo they use
@@ -1058,14 +1093,14 @@ the Data Sources API. The following options are supported:
       The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows).
     </td>
   </tr>
-  
+
   <tr>
     <td><code>truncate</code></td>
     <td>
-     This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g. indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. It defaults to <code>false</code>. 
+     This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g. indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. It defaults to <code>false</code>.
    </td>
   </tr>
-  
+
   <tr>
     <td><code>createTableOptions</code></td>
     <td>
@@ -1101,11 +1136,11 @@ USING org.apache.spark.sql.jdbc
 OPTIONS (
   url "jdbc:postgresql:dbserver",
   dbtable "schema.tablename",
-  user 'username', 
+  user 'username',
   password 'password'
 )
 
-INSERT INTO TABLE jdbcTable 
+INSERT INTO TABLE jdbcTable
 SELECT * FROM resultTable
 {% endhighlight %}
 

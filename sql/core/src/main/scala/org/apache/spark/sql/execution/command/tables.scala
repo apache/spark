@@ -579,9 +579,10 @@ case class ShowTablesCommand(
     databaseName: Option[String],
     tableIdentifierPattern: Option[String]) extends RunnableCommand {
 
-  // The result of SHOW TABLES has two columns, tableName and isTemporary.
+  // The result of SHOW TABLES has three columns: database, tableName and isTemporary.
   override val output: Seq[Attribute] = {
-    AttributeReference("tableName", StringType, nullable = false)() ::
+    AttributeReference("database", StringType, nullable = false)() ::
+      AttributeReference("tableName", StringType, nullable = false)() ::
       AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
   }
 
@@ -592,9 +593,9 @@ case class ShowTablesCommand(
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
     val tables =
       tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
-    tables.map { t =>
-      val isTemp = t.database.isEmpty
-      Row(t.table, isTemp)
+    tables.map { tableIdent =>
+      val isTemp = catalog.isTemporaryTable(tableIdent)
+      Row(tableIdent.database.getOrElse(""), tableIdent.table, isTemp)
     }
   }
 }

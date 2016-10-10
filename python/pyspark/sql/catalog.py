@@ -167,7 +167,7 @@ class Catalog(object):
 
     @since(2.0)
     def dropTempView(self, viewName):
-        """Drops the temporary view with the given view name in the catalog.
+        """Drops the local temporary view with the given view name in the catalog.
         If the view has been cached before, then it will also be uncached.
 
         >>> spark.createDataFrame([(1, 1)]).createTempView("my_table")
@@ -180,6 +180,22 @@ class Catalog(object):
         AnalysisException: ...
         """
         self._jcatalog.dropTempView(viewName)
+
+    @since(2.1)
+    def dropGlobalTempView(self, viewName):
+        """Drops the global temporary view with the given view name in the catalog.
+        If the view has been cached before, then it will also be uncached.
+
+        >>> spark.createDataFrame([(1, 1)]).createGlobalTempView("my_table")
+        >>> spark.table("global_temp.my_table").collect()
+        [Row(_1=1, _2=1)]
+        >>> spark.catalog.dropGlobalTempView("my_table")
+        >>> spark.table("global_temp.my_table") # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+            ...
+        AnalysisException: ...
+        """
+        self._jcatalog.dropGlobalTempView(viewName)
 
     @ignore_unicode_prefix
     @since(2.0)
