@@ -2029,6 +2029,10 @@ class RDD(object):
         [[1, 2, 3, 4, 5]]
         """
         if shuffle:
+            # In Scala's repartition code, we will distribute elements evenly across output
+            # partitions. However, the RDD from Python is serialized as a single binary data,
+            # so the distribution fails and produces highly skewed partitions. We need to
+            # convert it to a RDD of java object before repartitioning.
             data_java_rdd = self._to_java_object_rdd().coalesce(numPartitions, shuffle)
             jrdd = self.ctx._jvm.SerDeUtil.javaToPython(data_java_rdd)
         else:
