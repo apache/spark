@@ -244,20 +244,20 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
           .take((chiSqTestResult.length * percentile).toInt)
       case ChiSqSelector.FPR =>
         chiSqTestResult
-          .filter{ case (res, _) => res.pValue < alpha }
+          .filter { case (res, _) => res.pValue < alpha }
       case ChiSqSelector.FDR =>
         val tempRDD = chiSqTestResult
-          .sortBy{ case (res, _) => res.pValue }
+          .sortBy { case (res, _) => res.pValue }
         val maxIndex = tempRDD
           .zipWithIndex
-          .filter{ case ((res, _), index) =>
+          .filter { case ((res, _), index) =>
             res.pValue <= alpha * (index + 1) / chiSqTestResult.length }
-          .map{ case (_, index) => index}
+          .map { case (_, index) => index}
           .max
         tempRDD.take(maxIndex + 1)
       case ChiSqSelector.FWE =>
         chiSqTestResult
-          .filter{ case (res, _) => res.pValue < alpha/chiSqTestResult.length }
+          .filter { case (res, _) => res.pValue < alpha/chiSqTestResult.length }
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
