@@ -18,8 +18,10 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
 
@@ -27,13 +29,26 @@ import org.apache.spark.sql.Dataset
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
 
+  import testImplicits._
+  import GaussianMixtureSuite._
+
   final val k = 5
   @transient var dataset: Dataset[_] = _
+  @transient var denseDataset: Dataset[_] = _
+  @transient var sparseDataset: Dataset[_] = _
+  @transient var decompositionDataset: Dataset[_] = _
+  @transient var rDataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
+    denseDataset = denseData.map(FeatureData).toDF()
+    sparseDataset = denseData.map { point =>
+      FeatureData(Vectors.sparse(1, Array(0), point.toArray))
+    }.toDF()
+    decompositionDataset = decompositionData.map(FeatureData).toDF()
+    rDataset = rData.map(FeatureData).toDF()
   }
 
   test("default parameters") {
@@ -126,6 +141,91 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     testEstimatorAndModelReadWrite(gm, dataset,
       GaussianMixtureSuite.allParamSettings, checkModelData)
   }
+
+  test("univariate dense data with two clusters") {
+    val weights = Array(2.0 / 3.0, 1.0 / 3.0)
+    val mean = Array(Vectors.dense(5.1604), Vectors.dense(-4.3673))
+    val cov = Array(Matrices.dense(1, 1, Array(0.86644)), Matrices.dense(1, 1, Array(1.1098)))
+
+    val gmm = new GaussianMixture().setK(2).fit(denseDataset)
+
+    assert(gmm.weights(0) ~== weights(0) absTol 1E-3)
+    assert(gmm.weights(1) ~== weights(1) absTol 1E-3)
+    assert(gmm.gaussians(0).mean ~== mean(0) absTol 1E-3)
+    assert(gmm.gaussians(1).mean ~== mean(1) absTol 1E-3)
+    assert(gmm.gaussians(0).cov ~== cov(0) absTol 1E-3)
+    assert(gmm.gaussians(1).cov ~== cov(1) absTol 1E-3)
+  }
+
+  test("univariate sparse data with two clusters") {
+    val weights = Array(2.0 / 3.0, 1.0 / 3.0)
+    val mean = Array(Vectors.dense(5.1604), Vectors.dense(-4.3673))
+    val cov = Array(Matrices.dense(1, 1, Array(0.86644)), Matrices.dense(1, 1, Array(1.1098)))
+
+    val gmm = new GaussianMixture().setK(2).fit(sparseDataset)
+
+    assert(gmm.weights(0) ~== weights(0) absTol 1E-3)
+    assert(gmm.weights(1) ~== weights(1) absTol 1E-3)
+    assert(gmm.gaussians(0).mean ~== mean(0) absTol 1E-3)
+    assert(gmm.gaussians(1).mean ~== mean(1) absTol 1E-3)
+    assert(gmm.gaussians(0).cov ~== cov(0) absTol 1E-3)
+    assert(gmm.gaussians(1).cov ~== cov(1) absTol 1E-3)
+  }
+
+  test("check distributed decomposition") {
+    val k = 5
+    val d = decompositionData.head.size
+    assert(GaussianMixture.shouldDistributeGaussians(k, d))
+
+    val gmm = new GaussianMixture().setK(k).fit(decompositionDataset)
+    assert(gmm.getK === k)
+  }
+
+  test("multivariate data and check againt R mvnormalmixEM") {
+    /*
+      Using the following R code to generate data and train the model using mixtools package.
+      library(mvtnorm)
+      library(mixtools)
+      set.seed(1)
+      a <- rmvnorm(7, c(0, 0))
+      b <- rmvnorm(8, c(10, 10))
+      data <- rbind(a, b)
+      model <- mvnormalmixEM(data, k = 2)
+      model$lambda
+
+      [1] 0.4666667 0.5333333
+
+      model$mu
+
+      [1] 0.11731091 -0.06192351
+      [1] 10.363673  9.897081
+
+      model$sigma
+
+      [[1]]
+                 [,1]       [,2]
+      [1,] 0.62049934 0.06880802
+      [2,] 0.06880802 1.27431874
+
+      [[2]]
+                [,1]     [,2]
+      [1,] 0.2961543 0.160783
+      [2,] 0.1607830 1.008878
+     */
+    val weights = Array(0.5333333, 0.4666667)
+    val mean = Array(Vectors.dense(10.363673, 9.897081), Vectors.dense(0.11731091, -0.06192351))
+    val cov = Array(Matrices.dense(2, 2, Array(0.2961543, 0.1607830, 0.160783, 1.008878)),
+      Matrices.dense(2, 2, Array(0.62049934, 0.06880802, 0.06880802, 1.27431874)))
+
+    val gmm = new GaussianMixture().setK(2).fit(rDataset)
+
+    assert(gmm.weights(0) ~== weights(0) absTol 1E-3)
+    assert(gmm.weights(1) ~== weights(1) absTol 1E-3)
+    assert(gmm.gaussians(0).mean ~== mean(0) absTol 1E-3)
+    assert(gmm.gaussians(1).mean ~== mean(1) absTol 1E-3)
+    assert(gmm.gaussians(0).cov ~== cov(0) absTol 1E-3)
+    assert(gmm.gaussians(1).cov ~== cov(1) absTol 1E-3)
+  }
 }
 
 object GaussianMixtureSuite {
@@ -141,4 +241,29 @@ object GaussianMixtureSuite {
     "maxIter" -> 2,
     "tol" -> 0.01
   )
+
+  val denseData = Seq(
+    Vectors.dense(-5.1971), Vectors.dense(-2.5359), Vectors.dense(-3.8220),
+    Vectors.dense(-5.2211), Vectors.dense(-5.0602), Vectors.dense( 4.7118),
+    Vectors.dense( 6.8989), Vectors.dense( 3.4592), Vectors.dense( 4.6322),
+    Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
+    Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
+  )
+
+  val decompositionData: Seq[Vector] = Seq.tabulate(25) { i: Int =>
+    Vectors.dense(Array.tabulate(50)(i + _.toDouble))
+  }
+
+  val rData = Seq(
+    Vectors.dense(-0.6264538, 0.1836433), Vectors.dense(-0.8356286, 1.5952808),
+    Vectors.dense(0.3295078, -0.8204684), Vectors.dense(0.4874291, 0.7383247),
+    Vectors.dense(0.5757814, -0.3053884), Vectors.dense(1.5117812, 0.3898432),
+    Vectors.dense(-0.6212406, -2.2146999), Vectors.dense(11.1249309, 9.9550664),
+    Vectors.dense(9.9838097, 10.9438362), Vectors.dense(10.8212212, 10.5939013),
+    Vectors.dense(10.9189774, 10.7821363), Vectors.dense(10.0745650, 8.0106483),
+    Vectors.dense(10.6198257, 9.9438713), Vectors.dense(9.8442045, 8.5292476),
+    Vectors.dense(9.5218499, 10.4179416)
+  )
+
+  case class FeatureData(features: Vector)
 }

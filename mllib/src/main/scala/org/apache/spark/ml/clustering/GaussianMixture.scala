@@ -28,7 +28,6 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.clustering.{GaussianMixture => MLlibGM}
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
@@ -323,27 +322,106 @@ class GaussianMixture @Since("2.0.0") (
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  // number of samples per cluster to use when initializing Gaussians
+  private val nSamples = 5
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
     transformSchema(dataset.schema, logging = true)
-    val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
-      case Row(point: Vector) => OldVectors.fromML(point)
+
+    val sc = dataset.sparkSession.sparkContext
+    val _k = $(k)
+    // Extract the number of features.
+    val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
+
+    val instances: RDD[Vector] = dataset.select(col($(featuresCol))).rdd.map {
+      case Row(features: Vector) => features
     }
 
-    val instr = Instrumentation.create(this, rdd)
+    val instr = Instrumentation.create(this, instances)
     instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
 
-    val algo = new MLlibGM()
-      .setK($(k))
-      .setMaxIterations($(maxIter))
-      .setSeed($(seed))
-      .setConvergenceTol($(tol))
-    val parentModel = algo.run(rdd)
-    val gaussians = parentModel.gaussians.map { case g =>
-      new MultivariateGaussian(g.mu.asML, g.sigma.asML)
+    val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(_k, numFeatures)
+
+    // Determine initial weights and corresponding Gaussians.
+    // We start with uniform weights, a random mean from the data, and
+    // diagonal covariance matrices using component variances
+    // derived from the samples.
+    // TODO: Support users supplied initial GMM.
+    val samples = instances.takeSample(withReplacement = true, _k * nSamples, $(seed))
+    val weights = Array.fill(_k)(1.0 / _k)
+    val gaussians = Array.tabulate(_k) { i =>
+      val slice = samples.view(i * nSamples, (i + 1) * nSamples)
+      val mean = {
+        val v = Vectors.zeros(numFeatures)
+        var i = 0
+        while (i < nSamples) {
+          BLAS.axpy(1.0, slice(i), v)
+          i += 1
+        }
+        BLAS.scal(1.0 / nSamples, v)
+        v
+      }
+      /**
+       * Construct matrix where diagonal entries are element-wise
+       * variance of input vectors (computes biased variance)
+       */
+      val cov = {
+        val ss = Vectors.zeros(numFeatures).asBreeze
+        slice.foreach(xi => ss += (xi.asBreeze - mean.asBreeze) :^ 2.0)
+        val diagVec = Vectors.fromBreeze(ss)
+        BLAS.scal(1.0 / nSamples, diagVec)
+        Matrices.diag(diagVec)
+      }
+      new MultivariateGaussian(mean, cov)
     }
-    val model = copyValues(new GaussianMixtureModel(uid, parentModel.weights, gaussians))
-      .setParent(this)
+
+    var llh = Double.MinValue // current log-likelihood
+    var llhp = 0.0            // previous log-likelihood
+
+    var iter = 0
+    while (iter < $(maxIter) && math.abs(llh - llhp) > $(tol)) {
+      // create and broadcast curried cluster contribution function
+      val compute = sc.broadcast(ExpectationSum.add(weights, gaussians)_)
+
+      // aggregate the cluster contribution for all sample points
+      val sums = instances.treeAggregate(ExpectationSum.zero(_k, numFeatures))(
+        compute.value, _ += _)
+
+      /**
+       * Create new distributions based on the partial assignments
+       * (often referred to as the "M" step in literature)
+       */
+      val sumWeights = sums.weights.sum
+
+      if (shouldDistributeGaussians) {
+        val numPartitions = math.min(_k, 1024)
+        val tuples = Seq.tabulate(_k) { i =>
+          (sums.means(i), sums.sigmas(i), sums.weights(i))
+        }
+        val (ws, gs) = sc.parallelize(tuples, numPartitions).map { case (mean, sigma, weight) =>
+          GaussianMixture.updateWeightsAndGaussians(mean, sigma, weight, sumWeights)
+        }.collect().unzip
+        Array.copy(ws.toArray, 0, weights, 0, ws.length)
+        Array.copy(gs.toArray, 0, gaussians, 0, gs.length)
+      } else {
+        var i = 0
+        while (i < _k) {
+          val (weight, gaussian) = GaussianMixture.updateWeightsAndGaussians(
+            sums.means(i), sums.sigmas(i), sums.weights(i), sumWeights)
+          weights(i) = weight
+          gaussians(i) = gaussian
+          i += 1
+        }
+      }
+
+      llhp = llh  // current becomes previous
+      llh = sums.logLikelihood  // this is the freshly computed log-likelihood
+      iter += 1
+      compute.destroy(blocking = false)
+    }
+
+    val model = copyValues(new GaussianMixtureModel(uid, weights, gaussians)).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
@@ -363,6 +441,90 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
 
   @Since("2.0.0")
   override def load(path: String): GaussianMixture = super.load(path)
+
+  /**
+   * Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
+   * d > 25 except for when k is very small.
+   * @param k  Number of topics
+   * @param d  Number of features
+   */
+  private[clustering] def shouldDistributeGaussians(k: Int, d: Int): Boolean = {
+    ((k - 1.0) / k) * d > 25
+  }
+
+  private[clustering] def updateWeightsAndGaussians(
+      mean: Vector,
+      cov: Matrix,
+      weight: Double,
+      sumWeights: Double): (Double, MultivariateGaussian) = {
+    BLAS.scal(1.0 / weight, mean)
+    // TODO: Handle sparse matrix more efficiently
+    BLAS.syr(-weight, mean, cov.asInstanceOf[DenseMatrix])
+    val newWeight = weight / sumWeights
+    cov.update(_ / weight)
+    val newGaussian = new MultivariateGaussian(mean, cov)
+    (newWeight, newGaussian)
+  }
+}
+
+/**
+ * Aggregation class for partial expectation results.
+ */
+private class ExpectationSum(
+    var logLikelihood: Double,
+    val weights: Array[Double],
+    val means: Array[Vector],
+    val sigmas: Array[Matrix]) extends Serializable {
+
+  val k = weights.length
+
+  def += (x: ExpectationSum): ExpectationSum = {
+    var i = 0
+    while (i < k) {
+      weights(i) += x.weights(i)
+      BLAS.axpy(1.0, x.means(i), means(i))
+      sigmas(i).asBreeze += x.sigmas(i).asBreeze
+      i += 1
+    }
+    logLikelihood += x.logLikelihood
+    this
+  }
+}
+
+/**
+ * Companion class to provide zero constructor for ExpectationSum.
+ */
+private object ExpectationSum {
+
+  def zero(k: Int, d: Int): ExpectationSum = {
+    new ExpectationSum(0.0, Array.fill(k)(0.0), Array.fill(k)(Vectors.zeros(d)),
+      Array.fill(k)(Matrices.zeros(d, d)))
+  }
+
+  /**
+   * Compute cluster contributions for each input point
+   * (U, T) => U for aggregation.
+   */
+  def add(
+      weights: Array[Double],
+      dists: Array[MultivariateGaussian])
+      (sum: ExpectationSum, x: Vector): ExpectationSum = {
+    val p = weights.zip(dists).map { case (weight, dist) =>
+        EPSILON + weight * dist.pdf(x)
+    }
+    val pSum = p.sum
+    sum.logLikelihood += math.log(pSum)
+    var i = 0
+    while(i < sum.k) {
+      p(i) /= pSum
+      sum.weights(i) += p(i)
+      BLAS.axpy(p(i), x, sum.means(i))
+      // TODO: Handle sparse matrix more efficiently
+      BLAS.syr(p(i), x, sum.sigmas(i).asInstanceOf[DenseMatrix])
+      i += 1
+    }
+    sum
+  }
 }
 
 /**
