@@ -72,12 +72,6 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       coordinator.skewPartitionIdx(mapOutputStatistics,
         preStageNum,
         Some(estimatedPartitionStartIndices))
-    // scalastyle:off println println(...)
-    println("-------estimatedPartitionStartIndices---------")
-    estimatedPartitionStartIndices.foreach(println)
-    println(estimatedPartitionStartIndices)
-    println("----------------------")
-    skewPartitionIndices.foreach(m => {println(m._1);m._2.foreach(println)})
     assert(skewPartitionIndices.length === 2)
     assert(skewPartitionIndices(0)._1 === expectedSkewPartitionIndices(0)._1)
     assert(skewPartitionIndices(1)._1 === expectedSkewPartitionIndices(1)._1)

@@ -196,18 +196,20 @@ class ExchangeCoordinator(
   * And return a Array of 2-item tuples , the return value is use to create SkewShuffleRowRDD.
   *
   * we find data skew partition by mapOutputStatistics, and reuse partitionStartIndices which
-  * provided by estimatePartitionStartIndices function, to generate new partition start indices.
+  * provided by estimatePartitionStartIndices function, to generate new partition start indices
+  * call "skewPartitionStartIndices". skewPartitionStartIndices is the function return value use
+  * for generate SkewShuffleRowRDD
   * For example, we have two stages with the following pre-shuffle partition size statistics
-  * stage 1: [100 MB, 20 MB, 20000 MB, 10MB, 30 MB] and stage 1 partition is 3
+  * stage 1: [100 MB, 10 MB, 20000 MB, 10MB, 30 MB] and stage 1 partition num is 3
   * stage 2: [10 MB,  10 MB, 70 MB,  5 MB, 5 MB]
   * assuming the target input size is 128 MB
-  * obviously partition 3 is data skew.
-  * we use SkewShuffleRowRDD read per-stage data,in skew join,it's no same deal process.
+  * obviously partition 3 is data skew partition is [2].
+  * the partitionStartIndices is [0,3]
   * in this case , we find partition3 is data skew,as SPARK-9862 said ,we don't put this
   * partition in a reduce task.but broadcast other stage partition3 to this stage partition.
-  * we will return like this:
+  * so the skewPartitionStartIndices  like this:
   * ( 5/*partition num*/
-  * ((-1/*mean no skew*/,/* index like partitionStartIndices */ ),1 /*only generate 1 partition*/)
+  * ((-1/*mean no skew*/,0/* index like partitionStartIndices */ ),1 /*only generate 1 partition*/)
   * (1/*mean this side data skew*/,2/*index*/,3/*generate 3 partition*/),
   * (-1,3,1))// this for generate  SkewShuffleRowRDD of stage 1.
   * ( 5/*partition num*/)
@@ -262,6 +264,10 @@ class ExchangeCoordinator(
         var thisPos = 0
         var otherPos = 0
         val skewPartitionIdx = ArrayBuffer[(Int, Int, Int)]()
+        // use partStartIndices and skewPartition make new "skewStartIndices"
+        // for example: partStartIndices is [1,3,5,7] skew partition is [2,6,9]
+        // then skewStartIndices describe Indices like :[1,2,3,5,6,7,9] and describe
+        // which index is skew index.
         for (i <- 0 until  partStartIndices.length) {
           val thisPartitionSkew = if (skewPartition(k).isDefinedAt(thisPos)) {
             skewPartition(k)(thisPos)
