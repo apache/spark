@@ -31,7 +31,6 @@ import org.scalatest.Assertions.AssertionsHelper
 
 import org.apache.spark._
 import org.apache.spark.TaskState._
-import org.apache.spark.internal.config.BLACKLIST_ENABLED
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
@@ -638,11 +637,5 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       assert(failure.getMessage.contains("test task failure"))
     }
     assertDataStructuresEmpty(noFailure = false)
-  }
-
-  override def testScheduler(name: String)(body: => Unit): Unit = {
-    // in these simple tests, we only have one executor, so it doens't make sense to turn on the
-    // blacklist.
-    testScheduler(name, extraConfs = Seq(BLACKLIST_ENABLED.key -> "false"))(body)
   }
 }

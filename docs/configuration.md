@@ -1257,14 +1257,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.timeout</code></td>
-  <td>1h</td>
-  <td>
-    (Experimental) How long a node or executor is blacklisted for the entire application, before it
-    is unconditionally removed from the blacklist to attempt running new tasks.
-  </td>
-</tr>
-<tr>
   <td><code>spark.blacklist.task.maxTaskAttemptsPerExecutor</code></td>
   <td>1</td>
   <td>
