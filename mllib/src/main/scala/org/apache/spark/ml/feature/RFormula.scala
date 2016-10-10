@@ -111,18 +111,18 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
    * we can force to index label even it is numeric type by setting this param with true.
    * Default: false.
    */
-  @Since("2.0.0")
-  val indexLabel: BooleanParam = new BooleanParam(this, "indexLabel",
+  @Since("2.1.0")
+  val forceIndexLabel: BooleanParam = new BooleanParam(this, "forceIndexLabel",
     "Force to index label whether it is numeric or string")
-  setDefault(indexLabel -> false)
+  setDefault(forceIndexLabel -> false)
 
   /** @group getParam */
-  @Since("2.0.0")
-  def getIndexLabel: Boolean = $(indexLabel)
+  @Since("2.1.0")
+  def getForceIndexLabel: Boolean = $(forceIndexLabel)
 
   /** @group setParam */
-  @Since("2.0.0")
-  def setIndexLabel(value: Boolean): this.type = set(indexLabel, value)
+  @Since("2.1.0")
+  def setForceIndexLabel(value: Boolean): this.type = set(forceIndexLabel, value)
 
   /** Whether the formula specifies fitting an intercept. */
   private[ml] def hasIntercept: Boolean = {
@@ -188,7 +188,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     encoderStages += new ColumnPruner(tempColumns.toSet)
 
     if ((dataset.schema.fieldNames.contains(resolvedFormula.label) &&
-      dataset.schema(resolvedFormula.label).dataType == StringType) || $(indexLabel)) {
+      dataset.schema(resolvedFormula.label).dataType == StringType) || $(forceIndexLabel)) {
       encoderStages += new StringIndexer()
         .setInputCol(resolvedFormula.label)
         .setOutputCol($(labelCol))
@@ -201,7 +201,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
-    require(!hasLabelCol(schema) || !$(indexLabel),
+    require(!hasLabelCol(schema) || !$(forceIndexLabel),
       "If label column already exists, indexLabel can not be set with true.")
     if (hasLabelCol(schema)) {
       StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
