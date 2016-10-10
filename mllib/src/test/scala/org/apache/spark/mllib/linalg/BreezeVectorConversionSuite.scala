@@ -33,12 +33,12 @@ class BreezeVectorConversionSuite extends SparkFunSuite {
 
   test("dense to breeze") {
     val vec = Vectors.dense(arr)
-    assert(vec.toBreeze === new BDV[Double](arr))
+    assert(vec.asBreeze === new BDV[Double](arr))
   }
 
   test("sparse to breeze") {
     val vec = Vectors.sparse(n, indices, values)
-    assert(vec.toBreeze === new BSV[Double](indices, values, n))
+    assert(vec.asBreeze === new BSV[Double](indices, values, n))
   }
 
   test("dense breeze to vector") {

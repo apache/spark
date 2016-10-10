@@ -21,11 +21,10 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.1.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming-kinesis-asl-assembly_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Kinesis Assembly</name>
@@ -63,16 +62,26 @@
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
+      <version>2.6.1</version>
+      <!-- 
+         We are being explicit about version here and overriding the 
+         spark default of 2.5.0 because KCL appears to have introduced 
+         a dependency on protobuf 2.6.1 somewhere between KCL 1.4.0 and 1.6.1.
+       -->
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.core</groupId>
+      <artifactId>jersey-client</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>com.sun.jersey</groupId>
+      <groupId>org.glassfish.jersey.core</groupId>
+      <artifactId>jersey-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.core</groupId>
       <artifactId>jersey-server</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.sun.jersey</groupId>
-      <artifactId>jersey-core</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -132,6 +141,21 @@
   <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
   <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
   <plugins>
+    <!-- SPARK-17418: prevent the kinesis-asl-assembly from being published to Maven -->
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-deploy-plugin</artifactId>
+      <configuration>
+        <skip>true</skip>
+      </configuration>
+    </plugin>
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-install-plugin</artifactId>
+      <configuration>
+        <skip>true</skip>
+      </configuration>
+    </plugin>
     <plugin>
       <groupId>org.apache.maven.plugins</groupId>
       <artifactId>maven-shade-plugin</artifactId>
@@ -142,6 +166,15 @@
             <include>*:*</include>
           </includes>
         </artifactSet>
+        <relocations>
+          <relocation>
+            <pattern>com.google.protobuf</pattern>
+            <shadedPattern>kinesis.protobuf</shadedPattern>
+            <includes>
+              <include>com.google.protobuf.**</include>
+            </includes>
+          </relocation>
+        </relocations>
         <filters>
           <filter>
             <artifact>*:*</artifact>

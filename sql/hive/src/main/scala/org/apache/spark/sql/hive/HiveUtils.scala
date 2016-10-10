@@ -96,17 +96,12 @@ private[spark] object HiveUtils extends Logging {
       .booleanConf
       .createWithDefault(false)
 
-  val CONVERT_CTAS = SQLConfigBuilder("spark.sql.hive.convertCTAS")
-    .doc("When true, a table created by a Hive CTAS statement (no USING clause) will be " +
-      "converted to a data source table, using the data source set by spark.sql.sources.default.")
-    .booleanConf
-    .createWithDefault(false)
-
   val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+    .internal()
     .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
       "the built in support.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
@@ -178,7 +173,7 @@ private[spark] object HiveUtils extends Logging {
   /**
    * Configurations needed to create a [[HiveClient]].
    */
-  private[hive] def hiveClientConfigurations(hiveconf: HiveConf): Map[String, String] = {
+  private[hive] def hiveClientConfigurations(hadoopConf: Configuration): Map[String, String] = {
     // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
     // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
     // compatibility when users are trying to connecting to a Hive metastore of lower version,
@@ -227,7 +222,7 @@ private[spark] object HiveUtils extends Logging {
       ConfVars.SPARK_RPC_CLIENT_CONNECT_TIMEOUT -> TimeUnit.MILLISECONDS,
       ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
     ).map { case (confVar, unit) =>
-      confVar.varname -> hiveconf.getTimeVar(confVar, unit).toString
+      confVar.varname -> HiveConf.getTimeVar(hadoopConf, confVar, unit).toString
     }.toMap
   }
 
@@ -264,14 +259,12 @@ private[spark] object HiveUtils extends Logging {
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
       hadoopConf: Configuration): HiveClient = {
-    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
-    val configurations = hiveClientConfigurations(hiveConf)
-    newClientForMetadata(conf, hiveConf, hadoopConf, configurations)
+    val configurations = hiveClientConfigurations(hadoopConf)
+    newClientForMetadata(conf, hadoopConf, configurations)
   }
 
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
-      hiveConf: HiveConf,
       hadoopConf: Configuration,
       configurations: Map[String, String]): HiveClient = {
     val sqlConf = new SQLConf
@@ -281,12 +274,6 @@ private[spark] object HiveUtils extends Logging {
     val hiveMetastoreSharedPrefixes = HiveUtils.hiveMetastoreSharedPrefixes(sqlConf)
     val hiveMetastoreBarrierPrefixes = HiveUtils.hiveMetastoreBarrierPrefixes(sqlConf)
     val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
-
-    val defaultWarehouseLocation = hiveConf.get("hive.metastore.warehouse.dir")
-    logInfo("default warehouse location is " + defaultWarehouseLocation)
-
-    // `configure` goes second to override other settings.
-    val allConfig = hiveConf.asScala.map(e => e.getKey -> e.getValue).toMap ++ configurations
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
       if (hiveExecutionVersion != hiveMetastoreVersion) {
@@ -321,7 +308,7 @@ private[spark] object HiveUtils extends Logging {
         sparkConf = conf,
         hadoopConf = hadoopConf,
         execJars = jars.toSeq,
-        config = allConfig,
+        config = configurations,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -334,7 +321,7 @@ private[spark] object HiveUtils extends Logging {
         hadoopVersion = VersionInfo.getVersion,
         sparkConf = conf,
         hadoopConf = hadoopConf,
-        config = allConfig,
+        config = configurations,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else {
@@ -364,7 +351,7 @@ private[spark] object HiveUtils extends Logging {
         sparkConf = conf,
         hadoopConf = hadoopConf,
         execJars = jars.toSeq,
-        config = allConfig,
+        config = configurations,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -387,7 +374,7 @@ private[spark] object HiveUtils extends Logging {
         propMap.put(confvar.varname, confvar.getDefaultExpr())
       }
     }
-    propMap.put(HiveConf.ConfVars.METASTOREWAREHOUSE.varname, localMetastore.toURI.toString)
+    propMap.put(SQLConf.WAREHOUSE_PATH.key, localMetastore.toURI.toString)
     propMap.put(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname,
       s"jdbc:derby:${withInMemoryMode};databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
@@ -399,13 +386,20 @@ private[spark] object HiveUtils extends Logging {
     // Remote means that the metastore server is running in its own process.
     // When the mode is remote, configurations like "javax.jdo.option.ConnectionURL" will not be
     // used (because they are used by remote metastore server that talks to the database).
-    // Because execution Hive should always connects to a embedded derby metastore.
+    // Because execution Hive should always connects to an embedded derby metastore.
     // We have to remove the value of hive.metastore.uris. So, the execution Hive client connects
     // to the actual embedded derby metastore instead of the remote metastore.
     // You can search HiveConf.ConfVars.METASTOREURIS in the code of HiveConf (in Hive's repo).
     // Then, you will find that the local metastore mode is only set to true when
     // hive.metastore.uris is not set.
     propMap.put(ConfVars.METASTOREURIS.varname, "")
+
+    // The execution client will generate garbage events, therefore the listeners that are generated
+    // for the execution clients are useless. In order to not output garbage, we don't generate
+    // these listeners.
+    propMap.put(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
 
     propMap.toMap
   }

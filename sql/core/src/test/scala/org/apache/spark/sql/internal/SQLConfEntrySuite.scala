@@ -153,6 +153,17 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConf(confEntry, Seq("a", "b", "c")) === Seq("a", "b", "c", "d", "e"))
   }
 
+  test("optionalConf") {
+    val key = "spark.sql.SQLConfEntrySuite.optional"
+    val confEntry = SQLConfigBuilder(key)
+      .stringConf
+      .createOptional
+
+    assert(conf.getConf(confEntry) === None)
+    conf.setConfString(key, "a")
+    assert(conf.getConf(confEntry) === Some("a"))
+  }
+
   test("duplicate entry") {
     val key = "spark.sql.SQLConfEntrySuite.duplicate"
     SQLConfigBuilder(key).stringConf.createOptional

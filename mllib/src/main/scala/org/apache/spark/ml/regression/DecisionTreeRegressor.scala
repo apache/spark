@@ -21,15 +21,15 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
@@ -38,13 +38,11 @@ import org.apache.spark.sql.functions._
 
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
  * for regression.
  * It supports both continuous and categorical features.
  */
 @Since("1.4.0")
-@Experimental
 class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeRegressorParams with DefaultParamsWritable {
@@ -88,17 +86,30 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeRegressionModel]
+      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+
+    val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeRegressionModel = {
+    val instr = Instrumentation.create(this, data)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeRegressionModel]
+      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+
+    val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -112,7 +123,6 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 }
 
 @Since("1.4.0")
-@Experimental
 object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor] {
   /** Accessor for supported impurities: variance */
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
@@ -122,13 +132,11 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
 }
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for regression.
  * It supports both continuous and categorical features.
  * @param rootNode  Root of the decision tree
  */
 @Since("1.4.0")
-@Experimental
 class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
     override val rootNode: Node,
@@ -167,7 +175,7 @@ class DecisionTreeRegressionModel private[ml] (
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf { (features: Vector) => predict(features) }
     val predictVarianceUDF = udf { (features: Vector) => predictVariance(features) }
-    var output = dataset.toDF
+    var output = dataset.toDF()
     if ($(predictionCol).nonEmpty) {
       output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
     }
@@ -236,7 +244,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(nodeData).write.parquet(dataPath)
+      sparkSession.createDataFrame(nodeData).write.parquet(dataPath)
     }
   }
 
@@ -250,7 +258,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-      val root = loadTreeNodes(path, metadata, sqlContext)
+      val root = loadTreeNodes(path, metadata, sparkSession)
       val model = new DecisionTreeRegressionModel(metadata.uid, root, numFeatures)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

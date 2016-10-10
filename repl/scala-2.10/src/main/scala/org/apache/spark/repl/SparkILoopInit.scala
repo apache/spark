@@ -123,19 +123,25 @@ private[repl] trait SparkILoopInit {
   def initializeSpark() {
     intp.beQuietDuring {
       command("""
+        @transient val spark = org.apache.spark.repl.Main.interp.createSparkSession()
         @transient val sc = {
-          val _sc = org.apache.spark.repl.Main.interp.createSparkContext()
-          _sc.uiWebUrl.foreach(webUrl => println(s"Spark context Web UI available at ${webUrl}"))
+          val _sc = spark.sparkContext
+          if (_sc.getConf.getBoolean("spark.ui.reverseProxy", false)) {
+            val proxyUrl = _sc.getConf.get("spark.ui.reverseProxyUrl", null)
+            if (proxyUrl != null) {
+              println(s"Spark Context Web UI is available at ${proxyUrl}/proxy/${_sc.applicationId}")
+            } else {
+              println(s"Spark Context Web UI is available at Spark Master Public URL")
+            }
+          } else {
+            _sc.uiWebUrl.foreach {
+              webUrl => println(s"Spark context Web UI available at ${webUrl}")
+            }
+          }
           println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
-          _sc
-        }
-        """)
-      command("""
-        @transient val spark = {
-          val _session = org.apache.spark.repl.Main.interp.createSparkSession()
           println("Spark session available as 'spark'.")
-          _session
+          _sc
         }
         """)
       command("import org.apache.spark.SparkContext._")

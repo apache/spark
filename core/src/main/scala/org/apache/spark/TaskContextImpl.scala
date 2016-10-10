@@ -122,7 +122,7 @@ private[spark] class TaskContextImpl(
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
 
-  private[spark] override def registerAccumulator(a: NewAccumulator[_, _]): Unit = {
+  private[spark] override def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
     taskMetrics.registerAccumulator(a)
   }
 

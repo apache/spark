@@ -26,14 +26,13 @@ import scala.Tuple2;
 
 import com.google.common.collect.Iterables;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * Computes the PageRank of URLs from an input file. Input file should
@@ -46,6 +45,11 @@ import org.apache.spark.api.java.function.PairFunction;
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
  * please refer to org.apache.spark.graphx.lib.PageRank
+ *
+ * Example Usage:
+ * <pre>
+ * bin/run-example JavaPageRank data/mllib/pagerank_data.txt 10
+ * </pre>
  */
 public final class JavaPageRank {
   private static final Pattern SPACES = Pattern.compile("\\s+");
@@ -73,15 +77,17 @@ public final class JavaPageRank {
 
     showWarning();
 
-    SparkConf sparkConf = new SparkConf().setAppName("JavaPageRank");
-    JavaSparkContext ctx = new JavaSparkContext(sparkConf);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaPageRank")
+      .getOrCreate();
 
     // Loads in input file. It should be in format of:
     //     URL         neighbor URL
     //     URL         neighbor URL
     //     URL         neighbor URL
     //     ...
-    JavaRDD<String> lines = ctx.textFile(args[0], 1);
+    JavaRDD<String> lines = spark.read().textFile(args[0]).javaRDD();
 
     // Loads all URLs from input file and initialize their neighbors.
     JavaPairRDD<String, Iterable<String>> links = lines.mapToPair(
@@ -132,6 +138,6 @@ public final class JavaPageRank {
         System.out.println(tuple._1() + " has rank: " + tuple._2() + ".");
     }
 
-    ctx.stop();
+    spark.stop();
   }
 }

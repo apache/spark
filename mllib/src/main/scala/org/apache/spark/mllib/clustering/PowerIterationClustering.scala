@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -70,28 +70,26 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
     @Since("1.4.0")
     def save(sc: SparkContext, model: PowerIterationClusteringModel, path: String): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val dataRDD = model.assignments.toDF()
-      dataRDD.write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(model.assignments).write.parquet(Loader.dataPath(path))
     }
 
     @Since("1.4.0")
     def load(sc: SparkContext, path: String): PowerIterationClusteringModel = {
       implicit val formats = DefaultFormats
-      val sqlContext = SQLContext.getOrCreate(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
 
       val k = (metadata \ "k").extract[Int]
-      val assignments = sqlContext.read.parquet(Loader.dataPath(path))
+      val assignments = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[PowerIterationClustering.Assignment](assignments.schema)
 
       val assignmentsRDD = assignments.rdd.map {

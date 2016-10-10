@@ -211,9 +211,6 @@ private[storage] class BlockInfoManager extends Logging {
    * If another task has already locked this block for either reading or writing, then this call
    * will block until the other locks are released or will return immediately if `blocking = false`.
    *
-   * If this is called by a task which already holds the block's exclusive write lock, then this
-   * method will throw an exception.
-   *
    * @param blockId the block to lock.
    * @param blocking if true (default), this call will block until the lock is acquired. If false,
    *                 this call will return immediately if the lock acquisition fails.
@@ -228,10 +225,7 @@ private[storage] class BlockInfoManager extends Logging {
       infos.get(blockId) match {
         case None => return None
         case Some(info) =>
-          if (info.writerTask == currentTaskAttemptId) {
-            throw new IllegalStateException(
-              s"Task $currentTaskAttemptId has already locked $blockId for writing")
-          } else if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
+          if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
             info.writerTask = currentTaskAttemptId
             writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
             logTrace(s"Task $currentTaskAttemptId acquired write lock for $blockId")

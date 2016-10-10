@@ -85,8 +85,7 @@ def _gen_param_code(name, doc, defaultValueStr):
         """
         Sets the value of :py:attr:`$name`.
         """
-        self._set($name=value)
-        return self
+        return self._set($name=value)
 
     def get$Name(self):
         """
@@ -125,12 +124,12 @@ if __name__ == "__main__":
          "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None,
          "TypeConverters.toInt"),
         ("seed", "random seed.", "hash(type(self).__name__)", "TypeConverters.toInt"),
-        ("tol", "the convergence tolerance for iterative algorithms.", None,
+        ("tol", "the convergence tolerance for iterative algorithms (>= 0).", None,
          "TypeConverters.toFloat"),
-        ("stepSize", "Step size to be used for each iteration of optimization.", None,
+        ("stepSize", "Step size to be used for each iteration of optimization (>= 0).", None,
          "TypeConverters.toFloat"),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
-         "out rows with bad values), or error (which will throw an errror). More options may be " +
+         "out rows with bad values), or error (which will throw an error). More options may be " +
          "added later.", None, "TypeConverters.toString"),
         ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
          "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0",
@@ -140,15 +139,18 @@ if __name__ == "__main__":
          "model.", "True", "TypeConverters.toBoolean"),
         ("thresholds", "Thresholds in multi-class classification to adjust the probability of " +
          "predicting each class. Array must have length equal to the number of classes, with " +
-         "values >= 0. The class with largest value p/t is predicted, where p is the original " +
-         "probability of that class and t is the class' threshold.", None,
+         "values > 0, excepting that at most one value may be 0. " +
+         "The class with largest value p/t is predicted, where p is the original " +
+         "probability of that class and t is the class's threshold.", None,
          "TypeConverters.toListFloat"),
         ("weightCol", "weight column name. If this is not set or empty, we treat " +
          "all instance weights as 1.0.", None, "TypeConverters.toString"),
         ("solver", "the solver algorithm for optimization. If this is not set or empty, " +
          "default value is 'auto'.", "'auto'", "TypeConverters.toString"),
         ("varianceCol", "column name for the biased sample variance of prediction.",
-         None, "TypeConverters.toString")]
+         None, "TypeConverters.toString"),
+        ("aggregationDepth", "suggested depth for treeAggregate (>= 2).", "2",
+         "TypeConverters.toInt")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:

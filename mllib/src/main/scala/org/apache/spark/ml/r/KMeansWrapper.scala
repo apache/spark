@@ -17,27 +17,29 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.hadoop.fs.Path
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
-import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class KMeansWrapper private (
-    pipeline: PipelineModel) {
+    val pipeline: PipelineModel,
+    val features: Array[String],
+    val size: Array[Long],
+    val isLoaded: Boolean = false) extends MLWritable {
 
   private val kMeansModel: KMeansModel = pipeline.stages(1).asInstanceOf[KMeansModel]
 
   lazy val coefficients: Array[Double] = kMeansModel.clusterCenters.flatMap(_.toArray)
 
-  private lazy val attrs = AttributeGroup.fromStructField(
-    kMeansModel.summary.predictions.schema(kMeansModel.getFeaturesCol))
-
-  lazy val features: Array[String] = attrs.attributes.get.map(_.name.get)
-
   lazy val k: Int = kMeansModel.getK
-
-  lazy val size: Array[Long] = kMeansModel.summary.clusterSizes
 
   lazy val cluster: DataFrame = kMeansModel.summary.cluster
 
@@ -56,30 +58,79 @@ private[r] class KMeansWrapper private (
     pipeline.transform(dataset).drop(kMeansModel.getFeaturesCol)
   }
 
+  override def write: MLWriter = new KMeansWrapper.KMeansWrapperWriter(this)
 }
 
-private[r] object KMeansWrapper {
+private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
 
   def fit(
       data: DataFrame,
-      k: Double,
-      maxIter: Double,
-      initMode: String,
-      columns: Array[String]): KMeansWrapper = {
+      formula: String,
+      k: Int,
+      maxIter: Int,
+      initMode: String): KMeansWrapper = {
 
-    val assembler = new VectorAssembler()
-      .setInputCols(columns)
-      .setOutputCol("features")
+    val rFormula = new RFormula()
+      .setFormula(formula)
+      .setFeaturesCol("features")
+    RWrapperUtils.checkDataColumns(rFormula, data)
+    val rFormulaModel = rFormula.fit(data)
+
+    // get feature names from output schema
+    val schema = rFormulaModel.transform(data).schema
+    val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
+      .attributes.get
+    val features = featureAttrs.map(_.name.get)
 
     val kMeans = new KMeans()
-      .setK(k.toInt)
-      .setMaxIter(maxIter.toInt)
+      .setK(k)
+      .setMaxIter(maxIter)
       .setInitMode(initMode)
+      .setFeaturesCol(rFormula.getFeaturesCol)
 
     val pipeline = new Pipeline()
-      .setStages(Array(assembler, kMeans))
+      .setStages(Array(rFormulaModel, kMeans))
       .fit(data)
 
-    new KMeansWrapper(pipeline)
+    val kMeansModel: KMeansModel = pipeline.stages(1).asInstanceOf[KMeansModel]
+    val size: Array[Long] = kMeansModel.summary.clusterSizes
+
+    new KMeansWrapper(pipeline, features, size)
+  }
+
+  override def read: MLReader[KMeansWrapper] = new KMeansWrapperReader
+
+  override def load(path: String): KMeansWrapper = super.load(path)
+
+  class KMeansWrapperWriter(instance: KMeansWrapper) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      val rMetadataPath = new Path(path, "rMetadata").toString
+      val pipelinePath = new Path(path, "pipeline").toString
+
+      val rMetadata = ("class" -> instance.getClass.getName) ~
+        ("features" -> instance.features.toSeq) ~
+        ("size" -> instance.size.toSeq)
+      val rMetadataJson: String = compact(render(rMetadata))
+
+      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+      instance.pipeline.save(pipelinePath)
+    }
+  }
+
+  class KMeansWrapperReader extends MLReader[KMeansWrapper] {
+
+    override def load(path: String): KMeansWrapper = {
+      implicit val format = DefaultFormats
+      val rMetadataPath = new Path(path, "rMetadata").toString
+      val pipelinePath = new Path(path, "pipeline").toString
+      val pipeline = PipelineModel.load(pipelinePath)
+
+      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadata = parse(rMetadataStr)
+      val features = (rMetadata \ "features").extract[Array[String]]
+      val size = (rMetadata \ "size").extract[Array[Long]]
+      new KMeansWrapper(pipeline, features, size, isLoaded = true)
+    }
   }
 }

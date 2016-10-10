@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{analysis, CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
@@ -57,14 +58,34 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     LocalRelation(output.map(_.newInstance()), data).asInstanceOf[this.type]
   }
 
-  override protected def stringArgs = Iterator(output)
+  override protected def stringArgs: Iterator[Any] = {
+    if (data.isEmpty) {
+      Iterator("<empty>", output)
+    } else {
+      Iterator(output)
+    }
+  }
 
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LocalRelation(otherOutput, otherData) =>
-      otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
-    case _ => false
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    plan.canonicalized match {
+      case LocalRelation(otherOutput, otherData) =>
+        otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
+      case _ => false
+    }
   }
 
   override lazy val statistics =
     Statistics(sizeInBytes = output.map(_.dataType.defaultSize).sum * data.length)
+
+  def toSQL(inlineTableName: String): String = {
+    require(data.nonEmpty)
+    val types = output.map(_.dataType)
+    val rows = data.map { row =>
+      val cells = row.toSeq(types).zip(types).map { case (v, tpe) => Literal(v, tpe).sql }
+      cells.mkString("(", ", ", ")")
+    }
+    "VALUES " + rows.mkString(", ") +
+      " AS " + inlineTableName +
+      output.map(_.name).mkString("(", ", ", ")")
+  }
 }

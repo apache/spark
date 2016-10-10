@@ -18,38 +18,43 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer}
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object TfIdfExample {
 
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("TfIdfExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("TfIdfExample")
+      .getOrCreate()
 
     // $example on$
-    val sentenceData = sqlContext.createDataFrame(Seq(
-      (0, "Hi I heard about Spark"),
-      (0, "I wish Java could use case classes"),
-      (1, "Logistic regression models are neat")
+    val sentenceData = spark.createDataFrame(Seq(
+      (0.0, "Hi I heard about Spark"),
+      (0.0, "I wish Java could use case classes"),
+      (1.0, "Logistic regression models are neat")
     )).toDF("label", "sentence")
 
     val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
     val wordsData = tokenizer.transform(sentenceData)
+
     val hashingTF = new HashingTF()
       .setInputCol("words").setOutputCol("rawFeatures").setNumFeatures(20)
+
     val featurizedData = hashingTF.transform(wordsData)
     // alternatively, CountVectorizer can also be used to get term frequency vectors
 
     val idf = new IDF().setInputCol("rawFeatures").setOutputCol("features")
     val idfModel = idf.fit(featurizedData)
+
     val rescaledData = idfModel.transform(featurizedData)
-    rescaledData.select("features", "label").take(3).foreach(println)
+    rescaledData.select("label", "features").show()
     // $example off$
+
+    spark.stop()
   }
 }
 // scalastyle:on println

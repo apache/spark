@@ -17,22 +17,23 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.feature import VectorSlicer
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 from pyspark.sql.types import Row
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="VectorSlicerExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("VectorSlicerExample")\
+        .getOrCreate()
 
     # $example on$
-    df = sqlContext.createDataFrame([
-        Row(userFeatures=Vectors.sparse(3, {0: -2.0, 1: 2.3}),),
-        Row(userFeatures=Vectors.dense([-2.0, 2.3, 0.0]),)])
+    df = spark.createDataFrame([
+        Row(userFeatures=Vectors.sparse(3, {0: -2.0, 1: 2.3})),
+        Row(userFeatures=Vectors.dense([-2.0, 2.3, 0.0]))])
 
     slicer = VectorSlicer(inputCol="userFeatures", outputCol="features", indices=[1])
 
@@ -41,4 +42,4 @@ if __name__ == "__main__":
     output.select("userFeatures", "features").show()
     # $example off$
 
-    sc.stop()
+    spark.stop()

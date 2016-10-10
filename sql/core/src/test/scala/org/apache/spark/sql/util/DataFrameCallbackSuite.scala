@@ -39,7 +39,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
         metrics += ((funcName, qe, duration))
       }
     }
-    sqlContext.listenerManager.register(listener)
+    spark.listenerManager.register(listener)
 
     val df = Seq(1 -> "a").toDF("i", "j")
     df.select("i").collect()
@@ -55,7 +55,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(1)._2.analyzed.isInstanceOf[Aggregate])
     assert(metrics(1)._3 > 0)
 
-    sqlContext.listenerManager.unregister(listener)
+    spark.listenerManager.unregister(listener)
   }
 
   test("execute callback functions when a DataFrame action failed") {
@@ -68,7 +68,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       // Only test failed case here, so no need to implement `onSuccess`
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {}
     }
-    sqlContext.listenerManager.register(listener)
+    spark.listenerManager.register(listener)
 
     val errorUdf = udf[Int, Int] { _ => throw new RuntimeException("udf error") }
     val df = sparkContext.makeRDD(Seq(1 -> "a")).toDF("i", "j")
@@ -82,7 +82,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(0)._2.analyzed.isInstanceOf[Project])
     assert(metrics(0)._3.getMessage == e.getMessage)
 
-    sqlContext.listenerManager.unregister(listener)
+    spark.listenerManager.unregister(listener)
   }
 
   test("get numRows metrics by callback") {
@@ -99,7 +99,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
         metrics += metric.value
       }
     }
-    sqlContext.listenerManager.register(listener)
+    spark.listenerManager.register(listener)
 
     val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
     df.collect()
@@ -111,7 +111,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(1) === 1)
     assert(metrics(2) === 2)
 
-    sqlContext.listenerManager.unregister(listener)
+    spark.listenerManager.unregister(listener)
   }
 
   // TODO: Currently some LongSQLMetric use -1 as initial value, so if the accumulator is never
@@ -131,10 +131,10 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
         metrics += bottomAgg.longMetric("dataSize").value
       }
     }
-    sqlContext.listenerManager.register(listener)
+    spark.listenerManager.register(listener)
 
     val sparkListener = new SaveInfoListener
-    sqlContext.sparkContext.addSparkListener(sparkListener)
+    spark.sparkContext.addSparkListener(sparkListener)
 
     val df = (1 to 100).map(i => i -> i.toString).toDF("i", "j")
     df.groupBy("i").count().collect()
@@ -157,6 +157,6 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(0) == topAggDataSize)
     assert(metrics(1) == bottomAggDataSize)
 
-    sqlContext.listenerManager.unregister(listener)
+    spark.listenerManager.unregister(listener)
   }
 }

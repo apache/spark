@@ -20,7 +20,7 @@ package org.apache.spark.ml.attribute
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.linalg.VectorUDT
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
 
 /**

@@ -55,7 +55,7 @@ case class GenerateExec(
     child: SparkPlan)
   extends UnaryExecNode {
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
@@ -66,7 +66,7 @@ case class GenerateExec(
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     val rows = if (join) {
       child.execute().mapPartitionsInternal { iter =>
-        val generatorNullRow = new GenericInternalRow(generator.elementTypes.size)
+        val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
         val joinedRow = new JoinedRow
 
         iter.flatMap { row =>

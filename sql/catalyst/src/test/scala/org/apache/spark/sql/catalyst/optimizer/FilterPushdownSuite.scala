@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.IntegerType
@@ -34,7 +34,6 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
-        SamplePushDown,
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
@@ -92,6 +91,30 @@ class FilterPushdownSuite extends PlanTest {
         .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
+    val originalQuery =
+      testRelation
+        .where('a === 1)
+        .select('a, 'b)
+        .where('b === 1)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 1 && 'b === 1)
+        .select('a, 'b)
+        .analyze
+
+    // We can not use comparePlans here because it normalized the plan.
+    assert(optimized == correctAnswer)
+  }
+
+  test("SPARK-16994: filter should not be pushed through limit") {
+    val originalQuery = testRelation.limit(10).where('a === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
   }
 
   test("can't push without rewrite") {
@@ -513,14 +536,14 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = {
       testRelationWithArrayType
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6))
+        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('c > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where('b >= 5)
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where('a + Rand(10).as("rnd") > 6)
+        .where('a + Rand(10).as("rnd") > 6 && 'c > 6)
         .analyze
     }
 
@@ -565,22 +588,6 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     comparePlans(optimized, originalQuery)
-  }
-
-  test("push project and filter down into sample") {
-    val x = testRelation.subquery('x)
-    val originalQuery =
-      Sample(0.0, 0.6, false, 11L, x)().select('a)
-
-    val originalQueryAnalyzed =
-      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
-
-    val optimized = Optimize.execute(originalQueryAnalyzed)
-
-    val correctAnswer =
-      Sample(0.0, 0.6, false, 11L, x.select('a))()
-
-    comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("aggregate: push down filter when filter on group by expression") {
@@ -680,6 +687,23 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-17712: aggregate: don't push down filters that are data-independent") {
+    val originalQuery = LocalRelation.apply(testRelation.output, Seq.empty)
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("broadcast hint") {
     val originalQuery = BroadcastHint(testRelation)
       .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
@@ -697,48 +721,14 @@ class FilterPushdownSuite extends PlanTest {
     val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
 
     val originalQuery = Union(Seq(testRelation, testRelation2))
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3 && 'c > 5L)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = Union(Seq(
       testRelation.where('a === 2L),
       testRelation2.where('d === 2L)))
-      .where('b + Rand(10).as("rnd") === 3)
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("intersect") {
-    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-
-    val originalQuery = Intersect(testRelation, testRelation2)
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    val correctAnswer = Intersect(
-      testRelation.where('a === 2L),
-      testRelation2.where('d === 2L))
-      .where('b + Rand(10).as("rnd") === 3)
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("except") {
-    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-
-    val originalQuery = Except(testRelation, testRelation2)
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    val correctAnswer = Except(
-      testRelation.where('a === 2L),
-      testRelation2)
-      .where('b + Rand(10).as("rnd") === 3)
+      .where('b + Rand(10).as("rnd") === 3 && 'c > 5L)
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -757,6 +747,43 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(query)
     val correctedAnswer = agg.copy(child = agg.child.where(a > 1 && b > 2)).analyze
     comparePlans(optimized, correctedAnswer)
+  }
+
+  test("predicate subquery: push down simple") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = LocalRelation('a.int, 'b.int, 'c.int).subquery('z)
+
+    val query = x
+      .join(y, Inner, Option("x.a".attr === "y.a".attr))
+      .where(Exists(z.where("x.a".attr === "z.a".attr)))
+      .analyze
+    val answer = x
+      .where(Exists(z.where("x.a".attr === "z.a".attr)))
+      .join(y, Inner, Option("x.a".attr === "y.a".attr))
+      .analyze
+    val optimized = Optimize.execute(Optimize.execute(query))
+    comparePlans(optimized, answer)
+  }
+
+  test("predicate subquery: push down complex") {
+    val w = testRelation.subquery('w)
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = LocalRelation('a.int, 'b.int, 'c.int).subquery('z)
+
+    val query = w
+      .join(x, Inner, Option("w.a".attr === "x.a".attr))
+      .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
+      .where(Exists(z.where("w.a".attr === "z.a".attr)))
+      .analyze
+    val answer = w
+      .where(Exists(z.where("w.a".attr === "z.a".attr)))
+      .join(x, Inner, Option("w.a".attr === "x.a".attr))
+      .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
+      .analyze
+    val optimized = Optimize.execute(Optimize.execute(query))
+    comparePlans(optimized, answer)
   }
 
   test("Window: predicate push down -- basic") {
@@ -976,5 +1003,19 @@ class FilterPushdownSuite extends PlanTest {
       .where('a - 'b > 1).select('a, 'b, 'c, 'window).analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("join condition pushdown: deterministic and non-deterministic") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    // Verify that all conditions preceding the first non-deterministic condition are pushed down
+    // by the optimizer and others are not.
+    val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
+      "x.a".attr === Rand(10) && "y.b".attr === 5))
+    val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
+        condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }

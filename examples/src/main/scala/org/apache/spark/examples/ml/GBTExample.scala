@@ -23,13 +23,12 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
 import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
 import org.apache.spark.ml.regression.{GBTRegressionModel, GBTRegressor}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 
 /**
@@ -37,7 +36,7 @@ import org.apache.spark.sql.DataFrame
  * {{{
  * ./bin/run-example ml.GBTExample [options]
  * }}}
- * Decision Trees and ensembles can take a large amount of memory.  If the run-example command
+ * Decision Trees and ensembles can take a large amount of memory. If the run-example command
  * above fails, try running via spark-submit and specifying the amount of memory as at least 1g.
  * For local mode, run
  * {{{
@@ -88,7 +87,7 @@ object GBTExample {
         .text(s"number of trees in ensemble, default: ${defaultParams.maxIter}")
         .action((x, c) => c.copy(maxIter = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        .text(s"fraction of data to hold out for testing. If given option testInput, " +
         s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[Boolean]("cacheNodeIds")
@@ -109,7 +108,7 @@ object GBTExample {
         s"default: ${defaultParams.checkpointInterval}")
         .action((x, c) => c.copy(checkpointInterval = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+        .text(s"input path to test dataset. If given, option fracTest is ignored." +
         s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")
@@ -128,23 +127,25 @@ object GBTExample {
       }
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"GBTExample with $params")
-    val sc = new SparkContext(conf)
-    params.checkpointDir.foreach(sc.setCheckpointDir)
+  def run(params: Params): Unit = {
+    val spark = SparkSession
+      .builder
+      .appName(s"GBTExample with $params")
+      .getOrCreate()
+
+    params.checkpointDir.foreach(spark.sparkContext.setCheckpointDir)
     val algo = params.algo.toLowerCase
 
     println(s"GBTExample with parameters:\n$params")
 
     // Load training and test data and cache it.
-    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(sc, params.input,
+    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(params.input,
       params.dataFormat, params.testInput, algo, params.fracTest)
 
     // Set up Pipeline
@@ -164,7 +165,7 @@ object GBTExample {
       .setOutputCol("indexedFeatures")
       .setMaxCategories(10)
     stages += featuresIndexer
-    // (3) Learn GBT
+    // (3) Learn GBT.
     val dt = algo match {
       case "classification" =>
         new GBTClassifier()
@@ -193,13 +194,13 @@ object GBTExample {
     stages += dt
     val pipeline = new Pipeline().setStages(stages.toArray)
 
-    // Fit the Pipeline
+    // Fit the Pipeline.
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
-    // Get the trained GBT from the fitted PipelineModel
+    // Get the trained GBT from the fitted PipelineModel.
     algo match {
       case "classification" =>
         val rfModel = pipelineModel.stages.last.asInstanceOf[GBTClassificationModel]
@@ -218,7 +219,7 @@ object GBTExample {
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    // Evaluate model on training, test data
+    // Evaluate model on training, test data.
     algo match {
       case "classification" =>
         println("Training data results:")
@@ -234,7 +235,7 @@ object GBTExample {
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

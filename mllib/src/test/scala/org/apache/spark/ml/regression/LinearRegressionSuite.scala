@@ -21,16 +21,18 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
 class LinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   private val seed: Int = 42
   @transient var datasetWithDenseFeature: DataFrame = _
@@ -42,29 +44,27 @@ class LinearRegressionSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    datasetWithDenseFeature = sqlContext.createDataFrame(
-      sc.parallelize(LinearDataGenerator.generateLinearInput(
-        intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
+    datasetWithDenseFeature = sc.parallelize(LinearDataGenerator.generateLinearInput(
+      intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
+      xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2).map(_.asML).toDF()
     /*
        datasetWithDenseFeatureWithoutIntercept is not needed for correctness testing
        but is useful for illustrating training model without intercept
      */
-    datasetWithDenseFeatureWithoutIntercept = sqlContext.createDataFrame(
-      sc.parallelize(LinearDataGenerator.generateLinearInput(
+    datasetWithDenseFeatureWithoutIntercept = sc.parallelize(
+      LinearDataGenerator.generateLinearInput(
         intercept = 0.0, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2).map(_.asML).toDF()
 
     val r = new Random(seed)
     // When feature size is larger than 4096, normal optimizer is choosed
     // as the solver of linear regression in the case of "auto" mode.
     val featureSize = 4100
-    datasetWithSparseFeature = sqlContext.createDataFrame(
-      sc.parallelize(LinearDataGenerator.generateLinearInput(
+    datasetWithSparseFeature = sc.parallelize(LinearDataGenerator.generateLinearInput(
         intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble()).toArray,
         xMean = Seq.fill(featureSize)(r.nextDouble()).toArray,
         xVariance = Seq.fill(featureSize)(r.nextDouble()).toArray, nPoints = 200,
-        seed, eps = 0.1, sparsity = 0.7), 2))
+        seed, eps = 0.1, sparsity = 0.7), 2).map(_.asML).toDF()
 
     /*
        R code:
@@ -74,13 +74,12 @@ class LinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    datasetWithWeight = sqlContext.createDataFrame(
-      sc.parallelize(Seq(
-        Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
-        Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
-        Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
-        Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
-      ), 2))
+    datasetWithWeight = sc.parallelize(Seq(
+      Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
+    ), 2).toDF()
 
     /*
        R code:
@@ -90,20 +89,18 @@ class LinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df.const.label <- as.data.frame(cbind(A, b.const))
      */
-    datasetWithWeightConstantLabel = sqlContext.createDataFrame(
-      sc.parallelize(Seq(
-        Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
-        Instance(17.0, 2.0, Vectors.dense(1.0, 7.0)),
-        Instance(17.0, 3.0, Vectors.dense(2.0, 11.0)),
-        Instance(17.0, 4.0, Vectors.dense(3.0, 13.0))
-      ), 2))
-    datasetWithWeightZeroLabel = sqlContext.createDataFrame(
-      sc.parallelize(Seq(
-        Instance(0.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
-        Instance(0.0, 2.0, Vectors.dense(1.0, 7.0)),
-        Instance(0.0, 3.0, Vectors.dense(2.0, 11.0)),
-        Instance(0.0, 4.0, Vectors.dense(3.0, 13.0))
-      ), 2))
+    datasetWithWeightConstantLabel = sc.parallelize(Seq(
+      Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(17.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(17.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(17.0, 4.0, Vectors.dense(3.0, 13.0))
+    ), 2).toDF()
+    datasetWithWeightZeroLabel = sc.parallelize(Seq(
+      Instance(0.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(0.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(0.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(0.0, 4.0, Vectors.dense(3.0, 13.0))
+    ), 2).toDF()
   }
 
   /**
@@ -610,20 +607,31 @@ class LinearRegressionSuite
         val model1 = new LinearRegression()
           .setFitIntercept(fitIntercept)
           .setWeightCol("weight")
+          .setPredictionCol("myPrediction")
           .setSolver(solver)
           .fit(datasetWithWeightConstantLabel)
         val actual1 = Vectors.dense(model1.intercept, model1.coefficients(0),
             model1.coefficients(1))
         assert(actual1 ~== expected(idx) absTol 1e-4)
 
+        // Schema of summary.predictions should be a superset of the input dataset
+        assert((datasetWithWeightConstantLabel.schema.fieldNames.toSet + model1.getPredictionCol)
+          .subsetOf(model1.summary.predictions.schema.fieldNames.toSet))
+
         val model2 = new LinearRegression()
           .setFitIntercept(fitIntercept)
           .setWeightCol("weight")
+          .setPredictionCol("myPrediction")
           .setSolver(solver)
           .fit(datasetWithWeightZeroLabel)
         val actual2 = Vectors.dense(model2.intercept, model2.coefficients(0),
             model2.coefficients(1))
         assert(actual2 ~==  Vectors.dense(0.0, 0.0, 0.0) absTol 1e-4)
+
+        // Schema of summary.predictions should be a superset of the input dataset
+        assert((datasetWithWeightZeroLabel.schema.fieldNames.toSet + model2.getPredictionCol)
+          .subsetOf(model2.summary.predictions.schema.fieldNames.toSet))
+
         idx += 1
       }
     }
@@ -672,7 +680,7 @@ class LinearRegressionSuite
 
   test("linear regression model training summary") {
     Seq("auto", "l-bfgs", "normal").foreach { solver =>
-      val trainer = new LinearRegression().setSolver(solver)
+      val trainer = new LinearRegression().setSolver(solver).setPredictionCol("myPrediction")
       val model = trainer.fit(datasetWithDenseFeature)
       val trainerNoPredictionCol = trainer.setPredictionCol("")
       val modelNoPredictionCol = trainerNoPredictionCol.fit(datasetWithDenseFeature)
@@ -682,7 +690,7 @@ class LinearRegressionSuite
       assert(modelNoPredictionCol.hasSummary)
 
       // Schema should be a superset of the input dataset
-      assert((datasetWithDenseFeature.schema.fieldNames.toSet + "prediction").subsetOf(
+      assert((datasetWithDenseFeature.schema.fieldNames.toSet + model.getPredictionCol).subsetOf(
         model.summary.predictions.schema.fieldNames.toSet))
       // Validate that we re-insert a prediction column for evaluation
       val modelNoPredictionColFieldNames
@@ -795,7 +803,7 @@ class LinearRegressionSuite
     Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val (data, weightedData) = {
         val activeData = LinearDataGenerator.generateLinearInput(
-          6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
+          6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1).map(_.asML)
 
         val rnd = new Random(8392)
         val signedData = activeData.map { case p: LabeledPoint =>
@@ -822,14 +830,13 @@ class LinearRegressionSuite
         }
 
         val noiseData = LinearDataGenerator.generateLinearInput(
-          2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
+          2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1).map(_.asML)
         val weightedNoiseData = noiseData.map {
           case LabeledPoint(label, features) => Instance(label, weight = 0, features)
         }
         val data2 = weightedSignedData ++ weightedNoiseData
 
-        (sqlContext.createDataFrame(sc.parallelize(data1, 4)),
-          sqlContext.createDataFrame(sc.parallelize(data2, 4)))
+        (sc.parallelize(data1, 4).toDF(), sc.parallelize(data2, 4).toDF())
       }
 
       val trainer1a = (new LinearRegression).setFitIntercept(true)
@@ -1008,12 +1015,14 @@ class LinearRegressionSuite
   }
 
   test("should support all NumericType labels and not support other types") {
-    val lr = new LinearRegression().setMaxIter(1)
-    MLTestingUtils.checkNumericTypes[LinearRegressionModel, LinearRegression](
-      lr, isClassification = false, sqlContext) { (expected, actual) =>
+    for (solver <- Seq("auto", "l-bfgs", "normal")) {
+      val lr = new LinearRegression().setMaxIter(1).setSolver(solver)
+      MLTestingUtils.checkNumericTypes[LinearRegressionModel, LinearRegression](
+        lr, spark, isClassification = false) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }
+    }
   }
 }
 

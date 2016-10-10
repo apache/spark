@@ -68,6 +68,9 @@ private[hive] trait HiveClient {
   /** List the names of all the databases that match the specified pattern. */
   def listDatabases(pattern: String): Seq[String]
 
+  /** Return whether a table/view with the specified name exists. */
+  def tableExists(dbName: String, tableName: String): Boolean
+
   /** Returns the specified table, or throws [[NoSuchTableException]]. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
@@ -80,7 +83,7 @@ private[hive] trait HiveClient {
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 
   /** Drop the specified table. */
-  def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit
+  def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
   /** Alter a table whose name matches the one specified in `table`, assuming it exists. */
   final def alterTable(table: CatalogTable): Unit = alterTable(table.identifier.table, table)
@@ -121,7 +124,8 @@ private[hive] trait HiveClient {
       db: String,
       table: String,
       specs: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.
@@ -191,12 +195,12 @@ private[hive] trait HiveClient {
   /** Loads a static partition into an existing table. */
   def loadPartition(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit
+      inheritTableSpecs: Boolean): Unit
 
   /** Loads data into an existing table. */
   def loadTable(
@@ -208,17 +212,17 @@ private[hive] trait HiveClient {
   /** Loads new dynamic partitions into an existing table. */
   def loadDynamicPartitions(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
-      listBucketingEnabled: Boolean): Unit
+      holdDDLTime: Boolean): Unit
 
   /** Create a function in an existing database. */
   def createFunction(db: String, func: CatalogFunction): Unit
 
-  /** Drop an existing function an the database. */
+  /** Drop an existing function in the database. */
   def dropFunction(db: String, name: String): Unit
 
   /** Rename an existing function in the database. */
@@ -229,7 +233,7 @@ private[hive] trait HiveClient {
 
   /** Return an existing function in the database, assuming it exists. */
   final def getFunction(db: String, name: String): CatalogFunction = {
-    getFunctionOption(db, name).getOrElse(throw new NoSuchFunctionException(db, name))
+    getFunctionOption(db, name).getOrElse(throw new NoSuchPermanentFunctionException(db, name))
   }
 
   /** Return an existing function in the database, or None if it doesn't exist. */

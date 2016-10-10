@@ -17,12 +17,15 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
 class MaxAbsScalerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
+
   test("MaxAbsScaler fit basic case") {
     val data = Array(
       Vectors.dense(1, 0, 100),
@@ -36,7 +39,7 @@ class MaxAbsScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       Vectors.sparse(3, Array(0, 2), Array(-1, -1)),
       Vectors.sparse(3, Array(0), Array(-0.75)))
 
-    val df = sqlContext.createDataFrame(data.zip(expected)).toDF("features", "expected")
+    val df = data.zip(expected).toSeq.toDF("features", "expected")
     val scaler = new MaxAbsScaler()
       .setInputCol("features")
       .setOutputCol("scaled")

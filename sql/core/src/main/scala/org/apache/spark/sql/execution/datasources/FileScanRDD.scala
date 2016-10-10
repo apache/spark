@@ -27,9 +27,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 
 /**
- * A single file that should be read, along with partition column values that
- * need to be prepended to each row.  The reading should start at the first
- * valid record found after `start`.
+ * A part (i.e. "block") of a single file that should be read, along with partition column values
+ * that need to be prepended to each row.
+ *
+ * @param partitionValues value of partition columns to be prepended to each row.
+ * @param filePath path of the file to read
+ * @param start the beginning offset (in bytes) of the block.
+ * @param length number of bytes to read.
+ * @param locations locality information (list of nodes that have the data).
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
@@ -43,13 +48,14 @@ case class PartitionedFile(
 }
 
 /**
- * A collection of files that should be read as a single task possibly from multiple partitioned
- * directories.
- *
- * TODO: This currently does not take locality information about the files into account.
+ * A collection of file blocks that should be read as a single task
+ * (possibly from multiple partitioned directories).
  */
 case class FilePartition(index: Int, files: Seq[PartitionedFile]) extends RDDPartition
 
+/**
+ * An RDD that scans a list of file partitions.
+ */
 class FileScanRDD(
     @transient private val sparkSession: SparkSession,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
@@ -88,8 +94,8 @@ class FileScanRDD(
       private[this] var currentFile: PartitionedFile = null
       private[this] var currentIterator: Iterator[Object] = null
 
-      def hasNext = (currentIterator != null && currentIterator.hasNext) || nextIterator()
-      def next() = {
+      def hasNext: Boolean = (currentIterator != null && currentIterator.hasNext) || nextIterator()
+      def next(): Object = {
         val nextElement = currentIterator.next()
         // TODO: we should have a better separation of row based and batch based scan, so that we
         // don't need to run this `if` for every record.
@@ -111,7 +117,20 @@ class FileScanRDD(
           currentFile = files.next()
           logInfo(s"Reading File $currentFile")
           InputFileNameHolder.setInputFileName(currentFile.filePath)
-          currentIterator = readFunction(currentFile)
+
+          try {
+            currentIterator = readFunction(currentFile)
+          } catch {
+            case e: java.io.FileNotFoundException =>
+              throw new java.io.FileNotFoundException(
+                e.getMessage + "\n" +
+                  "It is possible the underlying files have been updated. " +
+                  "You can explicitly invalidate the cache in Spark by " +
+                  "running 'REFRESH TABLE tableName' command in SQL or " +
+                  "by recreating the Dataset/DataFrame involved."
+              )
+          }
+
           hasNext
         } else {
           currentFile = null
@@ -120,7 +139,7 @@ class FileScanRDD(
         }
       }
 
-      override def close() = {
+      override def close(): Unit = {
         updateBytesRead()
         updateBytesReadWithFileSize()
         InputFileNameHolder.unsetInputFileName()

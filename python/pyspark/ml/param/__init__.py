@@ -29,8 +29,8 @@ import warnings
 from py4j.java_gateway import JavaObject
 
 from pyspark import since
+from pyspark.ml.linalg import DenseVector, Vector
 from pyspark.ml.util import Identifiable
-from pyspark.mllib.linalg import DenseVector, Vector
 
 
 __all__ = ['Param', 'Params', 'TypeConverters']

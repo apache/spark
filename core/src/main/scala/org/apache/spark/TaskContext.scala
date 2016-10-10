@@ -24,7 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.util.{TaskCompletionListener, TaskFailureListener}
+import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
 
 
 object TaskContext {
@@ -188,6 +188,6 @@ abstract class TaskContext extends Serializable {
    * Register an accumulator that belongs to this task. Accumulators must call this method when
    * deserializing in executors.
    */
-  private[spark] def registerAccumulator(a: NewAccumulator[_, _]): Unit
+  private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit
 
 }

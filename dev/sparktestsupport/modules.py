@@ -92,7 +92,6 @@ class Module(object):
     def __hash__(self):
         return hash(self.name)
 
-
 tags = Module(
     name="tags",
     dependencies=[],
@@ -100,7 +99,6 @@ tags = Module(
         "common/tags/",
     ]
 )
-
 
 catalyst = Module(
     name="catalyst",
@@ -160,14 +158,14 @@ hive_thriftserver = Module(
 )
 
 
-hivecontext_compatibility = Module(
-    name="hivecontext-compatibility",
-    dependencies=[hive],
+sql_kafka = Module(
+    name="sql-kafka-0-10",
+    dependencies=[sql],
     source_file_regexes=[
-        "sql/hivecontext-compatibility/",
+        "external/kafka-0-10-sql",
     ],
     sbt_test_goals=[
-        "hivecontext-compatibility/test"
+        "sql-kafka-0-10/test",
     ]
 )
 
@@ -232,17 +230,28 @@ streaming_kinesis_asl = Module(
 
 
 streaming_kafka = Module(
-    name="streaming-kafka",
+    name="streaming-kafka-0-8",
     dependencies=[streaming],
     source_file_regexes=[
-        "external/kafka",
-        "external/kafka-assembly",
+        "external/kafka-0-8",
+        "external/kafka-0-8-assembly",
     ],
     sbt_test_goals=[
-        "streaming-kafka/test",
+        "streaming-kafka-0-8/test",
     ]
 )
 
+streaming_kafka_0_10 = Module(
+    name="streaming-kafka-0-10",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/kafka-0-10",
+        "external/kafka-0-10-assembly",
+    ],
+    sbt_test_goals=[
+        "streaming-kafka-0-10/test",
+    ]
+)
 
 streaming_flume_sink = Module(
     name="streaming-flume-sink",
@@ -343,11 +352,15 @@ pyspark_sql = Module(
     python_test_goals=[
         "pyspark.sql.types",
         "pyspark.sql.context",
+        "pyspark.sql.session",
+        "pyspark.sql.conf",
+        "pyspark.sql.catalog",
         "pyspark.sql.column",
         "pyspark.sql.dataframe",
         "pyspark.sql.group",
         "pyspark.sql.functions",
         "pyspark.sql.readwriter",
+        "pyspark.sql.streaming",
         "pyspark.sql.window",
         "pyspark.sql.tests",
     ]
@@ -412,6 +425,7 @@ pyspark_ml = Module(
         "pyspark.ml.feature",
         "pyspark.ml.classification",
         "pyspark.ml.clustering",
+        "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",
         "pyspark.ml.regression",
         "pyspark.ml.tuning",
@@ -458,6 +472,7 @@ yarn = Module(
         "yarn/",
         "common/network-yarn/",
     ],
+    build_profile_flags=["-Pyarn"],
     sbt_test_goals=[
         "yarn/test",
         "network-yarn/test",
@@ -465,6 +480,14 @@ yarn = Module(
     test_tags=[
         "org.apache.spark.tags.ExtendedYarnTest"
     ]
+)
+
+mesos = Module(
+    name="mesos",
+    dependencies=[],
+    source_file_regexes=["mesos/"],
+    build_profile_flags=["-Pmesos"],
+    sbt_test_goals=["mesos/test"]
 )
 
 # The root module is a dummy module which is used to run all of the tests.

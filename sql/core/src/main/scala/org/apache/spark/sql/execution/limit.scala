@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.util.Utils
 
 
 /**
@@ -38,9 +39,10 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   protected override def doExecute(): RDD[InternalRow] = {
+    val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
     val shuffled = new ShuffledRowRDD(
       ShuffleExchange.prepareShuffleDependency(
-        child.execute(), child.output, SinglePartition, serializer))
+        locallyLimited, child.output, SinglePartition, serializer))
     shuffled.mapPartitionsInternal(_.take(limit))
   }
 }
@@ -113,11 +115,11 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 case class TakeOrderedAndProjectExec(
     limit: Int,
     sortOrder: Seq[SortOrder],
-    projectList: Option[Seq[NamedExpression]],
+    projectList: Seq[NamedExpression],
     child: SparkPlan) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = {
-    projectList.map(_.map(_.toAttribute)).getOrElse(child.output)
+    projectList.map(_.toAttribute)
   }
 
   override def outputPartitioning: Partitioning = SinglePartition
@@ -125,8 +127,8 @@ case class TakeOrderedAndProjectExec(
   override def executeCollect(): Array[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    if (projectList.isDefined) {
-      val proj = UnsafeProjection.create(projectList.get, child.output)
+    if (projectList != child.output) {
+      val proj = UnsafeProjection.create(projectList, child.output)
       data.map(r => proj(r).copy())
     } else {
       data
@@ -147,8 +149,8 @@ case class TakeOrderedAndProjectExec(
         localTopK, child.output, SinglePartition, serializer))
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
-      if (projectList.isDefined) {
-        val proj = UnsafeProjection.create(projectList.get, child.output)
+      if (projectList != child.output) {
+        val proj = UnsafeProjection.create(projectList, child.output)
         topK.map(r => proj(r))
       } else {
         topK
@@ -159,8 +161,8 @@ case class TakeOrderedAndProjectExec(
   override def outputOrdering: Seq[SortOrder] = sortOrder
 
   override def simpleString: String = {
-    val orderByString = sortOrder.mkString("[", ",", "]")
-    val outputString = output.mkString("[", ",", "]")
+    val orderByString = Utils.truncatedString(sortOrder, "[", ",", "]")
+    val outputString = Utils.truncatedString(output, "[", ",", "]")
 
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
   }

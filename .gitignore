@@ -17,11 +17,14 @@
 .idea/
 .idea_modules/
 .project
+.pydevproject
 .scala_dependencies
 .settings
 /lib/
 R-unit-tests.log
 R/unit-tests.out
+R/cran-check.out
+R/pkg/vignettes/sparkr-vignettes.html
 build/*.jar
 build/apache-maven*
 build/scala*
@@ -72,7 +75,13 @@ metastore/
 metastore_db/
 sql/hive-thriftserver/test_warehouses
 warehouse/
+spark-warehouse/
 
 # For R session data
 .RData
 .RHistory
+.Rhistory
+*.Rproj
+*.Rproj.*
+
+.Rproj.user

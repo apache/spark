@@ -22,7 +22,7 @@ import java.io.File
 
 import scala.io.Source._
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.SparkSession
 
 /**
  * Simple test for reading and writing to a distributed
@@ -101,19 +101,19 @@ object DFSReadWriteTest {
     val fileContents = readFile(localFilePath.toString())
     val localWordCount = runLocalWordCount(fileContents)
 
-    println("Creating SparkConf")
-    val conf = new SparkConf().setAppName("DFS Read Write Test")
-
-    println("Creating SparkContext")
-    val sc = new SparkContext(conf)
+    println("Creating SparkSession")
+    val spark = SparkSession
+      .builder
+      .appName("DFS Read Write Test")
+      .getOrCreate()
 
     println("Writing local file to DFS")
     val dfsFilename = dfsDirPath + "/dfs_read_write_test"
-    val fileRDD = sc.parallelize(fileContents)
+    val fileRDD = spark.sparkContext.parallelize(fileContents)
     fileRDD.saveAsTextFile(dfsFilename)
 
     println("Reading file from DFS and running Word Count")
-    val readFileRDD = sc.textFile(dfsFilename)
+    val readFileRDD = spark.sparkContext.textFile(dfsFilename)
 
     val dfsWordCount = readFileRDD
       .flatMap(_.split(" "))
@@ -124,7 +124,7 @@ object DFSReadWriteTest {
       .values
       .sum
 
-    sc.stop()
+    spark.stop()
 
     if (localWordCount == dfsWordCount) {
       println(s"Success! Local Word Count ($localWordCount) " +

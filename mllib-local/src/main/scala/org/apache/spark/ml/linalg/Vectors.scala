@@ -24,9 +24,6 @@ import scala.annotation.varargs
 import scala.collection.JavaConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
 import org.apache.spark.annotation.Since
 
@@ -69,7 +66,7 @@ sealed trait Vector extends Serializable {
 
   /**
    * Returns a hash code value for the vector. The hash code is based on its size and its first 128
-   * nonzero entries, using a hash algorithm similar to [[java.util.Arrays.hashCode]].
+   * nonzero entries, using a hash algorithm similar to `java.util.Arrays.hashCode`.
    */
   override def hashCode(): Int = {
     // This is a reference implementation. It calls return in foreachActive, which is slow.
@@ -95,14 +92,14 @@ sealed trait Vector extends Serializable {
   /**
    * Converts the instance to a breeze vector.
    */
-  private[spark] def toBreeze: BV[Double]
+  private[spark] def asBreeze: BV[Double]
 
   /**
    * Gets the value of the ith element.
    * @param i index
    */
   @Since("2.0.0")
-  def apply(i: Int): Double = toBreeze(i)
+  def apply(i: Int): Double = asBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
@@ -167,12 +164,6 @@ sealed trait Vector extends Serializable {
    */
   @Since("2.0.0")
   def argmax: Int
-
-  /**
-   * Converts the vector to a JSON string.
-   */
-  @Since("2.0.0")
-  def toJson: String
 }
 
 /**
@@ -217,17 +208,7 @@ object Vectors {
    */
   @Since("2.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
-    require(size > 0, "The size of the requested sparse vector must be greater than 0.")
-
     val (indices, values) = elements.sortBy(_._1).unzip
-    var prev = -1
-    indices.foreach { i =>
-      require(prev < i, s"Found duplicate indices: $i.")
-      prev = i
-    }
-    require(prev < size, s"You may not write an element to index $prev because the declared " +
-      s"size of your vector is $size")
-
     new SparseVector(size, indices.toArray, values.toArray)
   }
 
@@ -253,27 +234,6 @@ object Vectors {
   @Since("2.0.0")
   def zeros(size: Int): Vector = {
     new DenseVector(new Array[Double](size))
-  }
-
-  /**
-   * Parses the JSON representation of a vector into a [[Vector]].
-   */
-  @Since("2.0.0")
-  def fromJson(json: String): Vector = {
-    implicit val formats = DefaultFormats
-    val jValue = parseJson(json)
-    (jValue \ "type").extract[Int] match {
-      case 0 => // sparse
-        val size = (jValue \ "size").extract[Int]
-        val indices = (jValue \ "indices").extract[Seq[Int]].toArray
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
-        sparse(size, indices, values)
-      case 1 => // dense
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
-        dense(values)
-      case _ =>
-        throw new IllegalArgumentException(s"Cannot parse $json into a vector.")
-    }
   }
 
   /**
@@ -475,7 +435,7 @@ object Vectors {
  * A dense vector represented by a value array.
  */
 @Since("2.0.0")
-class DenseVector @Since("2.0.0") (@Since("2.0.0") val values: Array[Double]) extends Vector {
+class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) extends Vector {
 
   override def size: Int = values.length
 
@@ -483,7 +443,7 @@ class DenseVector @Since("2.0.0") (@Since("2.0.0") val values: Array[Double]) ex
 
   override def toArray: Array[Double] = values
 
-  private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
+  private[spark] override def asBreeze: BV[Double] = new BDV[Double](values)
 
   override def apply(i: Int): Double = values(i)
 
@@ -567,11 +527,6 @@ class DenseVector @Since("2.0.0") (@Since("2.0.0") val values: Array[Double]) ex
       maxIdx
     }
   }
-
-  override def toJson: String = {
-    val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
-    compact(render(jValue))
-  }
 }
 
 @Since("2.0.0")
@@ -583,7 +538,7 @@ object DenseVector {
 }
 
 /**
- * A sparse vector represented by an index array and an value array.
+ * A sparse vector represented by an index array and a value array.
  *
  * @param size size of the vector.
  * @param indices index array, assume to be strictly increasing.
@@ -595,11 +550,25 @@ class SparseVector @Since("2.0.0") (
     @Since("2.0.0") val indices: Array[Int],
     @Since("2.0.0") val values: Array[Double]) extends Vector {
 
-  require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
-    s" indices match the dimension of the values. You provided ${indices.length} indices and " +
-    s" ${values.length} values.")
-  require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
-    s"which exceeds the specified vector size ${size}.")
+  // validate the data
+  {
+    require(size >= 0, "The size of the requested sparse vector must be greater than 0.")
+    require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
+      s" indices match the dimension of the values. You provided ${indices.length} indices and " +
+      s" ${values.length} values.")
+    require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
+      s"which exceeds the specified vector size ${size}.")
+
+    if (indices.nonEmpty) {
+      require(indices(0) >= 0, s"Found negative index: ${indices(0)}.")
+    }
+    var prev = -1
+    indices.foreach { i =>
+      require(prev < i, s"Index $i follows $prev and is not strictly increasing")
+      prev = i
+    }
+    require(prev < size, s"Index $prev out of bounds for vector of size $size")
+  }
 
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
@@ -619,7 +588,7 @@ class SparseVector @Since("2.0.0") (
     new SparseVector(size, indices.clone(), values.clone())
   }
 
-  private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
   override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0
@@ -752,14 +721,6 @@ class SparseVector @Since("2.0.0") (
       i_v
     }.unzip
     new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
-  }
-
-  override def toJson: String = {
-    val jValue = ("type" -> 0) ~
-      ("size" -> size) ~
-      ("indices" -> indices.toSeq) ~
-      ("values" -> values.toSeq)
-    compact(render(jValue))
   }
 }
 

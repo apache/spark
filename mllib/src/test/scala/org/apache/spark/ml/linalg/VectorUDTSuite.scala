@@ -18,6 +18,8 @@
 package org.apache.spark.ml.linalg
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.sql.catalyst.JavaTypeInference
 import org.apache.spark.sql.types._
 
 class VectorUDTSuite extends SparkFunSuite {
@@ -35,5 +37,11 @@ class VectorUDTSuite extends SparkFunSuite {
       assert(udt.typeName == "vector")
       assert(udt.simpleString == "vector")
     }
+  }
+
+  test("JavaTypeInference with VectorUDT") {
+    val (dataType, _) = JavaTypeInference.inferDataType(classOf[LabeledPoint])
+    assert(dataType.asInstanceOf[StructType].fields.map(_.dataType)
+      === Seq(new VectorUDT, DoubleType))
   }
 }

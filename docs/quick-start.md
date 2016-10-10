@@ -33,14 +33,14 @@ Spark's primary abstraction is a distributed collection of items called a Resili
 
 {% highlight scala %}
 scala> val textFile = sc.textFile("README.md")
-textFile: spark.RDD[String] = spark.MappedRDD@2ee9b6e3
+textFile: org.apache.spark.rdd.RDD[String] = README.md MapPartitionsRDD[1] at textFile at <console>:25
 {% endhighlight %}
 
 RDDs have _[actions](programming-guide.html#actions)_, which return values, and _[transformations](programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
 
 {% highlight scala %}
 scala> textFile.count() // Number of items in this RDD
-res0: Long = 126
+res0: Long = 126 // May be different from yours as README.md will change over time, similar to other outputs
 
 scala> textFile.first() // First item in this RDD
 res1: String = # Apache Spark
@@ -50,7 +50,7 @@ Now let's use a transformation. We will use the [`filter`](programming-guide.htm
 
 {% highlight scala %}
 scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))
-linesWithSpark: spark.RDD[String] = spark.FilteredRDD@7dd4af09
+linesWithSpark: org.apache.spark.rdd.RDD[String] = MapPartitionsRDD[2] at filter at <console>:27
 {% endhighlight %}
 
 We can chain together transformations and actions:
@@ -74,10 +74,10 @@ Spark's primary abstraction is a distributed collection of items called a Resili
 RDDs have _[actions](programming-guide.html#actions)_, which return values, and _[transformations](programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
 
 {% highlight python %}
->>> textFile.count() # Number of items in this RDD
+>>> textFile.count()  # Number of items in this RDD
 126
 
->>> textFile.first() # First item in this RDD
+>>> textFile.first()  # First item in this RDD
 u'# Apache Spark'
 {% endhighlight %}
 
@@ -90,7 +90,7 @@ Now let's use a transformation. We will use the [`filter`](programming-guide.htm
 We can chain together transformations and actions:
 
 {% highlight python %}
->>> textFile.filter(lambda line: "Spark" in line).count() # How many lines contain "Spark"?
+>>> textFile.filter(lambda line: "Spark" in line).count()  # How many lines contain "Spark"?
 15
 {% endhighlight %}
 
@@ -123,7 +123,7 @@ One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can i
 
 {% highlight scala %}
 scala> val wordCounts = textFile.flatMap(line => line.split(" ")).map(word => (word, 1)).reduceByKey((a, b) => a + b)
-wordCounts: spark.RDD[(String, Int)] = spark.ShuffledAggregatedRDD@71f027b8
+wordCounts: org.apache.spark.rdd.RDD[(String, Int)] = ShuffledRDD[8] at reduceByKey at <console>:28
 {% endhighlight %}
 
 Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations), and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (String, Int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
@@ -181,13 +181,13 @@ Spark also supports pulling data sets into a cluster-wide in-memory cache. This 
 
 {% highlight scala %}
 scala> linesWithSpark.cache()
-res7: spark.RDD[String] = spark.FilteredRDD@17e51082
+res7: linesWithSpark.type = MapPartitionsRDD[2] at filter at <console>:27
 
 scala> linesWithSpark.count()
-res8: Long = 19
+res8: Long = 15
 
 scala> linesWithSpark.count()
-res9: Long = 19
+res9: Long = 15
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
@@ -202,10 +202,10 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 >>> linesWithSpark.cache()
 
 >>> linesWithSpark.count()
-19
+15
 
 >>> linesWithSpark.count()
-19
+15
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
@@ -240,7 +240,8 @@ object SimpleApp {
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
     val numBs = logData.filter(line => line.contains("b")).count()
-    println("Lines with a: %s, Lines with b: %s".format(numAs, numBs))
+    println(s"Lines with a: $numAs, Lines with b: $numBs")
+    sc.stop()
   }
 }
 {% endhighlight %}
@@ -289,13 +290,13 @@ $ find .
 # Package a jar containing your application
 $ sbt package
 ...
-[info] Packaging {..}/{..}/target/scala-2.10/simple-project_2.10-1.0.jar
+[info] Packaging {..}/{..}/target/scala-{{site.SCALA_BINARY_VERSION}}/simple-project_{{site.SCALA_BINARY_VERSION}}-1.0.jar
 
 # Use spark-submit to run your application
 $ YOUR_SPARK_HOME/bin/spark-submit \
   --class "SimpleApp" \
   --master local[4] \
-  target/scala-2.10/simple-project_2.10-1.0.jar
+  target/scala-{{site.SCALA_BINARY_VERSION}}/simple-project_{{site.SCALA_BINARY_VERSION}}-1.0.jar
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
@@ -328,6 +329,8 @@ public class SimpleApp {
     }).count();
 
     System.out.println("Lines with a: " + numAs + ", lines with b: " + numBs);
+    
+    sc.stop()
   }
 }
 {% endhighlight %}
@@ -407,6 +410,8 @@ numAs = logData.filter(lambda s: 'a' in s).count()
 numBs = logData.filter(lambda s: 'b' in s).count()
 
 print("Lines with a: %i, lines with b: %i" % (numAs, numBs))
+
+sc.stop()
 {% endhighlight %}
 
 

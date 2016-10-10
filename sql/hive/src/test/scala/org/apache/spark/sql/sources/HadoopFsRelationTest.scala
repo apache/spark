@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.io.File
+
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
@@ -35,7 +37,7 @@ import org.apache.spark.sql.types._
 
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import sqlContext.implicits._
+  import spark.implicits._
 
   val dataSourceName: String
 
@@ -89,8 +91,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         yield Row(s"val_$i", s"val_$i", s"val_$i", s"val_$i", 1, 1, 1, 1))
 
     // Self-join
-    df.registerTempTable("t")
-    withTempTable("t") {
+    df.createOrReplaceTempView("t")
+    withTempView("t") {
       checkAnswer(
         sql(
           """SELECT l.a, r.b, l.p1, r.p2
@@ -141,8 +143,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .add("index", IntegerType, nullable = false)
             .add("col", dataType, nullable = true)
           val rdd =
-            sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
-          val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+            spark.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
+          val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
 
           df.write
             .mode("overwrite")
@@ -151,7 +153,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .options(extraOptions)
             .save(path)
 
-          val loadedDF = sqlContext
+          val loadedDF = spark
             .read
             .format(dataSourceName)
             .option("dataSchema", df.schema.json)
@@ -172,7 +174,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("path", file.getCanonicalPath)
           .option("dataSchema", dataSchema.json)
           .load(),
@@ -186,7 +188,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       testDF.write.mode(SaveMode.Append).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath).orderBy("a"),
         testDF.union(testDF).orderBy("a").collect())
@@ -206,7 +208,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       testDF.write.mode(SaveMode.Ignore).format(dataSourceName).save(file.getCanonicalPath)
 
       val path = new Path(file.getCanonicalPath)
-      val fs = path.getFileSystem(sqlContext.sessionState.newHadoopConf())
+      val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
       assert(fs.listStatus(path).isEmpty)
     }
   }
@@ -220,7 +222,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(file.getCanonicalPath)
 
       checkQueries(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath))
     }
@@ -241,7 +243,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -263,7 +265,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.union(partitionedTestDF).collect())
@@ -285,7 +287,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -321,7 +323,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), testDF.collect())
+      checkAnswer(spark.table("t"), testDF.collect())
     }
   }
 
@@ -330,14 +332,13 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), testDF.union(testDF).orderBy("a").collect())
+      checkAnswer(spark.table("t"), testDF.union(testDF).orderBy("a").collect())
     }
   }
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
-
-    withTempTable("t") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
       intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
       }
@@ -345,11 +346,10 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
-
-    withTempTable("t") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
-      assert(sqlContext.table("t").collect().isEmpty)
+      assert(spark.table("t").collect().isEmpty)
     }
   }
 
@@ -360,18 +360,18 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkQueries(sqlContext.table("t"))
+      checkQueries(spark.table("t"))
     }
   }
 
   test("saveAsTable()/load() - partitioned table - boolean type") {
-    sqlContext.range(2)
+    spark.range(2)
       .select('id, ('id % 2 === 0).as("b"))
       .write.partitionBy("b").saveAsTable("t")
 
     withTable("t") {
       checkAnswer(
-        sqlContext.table("t").sort('id),
+        spark.table("t").sort('id),
         Row(0, true) :: Row(1, false) :: Nil
       )
     }
@@ -393,7 +393,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
+      checkAnswer(spark.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -413,7 +413,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.union(partitionedTestDF).collect())
+      checkAnswer(spark.table("t"), partitionedTestDF.union(partitionedTestDF).collect())
     }
   }
 
@@ -433,7 +433,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
+      checkAnswer(spark.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -457,9 +457,9 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
-    withTempTable("t") {
+    withTempView("t") {
       intercept[AnalysisException] {
         partitionedTestDF.write
           .format(dataSourceName)
@@ -472,9 +472,9 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
-    withTempTable("t") {
+    withTempView("t") {
       partitionedTestDF.write
         .format(dataSourceName)
         .mode(SaveMode.Ignore)
@@ -482,44 +482,226 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .partitionBy("p1", "p2")
         .saveAsTable("t")
 
-      assert(sqlContext.table("t").collect().isEmpty)
+      assert(spark.table("t").collect().isEmpty)
     }
   }
 
-  test("Hadoop style globbing") {
+  test("load() - with directory of unpartitioned data in nested subdirs") {
+    withTempPath { dir =>
+      val subdir = new File(dir, "subdir")
+
+      val dataInDir = Seq(1, 2, 3).toDF("value")
+      val dataInSubdir = Seq(4, 5, 6).toDF("value")
+
+      /*
+
+        Directory structure to be generated
+
+        dir
+          |
+          |___ [ files of dataInDir ]
+          |
+          |___ subsubdir
+                    |
+                    |___ [ files of dataInSubdir ]
+      */
+
+      // Generated dataInSubdir, not data in dir
+      dataInSubdir.write
+        .format(dataSourceName)
+        .mode(SaveMode.Overwrite)
+        .save(subdir.getCanonicalPath)
+
+      // Inferring schema should throw error as it should not find any file to infer
+      val e = intercept[Exception] {
+        spark.read.format(dataSourceName).load(dir.getCanonicalPath)
+      }
+
+      e match {
+        case _: AnalysisException =>
+          assert(e.getMessage.contains("infer"))
+
+        case _: java.util.NoSuchElementException if e.getMessage.contains("dataSchema") =>
+          // Ignore error, the source format requires schema to be provided by user
+          // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema
+
+        case _ =>
+          fail("Unexpected error trying to infer schema from empty dir", e)
+      }
+
+      /** Test whether data is read with the given path matches the expected answer */
+      def testWithPath(path: File, expectedAnswer: Seq[Row]): Unit = {
+        val df = spark.read
+          .format(dataSourceName)
+          .schema(dataInDir.schema) // avoid schema inference for any format
+          .load(path.getCanonicalPath)
+        checkAnswer(df, expectedAnswer)
+      }
+
+      // Verify that reading by path 'dir/' gives empty results as there are no files in 'file'
+      // and it should not pick up files in 'dir/subdir'
+      require(subdir.exists)
+      require(subdir.listFiles().exists(!_.isDirectory))
+      testWithPath(dir, Seq.empty)
+
+      // Verify that if there is data in dir, then reading by path 'dir/' reads only dataInDir
+      dataInDir.write
+        .format(dataSourceName)
+        .mode(SaveMode.Append)   // append to prevent subdir from being deleted
+        .save(dir.getCanonicalPath)
+      require(dir.listFiles().exists(!_.isDirectory))
+      require(subdir.exists())
+      require(subdir.listFiles().exists(!_.isDirectory))
+      testWithPath(dir, dataInDir.collect())
+    }
+  }
+
+  test("Hadoop style globbing - unpartitioned data") {
     withTempPath { file =>
+
+      val dir = file.getCanonicalPath
+      val subdir = new File(dir, "subdir")
+      val subsubdir = new File(subdir, "subsubdir")
+      val anotherSubsubdir =
+        new File(new File(dir, "another-subdir"), "another-subsubdir")
+
+      val dataInSubdir = Seq(1, 2, 3).toDF("value")
+      val dataInSubsubdir = Seq(4, 5, 6).toDF("value")
+      val dataInAnotherSubsubdir = Seq(7, 8, 9).toDF("value")
+
+      dataInSubdir.write
+        .format (dataSourceName)
+        .mode (SaveMode.Overwrite)
+        .save (subdir.getCanonicalPath)
+
+      dataInSubsubdir.write
+        .format (dataSourceName)
+        .mode (SaveMode.Overwrite)
+        .save (subsubdir.getCanonicalPath)
+
+      dataInAnotherSubsubdir.write
+        .format (dataSourceName)
+        .mode (SaveMode.Overwrite)
+        .save (anotherSubsubdir.getCanonicalPath)
+
+      require(subdir.exists)
+      require(subdir.listFiles().exists(!_.isDirectory))
+      require(subsubdir.exists)
+      require(subsubdir.listFiles().exists(!_.isDirectory))
+      require(anotherSubsubdir.exists)
+      require(anotherSubsubdir.listFiles().exists(!_.isDirectory))
+
+      /*
+        Directory structure generated
+
+        dir
+          |
+          |___ subdir
+          |     |
+          |     |___ [ files of dataInSubdir ]
+          |     |
+          |     |___ subsubdir
+          |               |
+          |               |___ [ files of dataInSubsubdir ]
+          |
+          |
+          |___ anotherSubdir
+                |
+                |___ anotherSubsubdir
+                          |
+                          |___ [ files of dataInAnotherSubsubdir ]
+       */
+
+      val schema = dataInSubdir.schema
+
+      /** Check whether data is read with the given path matches the expected answer */
+      def check(path: String, expectedDf: DataFrame): Unit = {
+        val df = spark.read
+          .format(dataSourceName)
+          .schema(schema) // avoid schema inference for any format, expected to be same format
+          .load(path)
+        checkAnswer(df, expectedDf)
+      }
+
+      check(s"$dir/*/", dataInSubdir)
+      check(s"$dir/sub*/*", dataInSubdir.union(dataInSubsubdir))
+      check(s"$dir/another*/*", dataInAnotherSubsubdir)
+      check(s"$dir/*/another*", dataInAnotherSubsubdir)
+      check(s"$dir/*/*", dataInSubdir.union(dataInSubsubdir).union(dataInAnotherSubsubdir))
+    }
+  }
+
+  test("Hadoop style globbing - partitioned data with schema inference") {
+
+    // Tests the following on partition data
+    // - partitions are not discovered with globbing and without base path set.
+    // - partitions are discovered with globbing and base path set, though more detailed
+    //   tests for this is in ParquetPartitionDiscoverySuite
+
+    withTempPath { path =>
+      val dir = path.getCanonicalPath
       partitionedTestDF.write
         .format(dataSourceName)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+        .save(dir)
 
-      val df = sqlContext.read
-        .format(dataSourceName)
-        .option("dataSchema", dataSchema.json)
-        .option("basePath", file.getCanonicalPath)
-        .load(s"${file.getCanonicalPath}/p1=*/p2=???")
+      def check(
+          path: String,
+          expectedResult: Either[DataFrame, String],
+          basePath: Option[String] = None
+        ): Unit = {
+        try {
+          val reader = spark.read
+          basePath.foreach(reader.option("basePath", _))
+          val testDf = reader
+            .format(dataSourceName)
+            .load(path)
+          assert(expectedResult.isLeft, s"Error was expected with $path but result found")
+          checkAnswer(testDf, expectedResult.left.get)
+        } catch {
+          case e: java.util.NoSuchElementException if e.getMessage.contains("dataSchema") =>
+            // Ignore error, the source format requires schema to be provided by user
+            // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema
 
-      val expectedPaths = Set(
-        s"${file.getCanonicalFile}/p1=1/p2=foo",
-        s"${file.getCanonicalFile}/p1=2/p2=foo",
-        s"${file.getCanonicalFile}/p1=1/p2=bar",
-        s"${file.getCanonicalFile}/p1=2/p2=bar"
-      ).map { p =>
-        val path = new Path(p)
-        val fs = path.getFileSystem(sqlContext.sessionState.newHadoopConf())
-        path.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+          case e: Throwable =>
+            assert(expectedResult.isRight, s"Was not expecting error with $path: " + e)
+            assert(
+              e.getMessage.contains(expectedResult.right.get),
+              s"Did not find expected error message wiht $path")
+        }
       }
 
-      val actualPaths = df.queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: HadoopFsRelation, _, _) =>
-          relation.location.paths.map(_.toString).toSet
-      }.getOrElse {
-        fail("Expect an FSBasedRelation, but none could be found")
+      object Error {
+        def apply(msg: String): Either[DataFrame, String] = Right(msg)
       }
 
-      assert(actualPaths === expectedPaths)
-      checkAnswer(df, partitionedTestDF.collect())
+      object Result {
+        def apply(df: DataFrame): Either[DataFrame, String] = Left(df)
+      }
+
+      // ---- Without base path set ----
+      // Should find all the data with partitioning columns
+      check(s"$dir", Result(partitionedTestDF))
+
+      // Should fail as globbing finds dirs without files, only subdirs in them.
+      check(s"$dir/*/", Error("please set \"basePath\""))
+      check(s"$dir/p1=*/", Error("please set \"basePath\""))
+
+      // Should not find partition columns as the globs resolve to p2 dirs
+      // with files in them
+      check(s"$dir/*/*", Result(partitionedTestDF.drop("p1", "p2")))
+      check(s"$dir/p1=*/p2=foo", Result(partitionedTestDF.filter("p2 = 'foo'").drop("p1", "p2")))
+      check(s"$dir/p1=1/p2=???", Result(partitionedTestDF.filter("p1 = 1").drop("p1", "p2")))
+
+      // Should find all data without the partitioning columns as the globs resolve to the files
+      check(s"$dir/*/*/*", Result(partitionedTestDF.drop("p1", "p2")))
+
+      // ---- With base path set ----
+      val resultDf = partitionedTestDF.select("a", "b", "p1", "p2")
+      check(path = s"$dir/*", Result(resultDf), basePath = Some(dir))
+      check(path = s"$dir/*/*", Result(resultDf), basePath = Some(dir))
+      check(path = s"$dir/*/*/*", Result(resultDf), basePath = Some(dir))
     }
   }
 
@@ -538,7 +720,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         'p3.cast(FloatType).as('pf1),
         'f)
 
-      withTempTable("t") {
+      withTempView("t") {
         input
           .write
           .format(dataSourceName)
@@ -555,7 +737,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
         val realData = input.collect()
 
-        checkAnswer(sqlContext.table("t"), realData ++ realData)
+        checkAnswer(spark.table("t"), realData ++ realData)
       }
     }
   }
@@ -570,7 +752,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t").select('b, 'c, 'a), df.select('b, 'c, 'a).collect())
+      checkAnswer(spark.table("t").select('b, 'c, 'a), df.select('b, 'c, 'a).collect())
     }
   }
 
@@ -582,7 +764,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   test("SPARK-8406: Avoids name collision while writing files") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      sqlContext
+      spark
         .range(10000)
         .repartition(250)
         .write
@@ -591,7 +773,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(path)
 
       assertResult(10000) {
-        sqlContext
+        spark
           .read
           .format(dataSourceName)
           .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
@@ -610,7 +792,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         classOf[AlwaysFailParquetOutputCommitter].getName
     )
 
-    val df = sqlContext.range(1, 10).toDF("i")
+    val df = spark.range(1, 10).toDF("i")
     withTempPath { dir =>
       df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
       // Because there data already exists,
@@ -618,7 +800,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       // with file format and AlwaysFailOutputCommitter will not be used.
       df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
       checkAnswer(
-        sqlContext.read
+        spark.read
           .format(dataSourceName)
           .option("dataSchema", df.schema.json)
           .options(extraOptions)
@@ -666,20 +848,20 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     )
     withTempPath { dir =>
       val path = "file://" + dir.getCanonicalPath
-      val df1 = sqlContext.range(4)
+      val df1 = spark.range(4)
       df1.coalesce(1).write.mode("overwrite").options(options).format(dataSourceName).save(path)
       df1.coalesce(1).write.mode("append").options(options).format(dataSourceName).save(path)
 
       def checkLocality(): Unit = {
-        val df2 = sqlContext.read
+        val df2 = spark.read
           .format(dataSourceName)
           .option("dataSchema", df1.schema.json)
           .options(options)
           .load(path)
 
         val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
-          case scan: DataSourceScanExec if scan.rdd.isInstanceOf[FileScanRDD] =>
-            scan.rdd.asInstanceOf[FileScanRDD]
+          case scan: DataSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
+            scan.inputRDDs().head.asInstanceOf[FileScanRDD]
         }
 
         val partitions = fileScanRDD.partitions

@@ -26,7 +26,7 @@ import org.apache.spark.streaming.flume.sink._
 /**
  * This class implements the core functionality of [[FlumePollingReceiver]]. When started it
  * pulls data from Flume, stores it to Spark and then sends an Ack or Nack. This class should be
- * run via an [[java.util.concurrent.Executor]] as this implements [[Runnable]]
+ * run via a [[java.util.concurrent.Executor]] as this implements [[Runnable]]
  *
  * @param receiver The receiver that owns this instance.
  */

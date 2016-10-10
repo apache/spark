@@ -17,9 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.NewAccumulator
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.AccumulatorV2
 
 /**
  * Low-level task scheduler interface, currently implemented exclusively by
@@ -67,7 +67,7 @@ private[spark] trait TaskScheduler {
    */
   def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
+      accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId): Boolean
 
   /**

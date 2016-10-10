@@ -21,14 +21,14 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
@@ -36,14 +36,12 @@ import org.apache.spark.sql.Dataset
 
 
 /**
- * :: Experimental ::
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
+ * Decision tree learning algorithm (http://en.wikipedia.org/wiki/Decision_tree_learning)
  * for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
 @Since("1.4.0")
-@Experimental
 class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
@@ -86,19 +84,39 @@ class DecisionTreeClassifier @Since("1.4.0") (
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses: Int = getNumClasses(dataset)
+
+    if (isDefined(thresholds)) {
+      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+        ".train() called with non-matching numClasses and thresholds.length." +
+        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+    }
+
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeClassificationModel]
+      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+
+    val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
+    val instr = Instrumentation.create(this, data)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 0L, parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeClassificationModel]
+      seed = 0L, instr = Some(instr), parentUID = Some(uid))
+
+    val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -114,7 +132,6 @@ class DecisionTreeClassifier @Since("1.4.0") (
 }
 
 @Since("1.4.0")
-@Experimental
 object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifier] {
   /** Accessor for supported impurities: entropy, gini */
   @Since("1.4.0")
@@ -125,13 +142,11 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
 }
 
 /**
- * :: Experimental ::
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for classification.
+ * Decision tree model (http://en.wikipedia.org/wiki/Decision_tree_learning) for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
 @Since("1.4.0")
-@Experimental
 class DecisionTreeClassificationModel private[ml] (
     @Since("1.4.0")override val uid: String,
     @Since("1.4.0")override val rootNode: Node,
@@ -230,7 +245,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(nodeData).write.parquet(dataPath)
+      sparkSession.createDataFrame(nodeData).write.parquet(dataPath)
     }
   }
 
@@ -245,7 +260,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
-      val root = loadTreeNodes(path, metadata, sqlContext)
+      val root = loadTreeNodes(path, metadata, sparkSession)
       val model = new DecisionTreeClassificationModel(metadata.uid, root, numFeatures, numClasses)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

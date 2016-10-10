@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.UninterruptibleThread
 
 
 /**
@@ -47,6 +48,10 @@ import org.apache.spark.sql.SparkSession
  */
 class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   extends MetadataLog[T] with Logging {
+
+  // Avoid serializing generic sequences, see SPARK-17372
+  require(implicitly[ClassTag[T]].runtimeClass != classOf[Seq[_]],
+    "Should not create a log with type Seq, use Arrays instead - see SPARK-17372")
 
   import HDFSMetadataLog._
 
@@ -91,18 +96,30 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     serializer.deserialize[T](ByteBuffer.wrap(bytes))
   }
 
+  /**
+   * Store the metadata for the specified batchId and return `true` if successful. If the batchId's
+   * metadata has already been stored, this method will return `false`.
+   *
+   * Note that this method must be called on a [[org.apache.spark.util.UninterruptibleThread]]
+   * so that interrupts can be disabled while writing the batch file. This is because there is a
+   * potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If the thread
+   * running "Shell.runCommand" is interrupted, then the thread can get deadlocked. In our
+   * case, `writeBatch` creates a file using HDFS API and calls "Shell.runCommand" to set the
+   * file permissions, and can get deadlocked if the stream execution thread is stopped by
+   * interrupt. Hence, we make sure that this method is called on [[UninterruptibleThread]] which
+   * allows us to disable interrupts here. Also see SPARK-14131.
+   */
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
-      // Only write metadata when the batch has not yet been written.
-      try {
-        writeBatch(batchId, serialize(metadata))
-        true
-      } catch {
-        case e: IOException if "java.lang.InterruptedException" == e.getMessage =>
-          // create may convert InterruptedException to IOException. Let's convert it back to
-          // InterruptedException so that this failure won't crash StreamExecution
-          throw new InterruptedException("Creating file is interrupted")
+      // Only write metadata when the batch has not yet been written
+      Thread.currentThread match {
+        case ut: UninterruptibleThread =>
+          ut.runUninterruptibly { writeBatch(batchId, serialize(metadata)) }
+        case _ =>
+          throw new IllegalStateException(
+            "HDFSMetadataLog.add() must be executed on a o.a.spark.util.UninterruptibleThread")
       }
+      true
     }
   }
 
@@ -167,7 +184,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   private def isFileAlreadyExistsException(e: IOException): Boolean = {
     e.isInstanceOf[FileAlreadyExistsException] ||
       // Old Hadoop versions don't throw FileAlreadyExistsException. Although it's fixed in
-      // HADOOP-9361, we still need to support old Hadoop versions.
+      // HADOOP-9361 in Hadoop 2.5, we still need to support old Hadoop versions.
       (e.getMessage != null && e.getMessage.startsWith("File already exists: "))
   }
 
@@ -175,8 +192,12 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     val batchMetadataFile = batchIdToPath(batchId)
     if (fileManager.exists(batchMetadataFile)) {
       val input = fileManager.open(batchMetadataFile)
-      val bytes = IOUtils.toByteArray(input)
-      Some(deserialize(bytes))
+      try {
+        val bytes = IOUtils.toByteArray(input)
+        Some(deserialize(bytes))
+      } finally {
+        input.close()
+      }
     } else {
       logDebug(s"Unable to find batch $batchMetadataFile")
       None
@@ -210,14 +231,29 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     None
   }
 
+  /**
+   * Removes all the log entry earlier than thresholdBatchId (exclusive).
+   */
+  override def purge(thresholdBatchId: Long): Unit = {
+    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
+      .map(f => pathToBatchId(f.getPath))
+
+    for (batchId <- batchIds if batchId < thresholdBatchId) {
+      val path = batchIdToPath(batchId)
+      fileManager.delete(path)
+      logTrace(s"Removed metadata log file: $path")
+    }
+  }
+
   private def createFileManager(): FileManager = {
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     try {
       new FileContextManager(metadataPath, hadoopConf)
     } catch {
       case e: UnsupportedFileSystemException =>
-        logWarning("Could not use FileContext API for managing metadata log file. The log may be" +
-          "inconsistent under failures.", e)
+        logWarning("Could not use FileContext API for managing metadata log files at path " +
+          s"$metadataPath. Using FileSystem API instead for managing log files. The log may be " +
+          s"inconsistent under failures.")
         new FileSystemManager(metadataPath, hadoopConf)
     }
   }

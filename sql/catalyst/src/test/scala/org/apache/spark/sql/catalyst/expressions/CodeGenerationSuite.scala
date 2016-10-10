@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.expressions.objects.{CreateExternalRow, GetExternalRowField, ValidateExternalType}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -48,11 +52,23 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     futures.foreach(ThreadUtils.awaitResult(_, 10.seconds))
   }
 
+  test("metrics are recorded on compile") {
+    val startCount1 = CodegenMetrics.METRIC_COMPILATION_TIME.getCount()
+    val startCount2 = CodegenMetrics.METRIC_SOURCE_CODE_SIZE.getCount()
+    val startCount3 = CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.getCount()
+    val startCount4 = CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.getCount()
+    GenerateOrdering.generate(Add(Literal(123), Literal(1)).asc :: Nil)
+    assert(CodegenMetrics.METRIC_COMPILATION_TIME.getCount() == startCount1 + 1)
+    assert(CodegenMetrics.METRIC_SOURCE_CODE_SIZE.getCount() == startCount2 + 1)
+    assert(CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.getCount() > startCount3)
+    assert(CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.getCount() > startCount4)
+  }
+
   test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {
     val length = 5000
     val expressions = List.fill(length)(EqualTo(Literal(1), Literal(1)))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq.fill(length)(true)
 
     if (!checkResult(actual, expected)) {
@@ -75,7 +91,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expression = CaseWhen((1 to cases).map(generateCase(_)))
 
     val plan = GenerateMutableProjection.generate(Seq(expression))
-    val input = new GenericMutableRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
+    val input = new GenericInternalRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
     val actual = plan(input).toSeq(Seq(expression.dataType))
 
     assert(actual(0) == cases)
@@ -85,7 +101,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val length = 5000
     val expressions = Seq(CreateArray(List.fill(length)(EqualTo(Literal(1), Literal(1)))))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(new GenericArrayData(Seq.fill(length)(true)))
 
     if (!checkResult(actual, expected)) {
@@ -100,10 +116,10 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         case (expr, i) => Seq(Literal(i), expr)
       }))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
-    val expected = Seq(new ArrayBasedMapData(
-      new GenericArrayData(0 until length),
-      new GenericArrayData(Seq.fill(length)(true))))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType)).map {
+      case m: ArrayBasedMapData => ArrayBasedMapData.toScalaMap(m)
+    }
+    val expected = (0 until length).map((_, true)).toMap :: Nil
 
     if (!checkResult(actual, expected)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
@@ -114,7 +130,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val length = 5000
     val expressions = Seq(CreateStruct(List.fill(length)(EqualTo(Literal(1), Literal(1)))))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(InternalRow(Seq.fill(length)(true): _*))
 
     if (!checkResult(actual, expected)) {
@@ -129,8 +145,38 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         expr => Seq(Literal(expr.toString), expr)
       }))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(InternalRow(Seq.fill(length)(true): _*))
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
+  test("SPARK-14224: split wide external row creation into blocks due to JVM code size limit") {
+    val length = 5000
+    val schema = StructType(Seq.fill(length)(StructField("int", IntegerType)))
+    val expressions = Seq(CreateExternalRow(Seq.fill(length)(Literal(1)), schema))
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq(Row.fromSeq(Seq.fill(length)(1)))
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
+  test("SPARK-17702: split wide constructor into blocks due to JVM code size limit") {
+    val length = 5000
+    val expressions = Seq.fill(length) {
+      ToUTCTimestamp(
+        Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
+        Literal.create("PST", StringType))
+    }
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq.fill(length)(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
 
     if (!checkResult(actual, expected)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
@@ -193,5 +239,60 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       EqualTo(BoundReference(0, StringType, false), Literal.create("\\u", StringType)),
       true,
       InternalRow(UTF8String.fromString("\\u")))
+  }
+
+  test("check compilation error doesn't occur caused by specific literal") {
+    // The end of comment (*/) should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("*/Compilation error occurs/*", StringType) :: Nil)
+
+    // `\u002A` is `*` and `\u002F` is `/`
+    // so if the end of comment consists of those characters in queries, we need to escape them.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002A/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002A/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002a/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002a/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\u002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\\\u002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\002fCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\\\002fCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\002A\\002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\002A\\002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\002A\\\\002FCompilation error occurs/*", StringType) :: Nil)
+
+    // \ u002X is an invalid unicode literal so it should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002X/Compilation error occurs", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002X/Compilation error occurs", StringType) :: Nil)
+
+    // \ u001 is an invalid unicode literal so it should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u001/Compilation error occurs", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u001/Compilation error occurs", StringType) :: Nil)
+
+  }
+
+  test("SPARK-17160: field names are properly escaped by GetExternalRowField") {
+    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
+    GenerateUnsafeProjection.generate(
+      ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"), IntegerType) :: Nil)
+  }
+
+  test("SPARK-17160: field names are properly escaped by AssertTrue") {
+    GenerateUnsafeProjection.generate(AssertTrue(Cast(Literal("\""), BooleanType)) :: Nil)
   }
 }

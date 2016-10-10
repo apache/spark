@@ -336,7 +336,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * However, it is applicable to only "invertible reduce functions".
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
    * @param reduceFunc associative and commutative reduce function
-   * @param invReduceFunc inverse function
+   * @param invReduceFunc inverse function; such that for all y, invertible x:
+   *                      `invReduceFunc(reduceFunc(x, y), x) = y`
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -470,9 +471,10 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       val list: JList[V] = values.asJava
       val scalaState: Optional[S] = JavaUtils.optionToOptional(state)
       val result: Optional[S] = in.apply(list, scalaState)
-      result.isPresent match {
-        case true => Some(result.get())
-        case _ => None
+      if (result.isPresent) {
+        Some(result.get())
+      } else {
+        None
       }
     }
     scalaFunc

@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
 
 /**
- * Performs an sort merge join of two child relations.
+ * Performs a sort merge join of two child relations.
  */
 case class SortMergeJoinExec(
     leftKeys: Seq[Expression],
@@ -40,12 +40,12 @@ case class SortMergeJoinExec(
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with CodegenSupport {
 
-  override private[sql] lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case Inner =>
+      case _: InnerLike =>
         left.output ++ right.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -53,6 +53,8 @@ case class SortMergeJoinExec(
         left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
         (left.output ++ right.output).map(_.withNullability(true))
+      case j: ExistenceJoin =>
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case x =>
@@ -62,7 +64,8 @@ case class SortMergeJoinExec(
   }
 
   override def outputPartitioning: Partitioning = joinType match {
-    case Inner => PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+    case _: InnerLike =>
+      PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
     // For left and right outer joins, the output is partitioned by the streamed input's join keys.
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
@@ -109,7 +112,7 @@ case class SortMergeJoinExec(
       val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {
-        case Inner =>
+        case _: InnerLike =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
             private[this] var currentRightMatches: ArrayBuffer[InternalRow] = _
@@ -269,6 +272,44 @@ case class SortMergeJoinExec(
             override def getRow: InternalRow = currentLeftRow
           }.toScala
 
+        case j: ExistenceJoin =>
+          new RowIterator {
+            private[this] var currentLeftRow: InternalRow = _
+            private[this] val result: InternalRow = new GenericInternalRow(Array[Any](null))
+            private[this] val smjScanner = new SortMergeJoinScanner(
+              createLeftKeyGenerator(),
+              createRightKeyGenerator(),
+              keyOrdering,
+              RowIterator.fromScala(leftIter),
+              RowIterator.fromScala(rightIter)
+            )
+            private[this] val joinRow = new JoinedRow
+
+            override def advanceNext(): Boolean = {
+              while (smjScanner.findNextOuterJoinRows()) {
+                currentLeftRow = smjScanner.getStreamedRow
+                val currentRightMatches = smjScanner.getBufferedMatches
+                var found = false
+                if (currentRightMatches != null) {
+                  var i = 0
+                  while (!found && i < currentRightMatches.length) {
+                    joinRow(currentLeftRow, currentRightMatches(i))
+                    if (boundCondition(joinRow)) {
+                      found = true
+                    }
+                    i += 1
+                  }
+                }
+                result.setBoolean(0, found)
+                numOutputRows += 1
+                return true
+              }
+              false
+            }
+
+            override def getRow: InternalRow = resultProj(joinRow(currentLeftRow, result))
+          }.toScala
+
         case x =>
           throw new IllegalArgumentException(
             s"SortMergeJoin should not take $x as the JoinType")
@@ -278,7 +319,7 @@ case class SortMergeJoinExec(
   }
 
   override def supportCodegen: Boolean = {
-    joinType == Inner
+    joinType.isInstanceOf[InnerLike]
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -296,13 +337,7 @@ case class SortMergeJoinExec(
 
   private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
     vars.zipWithIndex.map { case (ev, i) =>
-      val value = ctx.freshName("value")
-      ctx.addMutableState(ctx.javaType(leftKeys(i).dataType), value, "")
-      val code =
-        s"""
-           |$value = ${ev.value};
-         """.stripMargin
-      ExprCode(code, "false", value)
+      ctx.addBufferedState(leftKeys(i).dataType, "value", ev.value)
     }
   }
 
@@ -919,12 +954,12 @@ private class SortMergeFullOuterJoinScanner(
     }
 
     if (leftMatches.size <= leftMatched.capacity) {
-      leftMatched.clear()
+      leftMatched.clearUntil(leftMatches.size)
     } else {
       leftMatched = new BitSet(leftMatches.size)
     }
     if (rightMatches.size <= rightMatched.capacity) {
-      rightMatched.clear()
+      rightMatched.clearUntil(rightMatches.size)
     } else {
       rightMatched = new BitSet(rightMatches.size)
     }

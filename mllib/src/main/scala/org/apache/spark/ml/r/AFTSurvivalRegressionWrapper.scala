@@ -19,7 +19,6 @@ package org.apache.spark.ml.r
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
-import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
@@ -88,6 +87,7 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
     val (rewritedFormula, censorCol) = formulaRewrite(formula)
 
     val rFormula = new RFormula().setFormula(rewritedFormula)
+    RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
     // get feature names from output schema
@@ -99,6 +99,7 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
     val aft = new AFTSurvivalRegression()
       .setCensorCol(censorCol)
       .setFitIntercept(rFormula.hasIntercept)
+      .setFeaturesCol(rFormula.getFeaturesCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, aft))

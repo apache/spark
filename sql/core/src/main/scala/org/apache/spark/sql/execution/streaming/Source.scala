@@ -39,4 +39,7 @@ trait Source  {
    * same data for a particular `start` and `end` pair.
    */
   def getBatch(start: Option[Offset], end: Offset): DataFrame
+
+  /** Stop this source and free any resources it has allocated. */
+  def stop(): Unit
 }

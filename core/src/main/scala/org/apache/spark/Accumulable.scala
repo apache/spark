@@ -17,18 +17,18 @@
 
 package org.apache.spark
 
-import java.io.{ObjectInputStream, Serializable}
+import java.io.Serializable
 
 import scala.collection.generic.Growable
 import scala.reflect.ClassTag
 
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, LegacyAccumulatorWrapper}
 
 
 /**
- * A data type that can be accumulated, i.e. has an commutative and associative "add" operation,
+ * A data type that can be accumulated, i.e. has a commutative and associative "add" operation,
  * but where the result type, `R`, may be different from the element type being added, `T`.
  *
  * You must define how to add data, and how to merge two of these together.  For some data types,
@@ -49,6 +49,7 @@ import org.apache.spark.util.Utils
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
+@deprecated("use AccumulatorV2", "2.0.0")
 class Accumulable[R, T] private (
     val id: Long,
     // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
@@ -109,7 +110,13 @@ class Accumulable[R, T] private (
   /**
    * Access the accumulator's current value; only allowed on driver.
    */
-  def value: R = newAcc.value
+  def value: R = {
+    if (newAcc.isAtDriverSide) {
+      newAcc.value
+    } else {
+      throw new UnsupportedOperationException("Can't read accumulator value in task")
+    }
+  }
 
   /**
    * Get the current value of this accumulator from within a task.
@@ -120,7 +127,7 @@ class Accumulable[R, T] private (
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
    */
-  def localValue: R = newAcc.localValue
+  def localValue: R = newAcc.value
 
   /**
    * Set the accumulator's value; only allowed on driver.
@@ -162,6 +169,7 @@ class Accumulable[R, T] private (
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
+@deprecated("use AccumulatorV2", "2.0.0")
 trait AccumulableParam[R, T] extends Serializable {
   /**
    * Add additional data to the accumulator value. Is allowed to modify and return `r`
@@ -191,6 +199,7 @@ trait AccumulableParam[R, T] extends Serializable {
 }
 
 
+@deprecated("use AccumulatorV2", "2.0.0")
 private[spark] class
 GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
   extends AccumulableParam[R, T] {

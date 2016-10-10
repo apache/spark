@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -33,15 +32,18 @@ object Main {
   def main(args: Array[String]) {
     // scalastyle:off println
     println("Running regression test for SPARK-8489.")
-    val sc = new SparkContext("local", "testing")
-    val sparkSession = SparkSession.withHiveSupport(sc)
+    val spark = SparkSession.builder
+      .master("local")
+      .appName("testing")
+      .enableHiveSupport()
+      .getOrCreate()
     // This line should not throw scala.reflect.internal.MissingRequirementError.
     // See SPARK-8470 for more detail.
-    val df = sparkSession.createDataFrame(Seq(MyCoolClass("1", "2", "3")))
+    val df = spark.createDataFrame(Seq(MyCoolClass("1", "2", "3")))
     df.collect()
     println("Regression test for SPARK-8489 success!")
     // scalastyle:on println
-    sc.stop()
+    spark.stop()
   }
 }
 

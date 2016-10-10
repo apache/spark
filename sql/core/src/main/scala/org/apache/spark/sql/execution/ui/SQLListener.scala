@@ -26,6 +26,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.AccumulatorContext
 
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(
@@ -41,14 +42,18 @@ case class SparkListenerSQLExecutionStart(
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent
 
-private[sql] class SQLHistoryListenerFactory extends SparkHistoryListenerFactory {
+@DeveloperApi
+case class SparkListenerDriverAccumUpdates(executionId: Long, accumUpdates: Seq[(Long, Long)])
+  extends SparkListenerEvent
+
+class SQLHistoryListenerFactory extends SparkHistoryListenerFactory {
 
   override def createListeners(conf: SparkConf, sparkUI: SparkUI): Seq[SparkListener] = {
     List(new SQLHistoryListener(conf, sparkUI))
   }
 }
 
-private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
+class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
   private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
 
@@ -164,7 +169,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
         taskEnd.taskInfo.taskId,
         taskEnd.stageId,
         taskEnd.stageAttemptId,
-        taskEnd.taskMetrics.accumulators().map(a => a.toInfo(Some(a.localValue), None)),
+        taskEnd.taskMetrics.externalAccums.map(a => a.toInfo(Some(a.value), None)),
         finishTask = true)
     }
   }
@@ -177,8 +182,10 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
       taskId: Long,
       stageId: Int,
       stageAttemptID: Int,
-      accumulatorUpdates: Seq[AccumulableInfo],
+      _accumulatorUpdates: Seq[AccumulableInfo],
       finishTask: Boolean): Unit = {
+    val accumulatorUpdates =
+      _accumulatorUpdates.filter(_.update.isDefined).map(accum => (accum.id, accum.update.get))
 
     _stageIdToStageMetrics.get(stageId) match {
       case Some(stageMetrics) =>
@@ -248,6 +255,13 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
         }
       }
     }
+    case SparkListenerDriverAccumUpdates(executionId, accumUpdates) => synchronized {
+      _executionIdToData.get(executionId).foreach { executionUIData =>
+        for ((accId, accValue) <- accumUpdates) {
+          executionUIData.driverAccumUpdates(accId) = accValue
+        }
+      }
+    }
     case _ => // Ignore
   }
 
@@ -290,12 +304,12 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
                stageMetrics <- _stageIdToStageMetrics.get(stageId).toIterable;
                taskMetrics <- stageMetrics.taskIdToMetricUpdates.values;
                accumulatorUpdate <- taskMetrics.accumulatorUpdates) yield {
-            assert(accumulatorUpdate.update.isDefined, s"accumulator update from " +
-              s"task did not have a partial value: ${accumulatorUpdate.name}")
-            (accumulatorUpdate.id, accumulatorUpdate.update.get)
+            (accumulatorUpdate._1, accumulatorUpdate._2)
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
-        mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
+
+        val driverUpdates = executionUIData.driverAccumUpdates.toSeq
+        mergeAccumulatorUpdates(accumulatorUpdates ++ driverUpdates, accumulatorId =>
           executionUIData.accumulatorMetrics(accumulatorId).metricType)
       case None =>
         // This execution has been dropped
@@ -319,7 +333,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
 /**
  * A [[SQLListener]] for rendering the SQL UI in the history server.
  */
-private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
+class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
   extends SQLListener(conf) {
 
   private var sqlTabAttached = false
@@ -336,7 +350,7 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
       taskEnd.taskInfo.accumulables.flatMap { a =>
         // Filter out accumulators that are not SQL metrics
         // For now we assume all SQL metrics are Long's that have been JSON serialized as String's
-        if (a.metadata == Some(SQLMetrics.ACCUM_IDENTIFIER)) {
+        if (a.metadata == Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)) {
           val newValue = a.update.map(_.toString.toLong).getOrElse(0L)
           Some(a.copy(update = Some(newValue)))
         } else {
@@ -367,10 +381,15 @@ private[ui] class SQLExecutionUIData(
     val physicalPlanDescription: String,
     val physicalPlanGraph: SparkPlanGraph,
     val accumulatorMetrics: Map[Long, SQLPlanMetric],
-    val submissionTime: Long,
-    var completionTime: Option[Long] = None,
-    val jobs: mutable.HashMap[Long, JobExecutionStatus] = mutable.HashMap.empty,
-    val stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer()) {
+    val submissionTime: Long) {
+
+  var completionTime: Option[Long] = None
+
+  val jobs: mutable.HashMap[Long, JobExecutionStatus] = mutable.HashMap.empty
+
+  val stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer()
+
+  val driverAccumUpdates: mutable.HashMap[Long, Long] = mutable.HashMap.empty
 
   /**
    * Return whether there are running jobs in this execution.
@@ -418,4 +437,4 @@ private[ui] class SQLStageMetrics(
 private[ui] class SQLTaskMetrics(
     val attemptId: Long, // TODO not used yet
     var finished: Boolean,
-    var accumulatorUpdates: Seq[AccumulableInfo])
+    var accumulatorUpdates: Seq[(Long, Any)])

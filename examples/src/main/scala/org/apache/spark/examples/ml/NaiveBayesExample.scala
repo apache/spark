@@ -18,24 +18,25 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.ml.classification.{NaiveBayes}
+import org.apache.spark.ml.classification.NaiveBayes
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object NaiveBayesExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("NaiveBayesExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("NaiveBayesExample")
+      .getOrCreate()
+
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
-    val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     // Split the data into training and test sets (30% held out for testing)
-    val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
+    val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3), seed = 1234L)
 
     // Train a NaiveBayes model.
     val model = new NaiveBayes()
@@ -49,10 +50,12 @@ object NaiveBayesExample {
     val evaluator = new MulticlassClassificationEvaluator()
       .setLabelCol("label")
       .setPredictionCol("prediction")
-      .setMetricName("precision")
-    val precision = evaluator.evaluate(predictions)
-    println("Precision:" + precision)
+      .setMetricName("accuracy")
+    val accuracy = evaluator.evaluate(predictions)
+    println("Test set accuracy = " + accuracy)
     // $example off$
+
+    spark.stop()
   }
 }
 // scalastyle:on println

@@ -17,19 +17,20 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.feature import DCT
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="DCTExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("DCTExample")\
+        .getOrCreate()
 
     # $example on$
-    df = sqlContext.createDataFrame([
+    df = spark.createDataFrame([
         (Vectors.dense([0.0, 1.0, -2.0, 3.0]),),
         (Vectors.dense([-1.0, 2.0, 4.0, -7.0]),),
         (Vectors.dense([14.0, -2.0, -5.0, 1.0]),)], ["features"])
@@ -38,8 +39,7 @@ if __name__ == "__main__":
 
     dctDf = dct.transform(df)
 
-    for dcts in dctDf.select("featuresDCT").take(3):
-        print(dcts)
+    dctDf.select("featuresDCT").show(truncate=False)
     # $example off$
 
-    sc.stop()
+    spark.stop()

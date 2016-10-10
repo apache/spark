@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
+import org.apache.commons.lang3.time.FastDateFormat
 
-private[sql] class CSVOptions(@transient private val parameters: Map[String, String])
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.util.{CompressionCodecs, ParseModes}
+
+private[csv] class CSVOptions(@transient private val parameters: Map[String, String])
   extends Logging with Serializable {
 
   private def getChar(paramName: String, default: Char): Char = {
@@ -89,18 +91,45 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
+  val nanValue = parameters.getOrElse("nanValue", "NaN")
+
+  val positiveInf = parameters.getOrElse("positiveInf", "Inf")
+  val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
+
+
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))
     name.map(CompressionCodecs.getCodecClassName)
   }
 
+  // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
+  val dateFormat: FastDateFormat =
+    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"))
+
+  val timestampFormat: FastDateFormat =
+    FastDateFormat.getInstance(
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"))
+
   val maxColumns = getInt("maxColumns", 20480)
 
-  val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
+  val maxCharsPerColumn = getInt("maxCharsPerColumn", -1)
+
+  val escapeQuotes = getBool("escapeQuotes", true)
+
+  val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
+
+  val quoteAll = getBool("quoteAll", false)
 
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
+}
 
-  val rowSeparator = "\n"
+object CSVOptions {
+
+  def apply(): CSVOptions = new CSVOptions(Map.empty)
+
+  def apply(paramName: String, paramValue: String): CSVOptions = {
+    new CSVOptions(Map(paramName -> paramValue))
+  }
 }

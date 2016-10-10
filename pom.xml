@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.0.0-SNAPSHOT</version>
+  <version>2.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -100,8 +100,6 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>sql/hivecontext-compatibility</module>
-    <module>external/docker-integration-tests</module>
     <module>assembly</module>
     <module>external/flume</module>
     <module>external/flume-sink</module>
@@ -109,8 +107,11 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
-    <module>external/kafka</module>
-    <module>external/kafka-assembly</module>
+    <module>external/kafka-0-8</module>
+    <module>external/kafka-0-8-assembly</module>
+    <module>external/kafka-0-10</module>
+    <module>external/kafka-0-10-assembly</module>
+    <module>external/kafka-0-10-sql</module>
   </modules>
 
   <properties>
@@ -119,8 +120,6 @@
     <java.version>1.7</java.version>
     <maven.version>3.3.9</maven.version>
     <sbt.project.name>spark</sbt.project.name>
-    <mesos.version>0.21.1</mesos.version>
-    <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>2.2.0</hadoop.version>
@@ -134,11 +133,11 @@
     <hive.version>1.2.1.spark2</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
-    <derby.version>10.10.1.1</derby.version>
-    <parquet.version>1.7.0</parquet.version>
+    <derby.version>10.12.1.1</derby.version>
+    <parquet.version>1.8.1</parquet.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jetty.version>8.1.14.v20131031</jetty.version>
-    <orbit.version>3.0.0.v201112011016</orbit.version>
+    <jetty.version>9.2.16.v20160414</jetty.version>
+    <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.0</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
@@ -150,8 +149,8 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
-    <commons.httpclient.version>4.3.2</commons.httpclient.version>
-    <commons.httpcore.version>4.3.2</commons.httpcore.version>
+    <commons.httpclient.version>4.5.2</commons.httpclient.version>
+    <commons.httpcore.version>4.4.4</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -159,29 +158,36 @@
     <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
-    <jline.version>${scala.version}</jline.version>
-    <jline.groupid>org.scala-lang</jline.groupid>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.5.3</fasterxml.jackson.version>
-    <snappy.version>1.1.2.4</snappy.version>
+    <fasterxml.jackson.version>2.6.5</fasterxml.jackson.version>
+    <snappy.version>1.1.2.6</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>
+    <commons-io.version>2.4</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.3.2</commons-lang3.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
-    <janino.version>2.7.8</janino.version>
-    <jersey.version>1.9</jersey.version>
+    <janino.version>3.0.0</janino.version>
+    <jersey.version>2.22.2</jersey.version>
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>1.3.9</jsr305.version>
     <libthrift.version>0.9.2</libthrift.version>
-    <antlr4.version>4.5.2-1</antlr4.version>
+    <antlr4.version>4.5.3</antlr4.version>
+    <jpam.version>1.1</jpam.version>
+    <selenium.version>2.52.0</selenium.version>
+    <paranamer.version>2.8</paranamer.version>
+    <maven-antrun.version>1.8</maven-antrun.version>
+    <commons-crypto.version>1.0.0</commons-crypto.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
+
+    <!-- When using different JDKs for the build, we can't use Zinc for the jdk8 part. -->
+    <useZincForJdk8>true</useZincForJdk8>
 
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.spark_project</spark.shade.packageName>
@@ -288,13 +294,6 @@
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.spark</groupId>
-        <artifactId>spark-tags_${scala.binary.version}</artifactId>
-        <version>${project.version}</version>
-        <classifier>tests</classifier>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>${chill.version}</version>
@@ -336,6 +335,24 @@
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-servlets</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-proxy</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-client</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-util</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
@@ -365,7 +382,6 @@
         <scope>provided</scope>
       </dependency>
       <!-- End of shaded deps -->
-
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
@@ -375,6 +391,11 @@
         <groupId>commons-lang</groupId>
         <artifactId>commons-lang</artifactId>
         <version>${commons-lang2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>${commons-io.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-codec</groupId>
@@ -413,13 +434,18 @@
       </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpmime</artifactId>
+        <version>${commons.httpclient.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpcore</artifactId>
         <version>${commons.httpcore.version}</version>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
         <artifactId>selenium-java</artifactId>
-        <version>2.45.0</version> <!-- 2.46.0+ requires Jetty 9 -->
+        <version>${selenium.version}</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -431,6 +457,12 @@
             <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.seleniumhq.selenium</groupId>
+        <artifactId>selenium-htmlunit-driver</artifactId>
+        <version>${selenium.version}</version>
+        <scope>test</scope>
       </dependency>
       <!-- Added for selenium only, and should match its dependent version: -->
       <dependency>
@@ -508,18 +540,6 @@
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
-        <groupId>org.apache.mesos</groupId>
-        <artifactId>mesos</artifactId>
-        <version>${mesos.version}</version>
-        <classifier>${mesos.classifier}</classifier>
-        <exclusions>
-          <exclusion>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
         <version>0.5.11</version>
@@ -532,7 +552,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.29.Final</version>
+        <version>4.0.41.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -593,21 +613,49 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.sun.jersey</groupId>
-        <artifactId>jersey-server</artifactId>
-        <version>${jersey.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
+        <groupId>com.fasterxml.jackson.module</groupId>
+        <artifactId>jackson-module-jaxb-annotations</artifactId>
+        <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.sun.jersey</groupId>
-        <artifactId>jersey-core</artifactId>
+        <groupId>org.glassfish.jersey.core</groupId>
+        <artifactId>jersey-server</artifactId>
         <version>${jersey.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey.core</groupId>
+        <artifactId>jersey-common</artifactId>
+        <version>${jersey.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey.core</groupId>
+        <artifactId>jersey-client</artifactId>
+        <version>${jersey.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey.containers</groupId>
+        <artifactId>jersey-container-servlet</artifactId>
+        <version>${jersey.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey.containers</groupId>
+        <artifactId>jersey-container-servlet-core</artifactId>
+        <version>${jersey.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey</groupId>
+        <artifactId>jersey-client</artifactId>
+        <version>${jersey.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>javax.ws.rs</groupId>
+        <artifactId>javax.ws.rs-api</artifactId>
+        <version>2.0.1</version>
       </dependency>
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>0.11.2</version>
+        <version>0.12</version>
         <exclusions>
           <!-- This is included as a compile-scoped dependency by jtransforms, which is
                a dependency of breeze. -->
@@ -624,18 +672,7 @@
       <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-        <version>3.2.10</version>
-      </dependency>
-      <dependency>
-        <groupId>com.sun.jersey</groupId>
-        <artifactId>jersey-json</artifactId>
-        <version>${jersey.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>stax</groupId>
-            <artifactId>stax-api</artifactId>
-          </exclusion>
-        </exclusions>
+        <version>3.2.11</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -707,25 +744,12 @@
       <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
-        <classifier>shaded</classifier>
-        <version>3.6.6</version>
+        <version>5.0.2</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
             <artifactId>guava</artifactId>
             <groupId>com.google.guava</groupId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpclient</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpcore</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-logging</groupId>
-            <artifactId>httpclient</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -818,6 +842,18 @@
           <exclusion>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.jersey-test-framework</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.contribs</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -931,6 +967,18 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.jersey-test-framework</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.contribs</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -958,6 +1006,18 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.jersey-test-framework</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.contribs</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -988,6 +1048,18 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.jersey-test-framework</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.contribs</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1016,6 +1088,18 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.jersey-test-framework</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.contribs</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1043,6 +1127,18 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.jersey-test-framework</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.sun.jersey.contribs</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1329,6 +1425,10 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1359,14 +1459,6 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpclient</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpcore</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.curator</groupId>
@@ -1506,51 +1598,11 @@
       </dependency>
 
       <dependency>
-        <groupId>${hive.group}</groupId>
-        <artifactId>hive-service</artifactId>
-        <version>${hive.version}</version>
+        <groupId>net.sf.jpam</groupId>
+        <artifactId>jpam</artifactId>
         <scope>${hive.deps.scope}</scope>
+        <version>${jpam.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-common</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-exec</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-metastore</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>${hive.group}</groupId>
-            <artifactId>hive-shims</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.curator</groupId>
-            <artifactId>curator-framework</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.curator</groupId>
-            <artifactId>curator-recipes</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libfb303</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libthrift</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.groovy</groupId>
-            <artifactId>groovy-all</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
@@ -1760,14 +1812,6 @@
         <version>${libthrift.version}</version>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpclient</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpcore</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
           </exclusion>
@@ -1779,14 +1823,6 @@
         <version>${libthrift.version}</version>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpclient</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpcore</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
           </exclusion>
@@ -1796,6 +1832,22 @@
         <groupId>org.antlr</groupId>
         <artifactId>antlr4-runtime</artifactId>
         <version>${antlr4.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>${jline.groupid}</groupId>
+        <artifactId>jline</artifactId>
+        <version>${jline.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-crypto</artifactId>
+        <version>${commons-crypto.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -1920,11 +1972,6 @@
         </plugin>
         <plugin>
           <groupId>org.antlr</groupId>
-          <artifactId>antlr3-maven-plugin</artifactId>
-          <version>3.5.2</version>
-        </plugin>
-        <plugin>
-          <groupId>org.antlr</groupId>
           <artifactId>antlr4-maven-plugin</artifactId>
           <version>${antlr4.version}</version>
         </plugin>
@@ -1965,6 +2012,7 @@
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+              <spark.memory.debugFill>true</spark.memory.debugFill>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
             </systemProperties>
@@ -2035,7 +2083,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-antrun-plugin</artifactId>
-          <version>1.8</version>
+          <version>${maven-antrun.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2158,7 +2206,7 @@
                   <pluginExecutionFilter>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-antrun-plugin</artifactId>
-                    <versionRange>[1.8,)</versionRange>
+                    <versionRange>[${maven-antrun.version},)</versionRange>
                     <goals>
                       <goal>run</goal>
                     </goals>
@@ -2220,8 +2268,11 @@
               <include>org.spark-project.spark:unused</include>
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
+              <include>org.eclipse.jetty:jetty-proxy</include>
+              <include>org.eclipse.jetty:jetty-client</include>
               <include>org.eclipse.jetty:jetty-continuation</include>
               <include>org.eclipse.jetty:jetty-servlet</include>
+              <include>org.eclipse.jetty:jetty-servlets</include>
               <include>org.eclipse.jetty:jetty-plus</include>
               <include>org.eclipse.jetty:jetty-security</include>
               <include>org.eclipse.jetty:jetty-util</include>
@@ -2426,6 +2477,13 @@
       </build>
     </profile>
 
+    <profile>
+      <id>docker-integration-tests</id>
+      <modules>
+        <module>external/docker-integration-tests</module>
+      </modules>
+    </profile>
+
     <!-- A series of build profiles where customizations for particular Hadoop releases can be made -->
 
     <!-- Hadoop-a.b.c dependencies can be found at
@@ -2448,7 +2506,7 @@
     <profile>
       <id>hadoop-2.4</id>
       <properties>
-        <hadoop.version>2.4.0</hadoop.version>
+        <hadoop.version>2.4.1</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
       </properties>
     </profile>
@@ -2456,7 +2514,7 @@
     <profile>
       <id>hadoop-2.6</id>
       <properties>
-        <hadoop.version>2.6.0</hadoop.version>
+        <hadoop.version>2.6.4</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
@@ -2466,7 +2524,7 @@
     <profile>
       <id>hadoop-2.7</id>
       <properties>
-        <hadoop.version>2.7.0</hadoop.version>
+        <hadoop.version>2.7.3</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
@@ -2478,6 +2536,13 @@
       <modules>
         <module>yarn</module>
         <module>common/network-yarn</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>mesos</id>
+      <modules>
+        <module>mesos</module>
       </modules>
     </profile>
 
@@ -2499,15 +2564,6 @@
         <jline.version>${scala.version}</jline.version>
         <jline.groupid>org.scala-lang</jline.groupid>
       </properties>
-      <dependencyManagement>
-        <dependencies>
-          <dependency>
-            <groupId>${jline.groupid}</groupId>
-            <artifactId>jline</artifactId>
-            <version>${jline.version}</version>
-          </dependency>
-        </dependencies>
-      </dependencyManagement>
       <build>
         <plugins>
           <plugin>
@@ -2546,6 +2602,60 @@
     </profile>
 
     <profile>
+      <id>java7</id>
+      <activation>
+        <property><name>env.JAVA_7_HOME</name></property>
+      </activation>
+      <properties>
+        <useZincForJdk8>false</useZincForJdk8>
+      </properties>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-compiler-plugin</artifactId>
+              <configuration>
+                <compilerArgs combine.children="append">
+                  <arg>-bootclasspath</arg>
+                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
+                </compilerArgs>
+                <verbose>true</verbose>
+              </configuration>
+            </plugin>
+            <plugin>
+              <groupId>net.alchim31.maven</groupId>
+              <artifactId>scala-maven-plugin</artifactId>
+              <!-- Note: -javabootclasspath is set on a per-execution basis rather than as a
+                   plugin-wide configuration because doc-jar generation will break if it's
+                   set; see SPARK-15839 for more details -->
+              <executions>
+                <execution>
+                  <id>scala-compile-first</id>
+                  <configuration>
+                    <args combine.children="append">
+                      <arg>-javabootclasspath</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
+                    </args>
+                  </configuration>
+                </execution>
+                <execution>
+                  <id>scala-test-compile-first</id>
+                  <configuration>
+                    <args combine.children="append">
+                      <arg>-javabootclasspath</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
+                    </args>
+                  </configuration>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
+
+    <profile>
       <id>scala-2.11</id>
       <activation>
         <property><name>!scala-2.10</name></property>
@@ -2553,6 +2663,8 @@
       <properties>
         <scala.version>2.11.8</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
+        <jline.version>2.12.1</jline.version>
+        <jline.groupid>jline</jline.groupid>
       </properties>
       <build>
         <plugins>

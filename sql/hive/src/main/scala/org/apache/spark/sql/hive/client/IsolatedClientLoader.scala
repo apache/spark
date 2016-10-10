@@ -33,6 +33,7 @@ import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
@@ -219,9 +220,15 @@ private[hive] class IsolatedClientLoader(
               logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
               super.loadClass(name, resolve)
             } else {
-              // For shared classes, we delegate to baseClassLoader.
+              // For shared classes, we delegate to baseClassLoader, but fall back in case the
+              // class is not found.
               logDebug(s"shared class: $name")
-              baseClassLoader.loadClass(name)
+              try {
+                baseClassLoader.loadClass(name)
+              } catch {
+                case _: ClassNotFoundException =>
+                  super.loadClass(name, resolve)
+              }
             }
           }
         }
@@ -263,7 +270,7 @@ private[hive] class IsolatedClientLoader(
           throw new ClassNotFoundException(
             s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
             "Please make sure that jars for your version of hive and hadoop are included in the " +
-            s"paths passed to ${HiveUtils.HIVE_METASTORE_JARS}.", e)
+            s"paths passed to ${HiveUtils.HIVE_METASTORE_JARS.key}.", e)
         } else {
           throw e
         }
@@ -277,15 +284,4 @@ private[hive] class IsolatedClientLoader(
    * IsolatedClientLoader).
    */
   private[hive] var cachedHive: Any = null
-}
-
-/**
- * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
- * This class loader cannot be closed (its `close` method is a no-op).
- */
-private[sql] class NonClosableMutableURLClassLoader(
-    parent: ClassLoader)
-  extends MutableURLClassLoader(Array.empty, parent) {
-
-  override def close(): Unit = {}
 }

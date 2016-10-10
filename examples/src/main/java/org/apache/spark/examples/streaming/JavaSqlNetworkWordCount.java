@@ -22,14 +22,13 @@ import java.util.Iterator;
 import java.util.regex.Pattern;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.VoidFunction2;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.api.java.StorageLevels;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.Time;
@@ -82,7 +81,7 @@ public final class JavaSqlNetworkWordCount {
     words.foreachRDD(new VoidFunction2<JavaRDD<String>, Time>() {
       @Override
       public void call(JavaRDD<String> rdd, Time time) {
-        SQLContext sqlContext = JavaSQLContextSingleton.getInstance(rdd.context());
+        SparkSession spark = JavaSparkSessionSingleton.getInstance(rdd.context().getConf());
 
         // Convert JavaRDD[String] to JavaRDD[bean class] to DataFrame
         JavaRDD<JavaRecord> rowRDD = rdd.map(new Function<String, JavaRecord>() {
@@ -93,14 +92,14 @@ public final class JavaSqlNetworkWordCount {
             return record;
           }
         });
-        Dataset<Row> wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRecord.class);
+        Dataset<Row> wordsDataFrame = spark.createDataFrame(rowRDD, JavaRecord.class);
 
-        // Register as table
-        wordsDataFrame.registerTempTable("words");
+        // Creates a temporary view using the DataFrame
+        wordsDataFrame.createOrReplaceTempView("words");
 
         // Do word count on table using SQL and print it
         Dataset<Row> wordCountsDataFrame =
-            sqlContext.sql("select word, count(*) as total from words group by word");
+            spark.sql("select word, count(*) as total from words group by word");
         System.out.println("========= " + time + "=========");
         wordCountsDataFrame.show();
       }
@@ -111,12 +110,15 @@ public final class JavaSqlNetworkWordCount {
   }
 }
 
-/** Lazily instantiated singleton instance of SQLContext */
-class JavaSQLContextSingleton {
-  private static transient SQLContext instance = null;
-  public static SQLContext getInstance(SparkContext sparkContext) {
+/** Lazily instantiated singleton instance of SparkSession */
+class JavaSparkSessionSingleton {
+  private static transient SparkSession instance = null;
+  public static SparkSession getInstance(SparkConf sparkConf) {
     if (instance == null) {
-      instance = new SQLContext(sparkContext);
+      instance = SparkSession
+        .builder()
+        .config(sparkConf)
+        .getOrCreate();
     }
     return instance;
   }

@@ -195,10 +195,16 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       )
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
-      val filter = new PathFilter {
+
+      val newFileFilter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
-      val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+      val directoryFilter = new PathFilter {
+        override def accept(path: Path): Boolean = fs.getFileStatus(path).isDirectory
+      }
+      val directories = fs.globStatus(directoryPath, directoryFilter).map(_.getPath)
+      val newFiles = directories.flatMap(dir =>
+        fs.listStatus(dir, newFileFilter).map(_.getPath.toString))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)

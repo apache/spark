@@ -23,8 +23,10 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 case class PrimitiveData(
@@ -92,7 +94,7 @@ object TestingUDT {
       .add("c", DoubleType, nullable = false)
 
     override def serialize(n: NestedStruct): Any = {
-      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
       row.setInt(0, n.a)
       row.setLong(1, n.b)
       row.setDouble(2, n.c)
@@ -275,6 +277,18 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val anyTypes = getParameterTypes(anyFunc)
     assert(anyTypes.forall(!_.isPrimitive))
     assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
+  }
+
+  test("SPARK-15062: Get correct serializer for List[_]") {
+    val list = List(1, 2, 3)
+    val serializer = serializerFor[List[Int]](BoundReference(
+      0, ObjectType(list.getClass), nullable = false))
+    assert(serializer.children.size == 2)
+    assert(serializer.children.head.isInstanceOf[Literal])
+    assert(serializer.children.head.asInstanceOf[Literal].value === UTF8String.fromString("value"))
+    assert(serializer.children.last.isInstanceOf[NewInstance])
+    assert(serializer.children.last.asInstanceOf[NewInstance]
+      .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
   }
 
   private val dataTypeForComplexData = dataTypeFor[ComplexData]

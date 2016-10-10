@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
-abstract class AbstractDataTypeParserSuite extends SparkFunSuite {
+class DataTypeParserSuite extends SparkFunSuite {
 
-  def parse(sql: String): DataType
+  def parse(sql: String): DataType = CatalystSqlParser.parseDataType(sql)
 
   def checkDataType(dataTypeString: String, expectedDataType: DataType): Unit = {
     test(s"parse ${dataTypeString.replace("\n", "")}") {
@@ -30,7 +30,8 @@ abstract class AbstractDataTypeParserSuite extends SparkFunSuite {
     }
   }
 
-  def intercept(sql: String)
+  def intercept(sql: String): Unit =
+    intercept[ParseException](CatalystSqlParser.parseDataType(sql))
 
   def unsupported(dataTypeString: String): Unit = {
     test(s"$dataTypeString is not supported") {
@@ -115,38 +116,16 @@ abstract class AbstractDataTypeParserSuite extends SparkFunSuite {
   unsupported("it is not a data type")
   unsupported("struct<x+y: int, 1.1:timestamp>")
   unsupported("struct<x: int")
-}
 
-class DataTypeParserSuite extends AbstractDataTypeParserSuite {
-  override def intercept(sql: String): Unit =
-    intercept[DataTypeException](DataTypeParser.parse(sql))
-
-  override def parse(sql: String): DataType =
-    DataTypeParser.parse(sql)
-
-  // A column name can be a reserved word in our DDL parser and SqlParser.
+  // DataType parser accepts certain reserved keywords.
   checkDataType(
-    "Struct<TABLE: string, CASE:boolean>",
+    "Struct<TABLE: string, DATE:boolean>",
     StructType(
       StructField("TABLE", StringType, true) ::
-        StructField("CASE", BooleanType, true) :: Nil)
+        StructField("DATE", BooleanType, true) :: Nil)
   )
 
-  unsupported("struct<x int, y string>")
-
-  unsupported("struct<`x``y` int>")
-}
-
-class CatalystQlDataTypeParserSuite extends AbstractDataTypeParserSuite {
-  override def intercept(sql: String): Unit =
-    intercept[ParseException](CatalystSqlParser.parseDataType(sql))
-
-  override def parse(sql: String): DataType =
-    CatalystSqlParser.parseDataType(sql)
-
-  // A column name can be a reserved word in our DDL parser and SqlParser.
-  unsupported("Struct<TABLE: string, CASE:boolean>")
-
+  // Define struct columns without ':'
   checkDataType(
     "struct<x int, y string>",
     (new StructType).add("x", IntegerType).add("y", StringType))
@@ -154,4 +133,8 @@ class CatalystQlDataTypeParserSuite extends AbstractDataTypeParserSuite {
   checkDataType(
     "struct<`x``y` int>",
     (new StructType).add("x`y", IntegerType))
+
+  // Use SQL keywords.
+  checkDataType("struct<end: long, select: int, from: string>",
+    (new StructType).add("end", LongType).add("select", IntegerType).add("from", StringType))
 }

@@ -27,7 +27,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util._
@@ -44,7 +44,10 @@ abstract class PipelineStage extends Params with Logging {
   /**
    * :: DeveloperApi ::
    *
-   * Derives the output schema from the input schema.
+   * Check transform validity and derive the output schema from the input schema.
+   *
+   * Typical implementation should first conduct verification on schema change and parameter
+   * validity, including complex parameter interaction checks.
    */
   @DeveloperApi
   def transformSchema(schema: StructType): StructType
@@ -75,19 +78,17 @@ abstract class PipelineStage extends Params with Logging {
 }
 
 /**
- * :: Experimental ::
  * A simple pipeline, which acts as an estimator. A Pipeline consists of a sequence of stages, each
  * of which is either an [[Estimator]] or a [[Transformer]]. When [[Pipeline#fit]] is called, the
  * stages are executed in order. If a stage is an [[Estimator]], its [[Estimator#fit]] method will
  * be called on the input dataset to fit a model. Then the model, which is a transformer, will be
  * used to transform the dataset as the input to the next stage. If a stage is a [[Transformer]],
  * its [[Transformer#transform]] method will be called to produce the dataset for the next stage.
- * The fitted model from a [[Pipeline]] is an [[PipelineModel]], which consists of fitted models and
+ * The fitted model from a [[Pipeline]] is a [[PipelineModel]], which consists of fitted models and
  * transformers, corresponding to the pipeline stages. If there are no stages, the pipeline acts as
  * an identity transformer.
  */
 @Since("1.2.0")
-@Experimental
 class Pipeline @Since("1.4.0") (
   @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel] with MLWritable {
 
@@ -211,7 +212,7 @@ object Pipeline extends MLReadable[Pipeline] {
     }
   }
 
-  /** Methods for [[MLReader]] and [[MLWriter]] shared between [[Pipeline]] and [[PipelineModel]] */
+  /** Methods for `MLReader` and `MLWriter` shared between [[Pipeline]] and [[PipelineModel]] */
   private[ml] object SharedReadWrite {
 
     import org.json4s.JsonDSL._
@@ -279,11 +280,9 @@ object Pipeline extends MLReadable[Pipeline] {
 }
 
 /**
- * :: Experimental ::
  * Represents a fitted pipeline.
  */
 @Since("1.2.0")
-@Experimental
 class PipelineModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.4.0") val stages: Array[Transformer])
