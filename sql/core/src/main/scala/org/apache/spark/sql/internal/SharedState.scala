@@ -98,7 +98,8 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(
         s"$globalTempDB is a system preserved database, please rename your existing database " +
-          "to resolve the name conflict and launch your Spark application again.")
+          "to resolve the name conflict, or set a different value for " +
+          s"${GLOBAL_TEMP_DATABASE.key}, and launch your Spark application again.")
     }
     new GlobalTempViewManager(globalTempDB)
   }
