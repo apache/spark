@@ -28,7 +28,8 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.InferSchema
 import org.apache.spark.sql.types.StructType
@@ -413,6 +414,39 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+
+  /**
+   * Loads an `Dataset[String]` storing CSV objects (one object per record) and
+   * returns the result as a [[DataFrame]].
+   *
+   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @param csvDS input Dataset with one CSV object per record
+   * @since 2.1.0
+   */
+  def csv(csvDS: Dataset[String]): DataFrame = {
+    val csvRDD = csvDS.rdd
+    val parsedOptions: CSVOptions = new CSVOptions(extraOptions.toMap)
+    val header = CSVRelation.getHeader(csvRDD, parsedOptions)
+    val parsedRDD = CSVRelation.tokenRdd(parsedOptions, header, csvRDD)
+    val schema = userSpecifiedSchema.getOrElse {
+        CSVInferSchema.infer(parsedRDD, header, parsedOptions)
+      }
+
+    val parser = CSVRelation.csvParser(schema, schema.fields.map(_.name), parsedOptions)
+    var numMalformedRecords = 0
+    val rows = parsedRDD.flatMap { recordTokens =>
+      val row = parser(recordTokens, numMalformedRecords)
+      if (row.isEmpty) {
+        numMalformedRecords += 1
+      }
+      row
+    }
+    Dataset.ofRows(
+      sparkSession,
+      LogicalRDD(schema.toAttributes, rows)(sparkSession))
+  }
 
   /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. See the documentation

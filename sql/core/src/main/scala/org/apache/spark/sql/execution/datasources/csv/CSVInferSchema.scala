@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-private[csv] object CSVInferSchema {
+object CSVInferSchema {
 
   /**
    * Similar to the JSON schema inference
@@ -42,16 +42,23 @@ private[csv] object CSVInferSchema {
       tokenRdd: RDD[Array[String]],
       header: Array[String],
       options: CSVOptions): StructType = {
-    val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val rootTypes: Array[DataType] =
-      tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
+    val structFields = if (options.inferSchemaFlag) {
+      val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
+      val rootTypes: Array[DataType] =
+        tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
 
-    val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
-      val dType = rootType match {
-        case _: NullType => StringType
-        case other => other
+      header.zip(rootTypes).map { case (thisHeader, rootType) =>
+        val dType = rootType match {
+          case _: NullType => StringType
+          case other => other
+        }
+        StructField(thisHeader, dType, nullable = true)
       }
-      StructField(thisHeader, dType, nullable = true)
+    } else {
+      // By default fields are assumed to be StringType
+      header.map { fieldName =>
+        StructField(fieldName.toString, StringType, nullable = true)
+      }
     }
 
     StructType(structFields)

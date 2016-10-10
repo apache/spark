@@ -56,29 +56,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     // TODO: Move filtering.
     val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
-    val rdd = baseRdd(sparkSession, csvOptions, paths)
-    val firstLine = findFirstLine(csvOptions, rdd)
-    val firstRow = new CsvReader(csvOptions).parseLine(firstLine)
-
-    val header = if (csvOptions.headerFlag) {
-      firstRow.zipWithIndex.map { case (value, index) =>
-        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
-      }
-    } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
-    }
-
-    val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
-    val schema = if (csvOptions.inferSchemaFlag) {
-      CSVInferSchema.infer(parsedRdd, header, csvOptions)
-    } else {
-      // By default fields are assumed to be StringType
-      val schemaFields = header.map { fieldName =>
-        StructField(fieldName.toString, StringType, nullable = true)
-      }
-      StructType(schemaFields)
-    }
-    Some(schema)
+    val rdd = CSVRelation.baseRdd(sparkSession, csvOptions, paths)
+    val header = CSVRelation.getHeader(rdd, csvOptions)
+    val parsedRdd = CSVRelation.tokenRdd(csvOptions, header, rdd)
+    Some(CSVInferSchema.infer(parsedRdd, header, csvOptions))
   }
 
   override def prepareWrite(
@@ -86,7 +67,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    verifySchema(dataSchema)
+    CSVRelation.verifySchema(dataSchema)
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(options)
     csvOptions.compressionCodec.foreach { codec =>
@@ -139,69 +120,5 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         row
       }
     }
-  }
-
-  private def baseRdd(
-      sparkSession: SparkSession,
-      options: CSVOptions,
-      inputPaths: Seq[String]): RDD[String] = {
-    readText(sparkSession, options, inputPaths.mkString(","))
-  }
-
-  private def tokenRdd(
-      sparkSession: SparkSession,
-      options: CSVOptions,
-      header: Array[String],
-      inputPaths: Seq[String]): RDD[Array[String]] = {
-    val rdd = baseRdd(sparkSession, options, inputPaths)
-    // Make sure firstLine is materialized before sending to executors
-    val firstLine = if (options.headerFlag) findFirstLine(options, rdd) else null
-    CSVRelation.univocityTokenizer(rdd, firstLine, options)
-  }
-
-  /**
-   * Returns the first line of the first non-empty file in path
-   */
-  private def findFirstLine(options: CSVOptions, rdd: RDD[String]): String = {
-    if (options.isCommentSet) {
-      val comment = options.comment.toString
-      rdd.filter { line =>
-        line.trim.nonEmpty && !line.startsWith(comment)
-      }.first()
-    } else {
-      rdd.filter { line =>
-        line.trim.nonEmpty
-      }.first()
-    }
-  }
-
-  private def readText(
-      sparkSession: SparkSession,
-      options: CSVOptions,
-      location: String): RDD[String] = {
-    if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
-      sparkSession.sparkContext.textFile(location)
-    } else {
-      val charset = options.charset
-      sparkSession.sparkContext
-        .hadoopFile[LongWritable, Text, TextInputFormat](location)
-        .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
-    }
-  }
-
-  private def verifySchema(schema: StructType): Unit = {
-    def verifyType(dataType: DataType): Unit = dataType match {
-        case ByteType | ShortType | IntegerType | LongType | FloatType |
-             DoubleType | BooleanType | _: DecimalType | TimestampType |
-             DateType | StringType =>
-
-        case udt: UserDefinedType[_] => verifyType(udt.sqlType)
-
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"CSV data source does not support ${dataType.simpleString} data type.")
-    }
-
-    schema.foreach(field => verifyType(field.dataType))
   }
 }

@@ -522,6 +522,35 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("Dataset[String] to DataFrame " +
+    "-- load date types via custom date format") {
+    val testFilePath = testFile(datesFile)
+    val customSchema = new StructType(Array(StructField("date", DateType, true)))
+    val options = Map(
+      "header" -> "true",
+      "inferSchema" -> "false",
+      "dateFormat" -> "dd/MM/yyyy hh:mm")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val expected = Seq(
+      new Date(dateFormat.parse("26/08/2015 18:00").getTime),
+      new Date(dateFormat.parse("27/10/2014 18:30").getTime),
+      new Date(dateFormat.parse("28/01/2016 20:00").getTime))
+
+    val results = spark.read.schema(customSchema).options(options).csv(csvRDD.toDS()).collect()
+    val dates = results.toSeq.map(_.toSeq.head)
+    expected.zip(dates).foreach {
+      case (expectedDate, date) =>
+        // As it truncates the hours, minutes and etc., we only check
+        // if the dates (days, months and years) are the same via `toString()`.
+        assert(expectedDate.toString === date.toString)
+    }
+  }
+
   test("setting comment to null disables comment support") {
     val results = spark.read
       .format("csv")
@@ -534,6 +563,24 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         Seq("#1", "2", "3"),
         Seq("4", "5", "6"))
 
+    assert(results.toSeq.map(_.toSeq) === expected)
+  }
+
+  test("Dataset[String] to DataFrame " +
+    "-- setting comment to null disables comment support") {
+    val testFilePath = testFile(disableCommentsFile)
+    val options = Map("header" -> "false", "comment" -> "")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    val expected =
+      List(
+        List("#1", "2", "3"),
+        List("4", "5", "6"))
+
+    val results = spark.read.options(options).csv(csvRDD.toDS()).collect()
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 
@@ -555,6 +602,30 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = true, checkValues = false)
     val results = cars.collect()
     assert(results(0).toSeq === Array(2012, "Tesla", "S", null, null))
+    assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
+  }
+
+  test("Dataset[String] to DataFrame " +
+    "-- nullable fields with user defined null value of \"null\"") {
+    val testFilePath = testFile(carsNullFile)
+    val options = Map("header" -> "true", "nullValue" -> "null")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    // year,make,model,comment,blank
+    val dataSchema = StructType(List(
+      StructField("year", IntegerType, nullable = true),
+      StructField("make", StringType, nullable = false),
+      StructField("model", StringType, nullable = false),
+      StructField("comment", StringType, nullable = true),
+      StructField("blank", StringType, nullable = true)))
+
+    val cars = spark.read.schema(dataSchema).options(options).csv(csvRDD.toDS())
+    verifyCars(cars, withHeader = true, checkValues = false)
+    val results = cars.collect()
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
@@ -631,6 +702,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
   }
 
+  test("RDD[String]/Dataset[String] to DataFrame " +
+    "-- Schema inference correctly identifies the datatype") {
+    val testFilePath = testFile(simpleSparseFile)
+    val options = Map("header" -> "true", "inferSchema" -> "true")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    val df = spark.read.options(options).csv(csvRDD.toDS())
+    assert(
+      df.schema.fields.map(field => field.dataType).deep ==
+        Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
+  }
+
   test("old csv data source name works") {
     val cars = spark
       .read
@@ -661,6 +747,24 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(numbersFile))
 
     assert(numbers.count() == 8)
+  }
+
+  test("RDD[String]/Dataset[String] to DataFrame -- null, NaNs and Infinity values") {
+    val testFilePath = testFile(numbersFile)
+    val options = Map(
+      "header" -> "true",
+      "mode" -> "DROPMALFORMED",
+      "nullValue" -> "--",
+      "nanValue" -> "NAN",
+      "negativeInf" -> "-INF",
+      "positiveInf" -> "INF")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    val df = spark.read.options(options).csv(csvRDD.toDS())
+    assert(df.count() == 8)
   }
 
   test("error handling for unsupported data types.") {
