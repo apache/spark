@@ -24,10 +24,12 @@ import java.sql.{Date, Time, Timestamp}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.WrappedArray
 
+import org.apache.spark.internal.Logging
+
 /**
  * Utility functions to serialize, deserialize objects to / from R
  */
-private[spark] object SerDe {
+private[spark] object SerDe extends Logging {
   type ReadObject = (DataInputStream, Char) => Object
   type WriteObject = (DataOutputStream, Object) => Boolean
 
@@ -125,15 +127,24 @@ private[spark] object SerDe {
   }
 
   def readDate(in: DataInputStream): Date = {
-    Date.valueOf(readString(in))
+    val inStr = readString(in)
+    if (inStr == "NA") {
+      null
+    } else {
+      Date.valueOf(inStr)
+    }
   }
 
   def readTime(in: DataInputStream): Timestamp = {
     val seconds = in.readDouble()
-    val sec = Math.floor(seconds).toLong
-    val t = new Timestamp(sec * 1000L)
-    t.setNanos(((seconds - sec) * 1e9).toInt)
-    t
+    if (java.lang.Double.isNaN(seconds)) {
+      null
+    } else {
+      val sec = Math.floor(seconds).toLong
+      val t = new Timestamp(sec * 1000L)
+      t.setNanos(((seconds - sec) * 1e9).toInt)
+      t
+    }
   }
 
   def readBytesArr(in: DataInputStream): Array[Array[Byte]] = {
