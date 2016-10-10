@@ -92,7 +92,7 @@ class AssociationRules(override val uid: String) extends Params {
 
   def run(dataset: Dataset[_]): DataFrame = {
     val freqItemSetRdd = dataset.select($(itemsCol), $(freqCol)).rdd
-      .map(row => new FreqItemset(row.getAs[Array[String]](0), row.getLong(1)))
+      .map(row => new FreqItemset(row.getSeq[String](0).toArray, row.getLong(1)))
 
     val sqlContext = SparkSession.builder().getOrCreate()
     import sqlContext.implicits._

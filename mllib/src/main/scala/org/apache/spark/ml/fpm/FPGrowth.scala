@@ -19,18 +19,19 @@ package org.apache.spark.ml.fpm
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.Since
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.fpm.{FPGrowth => MLlibFPGrowth, FPGrowthModel => MLlibFPGrowthModel}
-import org.apache.spark.mllib.fpm.AssociationRules.Rule
 import org.apache.spark.sql.{DataFrame, _}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
-
+/**
+ * Common params for FPGrowth and FPGrowthModel
+ */
 private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPredictionCol {
 
   /**
@@ -58,6 +59,15 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
 
 }
 
+/**
+ * :: Experimental ::
+ * A parallel FP-growth algorithm to mine frequent itemsets.
+ *
+ * @see [[http://dx.doi.org/10.1145/1454008.1454027 Li et al., PFP: Parallel FP-Growth for Query
+ *  Recommendation]]
+ */
+@Since("2.1.0")
+@Experimental
 class FPGrowth @Since("2.1.0") (
     @Since("2.1.0") override val uid: String)
   extends Estimator[FPGrowthModel] with FPGrowthParams with DefaultParamsWritable {
@@ -68,9 +78,19 @@ class FPGrowth @Since("2.1.0") (
   /** @group setParam */
   @Since("2.1.0")
   def setMinSupport(value: Double): this.type = set(minSupport, value)
+  setDefault(minSupport -> 0.3)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   def fit(dataset: Dataset[_]): FPGrowthModel = {
-    val data = dataset.select($(featuresCol)).rdd.map(r => r.getAs[Array[String]](0))
+    val data = dataset.select($(featuresCol)).rdd.map(r =>
+      r.getSeq[String](0).toArray)
     val parentModel = new MLlibFPGrowth()
       .setMinSupport($(minSupport))
       .run(data)
@@ -85,6 +105,22 @@ class FPGrowth @Since("2.1.0") (
   override def copy(extra: ParamMap): FPGrowth = defaultCopy(extra)
 }
 
+
+@Since("2.1.0")
+object FPGrowth extends DefaultParamsReadable[FPGrowth] {
+
+  @Since("2.1.0")
+  override def load(path: String): FPGrowth = super.load(path)
+}
+
+/**
+ * :: Experimental ::
+ * Model fitted by FPGrowth.
+ *
+ * @param parentModel a model trained by spark.mllib.fpm.FPGrowth
+ */
+@Since("2.1.0")
+@Experimental
 class FPGrowthModel private[ml] (
     @Since("2.1.0") override val uid: String,
     private val parentModel: MLlibFPGrowthModel[_])
@@ -98,6 +134,7 @@ class FPGrowthModel private[ml] (
   @Since("2.1.0")
   val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
     "minimal confidence for generating Association Rule")
+  setDefault(minConfidence -> 0.8)
 
   /** @group getParam */
   @Since("2.1.0")
@@ -109,13 +146,14 @@ class FPGrowthModel private[ml] (
 
   @Since("2.1.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val associationRules = generateAssociationRules().map(r =>
-      new Rule(r.getAs[Array[String]](0), r.getAs[Array[String]](1), r.getDouble(2))
+    val associationRules = generateAssociationRules().rdd.map(r =>
+      (r.getSeq[String](0), r.getSeq[String](1))
     ).collect()
+
     // For each rule, examine the input items and summarize the consequents
     val predictUDF = udf((items: Seq[String]) => associationRules.flatMap( r =>
-      if (r.antecedent.forall(items.contains(_))) r.consequent else Array.empty[String]
-    ))
+      if (r._1.forall(items.contains(_))) r._2 else Array.empty[String]
+    ).distinct)
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
@@ -130,17 +168,18 @@ class FPGrowthModel private[ml] (
     copyValues(copied, extra)
   }
 
-  def getFreqItemsets: DataFrame = {
+  private[fpm] def generateAssociationRules(): DataFrame = {
     val sqlContext = SparkSession.builder().getOrCreate()
     import sqlContext.implicits._
-    parentModel.freqItemsets.map(f => (f.items.map(_.toString), f.freq)).toDF("items", "freq")
-  }
+    val freqItemsets = parentModel.freqItemsets.map(f => (f.items.map(_.toString), f.freq))
+      .toDF("items", "freq")
 
-  def generateAssociationRules(): DataFrame = {
     val associationRules = new AssociationRules()
       .setMinConfidence($(minConfidence))
       .setMinSupport($(minSupport))
-    associationRules.run(getFreqItemsets)
+      .setItemsCol("items")
+      .setFreqCol("freq")
+    associationRules.run(freqItemsets)
   }
 
   @Since("2.1.0")
