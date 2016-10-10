@@ -202,7 +202,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
     require(!hasLabelCol(schema) || !$(forceIndexLabel),
-      "If label column already exists, indexLabel can not be set with true.")
+      "If label column already exists, forceIndexLabel can not be set with true.")
     if (hasLabelCol(schema)) {
       StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
     } else {
