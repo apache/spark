@@ -13,6 +13,8 @@
  */
 package org.apache.spark.io;
 
+import org.apache.spark.storage.StorageUtils;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -120,5 +122,6 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
   @Override
   public void close() throws IOException {
     fileChannel.close();
+    StorageUtils.dispose(byteBuffer);
   }
 }
