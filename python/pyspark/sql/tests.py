@@ -1510,20 +1510,9 @@ class SQLTests(ReusedPySparkTestCase):
 
     # Regression test for invalid join methods when on is None, Spark-14761
     def test_invalid_join_method(self):
-        df1 = self.sqlCtx.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
-        df2 = self.sqlCtx.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
-        self.assertRaises(AnalysisException, lambda: df1.join(df2, how="invalid-join-type"))
-
-        result = df1.join(df2, how="inner").select(df1.name, df2.height).collect()
-        self.assertEqual(
-            result,
-            [
-                Row(name=u'Alice', height=80),
-                Row(name=u'Alice', height=90),
-                Row(name=u'Bob', height=80),
-                Row(name=u'Bob', height=90)
-            ]
-        )
+        df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
+        df2 = self.spark.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
+        self.assertRaises(IllegalArgumentException, lambda: df1.join(df2, how="invalid-join-type"))
 
     def test_conf(self):
         spark = self.spark

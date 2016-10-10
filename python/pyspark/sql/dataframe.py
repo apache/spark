@@ -649,6 +649,7 @@ class DataFrame(object):
                     on = reduce(lambda x, y: x.__and__(y), on)
                 else:
                     on = on[0]
+                on = on._jc
 
         if on is None and how is None:
             jdf = self._jdf.crossJoin(other._jdf)
@@ -656,7 +657,7 @@ class DataFrame(object):
             if how is None:
                 how = "inner"
             assert isinstance(how, basestring), "how should be basestring"
-            jdf = self._jdf.join(other._jdf, on._jc, how)
+            jdf = self._jdf.join(other._jdf, on, how)
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.6)
