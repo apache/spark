@@ -193,12 +193,19 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
   @Since("2.1.0")
   private[this] def processDataset(
       dataset: Dataset[_],
+      inputName: String,
       explodeCols: Seq[String]): Dataset[_] = {
-    if (!dataset.columns.contains($(outputCol))) {
+    require(explodeCols.size == 2, "explodeCols must be two strings.")
+    val vectorToMap = udf((x: Vector) => x.asBreeze.iterator.toMap,
+      MapType(DataTypes.IntegerType, DataTypes.DoubleType))
+    val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
       transform(dataset)
     } else {
       dataset.toDF()
     }
+    modelDataset.select(
+      struct(col("*")).as(inputName),
+      explode(vectorToMap(col($(outputCol)))).as(explodeCols))
   }
 
   /**
@@ -241,32 +248,31 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
       distCol: String): Dataset[_] = {
 
     val explodeCols = Seq("entry", "hashValue")
-    val explodedA = processDataset(datasetA, explodeCols)
+    val inputName = "input"
+    val explodedA = processDataset(datasetA, inputName, explodeCols)
 
     // If this is a self join, we need to recreate the inputCol of datasetB to avoid ambiguity.
     // TODO: Remove recreateCol logic once SPARK-17154 is resolved.
     val explodedB = if (datasetA != datasetB) {
-      processDataset(datasetB, explodeCols)
+      processDataset(datasetB, inputName, explodeCols)
     } else {
       val recreatedB = recreateCol(datasetB, $(inputCol), s"${$(inputCol)}#${Random.nextString(5)}")
-      processDataset(recreatedB, explodeCols)
+      processDataset(recreatedB, inputName, explodeCols)
     }
 
-    val shareBucketUDF = udf((x: Vector, y: Vector) => hashDistance(x, y) == 0,
-      DataTypes.BooleanType)
-
     // Do a hash join on where the exploded hash values are equal.
-    val joinedDataset = explodedA.join(explodedB, shareBucketUDF(explodedA($(outputCol)), explodedB($(outputCol))))
+    val joinedDataset = explodedA.join(explodedB, explodeCols)
+      .drop(explodeCols: _*)
 
     // Add a new column to store the distance of the two records.
     val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y), DataTypes.DoubleType)
     val joinedDatasetWithDist = joinedDataset.select(col("*"),
-      distUDF(explodedA(s"${$(inputCol)}"),
-        explodedB(s"${$(inputCol)}")).as(distCol)
+      distUDF(explodedA(s"$inputName.${$(inputCol)}"),
+        explodedB(s"$inputName.${$(inputCol)}")).as(distCol)
     )
 
     // Filter the joined datasets where the distance are smaller than the threshold.
-    joinedDatasetWithDist.filter(col(distCol) < threshold)
+    joinedDatasetWithDist.filter(col(distCol) < threshold).distinct()
   }
 
   /**
