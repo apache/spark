@@ -92,7 +92,7 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
     if (n < 0L) {
       return 0L;
     }
-    if (byteBuffer.remaining() > n) {
+    if (byteBuffer.remaining() >= n) {
       // The buffered content is enough to skip
       byteBuffer.position(byteBuffer.position() + (int) n);
       return n;
