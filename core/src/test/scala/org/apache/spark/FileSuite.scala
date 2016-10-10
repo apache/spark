@@ -17,7 +17,8 @@
 
 package org.apache.spark
 
-import java.io.{File, FileWriter}
+import java.io._
+import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 
@@ -541,4 +542,37 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
         }.collect()
     assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
   }
+
+  test("HadoopRDD should not skip corrupt gzip files") {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+
+      // Reading a corrupt gzip file should throw EOFException
+      sc = new SparkContext("local", "test")
+      val e = intercept[SparkException] {
+        sc.textFile(inputFile.toURI.toString).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+    } finally {
+      inputFile.delete()
+    }
+  }
+
 }

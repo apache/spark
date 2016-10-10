@@ -17,7 +17,6 @@
 
 package org.apache.spark.rdd
 
-import java.io.EOFException
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -250,12 +249,7 @@ class HadoopRDD[K, V](
       val value: V = reader.createValue()
 
       override def getNext(): (K, V) = {
-        try {
-          finished = !reader.next(key, value)
-        } catch {
-          case eof: EOFException =>
-            finished = true
-        }
+        finished = !reader.next(key, value)
         if (!finished) {
           inputMetrics.incRecordsRead(1)
         }
