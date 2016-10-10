@@ -87,7 +87,7 @@ abstract class Predictor[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
-    val casted = castPoints(dataset)
+    val casted = castDataSet(dataset)
     copyValues(train(casted).setParent(this))
   }
 
@@ -130,9 +130,9 @@ abstract class Predictor[
   /**
    * Return the given DataFrame, with [[labelCol]] casted to DoubleType.
    */
-    protected def castPoints(dataset: Dataset[_]): DataFrame = {
-      val labelColMeta = dataset.schema.fields.filter(_.name == $(labelCol)).head.metadata
-      dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelColMeta)
+    protected def castDataSet(dataset: Dataset[_]): DataFrame = {
+      val labelMeta = dataset.schema.fields.filter(_.name == $(labelCol)).head.metadata
+      dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
     }
 }
 
