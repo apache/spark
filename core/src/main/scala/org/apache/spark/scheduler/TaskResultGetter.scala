@@ -134,8 +134,15 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               // if we can't deserialize the reason.
               logError(
                 "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
-            case ex: Exception => // No-op
+            // In general we avoid catching all throwables, but in this case, the Runnable
+            // is about to complete (so the error won't percolate up), so it's better to catch
+            // remaining errors so that we can log a sensible message to the user.
+            case ex: Throwable =>
+              logError("Could not deserialize TaskEndReason with error: ", ex)
           } finally {
+            // If there's an error while deserializing the TaskEndReason, this Runnable
+            // will die. Still tell the scheduler about the task failure, to avoid a hang
+            // where the scheduler thinks the task is still running.
             scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
           }
         }
