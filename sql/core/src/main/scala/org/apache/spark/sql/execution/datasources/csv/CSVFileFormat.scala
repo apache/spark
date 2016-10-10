@@ -84,13 +84,9 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       caseSensitive: Boolean): Array[String] = {
     if (options.headerFlag) {
       val duplicates = {
-        val safeRow = if (!caseSensitive) {
-          // Elements in row might be null.
-          row.flatMap(Option(_).map(_.toLowerCase))
-        } else {
-          row
-        }
-        safeRow.diff(safeRow.distinct).distinct
+        val headerNames = row.filter(_ != null)
+          .map(name => if (caseSensitive) name else name.toLowerCase)
+        headerNames.diff(headerNames.distinct).distinct
       }
 
       row.zipWithIndex.map { case (value, index) =>
@@ -109,7 +105,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         }
       }
     } else {
-      row.zipWithIndex.map { case (value, index) =>
+      row.zipWithIndex.map { case (_, index) =>
         // Uses default column names, "_c#" where # is its position of fields
         // when header option is disabled.
         s"_c$index"
