@@ -694,12 +694,9 @@ private[spark] object RandomForest extends Logging {
 
     val validFeatureSplits =
       Range(0, binAggregates.metadata.numFeaturesPerNode).view.map { featureIndexIdx =>
-        if (featuresForNode.nonEmpty) {
-          (featureIndexIdx, featuresForNode.get.apply(featureIndexIdx))
-        } else {
-          (featureIndexIdx, featureIndexIdx)
-        }
-      }.withFilter { case (featureIndexIdx, featureIndex) =>
+        featuresForNode.map(features => (featureIndexIdx, features(featureIndexIdx)))
+          .getOrElse((featureIndexIdx, featureIndexIdx))
+      }.withFilter { case (_, featureIndex) =>
         binAggregates.metadata.numSplits(featureIndex) != 0
       }
 
@@ -720,8 +717,7 @@ private[spark] object RandomForest extends Logging {
           // Find best split.
           val (bestFeatureSplitIndex, bestFeatureGainStats) =
             Range(0, numSplits).map { case splitIdx =>
-              val leftChildStats =
-                binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
+              val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
               val rightChildStats =
                 binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
               rightChildStats.subtract(leftChildStats)
