@@ -70,7 +70,7 @@ class MinHashModel private[ml] (override val uid: String, hashFunctions: Seq[Int
     val xSet = x.toSparse.indices.toSet
     val ySet = y.toSparse.indices.toSet
     val intersectionSize = xSet.intersect(ySet).size.toDouble
-    val unionSize = xSet.union(ySet).size.toDouble
+    val unionSize = xSet.size + ySet.size - intersectionSize
     assert(unionSize > 0, "The union of two input sets must have at least 1 elements")
     1 - intersectionSize / unionSize
   }
@@ -127,9 +127,9 @@ class MinHash(override val uid: String) extends LSH[MinHashModel] with MinHashPa
       Seq.fill($(outputDim))(1 + Random.nextInt(prime - 1))
     }
     val hashFunctions: Seq[Int => Long] = {
-      (0 until $(outputDim)).map { i: Int =>
+      randSeq.map { randCoefficient: Int =>
         // Perfect Hash function, use 2n buckets to reduce collision.
-        elem: Int => (1 + elem) * randSeq(i).toLong % prime % numEntry
+        elem: Int => (1 + elem) * randCoefficient.toLong % prime % numEntry
       }
     }
     new MinHashModel(uid, hashFunctions)
