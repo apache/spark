@@ -651,15 +651,17 @@ setGeneric("write.jdbc", function(x, url, tableName, mode = "error", ...) {
 
 #' @rdname write.json
 #' @export
-setGeneric("write.json", function(x, path) { standardGeneric("write.json") })
+setGeneric("write.json", function(x, path, ...) { standardGeneric("write.json") })
 
 #' @rdname write.orc
 #' @export
-setGeneric("write.orc", function(x, path) { standardGeneric("write.orc") })
+setGeneric("write.orc", function(x, path, ...) { standardGeneric("write.orc") })
 
 #' @rdname write.parquet
 #' @export
-setGeneric("write.parquet", function(x, path) { standardGeneric("write.parquet") })
+setGeneric("write.parquet", function(x, path, ...) {
+  standardGeneric("write.parquet")
+})
 
 #' @rdname write.parquet
 #' @export
@@ -667,7 +669,7 @@ setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParqu
 
 #' @rdname write.text
 #' @export
-setGeneric("write.text", function(x, path) { standardGeneric("write.text") })
+setGeneric("write.text", function(x, path, ...) { standardGeneric("write.text") })
 
 #' @rdname schema
 #' @export

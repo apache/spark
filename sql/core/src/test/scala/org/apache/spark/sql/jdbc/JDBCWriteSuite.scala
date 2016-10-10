@@ -132,6 +132,19 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     }
   }
 
+  test("CREATE with ignore") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+
+    df.write.mode(SaveMode.Ignore).jdbc(url1, "TEST.DROPTEST", properties)
+    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
+    assert(3 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
+
+    df2.write.mode(SaveMode.Ignore).jdbc(url1, "TEST.DROPTEST", properties)
+    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
+    assert(3 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
+  }
+
   test("CREATE with overwrite") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)

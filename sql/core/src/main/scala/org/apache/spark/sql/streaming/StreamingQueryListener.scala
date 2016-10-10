@@ -35,7 +35,7 @@ abstract class StreamingQueryListener {
   /**
    * Called when a query is started.
    * @note This is called synchronously with
-   *       [[org.apache.spark.sql.DataStreamWriter `DataStreamWriter.start()`]],
+   *       [[org.apache.spark.sql.streaming.DataStreamWriter `DataStreamWriter.start()`]],
    *       that is, `onQueryStart` will be called on all listeners before
    *       `DataStreamWriter.start()` returns the corresponding [[StreamingQuery]]. Please
    *       don't block this method as it will block your query.

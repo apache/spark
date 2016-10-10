@@ -233,13 +233,18 @@ class StreamExecution(
       })
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
-      case NonFatal(e) =>
+      case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
           this,
           s"Query $name terminated with exception: ${e.getMessage}",
           e,
           Some(committedOffsets.toCompositeOffset(sources)))
         logError(s"Query $name terminated with error", e)
+        // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
+        // handle them
+        if (!NonFatal(e)) {
+          throw e
+        }
     } finally {
       state = TERMINATED
 
