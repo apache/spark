@@ -56,8 +56,7 @@ class KMeans private (
   def this() = this(2, 20, KMeans.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong())
 
   /**
-   * Number of clusters to create (k). Note that if the input has fewer than k elements,
-   * then it's possible that fewer than k clusters are created.
+   * Number of clusters to create (k).
    */
   @Since("1.4.0")
   def getK: Int = k
@@ -410,6 +409,30 @@ object KMeans {
   val K_MEANS_PARALLEL = "k-means||"
 
   /**
+    * Trains a k-means model using the given set of parameters.
+    *
+    * @param data Training points as an `RDD` of `Vector` types.
+    * @param k Number of clusters to create.
+    * @param maxIterations Maximum number of iterations allowed.
+    * @param initializationMode The initialization algorithm. This can either be "random" or
+    *                           "k-means||". (default: "k-means||")
+    * @param seed Random seed for cluster initialization. Default is to generate seed based
+    *             on system time.
+    */
+  @Since("2.1.0")
+  def train(data: RDD[Vector],
+            k: Int,
+            maxIterations: Int,
+            initializationMode: String,
+            seed: Long): KMeansModel = {
+    new KMeans().setK(k)
+      .setMaxIterations(maxIterations)
+      .setInitializationMode(initializationMode)
+      .setSeed(seed)
+      .run(data)
+  }
+
+  /**
    * Trains a k-means model using the given set of parameters.
    *
    * @param data Training points as an `RDD` of `Vector` types.
@@ -422,6 +445,7 @@ object KMeans {
    *             on system time.
    */
   @Since("1.3.0")
+  @deprecated("Use train method without 'runs'", "2.1.0")
   def train(
       data: RDD[Vector],
       k: Int,
@@ -447,6 +471,7 @@ object KMeans {
    *                           "k-means||". (default: "k-means||")
    */
   @Since("0.8.0")
+  @deprecated("Use train method without 'runs'", "2.1.0")
   def train(
       data: RDD[Vector],
       k: Int,
@@ -480,7 +505,9 @@ object KMeans {
       k: Int,
       maxIterations: Int,
       runs: Int): KMeansModel = {
-    train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
+    new KMeans().setK(k)
+      .setMaxIterations(maxIterations)
+      .run(data)
   }
 
   /**
