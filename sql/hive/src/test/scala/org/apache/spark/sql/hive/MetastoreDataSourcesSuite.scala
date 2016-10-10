@@ -983,7 +983,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     checkAnswer(
       spark.sql("show TABLES in testdb8156").filter("tableName = 'ttt3'"),
-      Row("ttt3", false))
+      Row("testdb8156", "ttt3", false))
     spark.sql("""use default""")
     spark.sql("""drop database if exists testdb8156 CASCADE""")
   }

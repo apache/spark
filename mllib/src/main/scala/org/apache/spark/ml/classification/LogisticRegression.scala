@@ -78,7 +78,6 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Param for the name of family which is a description of the label distribution
    * to be used in the model.
-   * Supported options: "auto", "multinomial", "binomial".
    * Supported options:
    *  - "auto": Automatically select the family based on the number of classes:
    *            If numClasses == 1 || numClasses == 2, set to "binomial".
@@ -1169,7 +1168,7 @@ class BinaryLogisticRegressionSummary private[classification] (
   // TODO: Allow the user to vary the number of bins using a setBins method in
   // BinaryClassificationMetrics. For now the default is set to 100.
   @transient private val binaryMetrics = new BinaryClassificationMetrics(
-    predictions.select(probabilityCol, labelCol).rdd.map {
+    predictions.select(col(probabilityCol), col(labelCol).cast(DoubleType)).rdd.map {
       case Row(score: Vector, label: Double) => (score(1), label)
     }, 100
   )

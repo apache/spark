@@ -366,13 +366,13 @@ private[spark] abstract class MockBackend(
    */
   def executorIdToExecutor: Map[String, ExecutorTaskStatus]
 
-  private def generateOffers(): Seq[WorkerOffer] = {
+  private def generateOffers(): IndexedSeq[WorkerOffer] = {
     executorIdToExecutor.values.filter { exec =>
       exec.freeCores > 0
     }.map { exec =>
       WorkerOffer(executorId = exec.executorId, host = exec.host,
         cores = exec.freeCores)
-    }.toSeq
+    }.toIndexedSeq
   }
 
   /**
@@ -381,8 +381,7 @@ private[spark] abstract class MockBackend(
    * scheduling.
    */
   override def reviveOffers(): Unit = {
-    val offers: Seq[WorkerOffer] = generateOffers()
-    val newTaskDescriptions = taskScheduler.resourceOffers(offers).flatten
+    val newTaskDescriptions = taskScheduler.resourceOffers(generateOffers()).flatten
     // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
     // tests from introducing a race if they need it
     val newTasks = taskScheduler.synchronized {

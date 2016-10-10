@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.types._
 
 class TestNullableColumnBuilder[JvmType](columnType: ColumnType[JvmType])
@@ -94,7 +94,7 @@ class NullableColumnBuilderSuite extends SparkFunSuite {
       (1 to 7 by 2).foreach(assertResult(_, "Wrong null position")(buffer.getInt()))
 
       // For non-null values
-      val actual = new GenericMutableRow(new Array[Any](1))
+      val actual = new GenericInternalRow(new Array[Any](1))
       (0 until 4).foreach { _ =>
         columnType.extract(buffer, actual, 0)
         assert(converter(actual.get(0, dataType)) === converter(randomRow.get(0, dataType)),

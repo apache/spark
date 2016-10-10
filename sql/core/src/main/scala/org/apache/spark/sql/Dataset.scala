@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
+import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand, GlobalTempView, LocalTempView}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -2433,8 +2433,12 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Creates a temporary view using the given name. The lifetime of this
+   * Creates a local temporary view using the given name. The lifetime of this
    * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * Local temporary view is session-scoped. Its lifetime is the lifetime of the session that
+   * created it, i.e. it will be automatically dropped when the session terminates. It's not
+   * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
    *
    * @throws AnalysisException if the view name already exists
    *
@@ -2443,21 +2447,51 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = withPlan {
-    createViewCommand(viewName, replace = false)
+    createTempViewCommand(viewName, replace = false, global = false)
   }
 
+
+
   /**
-   * Creates a temporary view using the given name. The lifetime of this
+   * Creates a local temporary view using the given name. The lifetime of this
    * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
    *
    * @group basic
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
-    createViewCommand(viewName, replace = true)
+    createTempViewCommand(viewName, replace = true, global = false)
   }
 
-  private def createViewCommand(viewName: String, replace: Boolean): CreateViewCommand = {
+  /**
+   * Creates a global temporary view using the given name. The lifetime of this
+   * temporary view is tied to this Spark application.
+   *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   *
+   * @throws TempTableAlreadyExistsException if the view name already exists
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]
+  def createGlobalTempView(viewName: String): Unit = withPlan {
+    createTempViewCommand(viewName, replace = false, global = true)
+  }
+
+  private def createTempViewCommand(
+      viewName: String,
+      replace: Boolean,
+      global: Boolean): CreateViewCommand = {
+    val viewType = if (global) {
+      GlobalTempView
+    } else {
+      LocalTempView
+    }
+
     CreateViewCommand(
       name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
       userSpecifiedColumns = Nil,
@@ -2467,7 +2501,7 @@ class Dataset[T] private[sql](
       child = logicalPlan,
       allowExisting = false,
       replace = replace,
-      isTemporary = true)
+      viewType = viewType)
   }
 
   /**

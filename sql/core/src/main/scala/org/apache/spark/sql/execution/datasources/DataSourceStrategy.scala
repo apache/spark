@@ -273,7 +273,7 @@ object DataSourceStrategy extends Strategy with Logging {
   // Get the bucket ID based on the bucketing values.
   // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
   def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
+    val mutableRow = new SpecificInternalRow(Seq(bucketColumn.dataType))
     mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
     val bucketIdGeneration = UnsafeProjection.create(
       HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
@@ -340,6 +340,8 @@ object DataSourceStrategy extends Strategy with Logging {
     // `Filter`s or cannot be handled by `relation`.
     val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
 
+    // These metadata values make scan plans uniquely identifiable for equality checking.
+    // TODO(SPARK-17701) using strings for equality checking is brittle
     val metadata: Map[String, String] = {
       val pairs = ArrayBuffer.empty[(String, String)]
 
@@ -350,6 +352,8 @@ object DataSourceStrategy extends Strategy with Logging {
         }
         pairs += ("PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
       }
+      pairs += ("ReadSchema" ->
+        StructType.fromAttributes(projects.map(_.toAttribute)).catalogString)
       pairs.toMap
     }
 
