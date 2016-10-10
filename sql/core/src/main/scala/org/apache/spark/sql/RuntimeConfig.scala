@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -28,6 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * @since 2.0.0
  */
+@InterfaceStability.Stable
 class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
 
   /**

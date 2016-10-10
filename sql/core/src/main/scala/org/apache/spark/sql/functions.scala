@@ -22,7 +22,7 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
- * Functions available for [[DataFrame]].
+ * Functions available for DataFrame operations.
  *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
@@ -54,6 +54,7 @@ import org.apache.spark.util.Utils
  * @since 1.3.0
  */
 @Experimental
+@InterfaceStability.Evolving
 // scalastyle:off
 object functions {
 // scalastyle:on
@@ -2730,6 +2731,7 @@ object functions {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def window(
       timeColumn: Column,
       windowDuration: String,
@@ -2783,6 +2785,7 @@ object functions {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
     window(timeColumn, windowDuration, slideDuration, "0 second")
   }
@@ -2821,6 +2824,7 @@ object functions {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def window(timeColumn: Column, windowDuration: String): Column = {
     window(timeColumn, windowDuration, windowDuration, "0 second")
   }
