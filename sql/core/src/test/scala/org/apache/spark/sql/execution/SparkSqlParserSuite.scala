@@ -116,16 +116,6 @@ class SparkSqlParserSuite extends PlanTest {
     )
   }
 
-  private def createTempViewUsing(
-      table: String,
-      database: Option[String] = None,
-      schema: Option[StructType] = None,
-      replace: Boolean = true,
-      provider: String = "parquet",
-      options: Map[String, String] = Map.empty): LogicalPlan = {
-    CreateTempViewUsing(TableIdentifier(table, database), schema, replace, provider, options)
-  }
-
   private def createTable(
       table: String,
       database: Option[String] = None,
