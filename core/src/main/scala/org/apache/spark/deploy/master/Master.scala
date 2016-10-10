@@ -641,7 +641,7 @@ private[deploy] class Master(
     val numExecutorsScheduled = assignedExecutors.sum
     val numExecutorsLaunched = app.executors.size
     // Check to see if we managed to launch the requested number of executors
-    if(numUsable != 0 && numExecutorsLaunched != app.executorLimit &&
+    if (numUsable != 0 && numExecutorsLaunched != app.executorLimit &&
       numExecutorsScheduled != app.executorLimit) {
       logWarning(s"Failed to launch the requested number of executors due to resource limits : " +
         s"only $numExecutorsScheduled executors instead of ${app.executorLimit}")
