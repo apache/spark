@@ -27,6 +27,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
@@ -73,15 +74,52 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /**
+   * Param for how to handle invalid entries. Options are skip (which will filter out rows with
+   * invalid values), or error (which will throw an error), or keep (which will keep the invalid
+   * values in certain way). Default behaviour is to report an error for invalid entries.
+   *
+   * @group param
+   */
+  @Since("2.1.0")
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle" +
+    "invalid entries. Options are skip (which will filter out rows with invalid values), or" +
+    "error (which will throw an error), or keep (which will keep the invalid values" +
+    " in certain way). Default behaviour is to report an error for invalid entries.",
+    ParamValidators.inArray(Array("skip", "error", "keep")))
+
+  /** @group getParam */
+  @Since("2.1.0")
+  def gethandleInvalid: Option[Boolean] = $(handleInvalid) match {
+    case "keep" => Some(true)
+    case "skip" => Some(false)
+    case _ => None
+  }
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def sethandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, "error")
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
-    val bucketizer = udf { feature: Double =>
-      Bucketizer.binarySearchForBuckets($(splits), feature)
+    val keepInvalid = gethandleInvalid.isDefined && gethandleInvalid.get
+
+    val bucketizer: UserDefinedFunction = udf { (feature: Double) =>
+      Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
     }
-    val newCol = bucketizer(dataset($(inputCol)))
-    val newField = prepOutputField(dataset.schema)
-    dataset.withColumn($(outputCol), newCol, newField.metadata)
+    val filteredDataset = {
+      if (!keepInvalid) {
+        // "skip" NaN option is set, will filter out NaN values in the dataset
+        dataset.na.drop.toDF()
+      } else {
+        dataset.toDF()
+      }
+    }
+    val newCol = bucketizer(filteredDataset($(inputCol)))
+    val newField = prepOutputField(filteredDataset.schema)
+    filteredDataset.withColumn($(outputCol), newCol, newField.metadata)
   }
 
   private def prepOutputField(schema: StructType): StructField = {
@@ -126,10 +164,21 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
   /**
    * Binary searching in several buckets to place each data point.
+   * @param splits array of split points
+   * @param feature data point
+   * @param keepInvalid NaN flag.
+   *                    Set "true" to make an extra bucket for NaN values;
+   *                    Set "false" to report an error for NaN values
+   * @return bucket for each data point
    * @throws SparkException if a feature is < splits.head or > splits.last
    */
-  private[feature] def binarySearchForBuckets(splits: Array[Double], feature: Double): Double = {
-    if (feature.isNaN) {
+
+  private[feature] def binarySearchForBuckets(
+      splits: Array[Double],
+      feature: Double,
+      keepInvalid: Boolean): Double = {
+    if (feature.isNaN && keepInvalid) {
+      // NaN data point found plus "keep" NaN option is set
       splits.length - 1
     } else if (feature == splits.last) {
       splits.length - 2

@@ -98,6 +98,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCol("feature")
       .setOutputCol("result")
       .setSplits(splits)
+      .sethandleInvalid("keep")
 
     bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
       case Row(x: Double, y: Double) =>
@@ -111,8 +112,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     withClue("Invalid NaN split was not caught as an invalid split!") {
       intercept[IllegalArgumentException] {
         val bucketizer: Bucketizer = new Bucketizer()
-          .setInputCol("feature")
-          .setOutputCol("result")
           .setSplits(splits)
       }
     }
@@ -138,7 +137,8 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val data = Array.fill(100)(Random.nextDouble())
     val splits: Array[Double] = Double.NegativeInfinity +:
       Array.fill(10)(Random.nextDouble()).sorted :+ Double.PositiveInfinity
-    val bsResult = Vectors.dense(data.map(x => Bucketizer.binarySearchForBuckets(splits, x)))
+    val bsResult = Vectors.dense(data.map(x =>
+      Bucketizer.binarySearchForBuckets(splits, x, false)))
     val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
     assert(bsResult ~== lsResult absTol 1e-5)
   }
@@ -169,7 +169,7 @@ private object BucketizerSuite extends SparkFunSuite {
   /** Check all values in splits, plus values between all splits. */
   def checkBinarySearch(splits: Array[Double]): Unit = {
     def testFeature(feature: Double, expectedBucket: Double): Unit = {
-      assert(Bucketizer.binarySearchForBuckets(splits, feature) === expectedBucket,
+      assert(Bucketizer.binarySearchForBuckets(splits, feature, false) === expectedBucket,
         s"Expected feature value $feature to be in bucket $expectedBucket with splits:" +
           s" ${splits.mkString(", ")}")
     }
