@@ -147,7 +147,8 @@ private[deploy] class DriverRunner(
    * Will throw an exception if there are errors downloading the jar.
    */
   private def downloadUserJar(driverDir: File): String = {
-    val jarPath = new Path(driverDesc.jarUrl)
+    // Remove query string if jarUrl is http based
+    val jarPath = new Path(driverDesc.jarUrl.takeWhile(_ != '?'))
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
