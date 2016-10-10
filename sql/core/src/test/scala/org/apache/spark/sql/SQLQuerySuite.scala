@@ -2199,6 +2199,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("select a, b, c, count(d) from point_table group by a, b, c GROUPING SETS (())"),
       Row(null, null, null, 3) :: Nil)
+    checkAnswer(
+      sql("select a, b, c, count(d) from point_table group by a, b, c GROUPING SETS ((a))"),
+      Row("1", null, null, 1) ::
+        Row("4", null, null, 1) ::
+        Row("7", null, null, 1) :: Nil)
   }
 
 
