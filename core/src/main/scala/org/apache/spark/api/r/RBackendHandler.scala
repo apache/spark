@@ -19,9 +19,10 @@ package org.apache.spark.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.mutable.HashMap
+import scala.collection.JavaConverters._
 import scala.language.existentials
 
+import com.google.common.collect.MapMaker
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 import io.netty.channel.ChannelHandler.Sharable
 
@@ -263,7 +264,7 @@ private[r] object JVMObjectTracker {
 
   // TODO: This map should be thread-safe if we want to support multiple
   // connections at the same time
-  private[this] val objMap = new HashMap[String, Object]
+  private[this] val objMap = new MapMaker().weakValues().makeMap[String, Object]().asScala
 
   // TODO: We support only one connection now, so an integer is fine.
   // Investigate using use atomic integer in the future.
