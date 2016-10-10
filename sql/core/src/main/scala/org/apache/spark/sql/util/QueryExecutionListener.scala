@@ -22,7 +22,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.mutable.ListBuffer
 import scala.util.control.NonFatal
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.QueryExecution
 
@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.QueryExecution
  * multiple different threads.
  */
 @Experimental
+@InterfaceStability.Evolving
 trait QueryExecutionListener {
 
   /**
@@ -68,6 +69,7 @@ trait QueryExecutionListener {
  * Manager for [[QueryExecutionListener]]. See [[org.apache.spark.sql.SQLContext.listenerManager]].
  */
 @Experimental
+@InterfaceStability.Evolving
 class ExecutionListenerManager private[sql] () extends Logging {
 
   /**

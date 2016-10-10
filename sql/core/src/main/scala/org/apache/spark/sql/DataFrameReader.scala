@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
@@ -38,6 +39,7 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 1.4.0
  */
+@InterfaceStability.Stable
 class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
