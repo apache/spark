@@ -298,10 +298,11 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
-        val nonNullBitmask = x.bitmasks.reduce(_ & _)
+        val nonNullBitmask = ~ x.bitmasks.reduce(_ | _)
 
+        val attrLength = groupByAliases.length
         val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
-          a.toAttribute.withNullability((nonNullBitmask & 1 << idx) == 0)
+          a.toAttribute.withNullability((nonNullBitmask & 1 << (attrLength - idx - 1)) == 0)
         }
 
         val expand = Expand(x.bitmasks, groupByAliases, expandedAttributes, gid, x.child)
