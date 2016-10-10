@@ -21,7 +21,7 @@ import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.types._
@@ -34,6 +34,7 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
  * @since 1.4.0
  */
 @Experimental
+@InterfaceStability.Evolving
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**

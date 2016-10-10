@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
@@ -36,6 +36,7 @@ import org.apache.spark.sql.expressions.ReduceAggregator
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],

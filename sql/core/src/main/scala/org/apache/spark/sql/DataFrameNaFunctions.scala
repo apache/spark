@@ -21,7 +21,7 @@ import java.{lang => jl}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -34,6 +34,7 @@ import org.apache.spark.sql.types._
  * @since 1.3.1
  */
 @Experimental
+@InterfaceStability.Evolving
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
