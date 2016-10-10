@@ -858,20 +858,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("SPARK-16896 load duplicated field names consistently with null or empty strings") {
-    withTempPath { path =>
-      Seq("a,a,c,a,b,b").toDF().write.text(path.getAbsolutePath)
-      val actualSchema = spark.read
-        .format("csv")
-        .option("header", true)
-        .load(path.getAbsolutePath)
-        .schema
-      val fields = Seq("a0", "a1", "c", "a3", "b4", "b5").map(StructField(_, StringType, true))
-      val expectedSchema = StructType(fields)
-      assert(actualSchema == expectedSchema)
-    }
-  }
-
   test("load duplicated field names consistently with null or empty strings - case sensitive") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTempPath { path =>
