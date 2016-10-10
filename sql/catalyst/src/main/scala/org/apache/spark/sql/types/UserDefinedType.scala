@@ -23,6 +23,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.util.TypeUtils
 
 /**
  * The data type for User Defined Types (UDTs).
@@ -42,6 +43,10 @@ import org.apache.spark.annotation.DeveloperApi
  */
 private[spark]
 abstract class UserDefinedType[UserType >: Null] extends DataType with Serializable {
+
+  final def interpretedOrdering: Ordering[Any] = {
+    TypeUtils.getInterpretedOrdering(this.sqlType)
+  }
 
   /** Underlying storage type for this UDT */
   def sqlType: DataType
@@ -80,15 +85,17 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
    */
   override private[spark] def asNullable: UserDefinedType[UserType] = this
 
-  override private[sql] def acceptsType(dataType: DataType) =
-    this.getClass == dataType.getClass
+  override private[sql] def acceptsType(dataType: DataType) = dataType match {
+    case that: UserDefinedType[_] => this.getClass == that.getClass
+    case thatType => this.sqlType == thatType
+  }
 
   override def sql: String = sqlType.sql
 
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other match {
-    case that: UserDefinedType[_] => this.acceptsType(that)
+    case that: DataType => this.acceptsType(that)
     case _ => false
   }
 
@@ -122,7 +129,7 @@ private[sql] class PythonUserDefinedType(
   }
 
   override def equals(other: Any): Boolean = other match {
-    case that: PythonUserDefinedType => pyUDT == that.pyUDT
+    case that: DataType => this.acceptsType(that)
     case _ => false
   }
 

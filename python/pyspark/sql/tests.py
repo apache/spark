@@ -94,6 +94,37 @@ class ExamplePointUDT(UserDefinedType):
         return ExamplePoint(datum[0], datum[1])
 
 
+class ExampleMoneyUDT(UserDefinedType):
+
+    @classmethod
+    def sqlType(self):
+        return DecimalType()
+
+    @classmethod
+    def module(cls):
+        return 'pyspark.sql.tests'
+
+    def serialize(self, obj):
+        return obj
+
+    def deserialize(self, datum):
+        return datum
+
+
+class ExampleMoney:
+
+    __UDT__ = ExampleMoneyUDT()
+
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return "$%s" % self.value
+
+    def __eq__(self, other):
+        return self.value == other.value
+
+
 class ExamplePoint:
     """
     An example class to demonstrate UDT in Scala, Java, and Python.
@@ -657,6 +688,43 @@ class SQLTests(ReusedPySparkTestCase):
         self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
         rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
         self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
+
+    def test_udt_with_predicates(self):
+        from pyspark.sql.tests import ExampleMoney, ExampleMoneyUDT
+        rows = [
+            Row(dollars=ExampleMoney(1.0)),
+            Row(dollars=ExampleMoney(2.0)),
+            Row(dollars=ExampleMoney(3.0))
+        ]
+        df = self.spark.createDataFrame(rows)
+
+        less_than = df.filter(df.dollars < 2.0)
+        self.assertEqual(Row(dollars=ExampleMoney(1.0)), less_than.collect())
+
+        equal = df.filter(df.dollars == 2.0)
+        self.assertEqual(Row(dollars=ExampleMoney(2.0)), equal.collect())
+
+        greater_than = df['dollars > 2.0']
+        self.assertEqual(Row(dollars=ExampleMoney(3.0)), greater_than.collect())
+
+    def test_udt_with_predicates_in_sql(self):
+        from pyspark.sql.tests import ExampleMoney, ExampleMoneyUDT
+        rows = [
+            Row(dollars=ExampleMoney(1.0)),
+            Row(dollars=ExampleMoney(2.0)),
+            Row(dollars=ExampleMoney(3.0))
+        ]
+        df = self.spark.createDataFrame(rows)
+        df.createOrReplaceTempView("money_table")
+
+        less_than = self.spark.sql("SELECT dollars FROM money_table WHERE dollars < 2.0")
+        self.assertEqual(Row(dollars=ExampleMoney(1.0)), less_than.collect())
+
+        equal = self.spark.sql("SELECT dollars FROM money_table WHERE dollars = 2.0")
+        self.assertEqual(Row(dollars=ExampleMoney(2.0)), equal.collect())
+
+        greater_than = self.spark.sql("SELECT dollars FROM money_table WHERE dollars > 2.0")
+        self.assertEqual(Row(dollars=ExampleMoney(3.0)), greater_than.collect())
 
     def test_infer_schema_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
