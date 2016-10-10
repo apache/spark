@@ -346,6 +346,8 @@ class BlockManagerReplicationSuite extends SparkFunSuite
     }
   }
 
+
+
   /**
    * Test replication of blocks with different storage levels (various combinations of
    * memory, disk & serialization). For each storage level, this function tests every store

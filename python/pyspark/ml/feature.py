@@ -2705,7 +2705,7 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
     @since("2.0.0")
     def selectedFeatures(self):
         """
-        List of indices to select (filter). Must be ordered asc.
+        List of indices to select (filter).
         """
         return self._call_java("selectedFeatures")
 

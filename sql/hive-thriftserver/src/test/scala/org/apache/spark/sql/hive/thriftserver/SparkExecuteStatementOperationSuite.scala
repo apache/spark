@@ -15,27 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.sql.hive.thriftserver
 
-private[datasources] object ParseModes {
-  val PERMISSIVE_MODE = "PERMISSIVE"
-  val DROP_MALFORMED_MODE = "DROPMALFORMED"
-  val FAIL_FAST_MODE = "FAILFAST"
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.{NullType, StructField, StructType}
 
-  val DEFAULT = PERMISSIVE_MODE
-
-  def isValidMode(mode: String): Boolean = {
-    mode.toUpperCase match {
-      case PERMISSIVE_MODE | DROP_MALFORMED_MODE | FAIL_FAST_MODE => true
-      case _ => false
-    }
-  }
-
-  def isDropMalformedMode(mode: String): Boolean = mode.toUpperCase == DROP_MALFORMED_MODE
-  def isFailFastMode(mode: String): Boolean = mode.toUpperCase == FAIL_FAST_MODE
-  def isPermissiveMode(mode: String): Boolean = if (isValidMode(mode))  {
-    mode.toUpperCase == PERMISSIVE_MODE
-  } else {
-    true // We default to permissive is the mode string is not valid
+class SparkExecuteStatementOperationSuite extends SparkFunSuite {
+  test("SPARK-17112 `select null` via JDBC triggers IllegalArgumentException in ThriftServer") {
+    val field1 = StructField("NULL", NullType)
+    val field2 = StructField("(IF(true, NULL, NULL))", NullType)
+    val tableSchema = StructType(Seq(field1, field2))
+    val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
+    assert(columns.size() == 2)
+    assert(columns.get(0).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
+    assert(columns.get(1).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
   }
 }

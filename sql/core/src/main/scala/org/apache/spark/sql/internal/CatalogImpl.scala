@@ -23,10 +23,10 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.types.StructType
 
@@ -68,14 +68,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of databases available across all sessions.
    */
   override def listDatabases(): Dataset[Database] = {
-    val databases = sessionCatalog.listDatabases().map { dbName =>
-      val metadata = sessionCatalog.getDatabaseMetadata(dbName)
-      new Database(
-        name = metadata.name,
-        description = metadata.description,
-        locationUri = metadata.locationUri)
-    }
+    val databases = sessionCatalog.listDatabases().map(makeDatabase)
     CatalogImpl.makeDataset(databases, sparkSession)
+  }
+
+  private def makeDatabase(dbName: String): Database = {
+    val metadata = sessionCatalog.getDatabaseMetadata(dbName)
+    new Database(
+      name = metadata.name,
+      description = metadata.description,
+      locationUri = metadata.locationUri)
   }
 
   /**
@@ -93,17 +95,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
     requireDatabaseExists(dbName)
-    val tables = sessionCatalog.listTables(dbName).map { tableIdent =>
-      val isTemp = tableIdent.database.isEmpty
-      val metadata = if (isTemp) None else Some(sessionCatalog.getTableMetadata(tableIdent))
-      new Table(
-        name = tableIdent.identifier,
-        database = metadata.flatMap(_.identifier.database).orNull,
-        description = metadata.flatMap(_.comment).orNull,
-        tableType = metadata.map(_.tableType.name).getOrElse("TEMPORARY"),
-        isTemporary = isTemp)
-    }
+    val tables = sessionCatalog.listTables(dbName).map(makeTable)
     CatalogImpl.makeDataset(tables, sparkSession)
+  }
+
+  private def makeTable(tableIdent: TableIdentifier): Table = {
+    val metadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
+    val database = metadata.identifier.database
+    new Table(
+      name = tableIdent.table,
+      database = database.orNull,
+      description = metadata.comment.orNull,
+      tableType = if (database.isEmpty) "TEMPORARY" else metadata.tableType.name,
+      isTemporary = database.isEmpty)
   }
 
   /**
@@ -121,16 +125,20 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
     requireDatabaseExists(dbName)
-    val functions = sessionCatalog.listFunctions(dbName).map { case (funcIdent, _) =>
-      val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
-      new Function(
-        name = funcIdent.identifier,
-        database = funcIdent.database.orNull,
-        description = null, // for now, this is always undefined
-        className = metadata.getClassName,
-        isTemporary = funcIdent.database.isEmpty)
+    val functions = sessionCatalog.listFunctions(dbName).map { case (functIdent, _) =>
+      makeFunction(functIdent)
     }
     CatalogImpl.makeDataset(functions, sparkSession)
+  }
+
+  private def makeFunction(funcIdent: FunctionIdentifier): Function = {
+    val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
+    new Function(
+      name = funcIdent.identifier,
+      database = funcIdent.database.orNull,
+      description = null, // for now, this is always undefined
+      className = metadata.getClassName,
+      isTemporary = funcIdent.database.isEmpty)
   }
 
   /**
@@ -165,6 +173,86 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         isBucket = bucketColumnNames.contains(c.name))
     }
     CatalogImpl.makeDataset(columns, sparkSession)
+  }
+
+  /**
+   * Get the database with the specified name. This throws an [[AnalysisException]] when no
+   * [[Database]] can be found.
+   */
+  override def getDatabase(dbName: String): Database = {
+    makeDatabase(dbName)
+  }
+
+  /**
+   * Get the table or view with the specified name. This table can be a temporary view or a
+   * table/view in the current database. This throws an [[AnalysisException]] when no [[Table]]
+   * can be found.
+   */
+  override def getTable(tableName: String): Table = {
+    getTable(null, tableName)
+  }
+
+  /**
+   * Get the table or view with the specified name in the specified database. This throws an
+   * [[AnalysisException]] when no [[Table]] can be found.
+   */
+  override def getTable(dbName: String, tableName: String): Table = {
+    makeTable(TableIdentifier(tableName, Option(dbName)))
+  }
+
+  /**
+   * Get the function with the specified name. This function can be a temporary function or a
+   * function in the current database. This throws an [[AnalysisException]] when no [[Function]]
+   * can be found.
+   */
+  override def getFunction(functionName: String): Function = {
+    getFunction(null, functionName)
+  }
+
+  /**
+   * Get the function with the specified name. This returns [[None]] when no [[Function]] can be
+   * found.
+   */
+  override def getFunction(dbName: String, functionName: String): Function = {
+    makeFunction(FunctionIdentifier(functionName, Option(dbName)))
+  }
+
+  /**
+   * Check if the database with the specified name exists.
+   */
+  override def databaseExists(dbName: String): Boolean = {
+    sessionCatalog.databaseExists(dbName)
+  }
+
+  /**
+   * Check if the table or view with the specified name exists. This can either be a temporary
+   * view or a table/view in the current database.
+   */
+  override def tableExists(tableName: String): Boolean = {
+    tableExists(null, tableName)
+  }
+
+  /**
+   * Check if the table or view with the specified name exists in the specified database.
+   */
+  override def tableExists(dbName: String, tableName: String): Boolean = {
+    val tableIdent = TableIdentifier(tableName, Option(dbName))
+    sessionCatalog.isTemporaryTable(tableIdent) || sessionCatalog.tableExists(tableIdent)
+  }
+
+  /**
+   * Check if the function with the specified name exists. This can either be a temporary function
+   * or a function in the current database.
+   */
+  override def functionExists(functionName: String): Boolean = {
+    functionExists(null, functionName)
+  }
+
+  /**
+   * Check if the function with the specified name exists in the specified database.
+   */
+  override def functionExists(dbName: String, functionName: String): Boolean = {
+    sessionCatalog.functionExists(FunctionIdentifier(functionName, Option(dbName)))
   }
 
   /**
