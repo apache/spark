@@ -24,12 +24,10 @@ import java.sql.{Date, Time, Timestamp}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.WrappedArray
 
-import org.apache.spark.internal.Logging
-
 /**
  * Utility functions to serialize, deserialize objects to / from R
  */
-private[spark] object SerDe extends Logging {
+private[spark] object SerDe {
   type ReadObject = (DataInputStream, Char) => Object
   type WriteObject = (DataOutputStream, Object) => Boolean
 

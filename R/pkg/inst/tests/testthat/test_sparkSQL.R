@@ -379,6 +379,17 @@ test_that("create DataFrame with different data types", {
   expect_equal(collect(df), data.frame(l, stringsAsFactors = FALSE))
 })
 
+test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
+  df <- data.frame(
+    id: 1:2,
+    time = c(as.POSIXlt("2016-01-10"), NA),
+    date = c(as.Date("2016-10-01"), NA))
+
+  DF <- collect(createDataFrame(df))
+  expect_true(is.na(DF$date[2]))
+  expect_true(is.na(DF$time[2]))
+})
+
 test_that("create DataFrame with complex types", {
   e <- new.env()
   assign("n", 3L, envir = e)
