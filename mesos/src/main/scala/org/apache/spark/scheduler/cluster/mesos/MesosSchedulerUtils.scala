@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 import com.google.common.base.Splitter
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.FrameworkInfo.Capability
 import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
@@ -92,6 +93,10 @@ trait MesosSchedulerUtils extends Logging {
     }
     conf.getOption("spark.mesos.role").foreach { role =>
       fwInfoBuilder.setRole(role)
+    }
+    val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+    if (maxGpus > 0) {
+      fwInfoBuilder.addCapabilities(Capability.newBuilder().setType(Capability.Type.GPU_RESOURCES))
     }
     if (credBuilder.hasPrincipal) {
       new MesosSchedulerDriver(

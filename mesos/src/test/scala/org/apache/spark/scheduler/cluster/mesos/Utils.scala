@@ -32,8 +32,9 @@ object Utils {
       offerId: String,
       slaveId: String,
       mem: Int,
-      cpu: Int,
-      ports: Option[(Long, Long)] = None): Offer = {
+      cpus: Int,
+      ports: Option[(Long, Long)] = None,
+      gpus: Int = 0): Offer = {
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
       .setName("mem")
@@ -42,13 +43,19 @@ object Utils {
     builder.addResourcesBuilder()
       .setName("cpus")
       .setType(Value.Type.SCALAR)
-      .setScalar(Scalar.newBuilder().setValue(cpu))
+      .setScalar(Scalar.newBuilder().setValue(cpus))
     ports.foreach { resourcePorts =>
       builder.addResourcesBuilder()
         .setName("ports")
         .setType(Value.Type.RANGES)
         .setRanges(Ranges.newBuilder().addRange(MesosRange.newBuilder()
           .setBegin(resourcePorts._1).setEnd(resourcePorts._2).build()))
+    }
+    if (gpus > 0) {
+      builder.addResourcesBuilder()
+        .setName("gpus")
+        .setType(Value.Type.SCALAR)
+        .setScalar(Scalar.newBuilder().setValue(gpus))
     }
     builder.setId(createOfferId(offerId))
       .setFrameworkId(FrameworkID.newBuilder()
@@ -82,4 +89,3 @@ object Utils {
     TaskID.newBuilder().setValue(taskId).build()
   }
 }
-
