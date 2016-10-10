@@ -80,6 +80,7 @@ class ExpressionSetSuite extends SparkFunSuite {
   setTest(1, Not(aUpper >= 1), aUpper < 1, Not(Literal(1) <= aUpper), Literal(1) > aUpper)
   setTest(1, Not(aUpper <= 1), aUpper > 1, Not(Literal(1) >= aUpper), Literal(1) < aUpper)
 
+  // Reordering AND/OR expressions
   setTest(1, aUpper > bUpper && aUpper <= 10, aUpper <= 10 && aUpper > bUpper)
   setTest(1,
     aUpper > bUpper && bUpper > 100 && aUpper <= 10,
@@ -91,47 +92,52 @@ class ExpressionSetSuite extends SparkFunSuite {
     bUpper > 100 || aUpper <= 10 || aUpper > bUpper)
 
   setTest(1,
-    bUpper > 100 || aUpper <= 10 && aUpper > bUpper,
+    (aUpper <= 10 && aUpper > bUpper) || bUpper > 100,
     bUpper > 100 || (aUpper <= 10 && aUpper > bUpper))
 
   setTest(1,
-    aUpper > 10 && bUpper < 10 || aUpper >= bUpper,
+    aUpper >= bUpper || (aUpper > 10 && bUpper < 10),
     (bUpper < 10 && aUpper > 10) || aUpper >= bUpper)
 
+  // More complicated cases mixing AND/OR
+  // Three predicates in the following:
+  //   (bUpper > 100)
+  //   (aUpper < 100 && bUpper <= aUpper)
+  //   (aUpper >= 10 && bUpper >= 50)
+  // They can be reordered and the sub-predicates contained in each of them can be reordered too.
   setTest(1,
-    bUpper > 100 || aUpper < 100 && bUpper <= aUpper || aUpper >= 10 && bUpper >= 50,
-    (aUpper >= 10 && bUpper >= 50) || bUpper > 100 || (aUpper < 100 && bUpper <= aUpper),
-    (bUpper >= 50 && aUpper >= 10) || (bUpper <= aUpper && aUpper < 100) || bUpper > 100)
+    (bUpper > 100) || (aUpper < 100 && bUpper <= aUpper) || (aUpper >= 10 && bUpper >= 50),
+    (aUpper >= 10 && bUpper >= 50) || (bUpper > 100) || (aUpper < 100 && bUpper <= aUpper),
+    (bUpper >= 50 && aUpper >= 10) || (bUpper <= aUpper && aUpper < 100) || (bUpper > 100))
 
+  // Two predicates in the following:
+  //   (bUpper > 100 && aUpper < 100 && bUpper <= aUpper)
+  //   (aUpper >= 10 && bUpper >= 50)
   setTest(1,
-    bUpper > 100 && aUpper < 100 && bUpper <= aUpper || aUpper >= 10 && bUpper >= 50,
+    (bUpper > 100 && aUpper < 100 && bUpper <= aUpper) || (aUpper >= 10 && bUpper >= 50),
     (aUpper >= 10 && bUpper >= 50) || (aUpper < 100 && bUpper > 100 && bUpper <= aUpper),
     (bUpper >= 50 && aUpper >= 10) || (bUpper <= aUpper && aUpper < 100 && bUpper > 100))
 
+  // Three predicates in the following:
+  //   (aUpper >= 10)
+  //   (bUpper <= 10 && aUpper === bUpper && aUpper < 100)
+  //   (bUpper >= 100)
   setTest(1,
-    aUpper >= 10 || bUpper <= 10 && aUpper === bUpper && aUpper < 100 || bUpper >= 100,
-    aUpper === bUpper && aUpper < 100 && bUpper <= 10 || bUpper >= 100 || aUpper >= 10,
-    aUpper < 100 && bUpper <= 10 && aUpper === bUpper || aUpper >= 10 || bUpper >= 100,
-    ((bUpper <= 10 && aUpper === bUpper) && aUpper < 100) || (aUpper >= 10 || bUpper >= 100))
+    (aUpper >= 10) || (bUpper <= 10 && aUpper === bUpper && aUpper < 100) || (bUpper >= 100),
+    (aUpper === bUpper && aUpper < 100 && bUpper <= 10) || (bUpper >= 100) || (aUpper >= 10),
+    (aUpper < 100 && bUpper <= 10 && aUpper === bUpper) || (aUpper >= 10) || (bUpper >= 100),
+    ((bUpper <= 10 && aUpper === bUpper) && aUpper < 100) || ((aUpper >= 10) || (bUpper >= 100)))
 
   // Don't reorder non-deterministic expression in AND/OR.
   setTest(2, Rand(1L) > aUpper && aUpper <= 10, aUpper <= 10 && Rand(1L) > aUpper)
   setTest(2,
-    aUpper > bUpper &&
-      bUpper > 100 &&
-      Rand(1L) > aUpper,
-    bUpper > 100 &&
-      Rand(1L) > aUpper &&
-      aUpper > bUpper)
+    aUpper > bUpper && bUpper > 100 && Rand(1L) > aUpper,
+    bUpper > 100 && Rand(1L) > aUpper && aUpper > bUpper)
 
   setTest(2, Rand(1L) > aUpper || aUpper <= 10, aUpper <= 10 || Rand(1L) > aUpper)
   setTest(2,
-    aUpper > bUpper ||
-      aUpper <= Rand(1L) ||
-      aUpper <= 10,
-    aUpper <= Rand(1L) ||
-      aUpper <= 10 ||
-      aUpper > bUpper)
+    aUpper > bUpper || aUpper <= Rand(1L) || aUpper <= 10,
+    aUpper <= Rand(1L) || aUpper <= 10 || aUpper > bUpper)
 
   test("add to / remove from set") {
     val initialSet = ExpressionSet(aUpper + 1 :: Nil)
