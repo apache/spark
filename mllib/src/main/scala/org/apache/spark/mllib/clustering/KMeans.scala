@@ -409,16 +409,16 @@ object KMeans {
   val K_MEANS_PARALLEL = "k-means||"
 
   /**
-    * Trains a k-means model using the given set of parameters.
-    *
-    * @param data Training points as an `RDD` of `Vector` types.
-    * @param k Number of clusters to create.
-    * @param maxIterations Maximum number of iterations allowed.
-    * @param initializationMode The initialization algorithm. This can either be "random" or
-    *                           "k-means||". (default: "k-means||")
-    * @param seed Random seed for cluster initialization. Default is to generate seed based
-    *             on system time.
-    */
+   * Trains a k-means model using the given set of parameters.
+   *
+   * @param data Training points as an `RDD` of `Vector` types.
+   * @param k Number of clusters to create.
+   * @param maxIterations Maximum number of iterations allowed.
+   * @param initializationMode The initialization algorithm. This can either be "random" or
+   *                           "k-means||". (default: "k-means||")
+   * @param seed Random seed for cluster initialization. Default is to generate seed based
+   *             on system time.
+   */
   @Since("2.1.0")
   def train(data: RDD[Vector],
             k: Int,
