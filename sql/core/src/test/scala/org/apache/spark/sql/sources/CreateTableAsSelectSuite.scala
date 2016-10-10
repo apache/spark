@@ -26,7 +26,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -83,6 +82,8 @@ class CreateTableAsSelectSuite
   }
 
   test("CREATE TABLE USING AS SELECT based on the file without write permission") {
+    // setWritable(...) does not work on Windows. Please refer JDK-6728842.
+    assume(!Utils.isWindows)
     val childPath = new File(path.toString, "child")
     path.mkdir()
     path.setWritable(false)
@@ -201,7 +202,7 @@ class CreateTableAsSelectSuite
          """.stripMargin
       )
       val table = catalog.getTableMetadata(TableIdentifier("t"))
-      assert(DDLUtils.getPartitionColumnsFromTableProperties(table) == Seq("a"))
+      assert(table.partitionColumnNames == Seq("a"))
     }
   }
 
@@ -217,8 +218,7 @@ class CreateTableAsSelectSuite
          """.stripMargin
       )
       val table = catalog.getTableMetadata(TableIdentifier("t"))
-      assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
-        Option(BucketSpec(5, Seq("a"), Seq("b"))))
+      assert(table.bucketSpec == Option(BucketSpec(5, Seq("a"), Seq("b"))))
     }
   }
 
@@ -235,6 +235,18 @@ class CreateTableAsSelectSuite
         )
       }.getMessage
       assert(e.contains("Expected positive number of buckets, but got `0`"))
+    }
+  }
+
+  test("CTAS of decimal calculation") {
+    withTable("tab2") {
+      withTempView("tab1") {
+        spark.range(99, 101).createOrReplaceTempView("tab1")
+        val sqlStmt =
+          "SELECT id, cast(id as long) * cast('1.0' as decimal(38, 18)) as num FROM tab1"
+        sql(s"CREATE TABLE tab2 USING PARQUET AS $sqlStmt")
+        checkAnswer(spark.table("tab2"), sql(sqlStmt))
+      }
     }
   }
 }

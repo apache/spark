@@ -28,7 +28,6 @@ import com.google.common.io.ByteStreams
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer._
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
@@ -239,7 +238,7 @@ private[spark] class ExternalSorter[K, V, C](
   override protected[this] def spill(collection: WritablePartitionedPairCollection[K, C]): Unit = {
     val inMemoryIterator = collection.destructiveSortedWritablePartitionedIterator(comparator)
     val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
-    spills.append(spillFile)
+    spills += spillFile
   }
 
   /**
@@ -286,7 +285,7 @@ private[spark] class ExternalSorter[K, V, C](
     // The writer is committed at the end of this process.
     def flush(): Unit = {
       val segment = writer.commitAndGet()
-      batchSizes.append(segment.length)
+      batchSizes += segment.length
       _diskBytesSpilled += segment.length
       objectsWritten = 0
     }
@@ -522,8 +521,9 @@ private[spark] class ExternalSorter[K, V, C](
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
-        val compressedStream = serializerManager.wrapForCompression(spill.blockId, bufferedStream)
-        serInstance.deserializeStream(compressedStream)
+
+        val wrappedStream = serializerManager.wrapStream(spill.blockId, bufferedStream)
+        serInstance.deserializeStream(wrappedStream)
       } else {
         // No more batches left
         cleanup()
@@ -611,7 +611,9 @@ private[spark] class ExternalSorter[K, V, C](
       val ds = deserializeStream
       deserializeStream = null
       fileStream = null
-      ds.close()
+      if (ds != null) {
+        ds.close()
+      }
       // NOTE: We don't do file.delete() here because that is done in ExternalSorter.stop().
       // This should also be fixed in ExternalAppendOnlyMap.
     }
@@ -794,7 +796,7 @@ private[spark] class ExternalSorter[K, V, C](
         logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
           s" it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
-        forceSpillFiles.append(spillFile)
+        forceSpillFiles += spillFile
         val spillReader = new SpillReader(spillFile)
         nextUpstream = (0 until numPartitions).iterator.flatMap { p =>
           val iterator = spillReader.readNextPartition()

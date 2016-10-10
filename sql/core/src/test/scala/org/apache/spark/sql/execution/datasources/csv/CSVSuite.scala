@@ -22,34 +22,35 @@ import java.nio.charset.UnsupportedCharsetException
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 
+import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, UDT}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   import testImplicits._
 
-  private val carsFile = "cars.csv"
-  private val carsMalformedFile = "cars-malformed.csv"
-  private val carsFile8859 = "cars_iso-8859-1.csv"
-  private val carsTsvFile = "cars.tsv"
-  private val carsAltFile = "cars-alternative.csv"
-  private val carsUnbalancedQuotesFile = "cars-unbalanced-quotes.csv"
-  private val carsNullFile = "cars-null.csv"
-  private val carsBlankColName = "cars-blank-column-name.csv"
-  private val emptyFile = "empty.csv"
-  private val commentsFile = "comments.csv"
-  private val disableCommentsFile = "disable_comments.csv"
-  private val boolFile = "bool.csv"
-  private val decimalFile = "decimal.csv"
-  private val simpleSparseFile = "simple_sparse.csv"
-  private val numbersFile = "numbers.csv"
-  private val datesFile = "dates.csv"
-  private val unescapedQuotesFile = "unescaped-quotes.csv"
+  private val carsFile = "test-data/cars.csv"
+  private val carsMalformedFile = "test-data/cars-malformed.csv"
+  private val carsFile8859 = "test-data/cars_iso-8859-1.csv"
+  private val carsTsvFile = "test-data/cars.tsv"
+  private val carsAltFile = "test-data/cars-alternative.csv"
+  private val carsUnbalancedQuotesFile = "test-data/cars-unbalanced-quotes.csv"
+  private val carsNullFile = "test-data/cars-null.csv"
+  private val carsBlankColName = "test-data/cars-blank-column-name.csv"
+  private val emptyFile = "test-data/empty.csv"
+  private val commentsFile = "test-data/comments.csv"
+  private val disableCommentsFile = "test-data/disable_comments.csv"
+  private val boolFile = "test-data/bool.csv"
+  private val decimalFile = "test-data/decimal.csv"
+  private val simpleSparseFile = "test-data/simple_sparse.csv"
+  private val numbersFile = "test-data/numbers.csv"
+  private val datesFile = "test-data/dates.csv"
+  private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -477,7 +478,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val options = Map(
       "header" -> "true",
       "inferSchema" -> "true",
-      "dateFormat" -> "dd/MM/yyyy hh:mm")
+      "timestampFormat" -> "dd/MM/yyyy HH:mm")
     val results = spark.read
       .format("csv")
       .options(options)
@@ -485,7 +486,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .select("date")
       .collect()
 
-    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm")
     val expected =
       Seq(Seq(new Timestamp(dateFormat.parse("26/08/2015 18:00").getTime)),
         Seq(new Timestamp(dateFormat.parse("27/10/2014 18:30").getTime)),
@@ -553,7 +554,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     verifyCars(cars, withHeader = true, checkValues = false)
     val results = cars.collect()
-    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", null, null))
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
@@ -679,6 +680,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands").write.csv(csvDir)
       }.getMessage
       assert(msg.contains("CSV data source does not support array<string> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
+          .write.csv(csvDir)
+      }.getMessage
+      assert(msg.contains("CSV data source does not support array<double> data type"))
+
+      msg = intercept[SparkException] {
+        val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
+        spark.range(1).write.csv(csvDir)
+        spark.read.schema(schema).csv(csvDir).collect()
+      }.getCause.getMessage
+      assert(msg.contains("Unsupported type: array"))
     }
   }
 
@@ -690,5 +704,156 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsUnbalancedQuotesFile))
 
     verifyCars(cars, withHeader = true, checkValues = false)
+  }
+
+  test("Write timestamps correctly in ISO8601 format by default") {
+    withTempDir { dir =>
+      val iso8601timestampsPath = s"${dir.getCanonicalPath}/iso8601timestamps.csv"
+      val timestamps = spark.read
+        .format("csv")
+        .option("inferSchema", "true")
+        .option("header", "true")
+        .option("timestampFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      timestamps.write
+        .format("csv")
+        .option("header", "true")
+        .save(iso8601timestampsPath)
+
+      // This will load back the timestamps as string.
+      val iso8601Timestamps = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(iso8601timestampsPath)
+
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ")
+      val expectedTimestamps = timestamps.collect().map { r =>
+        // This should be ISO8601 formatted string.
+        Row(iso8501.format(r.toSeq.head))
+      }
+
+      checkAnswer(iso8601Timestamps, expectedTimestamps)
+    }
+  }
+
+  test("Write dates correctly in ISO8601 format by default") {
+    withTempDir { dir =>
+      val customSchema = new StructType(Array(StructField("date", DateType, true)))
+      val iso8601datesPath = s"${dir.getCanonicalPath}/iso8601dates.csv"
+      val dates = spark.read
+        .format("csv")
+        .schema(customSchema)
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      dates.write
+        .format("csv")
+        .option("header", "true")
+        .save(iso8601datesPath)
+
+      // This will load back the dates as string.
+      val iso8601dates = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(iso8601datesPath)
+
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd")
+      val expectedDates = dates.collect().map { r =>
+        // This should be ISO8601 formatted string.
+        Row(iso8501.format(r.toSeq.head))
+      }
+
+      checkAnswer(iso8601dates, expectedDates)
+    }
+  }
+
+  test("Roundtrip in reading and writing timestamps") {
+    withTempDir { dir =>
+      val iso8601timestampsPath = s"${dir.getCanonicalPath}/iso8601timestamps.csv"
+      val timestamps = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .load(testFile(datesFile))
+
+      timestamps.write
+        .format("csv")
+        .option("header", "true")
+        .save(iso8601timestampsPath)
+
+      val iso8601timestamps = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .load(iso8601timestampsPath)
+
+      checkAnswer(iso8601timestamps, timestamps)
+    }
+  }
+
+  test("Write dates correctly with dateFormat option") {
+    val customSchema = new StructType(Array(StructField("date", DateType, true)))
+    withTempDir { dir =>
+      // With dateFormat option.
+      val datesWithFormatPath = s"${dir.getCanonicalPath}/datesWithFormat.csv"
+      val datesWithFormat = spark.read
+        .format("csv")
+        .schema(customSchema)
+        .option("header", "true")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      datesWithFormat.write
+        .format("csv")
+        .option("header", "true")
+        .option("dateFormat", "yyyy/MM/dd")
+        .save(datesWithFormatPath)
+
+      // This will load back the dates as string.
+      val stringDatesWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(datesWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26"),
+        Row("2014/10/27"),
+        Row("2016/01/28"))
+
+      checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
+    }
+  }
+
+  test("Write timestamps correctly with dateFormat option") {
+    withTempDir { dir =>
+      // With dateFormat option.
+      val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.csv"
+      val timestampsWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .option("timestampFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      timestampsWithFormat.write
+        .format("csv")
+        .option("header", "true")
+        .option("timestampFormat", "yyyy/MM/dd HH:mm")
+        .save(timestampsWithFormatPath)
+
+      // This will load back the timestamps as string.
+      val stringTimestampsWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(timestampsWithFormatPath)
+      val expectedStringTimestampsWithFormat = Seq(
+        Row("2015/08/26 18:00"),
+        Row("2014/10/27 18:30"),
+        Row("2016/01/28 20:00"))
+
+      checkAnswer(stringTimestampsWithFormat, expectedStringTimestampsWithFormat)
+    }
   }
 }

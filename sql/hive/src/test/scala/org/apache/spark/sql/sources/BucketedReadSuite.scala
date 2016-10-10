@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -237,7 +237,9 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       bucketSpecRight: Option[BucketSpec],
       joinColumns: Seq[String],
       shuffleLeft: Boolean,
-      shuffleRight: Boolean): Unit = {
+      shuffleRight: Boolean,
+      sortLeft: Boolean = true,
+      sortRight: Boolean = true): Unit = {
     withTable("bucketed_table1", "bucketed_table2") {
       def withBucket(
           writer: DataFrameWriter[Row],
@@ -247,6 +249,15 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
             spec.numBuckets,
             spec.bucketColumnNames.head,
             spec.bucketColumnNames.tail: _*)
+
+          if (spec.sortColumnNames.nonEmpty) {
+            writer.sortBy(
+              spec.sortColumnNames.head,
+              spec.sortColumnNames.tail: _*
+            )
+          } else {
+            writer
+          }
         }.getOrElse(writer)
       }
 
@@ -267,12 +278,21 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoinExec])
         val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoinExec]
 
+        // check existence of shuffle
         assert(
           joinOperator.left.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleLeft,
           s"expected shuffle in plan to be $shuffleLeft but found\n${joinOperator.left}")
         assert(
           joinOperator.right.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleRight,
           s"expected shuffle in plan to be $shuffleRight but found\n${joinOperator.right}")
+
+        // check existence of sort
+        assert(
+          joinOperator.left.find(_.isInstanceOf[SortExec]).isDefined == sortLeft,
+          s"expected sort in plan to be $shuffleLeft but found\n${joinOperator.left}")
+        assert(
+          joinOperator.right.find(_.isInstanceOf[SortExec]).isDefined == sortRight,
+          s"expected sort in plan to be $shuffleRight but found\n${joinOperator.right}")
       }
     }
   }
@@ -321,6 +341,45 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     }
   }
 
+  test("avoid shuffle and sort when bucket and sort columns are join keys") {
+    val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
+    testBucketing(
+      bucketSpec, bucketSpec, Seq("i", "j"),
+      shuffleLeft = false, shuffleRight = false,
+      sortLeft = false, sortRight = false
+    )
+  }
+
+  test("avoid shuffle and sort when sort columns are a super set of join keys") {
+    val bucketSpec1 = Some(BucketSpec(8, Seq("i"), Seq("i", "j")))
+    val bucketSpec2 = Some(BucketSpec(8, Seq("i"), Seq("i", "k")))
+    testBucketing(
+      bucketSpec1, bucketSpec2, Seq("i"),
+      shuffleLeft = false, shuffleRight = false,
+      sortLeft = false, sortRight = false
+    )
+  }
+
+  test("only sort one side when sort columns are different") {
+    val bucketSpec1 = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
+    val bucketSpec2 = Some(BucketSpec(8, Seq("i", "j"), Seq("k")))
+    testBucketing(
+      bucketSpec1, bucketSpec2, Seq("i", "j"),
+      shuffleLeft = false, shuffleRight = false,
+      sortLeft = false, sortRight = true
+    )
+  }
+
+  test("only sort one side when sort columns are same but their ordering is different") {
+    val bucketSpec1 = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
+    val bucketSpec2 = Some(BucketSpec(8, Seq("i", "j"), Seq("j", "i")))
+    testBucketing(
+      bucketSpec1, bucketSpec2, Seq("i", "j"),
+      shuffleLeft = false, shuffleRight = false,
+      sortLeft = false, sortRight = true
+    )
+  }
+
   test("avoid shuffle when grouping keys are equal to bucket keys") {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("bucketed_table")
@@ -353,16 +412,16 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
       val tableDir = new File(hiveContext
-        .sparkSession.warehousePath, "bucketed_table")
+        .sparkSession.getWarehousePath, "bucketed_table")
       Utils.deleteRecursively(tableDir)
       df1.write.parquet(tableDir.getAbsolutePath)
 
       val agged = spark.table("bucketed_table").groupBy("i").count()
-      val error = intercept[RuntimeException] {
+      val error = intercept[Exception] {
         agged.count()
       }
 
-      assert(error.toString contains "Invalid bucket file")
+      assert(error.getCause().toString contains "Invalid bucket file")
     }
   }
 

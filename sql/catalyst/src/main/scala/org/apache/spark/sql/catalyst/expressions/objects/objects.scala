@@ -245,27 +245,47 @@ case class NewInstance(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val argGen = arguments.map(_.genCode(ctx))
-    val argString = argGen.map(_.value).mkString(", ")
+    val argIsNulls = ctx.freshName("argIsNulls")
+    ctx.addMutableState("boolean[]", argIsNulls,
+      s"$argIsNulls = new boolean[${arguments.size}];")
+    val argValues = arguments.zipWithIndex.map { case (e, i) =>
+      val argValue = ctx.freshName("argValue")
+      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
+      argValue
+    }
+
+    val argCodes = arguments.zipWithIndex.map { case (e, i) =>
+      val expr = e.genCode(ctx)
+      expr.code + s"""
+       $argIsNulls[$i] = ${expr.isNull};
+       ${argValues(i)} = ${expr.value};
+     """
+    }
+    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
     val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"final boolean $isNull = ${argGen.map(_.isNull).mkString(" || ")};"
+      s"""
+       boolean $isNull = false;
+       for (int idx = 0; idx < ${arguments.length}; idx++) {
+         if ($argIsNulls[idx]) { $isNull = true; break; }
+       }
+     """
     } else {
       isNull = "false"
       ""
     }
 
     val constructorCall = outer.map { gen =>
-      s"""${gen.value}.new ${cls.getSimpleName}($argString)"""
+      s"""${gen.value}.new ${cls.getSimpleName}(${argValues.mkString(", ")})"""
     }.getOrElse {
-      s"new $className($argString)"
+      s"new $className(${argValues.mkString(", ")})"
     }
 
     val code = s"""
-      ${argGen.map(_.code).mkString("\n")}
+      $argCode
       ${outer.map(_.code).getOrElse("")}
       $setIsNull
       final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
@@ -359,6 +379,13 @@ case class LambdaVariable(value: String, isNull: String, dataType: DataType) ext
 object MapObjects {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
+  /**
+   * Construct an instance of MapObjects case class.
+   *
+   * @param function The function applied on the collection elements.
+   * @param inputData An expression that when evaluated returns a collection object.
+   * @param elementType The data type of elements in the collection.
+   */
   def apply(
       function: Expression => Expression,
       inputData: Expression,
@@ -446,8 +473,14 @@ case class MapObjects private(
       case _ => ""
     }
 
+    // The data with PythonUserDefinedType are actually stored with the data type of its sqlType.
+    // When we want to apply MapObjects on it, we have to use it.
+    val inputDataType = inputData.dataType match {
+      case p: PythonUserDefinedType => p.sqlType
+      case _ => inputData.dataType
+    }
 
-    val (getLength, getLoopVar) = inputData.dataType match {
+    val (getLength, getLoopVar) = inputDataType match {
       case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
         s"${genInputData.value}.size()" -> s"${genInputData.value}.apply($loopIndex)"
       case ObjectType(cls) if cls.isArray =>
@@ -461,7 +494,17 @@ case class MapObjects private(
           s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
     }
 
-    val loopNullCheck = inputData.dataType match {
+    // Make a copy of the data if it's unsafe-backed
+    def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
+      s"$value instanceof ${clazz.getSimpleName}? ${value}.copy() : $value"
+    val genFunctionValue = lambdaFunction.dataType match {
+      case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
+      case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
+      case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
+      case _ => genFunction.value
+    }
+
+    val loopNullCheck = inputDataType match {
       case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
       // The element of primitive array will never be null.
       case ObjectType(cls) if cls.isArray && cls.getComponentType.isPrimitive =>
@@ -488,7 +531,7 @@ case class MapObjects private(
           if (${genFunction.isNull}) {
             $convertedArray[$loopIndex] = null;
           } else {
-            $convertedArray[$loopIndex] = ${genFunction.value};
+            $convertedArray[$loopIndex] = $genFunctionValue;
           }
 
           $loopIndex += 1;
@@ -846,18 +889,26 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override def foldable: Boolean = false
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  private val errMsg = "Null value appeared in non-nullable field:" +
+    walkedTypePath.mkString("\n", "\n", "\n") +
+    "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
+    "please try to use scala.Option[_] or other nullable types " +
+    "(e.g. java.lang.Integer instead of int/scala.Int)."
+
+  override def eval(input: InternalRow): Any = {
+    val result = child.eval(input)
+    if (result == null) {
+      throw new RuntimeException(errMsg);
+    }
+    result
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
 
-    val errMsg = "Null value appeared in non-nullable field:" +
-      walkedTypePath.mkString("\n", "\n", "\n") +
-      "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
-      "please try to use scala.Option[_] or other nullable types " +
-      "(e.g. java.lang.Integer instead of int/scala.Int)."
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the value is null.
+    val errMsgField = ctx.addReferenceObj(errMsg)
 
     val code = s"""
       ${childGen.code}
@@ -889,7 +940,12 @@ case class GetExternalRowField(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
+  private val errMsg = s"The ${index}th field '$fieldName' of input row cannot be null."
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the field is null.
+    val errMsgField = ctx.addReferenceObj(errMsg)
     val row = child.genCode(ctx)
     val code = s"""
       ${row.code}
@@ -899,8 +955,7 @@ case class GetExternalRowField(
       }
 
       if (${row.value}.isNullAt($index)) {
-        throw new RuntimeException("The ${index}th field '$fieldName' of input row " +
-          "cannot be null.");
+        throw new RuntimeException($errMsgField);
       }
 
       final Object ${ev.value} = ${row.value}.get($index);
@@ -925,7 +980,12 @@ case class ValidateExternalType(child: Expression, expected: DataType)
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
+  private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the type doesn't match.
+    val errMsgField = ctx.addReferenceObj(errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
 
@@ -946,8 +1006,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         if ($typeCheck) {
           ${ev.value} = (${ctx.boxedType(dataType)}) $obj;
         } else {
-          throw new RuntimeException($obj.getClass().getName() + " is not a valid " +
-            "external type for schema of ${expected.simpleString}");
+          throw new RuntimeException($obj.getClass().getName() + $errMsgField);
         }
       }
 

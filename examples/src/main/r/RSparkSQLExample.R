@@ -18,31 +18,43 @@
 library(SparkR)
 
 # $example on:init_session$
-sparkR.session(appName = "MyApp", sparkConfig = list(spark.executor.memory = "1g"))
+sparkR.session(appName = "R Spark SQL basic example", sparkConfig = list(spark.some.config.option = "some-value"))
 # $example off:init_session$
 
 
-# $example on:create_DataFrames$
+# $example on:create_df$
 df <- read.json("examples/src/main/resources/people.json")
 
 # Displays the content of the DataFrame
 head(df)
+##   age    name
+## 1  NA Michael
+## 2  30    Andy
+## 3  19  Justin
 
 # Another method to print the first few rows and optionally truncate the printing of long values
 showDF(df)
-# $example off:create_DataFrames$
+## +----+-------+
+## | age|   name|
+## +----+-------+
+## |null|Michael|
+## |  30|   Andy|
+## |  19| Justin|
+## +----+-------+
+## $example off:create_df$
 
 
-# $example on:dataframe_operations$
+# $example on:untyped_ops$
 # Create the DataFrame
 df <- read.json("examples/src/main/resources/people.json")
 
 # Show the content of the DataFrame
 head(df)
-## age  name
-## null Michael
-## 30   Andy
-## 19   Justin
+##   age    name
+## 1  NA Michael
+## 2  30    Andy
+## 3  19  Justin
+
 
 # Print the schema in a tree format
 printSchema(df)
@@ -52,58 +64,58 @@ printSchema(df)
 
 # Select only the "name" column
 head(select(df, "name"))
-## name
-## Michael
-## Andy
-## Justin
+##      name
+## 1 Michael
+## 2    Andy
+## 3  Justin
 
 # Select everybody, but increment the age by 1
 head(select(df, df$name, df$age + 1))
-## name    (age + 1)
-## Michael null
-## Andy    31
-## Justin  20
+##      name (age + 1.0)
+## 1 Michael          NA
+## 2    Andy          31
+## 3  Justin          20
 
 # Select people older than 21
 head(where(df, df$age > 21))
-## age name
-## 30  Andy
+##   age name
+## 1  30 Andy
 
 # Count people by age
 head(count(groupBy(df, "age")))
-## age  count
-## null 1
-## 19   1
-## 30   1
-# $example off:dataframe_operations$
+##   age count
+## 1  19     1
+## 2  NA     1
+## 3  30     1
+# $example off:untyped_ops$
 
 
 # Register this DataFrame as a table.
 createOrReplaceTempView(df, "table")
-# $example on:sql_query$
+# $example on:run_sql$
 df <- sql("SELECT * FROM table")
-# $example off:sql_query$
+# $example off:run_sql$
 
 
-# $example on:source_parquet$
+# $example on:generic_load_save_functions$
 df <- read.df("examples/src/main/resources/users.parquet")
 write.df(select(df, "name", "favorite_color"), "namesAndFavColors.parquet")
-# $example off:source_parquet$
+# $example off:generic_load_save_functions$
 
 
-# $example on:source_json$
+# $example on:manual_load_options$
 df <- read.df("examples/src/main/resources/people.json", "json")
 namesAndAges <- select(df, "name", "age")
 write.df(namesAndAges, "namesAndAges.parquet", "parquet")
-# $example off:source_json$
+# $example off:manual_load_options$
 
 
-# $example on:direct_query$
+# $example on:direct_sql$
 df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
-# $example off:direct_query$
+# $example off:direct_sql$
 
 
-# $example on:load_programmatically$
+# $example on:basic_parquet_example$
 df <- read.df("examples/src/main/resources/people.json", "json")
 
 # SparkDataFrame can be saved as Parquet files, maintaining the schema information.
@@ -117,7 +129,7 @@ parquetFile <- read.parquet("people.parquet")
 createOrReplaceTempView(parquetFile, "parquetFile")
 teenagers <- sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 head(teenagers)
-## name
+##     name
 ## 1 Justin
 
 # We can also run custom R-UDFs on Spark DataFrames. Here we prefix all the names with "Name:"
@@ -129,7 +141,7 @@ for (teenName in collect(teenNames)$name) {
 ## Name: Michael
 ## Name: Andy
 ## Name: Justin
-# $example off:load_programmatically$
+# $example off:basic_parquet_example$
 
 
 # $example on:schema_merging$
@@ -146,18 +158,17 @@ write.df(df2, "data/test_table/key=2", "parquet", "overwrite")
 # Read the partitioned table
 df3 <- read.df("data/test_table", "parquet", mergeSchema = "true")
 printSchema(df3)
-
 # The final schema consists of all 3 columns in the Parquet files together
-# with the partitioning column appeared in the partition directory paths.
-# root
-# |-- single: double (nullable = true)
-# |-- double: double (nullable = true)
-# |-- triple: double (nullable = true)
-# |-- key : int (nullable = true)
+# with the partitioning column appeared in the partition directory paths
+## root
+##  |-- single: double (nullable = true)
+##  |-- double: double (nullable = true)
+##  |-- triple: double (nullable = true)
+##  |-- key: integer (nullable = true)
 # $example off:schema_merging$
 
 
-# $example on:load_json_file$
+# $example on:json_dataset$
 # A JSON dataset is pointed to by path.
 # The path can be either a single text file or a directory storing text files.
 path <- "examples/src/main/resources/people.json"
@@ -166,9 +177,9 @@ people <- read.json(path)
 
 # The inferred schema can be visualized using the printSchema() method.
 printSchema(people)
-# root
-#  |-- age: long (nullable = true)
-#  |-- name: string (nullable = true)
+## root
+##  |-- age: long (nullable = true)
+##  |-- name: string (nullable = true)
 
 # Register this DataFrame as a table.
 createOrReplaceTempView(people, "people")
@@ -176,12 +187,12 @@ createOrReplaceTempView(people, "people")
 # SQL statements can be run by using the sql methods.
 teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 head(teenagers)
-## name
+##     name
 ## 1 Justin
-# $example off:load_json_file$
+# $example off:json_dataset$
 
 
-# $example on:hive_table$
+# $example on:spark_hive$
 # enableHiveSupport defaults to TRUE
 sparkR.session(enableHiveSupport = TRUE)
 sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
@@ -189,12 +200,16 @@ sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src
 
 # Queries can be expressed in HiveQL.
 results <- collect(sql("FROM src SELECT key, value"))
-# $example off:hive_table$
+# $example off:spark_hive$
 
 
-# $example on:jdbc$
+# $example on:jdbc_dataset$
+# Loading data from a JDBC source
 df <- read.jdbc("jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
-# $example off:jdbc$
+
+# Saving data to a JDBC source
+write.jdbc(df, "jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
+# $example off:jdbc_dataset$
 
 # Stop the SparkSession now
 sparkR.session.stop()

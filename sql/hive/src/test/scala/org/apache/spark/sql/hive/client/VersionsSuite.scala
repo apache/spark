@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.client
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -32,10 +31,11 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
@@ -146,7 +146,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       CatalogTable(
         identifier = TableIdentifier(tableName, Some(database)),
         tableType = CatalogTableType.MANAGED,
-        schema = Seq(CatalogColumn("key", "int")),
+        schema = new StructType().add("key", "int"),
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = Some(classOf[TextInputFormat].getName),
@@ -216,6 +216,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
         tableName = "src",
         replace = false,
         holdDDLTime = false)
+    }
+
+    test(s"$version: tableExists") {
+      // No exception should be thrown
+      assert(client.tableExists("default", "src"))
+      assert(!client.tableExists("default", "nonexistent"))
     }
 
     test(s"$version: getTable") {
@@ -331,12 +337,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
       client.loadPartition(
         emptyDir,
-        "default.src_part",
+        "default",
+        "src_part",
         partSpec,
         replace = false,
         holdDDLTime = false,
-        inheritTableSpecs = false,
-        isSkewedStoreAsSubdir = false)
+        inheritTableSpecs = false)
     }
 
     test(s"$version: loadDynamicPartitions") {
@@ -346,12 +352,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
       client.loadDynamicPartitions(
         emptyDir,
-        "default.src_part",
+        "default",
+        "src_part",
         partSpec,
         replace = false,
         numDP = 1,
-        false,
-        false)
+        holdDDLTime = false)
     }
 
     test(s"$version: renamePartitions") {

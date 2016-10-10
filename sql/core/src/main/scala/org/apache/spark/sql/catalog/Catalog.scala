@@ -102,6 +102,90 @@ abstract class Catalog {
   def listColumns(dbName: String, tableName: String): Dataset[Column]
 
   /**
+   * Get the database with the specified name. This throws an AnalysisException when the database
+   * cannot be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("database does not exist")
+  def getDatabase(dbName: String): Database
+
+  /**
+   * Get the table or view with the specified name. This table can be a temporary view or a
+   * table/view in the current database. This throws an AnalysisException when no Table
+   * can be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("table does not exist")
+  def getTable(tableName: String): Table
+
+  /**
+   * Get the table or view with the specified name in the specified database. This throws an
+   * AnalysisException when no Table can be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("database or table does not exist")
+  def getTable(dbName: String, tableName: String): Table
+
+  /**
+   * Get the function with the specified name. This function can be a temporary function or a
+   * function in the current database. This throws an AnalysisException when the function cannot
+   * be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("function does not exist")
+  def getFunction(functionName: String): Function
+
+  /**
+   * Get the function with the specified name. This throws an AnalysisException when the function
+   * cannot be found.
+   *
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]("database or function does not exist")
+  def getFunction(dbName: String, functionName: String): Function
+
+  /**
+   * Check if the database with the specified name exists.
+   *
+   * @since 2.1.0
+   */
+  def databaseExists(dbName: String): Boolean
+
+  /**
+   * Check if the table or view with the specified name exists. This can either be a temporary
+   * view or a table/view in the current database.
+   *
+   * @since 2.1.0
+   */
+  def tableExists(tableName: String): Boolean
+
+  /**
+   * Check if the table or view with the specified name exists in the specified database.
+   *
+   * @since 2.1.0
+   */
+  def tableExists(dbName: String, tableName: String): Boolean
+
+  /**
+   * Check if the function with the specified name exists. This can either be a temporary function
+   * or a function in the current database.
+   *
+   * @since 2.1.0
+   */
+  def functionExists(functionName: String): Boolean
+
+  /**
+   * Check if the function with the specified name exists in the specified database.
+   *
+   * @since 2.1.0
+   */
+  def functionExists(dbName: String, functionName: String): Boolean
+
+  /**
    * :: Experimental ::
    * Creates an external table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
@@ -178,13 +262,31 @@ abstract class Catalog {
       options: Map[String, String]): DataFrame
 
   /**
-   * Drops the temporary view with the given view name in the catalog.
+   * Drops the local temporary view with the given view name in the catalog.
    * If the view has been cached before, then it will also be uncached.
+   *
+   * Local temporary view is session-scoped. Its lifetime is the lifetime of the session that
+   * created it, i.e. it will be automatically dropped when the session terminates. It's not
+   * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
    *
    * @param viewName the name of the view to be dropped.
    * @since 2.0.0
    */
   def dropTempView(viewName: String): Unit
+
+  /**
+   * Drops the global temporary view with the given view name in the catalog.
+   * If the view has been cached before, then it will also be uncached.
+   *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   *
+   * @param viewName the name of the view to be dropped.
+   * @since 2.1.0
+   */
+  def dropGlobalTempView(viewName: String): Boolean
 
   /**
    * Returns true if the table is currently cached in-memory.

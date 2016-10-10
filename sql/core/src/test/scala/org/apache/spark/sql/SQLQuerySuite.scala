@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql
 
+import java.io.File
 import java.math.MathContext
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
@@ -37,26 +38,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   setupTestData()
-
-  test("having clause") {
-    withTempView("hav") {
-      Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
-        .createOrReplaceTempView("hav")
-      checkAnswer(
-        sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
-        Row("one", 6) :: Row("three", 3) :: Nil)
-    }
-  }
-
-  test("having condition contains grouping column") {
-    withTempView("hav") {
-      Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
-        .createOrReplaceTempView("hav")
-      checkAnswer(
-        sql("SELECT count(k) FROM hav GROUP BY v + 1 HAVING v + 1 = 2"),
-        Row(1) :: Nil)
-    }
-  }
 
   test("SPARK-8010: promote numeric to string") {
     val df = Seq((1, 1)).toDF("key", "value")
@@ -464,12 +445,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
-  test("index into array") {
-    checkAnswer(
-      sql("SELECT data, data[0], data[0] + data[1], data[0 + 1] FROM arrayData"),
-      arrayData.map(d => Row(d.data, d.data(0), d.data(0) + d.data(1), d.data(1))).collect())
-  }
-
   test("left semi greater than predicate") {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       checkAnswer(
@@ -491,117 +466,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("index into array of arrays") {
-    checkAnswer(
-      sql(
-        "SELECT nestedData, nestedData[0][0], nestedData[0][0] + nestedData[0][1] FROM arrayData"),
-      arrayData.map(d =>
-        Row(d.nestedData,
-         d.nestedData(0)(0),
-         d.nestedData(0)(0) + d.nestedData(0)(1))).collect().toSeq)
-  }
-
   test("agg") {
     checkAnswer(
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
       Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
-  }
-
-  test("Group By Ordinal - basic") {
-    checkAnswer(
-      sql("SELECT a, sum(b) FROM testData2 GROUP BY 1"),
-      sql("SELECT a, sum(b) FROM testData2 GROUP BY a"))
-
-    // duplicate group-by columns
-    checkAnswer(
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-
-    checkAnswer(
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY 1, 2"),
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-  }
-
-  test("Group By Ordinal - non aggregate expressions") {
-    checkAnswer(
-      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, 2"),
-      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
-
-    checkAnswer(
-      sql("SELECT a, b + 2 as c, count(2) FROM testData2 GROUP BY a, 2"),
-      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
-  }
-
-  test("Group By Ordinal - non-foldable constant expression") {
-    checkAnswer(
-      sql("SELECT a, b, sum(b) FROM testData2 GROUP BY a, b, 1 + 0"),
-      sql("SELECT a, b, sum(b) FROM testData2 GROUP BY a, b"))
-
-    checkAnswer(
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-  }
-
-  test("Group By Ordinal - alias") {
-    checkAnswer(
-      sql("SELECT a, (b + 2) as c, count(2) FROM testData2 GROUP BY a, 2"),
-      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
-
-    checkAnswer(
-      sql("SELECT a as b, b as a, sum(b) FROM testData2 GROUP BY 1, 2"),
-      sql("SELECT a, b, sum(b) FROM testData2 GROUP BY a, b"))
-  }
-
-  test("Group By Ordinal - constants") {
-    checkAnswer(
-      sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
-      sql("SELECT 1, 2, sum(b) FROM testData2"))
-  }
-
-  test("Group By Ordinal - negative cases") {
-    intercept[UnresolvedException[Aggregate]] {
-      sql("SELECT a, b FROM testData2 GROUP BY -1")
-    }
-
-    intercept[UnresolvedException[Aggregate]] {
-      sql("SELECT a, b FROM testData2 GROUP BY 3")
-    }
-
-    var e = intercept[UnresolvedException[Aggregate]](
-      sql("SELECT SUM(a) FROM testData2 GROUP BY 1"))
-    assert(e.getMessage contains
-      "Invalid call to Group by position: the '1'th column in the select contains " +
-        "an aggregate function")
-
-    e = intercept[UnresolvedException[Aggregate]](
-      sql("SELECT SUM(a) + 1 FROM testData2 GROUP BY 1"))
-    assert(e.getMessage contains
-      "Invalid call to Group by position: the '1'th column in the select contains " +
-        "an aggregate function")
-
-    var ae = intercept[AnalysisException](
-      sql("SELECT a, rand(0), sum(b) FROM testData2 GROUP BY a, 2"))
-    assert(ae.getMessage contains
-      "nondeterministic expression rand(0) should not appear in grouping expression")
-
-    ae = intercept[AnalysisException](
-      sql("SELECT * FROM testData2 GROUP BY a, b, 1"))
-    assert(ae.getMessage contains
-      "Group by position: star is not allowed to use in the select list " +
-        "when using ordinals in group by")
-  }
-
-  test("Group By Ordinal: spark.sql.groupByOrdinal=false") {
-    withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
-      // If spark.sql.groupByOrdinal=false, ignore the position number.
-      intercept[AnalysisException] {
-        sql("SELECT a, sum(b) FROM testData2 GROUP BY 1")
-      }
-      // '*' is not allowed to use in the select list when users specify ordinals in group by
-      checkAnswer(
-        sql("SELECT * FROM testData2 GROUP BY a, b, 1"),
-        sql("SELECT * FROM testData2 GROUP BY a, b"))
-    }
   }
 
   test("aggregates with nulls") {
@@ -670,49 +538,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     sortTest()
   }
 
-  test("limit") {
-    checkAnswer(
-      sql("SELECT * FROM testData LIMIT 9 + 1"),
-      testData.take(10).toSeq)
-
-    checkAnswer(
-      sql("SELECT * FROM arrayData LIMIT CAST(1 AS Integer)"),
-      arrayData.collect().take(1).map(Row.fromTuple).toSeq)
-
-    checkAnswer(
-      sql("SELECT * FROM mapData LIMIT 1"),
-      mapData.collect().take(1).map(Row.fromTuple).toSeq)
-  }
-
-  test("non-foldable expressions in LIMIT") {
-    val e = intercept[AnalysisException] {
-      sql("SELECT * FROM testData LIMIT key > 3")
-    }.getMessage
-    assert(e.contains("The limit expression must evaluate to a constant value, " +
-      "but got (testdata.`key` > 3)"))
-  }
-
-  test("Expressions in limit clause are not integer") {
-    var e = intercept[AnalysisException] {
-      sql("SELECT * FROM testData LIMIT true")
-    }.getMessage
-    assert(e.contains("The limit expression must be integer type, but got boolean"))
-
-    e = intercept[AnalysisException] {
-      sql("SELECT * FROM testData LIMIT 'a'")
-    }.getMessage
-    assert(e.contains("The limit expression must be integer type, but got string"))
-  }
-
   test("negative in LIMIT or TABLESAMPLE") {
     val expected = "The limit expression must be equal to or greater than 0, but got -1"
     var e = intercept[AnalysisException] {
       sql("SELECT * FROM testData TABLESAMPLE (-1 rows)")
-    }.getMessage
-    assert(e.contains(expected))
-
-    e = intercept[AnalysisException] {
-      sql("SELECT * FROM testData LIMIT -1")
     }.getMessage
     assert(e.contains(expected))
   }
@@ -1103,6 +932,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData"), Nil)
   }
 
+  test("MINUS") {
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData MINUS SELECT * FROM upperCaseData"),
+      Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Row(4, "d") :: Nil)
+    checkAnswer(
+      sql("SELECT * FROM lowerCaseData MINUS SELECT * FROM lowerCaseData"), Nil)
+    checkAnswer(
+      sql("SELECT * FROM upperCaseData MINUS SELECT * FROM upperCaseData"), Nil)
+  }
+
   test("INTERSECT") {
     checkAnswer(
       sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
@@ -1345,136 +1184,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val df = spark.range(0, 5).map(x => (1 / x).toString).toDF("a").orderBy("a")
       df.queryExecution.toRdd // force physical planning, but not execution of the plan
     }
-  }
-
-  test("Test to check we can use Long.MinValue") {
-    checkAnswer(
-      sql(s"SELECT ${Long.MinValue} FROM testData ORDER BY key LIMIT 1"), Row(Long.MinValue)
-    )
-
-    checkAnswer(
-      sql(s"SELECT key FROM testData WHERE key > ${Long.MinValue}"),
-      (1 to 100).map(Row(_)).toSeq
-    )
-  }
-
-  test("Floating point number format") {
-    checkAnswer(
-      sql("SELECT 0.3"), Row(BigDecimal(0.3))
-    )
-
-    checkAnswer(
-      sql("SELECT -0.8"), Row(BigDecimal(-0.8))
-    )
-
-    checkAnswer(
-      sql("SELECT .5"), Row(BigDecimal(0.5))
-    )
-
-    checkAnswer(
-      sql("SELECT -.18"), Row(BigDecimal(-0.18))
-    )
-  }
-
-  test("Auto cast integer type") {
-    checkAnswer(
-      sql(s"SELECT ${Int.MaxValue + 1L}"), Row(Int.MaxValue + 1L)
-    )
-
-    checkAnswer(
-      sql(s"SELECT ${Int.MinValue - 1L}"), Row(Int.MinValue - 1L)
-    )
-
-    checkAnswer(
-      sql("SELECT 9223372036854775808"), Row(new java.math.BigDecimal("9223372036854775808"))
-    )
-
-    checkAnswer(
-      sql("SELECT -9223372036854775809"), Row(new java.math.BigDecimal("-9223372036854775809"))
-    )
-  }
-
-  test("Test to check we can apply sign to expression") {
-
-    checkAnswer(
-      sql("SELECT -100"), Row(-100)
-    )
-
-    checkAnswer(
-      sql("SELECT +230"), Row(230)
-    )
-
-    checkAnswer(
-      sql("SELECT -5.2"), Row(BigDecimal(-5.2))
-    )
-
-    checkAnswer(
-      sql("SELECT +6.8e0"), Row(6.8d)
-    )
-
-    checkAnswer(
-      sql("SELECT -key FROM testData WHERE key = 2"), Row(-2)
-    )
-
-    checkAnswer(
-      sql("SELECT +key FROM testData WHERE key = 3"), Row(3)
-    )
-
-    checkAnswer(
-      sql("SELECT -(key + 1) FROM testData WHERE key = 1"), Row(-2)
-    )
-
-    checkAnswer(
-      sql("SELECT - key + 1 FROM testData WHERE key = 10"), Row(-9)
-    )
-
-    checkAnswer(
-      sql("SELECT +(key + 5) FROM testData WHERE key = 5"), Row(10)
-    )
-
-    checkAnswer(
-      sql("SELECT -MAX(key) FROM testData"), Row(-100)
-    )
-
-    checkAnswer(
-      sql("SELECT +MAX(key) FROM testData"), Row(100)
-    )
-
-    checkAnswer(
-      sql("SELECT - (-10)"), Row(10)
-    )
-
-    checkAnswer(
-      sql("SELECT + (-key) FROM testData WHERE key = 32"), Row(-32)
-    )
-
-    checkAnswer(
-      sql("SELECT - (+Max(key)) FROM testData"), Row(-100)
-    )
-
-    checkAnswer(
-      sql("SELECT - - 3"), Row(3)
-    )
-
-    checkAnswer(
-      sql("SELECT - + 20"), Row(-20)
-    )
-
-    checkAnswer(
-      sql("SELEcT - + 45"), Row(-45)
-    )
-
-    checkAnswer(
-      sql("SELECT + + 100"), Row(100)
-    )
-
-    checkAnswer(
-      sql("SELECT - - Max(key) FROM testData"), Row(100)
-    )
-
-    checkAnswer(
-      sql("SELECT + - key FROM testData WHERE key = 33"), Row(-33)
-    )
   }
 
   test("Multiple join") {
@@ -1936,21 +1645,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
     }
-    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro. " +
-      "Please use Spark package http://spark-packages.org/package/databricks/spark-avro"))
+    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro."))
 
     // data source type is case insensitive
     e = intercept[AnalysisException] {
       sql(s"select id from Avro.`file_path`")
     }
-    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
-      "http://spark-packages.org/package/databricks/spark-avro"))
+    assert(e.message.contains("Failed to find data source: avro."))
 
     e = intercept[AnalysisException] {
       sql(s"select id from avro.`file_path`")
     }
-    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
-      "http://spark-packages.org/package/databricks/spark-avro"))
+    assert(e.message.contains("Failed to find data source: avro."))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
@@ -1992,15 +1698,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         df4,
         df1.withColumn("diff", lit(0)))
-    }
-  }
-
-  test("SPARK-11032: resolve having correctly") {
-    withTempView("src") {
-      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("src")
-      checkAnswer(
-        sql("SELECT MIN(t.i) FROM (SELECT * FROM src WHERE i > 0) t HAVING(COUNT(1) > 0)"),
-        Row(1))
     }
   }
 
@@ -2503,70 +2200,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("order by ordinal number") {
-    checkAnswer(
-      sql("SELECT * FROM testData2 ORDER BY 1 DESC"),
-      sql("SELECT * FROM testData2 ORDER BY a DESC"))
-    // If the position is not an integer, ignore it.
-    checkAnswer(
-      sql("SELECT * FROM testData2 ORDER BY 1 + 0 DESC, b ASC"),
-      sql("SELECT * FROM testData2 ORDER BY b ASC"))
-    checkAnswer(
-      sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
-      sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"))
-    checkAnswer(
-      sql("SELECT * FROM testData2 SORT BY 1 DESC, 2"),
-      sql("SELECT * FROM testData2 SORT BY a DESC, b ASC"))
-    checkAnswer(
-      sql("SELECT * FROM testData2 ORDER BY 1 ASC, b ASC"),
-      Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
-  }
-
-  test("order by ordinal number - negative cases") {
-    intercept[UnresolvedException[SortOrder]] {
-      sql("SELECT * FROM testData2 ORDER BY 0")
-    }
-    intercept[UnresolvedException[SortOrder]] {
-      sql("SELECT * FROM testData2 ORDER BY -1 DESC, b ASC")
-    }
-    intercept[UnresolvedException[SortOrder]] {
-      sql("SELECT * FROM testData2 ORDER BY 3 DESC, b ASC")
-    }
-  }
-
-  test("order by ordinal number with conf spark.sql.orderByOrdinal=false") {
-    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
-      // If spark.sql.orderByOrdinal=false, ignore the position number.
-      checkAnswer(
-        sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
-        sql("SELECT * FROM testData2 ORDER BY b ASC"))
-    }
-  }
-
-  test("natural join") {
-    val df1 = Seq(("one", 1), ("two", 2), ("three", 3)).toDF("k", "v1")
-    val df2 = Seq(("one", 1), ("two", 22), ("one", 5)).toDF("k", "v2")
-    withTempView("nt1", "nt2") {
-      df1.createOrReplaceTempView("nt1")
-      df2.createOrReplaceTempView("nt2")
-      checkAnswer(
-        sql("SELECT * FROM nt1 natural join nt2 where k = \"one\""),
-        Row("one", 1, 1) :: Row("one", 1, 5) :: Nil)
-
-      checkAnswer(
-        sql("SELECT * FROM nt1 natural left join nt2 order by v1, v2"),
-        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Row("three", 3, null) :: Nil)
-
-      checkAnswer(
-        sql("SELECT * FROM nt1 natural right join nt2 order by v1, v2"),
-        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Nil)
-
-      checkAnswer(
-        sql("SELECT count(*) FROM nt1 natural full outer join nt2"),
-        Row(4) :: Nil)
-    }
-  }
-
   test("join with using clause") {
     val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
       ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")
@@ -2986,6 +2619,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-16975: Column-partition path starting '_' should be handled correctly") {
+    withTempDir { dir =>
+      val parquetDir = new File(dir, "parquet").getCanonicalPath
+      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(parquetDir)
+      spark.read.parquet(parquetDir)
+    }
+  }
+
   test("SPARK-16644: Aggregate should not put aggregate expressions to constraints") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(a INT, b INT) USING parquet")
@@ -3015,6 +2656,26 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         readBack.selectExpr("`part.col1`", "`col.1`"),
         data.selectExpr("`part.col1`", "`col.1`"))
+    }
+  }
+
+  test("SPARK-17515: CollectLimit.execute() should perform per-partition limits") {
+    val numRecordsRead = spark.sparkContext.longAccumulator
+    spark.range(1, 100, 1, numPartitions = 10).map { x =>
+      numRecordsRead.add(1)
+      x
+    }.limit(1).queryExecution.toRdd.count()
+    assert(numRecordsRead.value === 10)
+  }
+
+  test("CREATE TABLE USING should not fail if a same-name temp view exists") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        spark.range(10).createTempView("same_name")
+        sql("CREATE TABLE same_name(i int) USING json")
+        checkAnswer(spark.table("same_name"), spark.range(10).toDF())
+        assert(spark.table("default.same_name").collect().isEmpty)
+      }
     }
   }
 }

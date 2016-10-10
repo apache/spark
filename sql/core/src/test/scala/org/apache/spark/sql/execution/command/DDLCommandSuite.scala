@@ -20,13 +20,12 @@ package org.apache.spark.sql.execution.command
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTableType, FunctionResource}
-import org.apache.spark.sql.catalyst.catalog.FunctionResourceType
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.execution.datasources.CreateTableUsing
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -243,12 +242,12 @@ class DDLCommandSuite extends PlanTest {
 
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab STORED AS $s"
-      val ct = parseAs[CreateTableCommand](query)
-      val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+      val ct = parseAs[CreateTable](query)
+      val hiveSerde = HiveSerDe.sourceToSerDe(s)
       assert(hiveSerde.isDefined)
-      assert(ct.table.storage.serde == hiveSerde.get.serde)
-      assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-      assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+      assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
+      assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
+      assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
     }
   }
 
@@ -259,14 +258,14 @@ class DDLCommandSuite extends PlanTest {
     val query2 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
 
     // No conflicting serdes here, OK
-    val parsed1 = parseAs[CreateTableCommand](query1)
-    assert(parsed1.table.storage.serde == Some("anything"))
-    assert(parsed1.table.storage.inputFormat == Some("inputfmt"))
-    assert(parsed1.table.storage.outputFormat == Some("outputfmt"))
-    val parsed2 = parseAs[CreateTableCommand](query2)
-    assert(parsed2.table.storage.serde.isEmpty)
-    assert(parsed2.table.storage.inputFormat == Some("inputfmt"))
-    assert(parsed2.table.storage.outputFormat == Some("outputfmt"))
+    val parsed1 = parseAs[CreateTable](query1)
+    assert(parsed1.tableDesc.storage.serde == Some("anything"))
+    assert(parsed1.tableDesc.storage.inputFormat == Some("inputfmt"))
+    assert(parsed1.tableDesc.storage.outputFormat == Some("outputfmt"))
+    val parsed2 = parseAs[CreateTable](query2)
+    assert(parsed2.tableDesc.storage.serde.isEmpty)
+    assert(parsed2.tableDesc.storage.inputFormat == Some("inputfmt"))
+    assert(parsed2.tableDesc.storage.outputFormat == Some("outputfmt"))
   }
 
   test("create table - row format serde and generic file format") {
@@ -276,12 +275,12 @@ class DDLCommandSuite extends PlanTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
       if (supportedSources.contains(s)) {
-        val ct = parseAs[CreateTableCommand](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val ct = parseAs[CreateTable](query)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
-        assert(ct.table.storage.serde == Some("anything"))
-        assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+        assert(ct.tableDesc.storage.serde == Some("anything"))
+        assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
+        assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
         assertUnsupported(query, Seq("row format serde", "incompatible", s))
       }
@@ -295,12 +294,12 @@ class DDLCommandSuite extends PlanTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
       if (supportedSources.contains(s)) {
-        val ct = parseAs[CreateTableCommand](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val ct = parseAs[CreateTable](query)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
-        assert(ct.table.storage.serde == hiveSerde.get.serde)
-        assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+        assert(ct.tableDesc.storage.serde == hiveSerde.get.serde)
+        assert(ct.tableDesc.storage.inputFormat == hiveSerde.get.inputFormat)
+        assert(ct.tableDesc.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
         assertUnsupported(query, Seq("row format delimited", "only compatible with 'textfile'", s))
       }
@@ -312,9 +311,9 @@ class DDLCommandSuite extends PlanTest {
       sql = "CREATE EXTERNAL TABLE my_tab",
       containsThesePhrases = Seq("create external table", "location"))
     val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
-    val ct = parseAs[CreateTableCommand](query)
-    assert(ct.table.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.table.storage.locationUri == Some("/something/anything"))
+    val ct = parseAs[CreateTable](query)
+    assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
+    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
   }
 
   test("create table - property values must be set") {
@@ -329,47 +328,29 @@ class DDLCommandSuite extends PlanTest {
 
   test("create table - location implies external") {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
-    val ct = parseAs[CreateTableCommand](query)
-    assert(ct.table.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.table.storage.locationUri == Some("/something/anything"))
-  }
-
-  test("create table - column repeated in partitioning columns") {
-    val query = "CREATE TABLE tab1 (key INT, value STRING) PARTITIONED BY (key INT, hr STRING)"
-    val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.getMessage.contains(
-      "Operation not allowed: Partition columns may not be specified in the schema: [\"key\"]"))
-  }
-
-  test("create table - duplicate column names in the table definition") {
-    val query = "CREATE TABLE default.tab1 (key INT, key STRING)"
-    val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.getMessage.contains("Operation not allowed: Duplicated column names found in " +
-      "table definition of `default`.`tab1`: [\"key\"]"))
+    val ct = parseAs[CreateTable](query)
+    assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
+    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
   }
 
   test("create table using - with partitioned by") {
     val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
       "USING parquet PARTITIONED BY (a)"
-    val expected = CreateTableUsing(
-      TableIdentifier("my_tab"),
-      Some(new StructType()
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("my_tab"),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType()
         .add("a", IntegerType, nullable = true, "test")
-        .add("b", StringType)),
-      "parquet",
-      false,
-      Map.empty,
-      null,
-      None,
-      false,
-      true)
+        .add("b", StringType),
+      provider = Some("parquet"),
+      partitionColumnNames = Seq("a")
+    )
 
     parser.parsePlan(query) match {
-      case ct: CreateTableUsing =>
-        // We can't compare array in `CreateTableUsing` directly, so here we compare
-        // `partitionColumns` ahead, and make `partitionColumns` null before plan comparison.
-        assert(Seq("a") == ct.partitionColumns.toSeq)
-        comparePlans(ct.copy(partitionColumns = null), expected)
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
           s"got ${other.getClass.getName}: $query")
@@ -379,23 +360,19 @@ class DDLCommandSuite extends PlanTest {
   test("create table using - with bucket") {
     val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
       "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
-    val expected = CreateTableUsing(
-      TableIdentifier("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
-      "parquet",
-      false,
-      Map.empty,
-      null,
-      Some(BucketSpec(5, Seq("a"), Seq("b"))),
-      false,
-      true)
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("my_tab"),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType().add("a", IntegerType).add("b", StringType),
+      provider = Some("parquet"),
+      bucketSpec = Some(BucketSpec(5, Seq("a"), Seq("b")))
+    )
 
     parser.parsePlan(query) match {
-      case ct: CreateTableUsing =>
-        // `Array.empty == Array.empty` returns false, here we set `partitionColumns` to null before
-        // plan comparison.
-        assert(ct.partitionColumns.isEmpty)
-        comparePlans(ct.copy(partitionColumns = null), expected)
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
           s"got ${other.getClass.getName}: $query")
@@ -411,14 +388,19 @@ class DDLCommandSuite extends PlanTest {
     val parsed_view = parser.parsePlan(sql_view)
     val expected_table = AlterTableRenameCommand(
       TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None),
+      "new_table_name",
       isView = false)
     val expected_view = AlterTableRenameCommand(
       TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None),
+      "new_table_name",
       isView = true)
     comparePlans(parsed_table, expected_table)
     comparePlans(parsed_view, expected_view)
+
+    val e = intercept[ParseException](
+      parser.parsePlan("ALTER TABLE db1.tbl RENAME TO db1.tbl2")
+    )
+    assert(e.getMessage.contains("Can not specify database in table/view name after RENAME TO"))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -561,6 +543,14 @@ class DDLCommandSuite extends PlanTest {
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
+  }
+
+  test("alter table: recover partitions") {
+    val sql = "ALTER TABLE table_name RECOVER PARTITIONS"
+    val parsed = parser.parsePlan(sql)
+    val expected = AlterTableRecoverPartitionsCommand(
+      TableIdentifier("table_name", None))
+    comparePlans(parsed, expected)
   }
 
   test("alter view: add partition (not supported)") {
@@ -907,22 +897,20 @@ class DDLCommandSuite extends PlanTest {
         |CREATE TABLE table_name USING json
         |OPTIONS (a 1, b 0.1, c TRUE)
       """.stripMargin
-    val expected = CreateTableUsing(
-      TableIdentifier("table_name"),
-      None,
-      "json",
-      false,
-      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
-      null,
-      None,
-      false,
-      true)
+
+    val expectedTableDesc = CatalogTable(
+      identifier = TableIdentifier("table_name"),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty.copy(
+        properties = Map("a" -> "1", "b" -> "0.1", "c" -> "true")
+      ),
+      schema = new StructType,
+      provider = Some("json")
+    )
 
     parser.parsePlan(sql) match {
-      case ct: CreateTableUsing =>
-        // We can't compare array in `CreateTableUsing` directly, so here we explicitly
-        // set partitionColumns to `null` and then compare it.
-        comparePlans(ct.copy(partitionColumns = null), expected)
+      case CreateTable(tableDesc, _, None) =>
+        assert(tableDesc == expectedTableDesc.copy(createTime = tableDesc.createTime))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
           s"got ${other.getClass.getName}: $sql")

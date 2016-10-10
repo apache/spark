@@ -24,13 +24,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -408,6 +408,39 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("[SPARK-16818] partition pruned file scans implement sameResult correctly") {
+    withTempPath { path =>
+      val tempDir = path.getCanonicalPath
+      spark.range(100)
+        .selectExpr("id", "id as b")
+        .write
+        .partitionBy("id")
+        .parquet(tempDir)
+      val df = spark.read.parquet(tempDir)
+      def getPlan(df: DataFrame): SparkPlan = {
+        df.queryExecution.executedPlan
+      }
+      assert(getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 2"))))
+      assert(!getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 3"))))
+    }
+  }
+
+  test("[SPARK-16818] exchange reuse respects differences in partition pruning") {
+    spark.conf.set("spark.sql.exchange.reuse", true)
+    withTempPath { path =>
+      val tempDir = path.getCanonicalPath
+      spark.range(10)
+        .selectExpr("id % 2 as a", "id % 3 as b", "id as c")
+        .write
+        .partitionBy("a")
+        .parquet(tempDir)
+      val df = spark.read.parquet(tempDir)
+      val df1 = df.where("a = 0").groupBy("b").agg("c" -> "sum")
+      val df2 = df.where("a = 1").groupBy("b").agg("c" -> "sum")
+      checkAnswer(df1.join(df2, "b"), Row(0, 6, 12) :: Row(1, 4, 8) :: Row(2, 10, 5) :: Nil)
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
@@ -475,7 +508,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       val bucketed = df.queryExecution.analyzed transform {
         case l @ LogicalRelation(r: HadoopFsRelation, _, _) =>
           l.copy(relation =
-            r.copy(bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil))))
+            r.copy(bucketSpec =
+              Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))
       }
       Dataset.ofRows(spark, bucketed)
     } else {
@@ -485,8 +519,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
   def getFileScanRDD(df: DataFrame): FileScanRDD = {
     df.queryExecution.executedPlan.collect {
-      case scan: DataSourceScanExec if scan.rdd.isInstanceOf[FileScanRDD] =>
-        scan.rdd.asInstanceOf[FileScanRDD]
+      case scan: DataSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
+        scan.inputRDDs().head.asInstanceOf[FileScanRDD]
     }.headOption.getOrElse {
       fail(s"No FileScan in query\n${df.queryExecution}")
     }

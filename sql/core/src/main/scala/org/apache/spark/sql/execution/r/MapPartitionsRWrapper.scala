@@ -21,12 +21,12 @@ import org.apache.spark.api.r._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.api.r.SQLUtils._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * A function wrapper that applies the given R function to each partition.
  */
-private[sql] case class MapPartitionsRWrapper(
+case class MapPartitionsRWrapper(
     func: Array[Byte],
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],

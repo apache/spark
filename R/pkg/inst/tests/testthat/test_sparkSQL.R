@@ -39,7 +39,7 @@ setHiveContext <- function(sc) {
     # initialize once and reuse
     ssc <- callJMethod(sc, "sc")
     hiveCtx <- tryCatch({
-      newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+      newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc, FALSE)
     },
     error = function(err) {
       skip("Hive is not build with SparkSQL, skipped")
@@ -208,7 +208,7 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
-test_that("read csv as DataFrame", {
+test_that("read/write csv as DataFrame", {
   csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
   mockLinesCsv <- c("year,make,model,comment,blank",
                    "\"2012\",\"Tesla\",\"S\",\"No comment\",",
@@ -243,6 +243,33 @@ test_that("read csv as DataFrame", {
   expect_equal(count(withoutna2), 3)
   expect_equal(count(where(withoutna2, withoutna2$make == "Dummy")), 0)
 
+  # writing csv file
+  csvPath2 <- tempfile(pattern = "csvtest2", fileext = ".csv")
+  write.df(df2, path = csvPath2, "csv", header = "true")
+  df3 <- read.df(csvPath2, "csv", header = "true")
+  expect_equal(nrow(df3), nrow(df2))
+  expect_equal(colnames(df3), colnames(df2))
+  csv <- read.csv(file = list.files(csvPath2, pattern = "^part", full.names = T)[[1]])
+  expect_equal(colnames(df3), colnames(csv))
+
+  unlink(csvPath)
+  unlink(csvPath2)
+})
+
+test_that("Support other types for options", {
+  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+  mockLinesCsv <- c("year,make,model,comment,blank",
+  "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+  "1997,Ford,E350,\"Go get one now they are going fast\",",
+  "2015,Chevy,Volt",
+  "NA,Dummy,Placeholder")
+  writeLines(mockLinesCsv, csvPath)
+
+  csvDf <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
+  expected <- read.df(csvPath, "csv", header = TRUE, inferSchema = TRUE)
+  expect_equal(collect(csvDf), collect(expected))
+
+  expect_error(read.df(csvPath, "csv", header = TRUE, maxColumns = 3))
   unlink(csvPath)
 })
 
@@ -487,10 +514,23 @@ test_that("read/write json files", {
   unlink(jsonPath3)
 })
 
+test_that("read/write json files - compression option", {
+  df <- read.df(jsonPath, "json")
+
+  jsonPath <- tempfile(pattern = "jsonPath", fileext = ".json")
+  write.json(df, jsonPath, compression = "gzip")
+  jsonDF <- read.json(jsonPath)
+  expect_is(jsonDF, "SparkDataFrame")
+  expect_equal(count(jsonDF), count(df))
+  expect_true(length(list.files(jsonPath, pattern = ".gz")) > 0)
+
+  unlink(jsonPath)
+})
+
 test_that("jsonRDD() on a RDD with json string", {
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   rdd <- parallelize(sc, mockLines)
-  expect_equal(count(rdd), 3)
+  expect_equal(countRDD(rdd), 3)
   df <- suppressWarnings(jsonRDD(sqlContext, rdd))
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
@@ -526,6 +566,17 @@ test_that(
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
   dropTempView("table1")
+
+  createOrReplaceTempView(df, "dfView")
+  sqlCast <- collect(sql("select cast('2' as decimal) as x from dfView limit 1"))
+  out <- capture.output(sqlCast)
+  expect_true(is.data.frame(sqlCast))
+  expect_equal(names(sqlCast)[1], "x")
+  expect_equal(nrow(sqlCast), 1)
+  expect_equal(ncol(sqlCast), 1)
+  expect_equal(out[1], "  x")
+  expect_equal(out[2], "1 2")
+  dropTempView("dfView")
 })
 
 test_that("test cache, uncache and clearCache", {
@@ -582,7 +633,7 @@ test_that("toRDD() returns an RRDD", {
   df <- read.json(jsonPath)
   testRDD <- toRDD(df)
   expect_is(testRDD, "RDD")
-  expect_equal(count(testRDD), 3)
+  expect_equal(countRDD(testRDD), 3)
 })
 
 test_that("union on two RDDs created from DataFrames returns an RRDD", {
@@ -592,7 +643,7 @@ test_that("union on two RDDs created from DataFrames returns an RRDD", {
   unioned <- unionRDD(RDD1, RDD2)
   expect_is(unioned, "RDD")
   expect_equal(getSerializedMode(unioned), "byte")
-  expect_equal(collect(unioned)[[2]]$name, "Andy")
+  expect_equal(collectRDD(unioned)[[2]]$name, "Andy")
 })
 
 test_that("union on mixed serialization types correctly returns a byte RRDD", {
@@ -614,14 +665,14 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
   unionByte <- unionRDD(rdd, dfRDD)
   expect_is(unionByte, "RDD")
   expect_equal(getSerializedMode(unionByte), "byte")
-  expect_equal(collect(unionByte)[[1]], 1)
-  expect_equal(collect(unionByte)[[12]]$name, "Andy")
+  expect_equal(collectRDD(unionByte)[[1]], 1)
+  expect_equal(collectRDD(unionByte)[[12]]$name, "Andy")
 
   unionString <- unionRDD(textRDD, dfRDD)
   expect_is(unionString, "RDD")
   expect_equal(getSerializedMode(unionString), "byte")
-  expect_equal(collect(unionString)[[1]], "Michael")
-  expect_equal(collect(unionString)[[5]]$name, "Andy")
+  expect_equal(collectRDD(unionString)[[1]], "Michael")
+  expect_equal(collectRDD(unionString)[[5]]$name, "Andy")
 })
 
 test_that("objectFile() works with row serialization", {
@@ -633,7 +684,7 @@ test_that("objectFile() works with row serialization", {
 
   expect_is(objectIn, "RDD")
   expect_equal(getSerializedMode(objectIn), "byte")
-  expect_equal(collect(objectIn)[[2]]$age, 30)
+  expect_equal(collectRDD(objectIn)[[2]]$age, 30)
 })
 
 test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
@@ -643,7 +694,7 @@ test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
     row
     })
   expect_is(testRDD, "RDD")
-  collected <- collect(testRDD)
+  collected <- collectRDD(testRDD)
   expect_equal(collected[[1]]$name, "Michael")
   expect_equal(collected[[2]]$newCol, 35)
 })
@@ -715,10 +766,10 @@ test_that("multiple pipeline transformations result in an RDD with the correct v
     row
   })
   expect_is(second, "RDD")
-  expect_equal(count(second), 3)
-  expect_equal(collect(second)[[2]]$age, 35)
-  expect_true(collect(second)[[2]]$testCol)
-  expect_false(collect(second)[[3]]$testCol)
+  expect_equal(countRDD(second), 3)
+  expect_equal(collectRDD(second)[[2]]$age, 35)
+  expect_true(collectRDD(second)[[2]]$testCol)
+  expect_false(collectRDD(second)[[3]]$testCol)
 })
 
 test_that("cache(), persist(), and unpersist() on a DataFrame", {
@@ -1608,7 +1659,7 @@ test_that("toJSON() returns an RDD of the correct values", {
   testRDD <- toJSON(df)
   expect_is(testRDD, "RDD")
   expect_equal(getSerializedMode(testRDD), "string")
-  expect_equal(collect(testRDD)[[1]], mockLines[1])
+  expect_equal(collectRDD(testRDD)[[1]], mockLines[1])
 })
 
 test_that("showDF()", {
@@ -1765,6 +1816,21 @@ test_that("read/write ORC files", {
   unsetHiveContext()
 })
 
+test_that("read/write ORC files - compression option", {
+  setHiveContext(sc)
+  df <- read.df(jsonPath, "json")
+
+  orcPath2 <- tempfile(pattern = "orcPath2", fileext = ".orc")
+  write.orc(df, orcPath2, compression = "ZLIB")
+  orcDF <- read.orc(orcPath2)
+  expect_is(orcDF, "SparkDataFrame")
+  expect_equal(count(orcDF), count(df))
+  expect_true(length(list.files(orcPath2, pattern = ".zlib.orc")) > 0)
+
+  unlink(orcPath2)
+  unsetHiveContext()
+})
+
 test_that("read/write Parquet files", {
   df <- read.df(jsonPath, "json")
   # Test write.df and read.df
@@ -1796,6 +1862,23 @@ test_that("read/write Parquet files", {
   unlink(parquetPath4)
 })
 
+test_that("read/write Parquet files - compression option/mode", {
+  df <- read.df(jsonPath, "json")
+  tempPath <- tempfile(pattern = "tempPath", fileext = ".parquet")
+
+  # Test write.df and read.df
+  write.parquet(df, tempPath, compression = "GZIP")
+  df2 <- read.parquet(tempPath)
+  expect_is(df2, "SparkDataFrame")
+  expect_equal(count(df2), 3)
+  expect_true(length(list.files(tempPath, pattern = ".gz.parquet")) > 0)
+
+  write.parquet(df, tempPath, mode = "overwrite")
+  df3 <- read.parquet(tempPath)
+  expect_is(df3, "SparkDataFrame")
+  expect_equal(count(df3), 3)
+})
+
 test_that("read/write text files", {
   # Test write.df and read.df
   df <- read.df(jsonPath, "text")
@@ -1817,6 +1900,19 @@ test_that("read/write text files", {
   unlink(textPath2)
 })
 
+test_that("read/write text files - compression option", {
+  df <- read.df(jsonPath, "text")
+
+  textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+  write.text(df, textPath, compression = "GZIP")
+  textDF <- read.text(textPath)
+  expect_is(textDF, "SparkDataFrame")
+  expect_equal(count(textDF), count(df))
+  expect_true(length(list.files(textPath, pattern = ".gz")) > 0)
+
+  unlink(textPath)
+})
+
 test_that("describe() and summarize() on a DataFrame", {
   df <- read.json(jsonPath)
   stats <- describe(df, "age")
@@ -1824,11 +1920,11 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats)[2, "age"], "24.5")
   expect_equal(collect(stats)[3, "age"], "7.7781745930520225")
   stats <- describe(df)
-  expect_equal(collect(stats)[4, "name"], "Andy")
+  expect_equal(collect(stats)[4, "summary"], "min")
   expect_equal(collect(stats)[5, "age"], "30")
 
   stats2 <- summary(df)
-  expect_equal(collect(stats2)[4, "name"], "Andy")
+  expect_equal(collect(stats2)[4, "summary"], "min")
   expect_equal(collect(stats2)[5, "age"], "30")
 
   # SPARK-16425: SparkR summary() fails on column of type logical
@@ -2089,6 +2185,9 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   # Test primitive types
   DF <- createDataFrame(data, schema)
   expect_equal(coltypes(DF), c("integer", "logical", "POSIXct"))
+  createOrReplaceTempView(DF, "DFView")
+  sqlCast <- sql("select cast('2' as decimal) as x from DFView limit 1")
+  expect_equal(coltypes(sqlCast), "numeric")
 
   # Test complex types
   x <- createDataFrame(list(list(as.environment(
@@ -2131,6 +2230,14 @@ test_that("Method str()", {
   expect_equal(out[6], paste0(" $ Species     : chr \"setosa\" \"setosa\" \"",
                               "setosa\" \"setosa\" \"setosa\" \"setosa\""))
   expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE")
+
+  createOrReplaceTempView(irisDF2, "irisView")
+
+  sqlCast <- sql("select cast('2' as decimal) as x from irisView limit 1")
+  castStr <- capture.output(str(sqlCast))
+  expect_equal(length(castStr), 2)
+  expect_equal(castStr[1], "'SparkDataFrame': 1 variables:")
+  expect_equal(castStr[2], " $ x: num 2")
 
   # A random dataset with many columns. This test is to check str limits
   # the number of columns. Therefore, it will suffice to check for the
@@ -2246,6 +2353,27 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
                x[, c("a", "b", "c")]
               })
   expect_identical(expected, result)
+})
+
+test_that("dapplyCollect() on DataFrame with a binary column", {
+
+  df <- data.frame(key = 1:3)
+  df$bytes <- lapply(df$key, serialize, connection = NULL)
+
+  df_spark <- createDataFrame(df)
+
+  result1 <- collect(df_spark)
+  expect_identical(df, result1)
+
+  result2 <- dapplyCollect(df_spark, function(x) x)
+  expect_identical(df, result2)
+
+  # A data.frame with a single column of bytes
+  scb <- subset(df, select = "bytes")
+  scb_spark <- createDataFrame(scb)
+  result <- dapplyCollect(scb_spark, function(x) x)
+  expect_identical(scb, result)
+
 })
 
 test_that("repartition by columns on DataFrame", {
@@ -2483,6 +2611,47 @@ test_that("enableHiveSupport on SparkSession", {
   conf <- callJMethod(sparkSession, "conf")
   value <- callJMethod(conf, "get", "spark.sql.catalogImplementation", "")
   expect_equal(value, "hive")
+})
+
+test_that("Spark version from SparkSession", {
+  ver <- callJMethod(sc, "version")
+  version <- sparkR.version()
+  expect_equal(ver, version)
+})
+
+test_that("Call DataFrameWriter.save() API in Java without path and check argument types", {
+  df <- read.df(jsonPath, "json")
+  # This tests if the exception is thrown from JVM not from SparkR side.
+  # It makes sure that we can omit path argument in write.df API and then it calls
+  # DataFrameWriter.save() without path.
+  expect_error(write.df(df, source = "csv"),
+               "Error in save : illegal argument - 'path' is not specified")
+
+  # Arguments checking in R side.
+  expect_error(write.df(df, "data.tmp", source = c(1, 2)),
+               paste("source should be character, NULL or omitted. It is the datasource specified",
+                     "in 'spark.sql.sources.default' configuration by default."))
+  expect_error(write.df(df, path = c(3)),
+               "path should be charactor, NULL or omitted.")
+  expect_error(write.df(df, mode = TRUE),
+               "mode should be charactor or omitted. It is 'error' by default.")
+})
+
+test_that("Call DataFrameWriter.load() API in Java without path and check argument types", {
+  # This tests if the exception is thrown from JVM not from SparkR side.
+  # It makes sure that we can omit path argument in read.df API and then it calls
+  # DataFrameWriter.load() without path.
+  expect_error(read.df(source = "json"),
+               paste("Error in loadDF : analysis error - Unable to infer schema for JSON at .",
+                     "It must be specified manually"))
+  expect_error(read.df("arbitrary_path"), "Error in loadDF : analysis error - Path does not exist")
+
+  # Arguments checking in R side.
+  expect_error(read.df(path = c(3)),
+               "path should be charactor, NULL or omitted.")
+  expect_error(read.df(jsonPath, source = c(1, 2)),
+               paste("source should be character, NULL or omitted. It is the datasource specified",
+                     "in 'spark.sql.sources.default' configuration by default."))
 })
 
 unlink(parquetPath)

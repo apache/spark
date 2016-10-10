@@ -33,7 +33,7 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
   private final int vlen;
   private final int recordLength;
 
-  private final long getKeyOffsetForFixedLengthRecords(int rowId) {
+  private long getKeyOffsetForFixedLengthRecords(int rowId) {
     return recordStartOffset + rowId * (long) recordLength;
   }
 
@@ -43,7 +43,7 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
    * Returns an UnsafeRow pointing to the value if succeeds, otherwise returns null.
    */
   @Override
-  public final UnsafeRow appendRow(Object kbase, long koff, int klen,
+  public UnsafeRow appendRow(Object kbase, long koff, int klen,
                              Object vbase, long voff, int vlen) {
     // if run out of max supported rows or page size, return null
     if (numRows >= capacity || page == null || page.size() - pageCursor < recordLength) {
@@ -71,7 +71,7 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
    * Returns the key row in this batch at `rowId`. Returned key row is reused across calls.
    */
   @Override
-  public final UnsafeRow getKeyRow(int rowId) {
+  public UnsafeRow getKeyRow(int rowId) {
     assert(rowId >= 0);
     assert(rowId < numRows);
     if (keyRowId != rowId) { // if keyRowId == rowId, desired keyRow is already cached
@@ -90,7 +90,7 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
    * In most times, 1) is skipped because `getKeyRow(id)` is often called before `getValueRow(id)`.
    */
   @Override
-  protected final UnsafeRow getValueFromKey(int rowId) {
+  protected UnsafeRow getValueFromKey(int rowId) {
     if (keyRowId != rowId) {
       getKeyRow(rowId);
     }
@@ -103,7 +103,7 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
    * Returns an iterator to go through all rows
    */
   @Override
-  public final org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> rowIterator() {
+  public org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> rowIterator() {
     return new org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>() {
       private final UnsafeRow key = new UnsafeRow(keySchema.length());
       private final UnsafeRow value = new UnsafeRow(valueSchema.length());
@@ -165,10 +165,10 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
   protected FixedLengthRowBasedKeyValueBatch(StructType keySchema, StructType valueSchema,
                                              int maxRows, TaskMemoryManager manager) {
     super(keySchema, valueSchema, maxRows, manager);
-    klen = keySchema.defaultSize()
-            + UnsafeRow.calculateBitSetWidthInBytes(keySchema.length());
-    vlen = valueSchema.defaultSize()
-            + UnsafeRow.calculateBitSetWidthInBytes(valueSchema.length());
+    int keySize = keySchema.size() * 8; // each fixed-length field is stored in a 8-byte word
+    int valueSize = valueSchema.size() * 8;
+    klen = keySize + UnsafeRow.calculateBitSetWidthInBytes(keySchema.length());
+    vlen = valueSize + UnsafeRow.calculateBitSetWidthInBytes(valueSchema.length());
     recordLength = klen + vlen + 8;
   }
 }

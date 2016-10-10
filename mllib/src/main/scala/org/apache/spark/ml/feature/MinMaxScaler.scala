@@ -76,11 +76,15 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
 /**
  * Rescale each feature individually to a common range [min, max] linearly using column summary
  * statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
- * feature E is calculated as,
+ * feature E is calculated as:
  *
- * `Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min`
+ * <p><blockquote>
+ *    $$
+ *    Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+ *    $$
+ * </blockquote></p>
  *
- * For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`.
+ * For the case $E_{max} == E_{min}$, $Rescaled(e_i) = 0.5 * (max + min)$.
  * Note that since zero values will probably be transformed to non-zero values, output of the
  * transformer will be DenseVector even for sparse input.
  */
@@ -182,8 +186,10 @@ class MinMaxScalerModel private[ml] (
       val size = values.length
       var i = 0
       while (i < size) {
-        val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
-        values(i) = raw * scale + $(min)
+        if (!values(i).isNaN) {
+          val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
+          values(i) = raw * scale + $(min)
+        }
         i += 1
       }
       Vectors.dense(values)
