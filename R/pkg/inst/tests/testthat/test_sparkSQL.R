@@ -381,7 +381,7 @@ test_that("create DataFrame with different data types", {
 
 test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
   df <- data.frame(
-    id: 1:2,
+    id = 1:2,
     time = c(as.POSIXlt("2016-01-10"), NA),
     date = c(as.Date("2016-10-01"), NA))
 
