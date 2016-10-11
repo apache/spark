@@ -149,6 +149,32 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(model.computeLogLikelihood(dataset) === llk)
   }
 
+  test("check LogLikelihood") {
+    val rdd = sc.parallelize(1 to 5).map(i => TestRow(Vectors.dense(i, i + 1)))
+    val dataset = spark.createDataFrame(rdd)
+
+    val gaussian1 = new MultivariateGaussian(Vectors.dense(Array(-1.0, -1.0)),
+      Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0)))
+    val gaussian2 = new MultivariateGaussian(Vectors.dense(Array(1.0, 1.0)),
+      Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0)))
+    val model = new GaussianMixtureModel("gmm", Array(0.2, 0.8), Array(gaussian1, gaussian2))
+
+    val llk = model.computeLogLikelihood(dataset)
+    assert(llk ~== -52.804472030823533 relTol 1E-4)
+    /*
+       Using the following Python code to compute the log-likelihood:
+
+       import numpy as np
+       from scipy.stats import multivariate_normal
+       data = np.array([[1, 2], [2, 3], [3, 4], [4, 5], [5, 6]])
+       pdf1 = multivariate_normal.pdf(data, mean=[-1, -1], cov=np.array([[1, 0], [0, 1]]))
+       pdf2 = multivariate_normal.pdf(data, mean=[1, 1], cov=np.array([[1, 0], [0, 1]]))
+       pdf = pdf1 * 0.2 + pdf2 * 0.8
+       > sum(np.log(pdf))
+        -52.804472030823533
+     */
+  }
+
   test("read/write") {
     def checkModelData(model: GaussianMixtureModel, model2: GaussianMixtureModel): Unit = {
       assert(model.weights === model2.weights)
