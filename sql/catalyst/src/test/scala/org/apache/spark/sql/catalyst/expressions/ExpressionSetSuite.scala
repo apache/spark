@@ -139,6 +139,29 @@ class ExpressionSetSuite extends SparkFunSuite {
     aUpper > bUpper || aUpper <= Rand(1L) || aUpper <= 10,
     aUpper <= Rand(1L) || aUpper <= 10 || aUpper > bUpper)
 
+  // Partial reorder case: we don't reorder non-deterministic expressions,
+  // but we can reorder sub-expressions in deterministic AND/OR expressions.
+  // There are two predicates:
+  //   (aUpper > bUpper || bUpper > 100) => we can reorder sub-expressions in it.
+  //   (aUpper === Rand(1L))
+  setTest(1,
+    (aUpper > bUpper || bUpper > 100) && aUpper === Rand(1L),
+    (bUpper > 100 || aUpper > bUpper) && aUpper === Rand(1L))
+
+  // There are three predicates:
+  //   (Rand(1L) > aUpper)
+  //   (aUpper <= Rand(1L) && aUpper > bUpper)
+  //   (aUpper > 10 && bUpper > 10) => we can reorder sub-expressions in it.
+  setTest(1,
+    Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (aUpper > 10 && bUpper > 10),
+    Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (bUpper > 10 && aUpper > 10))
+
+  // Same predicates as above, but a negative case when we reorder non-deterministic
+  // expression in (aUpper <= Rand(1L) && aUpper > bUpper).
+  setTest(2,
+    Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (aUpper > 10 && bUpper > 10),
+    Rand(1L) > aUpper || (aUpper > bUpper && aUpper <= Rand(1L)) || (aUpper > 10 && bUpper > 10))
+
   test("add to / remove from set") {
     val initialSet = ExpressionSet(aUpper + 1 :: Nil)
 
