@@ -45,4 +45,5 @@ public class SaslServerBootstrap implements TransportServerBootstrap {
   public RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler) {
     return new SaslRpcHandler(conf, channel, rpcHandler, secretKeyHolder);
   }
+
 }

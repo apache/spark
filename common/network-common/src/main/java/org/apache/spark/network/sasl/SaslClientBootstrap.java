@@ -94,7 +94,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         if(conf.saslEncryptionAesEnabled()) {
           Object result = saslClient.negotiate(client, conf);
           if (result instanceof AesCipher) {
-            logger.info("Enabling AES encryption for client channel {}", client);
+            logger.debug("Enabling AES cipher for client channel {}", client);
             AesEncryption.addToChannel(channel, (AesCipher) result);
           }
         } else {
@@ -116,4 +116,5 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
       }
     }
   }
+
 }

@@ -89,7 +89,7 @@ public class SparkSaslClient implements SaslEncryptionBackend {
     }
   }
 
-  /** Determine whether the authentication exchange has completed. */
+  /** Determines whether the authentication exchange has completed. */
   public synchronized boolean isComplete() {
     return saslClient != null && saslClient.isComplete();
   }

@@ -129,7 +129,7 @@ class SaslRpcHandler extends RpcHandler {
             } else {
               Object result = saslServer.negotiate(message, callback, conf);
               if (result instanceof AesCipher) {
-                logger.info("Enabling AES encryption for Server channel {}", client);
+                logger.debug("Enabling AES cipher for Server channel {}", client);
                 AesEncryption.addToChannel(channel, (AesCipher) result);
               }
             }

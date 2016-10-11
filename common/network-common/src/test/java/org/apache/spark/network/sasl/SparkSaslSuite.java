@@ -277,7 +277,7 @@ public class SparkSaslSuite {
       RpcHandler rpcHandler = mock(RpcHandler.class);
       when(rpcHandler.getStreamManager()).thenReturn(sm);
 
-      byte[] data = new byte[8 * 1024 ];
+      byte[] data = new byte[8 * 1024];
       new Random().nextBytes(data);
       Files.write(data, file);
 

@@ -79,7 +79,7 @@ public class AesEncryption {
         int i;
         byte[] decryptedData = new byte[byteChannel.length()];
         int offset = 0;
-        while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > -1) {
+        while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > 0) {
           offset += i;
           if (offset >= decryptedData.length) break;
         }
@@ -161,4 +161,5 @@ public class AesEncryption {
       byteChannel.reset();
     }
   }
+
 }

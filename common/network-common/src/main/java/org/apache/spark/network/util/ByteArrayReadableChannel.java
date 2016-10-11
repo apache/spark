@@ -51,6 +51,7 @@ public class ByteArrayReadableChannel implements ReadableByteChannel {
 
   public void feedData(ByteBuf buf) {
     int length = buf.readableBytes();
+
     if (buf.hasArray()) {
       data = buf.array();
       buf.skipBytes(length);
@@ -58,6 +59,7 @@ public class ByteArrayReadableChannel implements ReadableByteChannel {
       data = new byte[length];
       buf.readBytes(data);
     }
+
     logger.debug("ByteReadableChannel: get {} bytes", data.length);
   }
 
@@ -65,10 +67,10 @@ public class ByteArrayReadableChannel implements ReadableByteChannel {
   public int read(ByteBuffer dst) throws IOException {
     if (offset == data.length) {
       logger.debug("channel empty");
-      return -1;
+      return 0;
     }
 
-    int toPut = Math.min(length()-offset, dst.remaining());
+    int toPut = Math.min(data.length - offset, dst.remaining());
     dst.put(data, offset, toPut);
     offset += toPut;
 
@@ -84,4 +86,5 @@ public class ByteArrayReadableChannel implements ReadableByteChannel {
   public boolean isOpen() {
     return true;
   }
+
 }
