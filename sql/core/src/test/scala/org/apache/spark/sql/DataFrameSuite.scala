@@ -1728,4 +1728,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
     assert(df.filter($"array1" === $"array2").count() == 1)
   }
+
+  test("SPARK-17854: rand allows null as input seed") {
+    checkAnswer(testData.selectExpr("rand(NULL)"), testData.selectExpr("rand(0)"))
+    checkAnswer(testData.selectExpr("randn(NULL)"), testData.selectExpr("randn(0)"))
+  }
 }

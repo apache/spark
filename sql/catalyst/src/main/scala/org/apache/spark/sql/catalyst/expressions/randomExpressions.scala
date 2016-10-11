@@ -21,7 +21,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.types.{DataType, DoubleType}
+import org.apache.spark.sql.types.{DataType, DoubleType, NullType}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -73,6 +73,7 @@ case class Rand(seed: Long) extends RDG {
 
   def this(seed: Expression) = this(seed match {
     case IntegerLiteral(s) => s
+    case Literal(null, NullType) => 0
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
 
@@ -106,6 +107,7 @@ case class Randn(seed: Long) extends RDG {
 
   def this(seed: Expression) = this(seed match {
     case IntegerLiteral(s) => s
+    case Literal(null, NullType) => 0
     case _ => throw new AnalysisException("Input argument to randn must be an integer literal.")
   })
 
