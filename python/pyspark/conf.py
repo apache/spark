@@ -126,7 +126,6 @@ class SparkConf(object):
         if self._jconf is not None:
             self._jconf.set(key, unicode(value))
         else:
-            # Don't use unicode for self._conf, otherwise we will get exception when launching jvm.
             self._conf[key] = unicode(value)
         return self
 
