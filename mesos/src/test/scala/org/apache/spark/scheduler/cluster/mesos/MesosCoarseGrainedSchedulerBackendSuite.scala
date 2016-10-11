@@ -463,7 +463,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(launchedTasks.head.getCommand.getUrisList.asScala(0).getValue == url)
   }
 
-  test("mesos supports setting fetcher") {
+  test("mesos supports setting fetcher cache") {
     val url = "spark.spark.spark.com"
     setBackend(Map(
       "spark.mesos.fetchCache.enable" -> "true",
