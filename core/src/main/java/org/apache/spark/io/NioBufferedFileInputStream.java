@@ -59,8 +59,11 @@ public final class NioBufferedFileInputStream extends InputStream {
   private boolean refill() throws IOException {
     if (!byteBuffer.hasRemaining()) {
       byteBuffer.clear();
-      int nRead = fileChannel.read(byteBuffer);
-      if (nRead <= 0) {
+      int nRead = 0;
+      while (nRead == 0) {
+        nRead = fileChannel.read(byteBuffer);
+      }
+      if (nRead < 0) {
         return false;
       }
       byteBuffer.flip();
