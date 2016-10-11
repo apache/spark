@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import java.io._
 
 import com.google.common.io.Closeables
+
 import org.apache.spark.SparkException
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.memory.{MemoryConsumer, TaskMemoryManager}
