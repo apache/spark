@@ -274,7 +274,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val sessionCatalog = new SessionCatalog(externalCatalog)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     sessionCatalog.renameTable(TableIdentifier("tbl1", Some("db2")), TableIdentifier("tblone"))
-    assert(externalCatalog.listTables("db2").toSet == Set("tblone", TableIdentifier("tbl2")))
+    assert(externalCatalog.listTables("db2").toSet == Set("tblone", "tbl2"))
     sessionCatalog.renameTable(TableIdentifier("tbl2", Some("db2")), TableIdentifier("tbltwo"))
     assert(externalCatalog.listTables("db2").toSet == Set("tblone", "tbltwo"))
     // Rename table without explicitly specifying database
