@@ -183,20 +183,10 @@ public class TransportConf {
   }
 
   /**
-   * Transformation string to specify algorithm/mode/padding for AES cipher, which is effective
-   * when AES cipher is enabled.
-   */
-  public String saslEncryptionAesCipherTransformation() {
-    return conf.get("spark.authenticate.sasl.encryption.aes.cipher.transformation",
-      "AES/CTR/NoPadding");
-  }
-
-  /**
    * The bits of AES cipher key which is effective when AES cipher is enabled. Notice that
    * the length should be 128, 192 or 256 bits.
    */
   public int saslEncryptionAesCipherKeySizeBits() {
     return conf.getInt("spark.authenticate.sasl.encryption.aes.cipher.keySizeBits", 128);
   }
-
 }

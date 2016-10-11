@@ -18,16 +18,21 @@
 package org.apache.spark.network.sasl;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
-import org.apache.spark.network.sasl.aes.SparkAesSaslClient;
+import org.apache.spark.network.sasl.aes.AesEncryption;
+import org.apache.spark.network.sasl.aes.AesCipher;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -64,13 +69,20 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
    */
   @Override
   public void doBootstrap(TransportClient client, Channel channel) {
-    boolean aesEnable = conf.saslEncryptionAesEnabled();
-    SparkSaslClient saslClient = aesEnable ?
-      new SparkAesSaslClient(appId, secretKeyHolder, encrypt) :
-      new SparkSaslClient(appId, secretKeyHolder, encrypt);
-
+    SparkSaslClient saslClient = new SparkSaslClient(appId, secretKeyHolder, encrypt);
     try {
-      saslClient.negotiate(client, conf);
+      byte[] payload = saslClient.firstToken();
+
+      while (!saslClient.isComplete()) {
+        SaslMessage msg = new SaslMessage(appId, payload);
+        ByteBuf buf = Unpooled.buffer(msg.encodedLength() + (int) msg.body().size());
+        msg.encode(buf);
+        buf.writeBytes(msg.body().nioByteBuffer());
+
+        ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.saslRTTimeoutMs());
+        payload = saslClient.response(JavaUtils.bufferToArray(response));
+      }
+
       client.setClientId(appId);
 
       if (encrypt) {
@@ -79,7 +91,15 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
             new SaslException("Encryption requests by negotiated non-encrypted connection."));
         }
 
-        SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
+        if(conf.saslEncryptionAesEnabled()) {
+          Object result = saslClient.negotiate(client, conf);
+          if (result instanceof AesCipher) {
+            logger.info("Enabling AES encryption for client channel {}", client);
+            AesEncryption.addToChannel(channel, (AesCipher) result);
+          }
+        } else {
+          SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
+        }
         saslClient = null;
         logger.debug("Channel {} configured for SASL encryption.", client);
       }

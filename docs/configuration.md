@@ -1443,14 +1443,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.authenticate.sasl.encryption.aes.cipher.transformation</code></td>
-  <td>AES/CTR/NoPadding</td>
-  <td>
-    Specify the algorithm/mode/padding of AES cipher when AES cipher is enabled
-    for SASL authentication. Currently, it supports AES/CTR/NoPadding and AES/CBC/NoPadding.
-  </td>
-</tr>
-<tr>
   <td><code>spark.authenticate.sasl.encryption.aes.cipher.keySizeBits</code></td>
   <td>128</td>
   <td>
