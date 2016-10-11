@@ -123,14 +123,13 @@ parallelize <- function(sc, coll, numSlices = 1) {
     coll <- as.list(coll)
   }
 
-  if (numSlices > length(coll))
-    numSlices <- length(coll)
-
   sizeLimit <- getMaxAllocationLimit(sc)
   objectSize <- object.size(coll)
 
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
   numSlices <- max(numSlices, ceiling(objectSize / sizeLimit))
+  if (numSlices > length(coll))
+    numSlices <- length(coll)
 
   sliceLen <- ceiling(length(coll) / numSlices)
   slices <- split(coll, rep(1: (numSlices + 1), each = sliceLen)[1:length(coll)])
