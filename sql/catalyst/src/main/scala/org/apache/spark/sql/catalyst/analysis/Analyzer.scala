@@ -298,6 +298,9 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
+        // The left most bit in the bitmasks corresponds to the last expression in groupByAliases
+        // with 0 indicating this expression is in the grouping set. The following line of code
+        // calculates the bit mask representing the expressions that exist in all the grouping sets.
         val nonNullBitmask = ~ x.bitmasks.reduce(_ | _)
 
         val attrLength = groupByAliases.length
