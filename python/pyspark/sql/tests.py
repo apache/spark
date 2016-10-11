@@ -1892,7 +1892,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         sel = df.select(df.key,
             F.sum(df.value).over(Window.rowsBetween(Window.currentRow, frame_end)))
         rs = sorted(sel.collect())
-        expected = [("one", 1), ("two", 3)]
+        expected = [("one", 3), ("two", 2)]
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
 
