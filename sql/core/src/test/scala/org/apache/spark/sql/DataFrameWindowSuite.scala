@@ -22,6 +22,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 
+/**
+ * Window function testing for DataFrame API.
+ */
 class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
@@ -45,6 +48,15 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
         lead("key", 1).over(w),
         lead("value", 1).over(w)),
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
+  }
+
+  test("Window.rowsBetween") {
+    val df = Seq(("one", 1), ("two", 2)).toDF("key", "value")
+    // Running (cumulative) sum
+    checkAnswer(
+      df.select('key, sum("value").over(Window.rowsBetween(Long.MinValue, 0))),
+      Row("one", 1) :: Row("two", 3) :: Nil
+    )
   }
 
   test("lead") {

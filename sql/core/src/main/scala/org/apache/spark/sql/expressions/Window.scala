@@ -42,7 +42,7 @@ object Window {
    * Creates a [[WindowSpec]] with the partitioning defined.
    * @since 1.4.0
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def partitionBy(colName: String, colNames: String*): WindowSpec = {
     spec.partitionBy(colName, colNames : _*)
   }
@@ -51,7 +51,7 @@ object Window {
    * Creates a [[WindowSpec]] with the partitioning defined.
    * @since 1.4.0
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def partitionBy(cols: Column*): WindowSpec = {
     spec.partitionBy(cols : _*)
   }
@@ -60,7 +60,7 @@ object Window {
    * Creates a [[WindowSpec]] with the ordering defined.
    * @since 1.4.0
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def orderBy(colName: String, colNames: String*): WindowSpec = {
     spec.orderBy(colName, colNames : _*)
   }
@@ -69,9 +69,47 @@ object Window {
    * Creates a [[WindowSpec]] with the ordering defined.
    * @since 1.4.0
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def orderBy(cols: Column*): WindowSpec = {
     spec.orderBy(cols : _*)
+  }
+
+  /**
+   * Creates a [[WindowSpec]] with the frame boundaries defined,
+   * from `start` (inclusive) to `end` (inclusive).
+   *
+   * Both `start` and `end` are relative positions from the current row. For example, "0" means
+   * "current row", while "-1" means the row before the current row, and "5" means the fifth row
+   * after the current row.
+   *
+   * @param start boundary start, inclusive.
+   *              The frame is unbounded if this is the minimum long value.
+   * @param end boundary end, inclusive.
+   *            The frame is unbounded if this is the maximum long value.
+   * @since 2.1.0
+   */
+  // Note: when updating the doc for this method, also update WindowSpec.rowsBetween.
+  def rowsBetween(start: Long, end: Long): WindowSpec = {
+    spec.rowsBetween(start, end)
+  }
+
+  /**
+   * Creates a [[WindowSpec]] with the frame boundaries defined,
+   * from `start` (inclusive) to `end` (inclusive).
+   *
+   * Both `start` and `end` are relative from the current row. For example, "0" means "current row",
+   * while "-1" means one off before the current row, and "5" means the five off after the
+   * current row.
+   *
+   * @param start boundary start, inclusive.
+   *              The frame is unbounded if this is the minimum long value.
+   * @param end boundary end, inclusive.
+   *            The frame is unbounded if this is the maximum long value.
+   * @since 2.1.0
+   */
+  // Note: when updating the doc for this method, also update WindowSpec.rangeBetween.
+  def rangeBetween(start: Long, end: Long): WindowSpec = {
+    spec.rangeBetween(start, end)
   }
 
   private[sql] def spec: WindowSpec = {
