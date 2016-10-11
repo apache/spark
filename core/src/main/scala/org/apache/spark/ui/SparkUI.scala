@@ -59,13 +59,15 @@ private[spark] class SparkUI private (
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
 
+  val jobsTab = new JobsTab(this)
+
   val stagesTab = new StagesTab(this)
 
   var appId: String = _
 
   /** Initialize all components of the server. */
   def initialize() {
-    attachTab(new JobsTab(this))
+    attachTab(jobsTab)
     attachTab(stagesTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
@@ -73,7 +75,9 @@ private[spark] class SparkUI private (
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))
-    // This should be POST only, but, the YARN AM proxy won't proxy POSTs
+    // These should be POST only, but, the YARN AM proxy won't proxy POSTs
+    attachHandler(createRedirectHandler(
+      "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, httpMethods = Set("GET", "POST")))
     attachHandler(createRedirectHandler(
       "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
       httpMethods = Set("GET", "POST")))

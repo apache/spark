@@ -197,6 +197,22 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       runSlowJob(sc)
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        goToUi(sc, "/jobs")
+        assert(hasKillLink)
+      }
+    }
+
+    withSpark(newSparkContext(killEnabled = false)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        goToUi(sc, "/jobs")
+        assert(!hasKillLink)
+      }
+    }
+
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/stages")
         assert(hasKillLink)
       }
@@ -453,20 +469,24 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   test("kill stage POST/GET response is correct") {
-    def getResponseCode(url: URL, method: String): Int = {
-      val connection = url.openConnection().asInstanceOf[HttpURLConnection]
-      connection.setRequestMethod(method)
-      connection.connect()
-      val code = connection.getResponseCode()
-      connection.disconnect()
-      code
-    }
-
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         val url = new URL(
           sc.ui.get.appUIAddress.stripSuffix("/") + "/stages/stage/kill/?id=0&terminate=true")
+        // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
+        getResponseCode(url, "GET") should be (200)
+        getResponseCode(url, "POST") should be (200)
+      }
+    }
+  }
+
+  test("kill job POST/GET response is correct") {
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        val url = new URL(
+          sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs/job/kill/?id=0&terminate=true")
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
         getResponseCode(url, "GET") should be (200)
         getResponseCode(url, "POST") should be (200)
@@ -649,6 +669,15 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
         "6 [label=&quot;ShuffledRDD [6]"))
     }
+  }
+
+  def getResponseCode(url: URL, method: String): Int = {
+    val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+    connection.setRequestMethod(method)
+    connection.connect()
+    val code = connection.getResponseCode()
+    connection.disconnect()
+    code
   }
 
   def goToUi(sc: SparkContext, path: String): Unit = {

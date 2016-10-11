@@ -218,7 +218,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       request: HttpServletRequest,
       tableHeaderId: String,
       jobTag: String,
-      jobs: Seq[JobUIData]): Seq[Node] = {
+      jobs: Seq[JobUIData],
+      killEnabled: Boolean): Seq[Node] = {
     val allParameters = request.getParameterMap.asScala.toMap
     val parameterOtherTable = allParameters.filterNot(_._1.startsWith(jobTag))
       .map(para => para._1 + "=" + para._2(0))
@@ -264,6 +265,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         parameterOtherTable,
         parent.jobProgresslistener.stageIdToInfo,
         parent.jobProgresslistener.stageIdToData,
+        killEnabled,
         currentTime,
         jobIdTitle,
         pageSize = jobPageSize,
@@ -290,9 +292,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val completedJobs = listener.completedJobs.reverse.toSeq
       val failedJobs = listener.failedJobs.reverse.toSeq
 
-      val activeJobsTable = jobsTable(request, "active", "activeJob", activeJobs)
-      val completedJobsTable = jobsTable(request, "completed", "completedJob", completedJobs)
-      val failedJobsTable = jobsTable(request, "failed", "failedJob", failedJobs)
+      val activeJobsTable =
+        jobsTable(request, "active", "activeJob", activeJobs, killEnabled = parent.killEnabled)
+      val completedJobsTable =
+        jobsTable(request, "completed", "completedJob", completedJobs, killEnabled = false)
+      val failedJobsTable =
+        jobsTable(request, "failed", "failedJob", failedJobs, killEnabled = false)
 
       val shouldShowActiveJobs = activeJobs.nonEmpty
       val shouldShowCompletedJobs = completedJobs.nonEmpty
@@ -495,14 +500,15 @@ private[ui] class JobPagedTable(
     parameterOtherTable: Iterable[String],
     stageIdToInfo: HashMap[Int, StageInfo],
     stageIdToData: HashMap[(Int, Int), StageUIData],
+    killEnabled: Boolean,
     currentTime: Long,
     jobIdTitle: String,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean
   ) extends PagedTable[JobTableRowData] {
-  val parameterPath = UIUtils.prependBaseUri(basePath) + s"/$subPath/?" +
-    parameterOtherTable.mkString("&")
+  val basePathUri = UIUtils.prependBaseUri(basePath)
+  val parameterPath = basePathUri + s"/$subPath/?" + parameterOtherTable.mkString("&")
 
   override def tableId: String = jobTag + "-table"
 
@@ -599,12 +605,29 @@ private[ui] class JobPagedTable(
   override def row(jobTableRow: JobTableRowData): Seq[Node] = {
     val job = jobTableRow.jobData
 
+    val killLink = if (killEnabled) {
+      val confirm =
+        s"if (window.confirm('Are you sure you want to kill job ${job.jobId} ?')) " +
+          "{ this.parentNode.submit(); return true; } else { return false; }"
+      // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
+      /*
+      val killLinkUri = s"$basePathUri/jobs/job/kill/"
+      <form action={killLinkUri} method="POST" style="display:inline">
+        <input type="hidden" name="id" value={job.jobId.toString}/>
+        <input type="hidden" name="terminate" value="true"/>
+        <a href="#" onclick={confirm} class="kill-link">(kill)</a>
+      </form>
+       */
+      val killLinkUri = s"$basePathUri/jobs/job/kill/?id=${job.jobId}&terminate=true"
+      <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
+    }
+
     <tr id={"job-" + job.jobId}>
       <td>
         {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
       </td>
       <td>
-        {jobTableRow.jobDescription}
+        {jobTableRow.jobDescription} {killLink}
         <a href={jobTableRow.detailUrl} class="name-link">{jobTableRow.lastStageName}</a>
       </td>
       <td>
