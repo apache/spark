@@ -55,10 +55,16 @@ class TableFileCatalog(
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = partitionSchema match {
     case Some(partitionSchema) =>
-      externalCatalog.listPartitionsByFilter(db, table, filters).flatMap {
+      val catalogTablePartitions = externalCatalog.listPartitionsByFilter(db, table, filters)
+      val partitionPaths = catalogTablePartitions.flatMap {
         case CatalogTablePartition(spec, storage, _) =>
-          storage.locationUri.map(new Path(_)).map { path =>
-            val files = listDataLeafFiles(path :: Nil).toSeq
+          storage.locationUri.map(new Path(_))
+      }
+      val dataLeafFiles = listDataLeafFiles(partitionPaths).toSeq
+      catalogTablePartitions.flatMap {
+        case CatalogTablePartition(spec, storage, _) =>
+          storage.locationUri.map(new Path(_)).map { partitionPath =>
+            val files = dataLeafFiles.filter(_.getPath.getParent == partitionPath)
             val values =
               InternalRow.fromSeq(partitionSchema.map { case StructField(name, dataType, _, _) =>
                 Cast(Literal(spec(name)), dataType).eval()
