@@ -2381,7 +2381,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def date_sub(start: Column, days: Int): Column = withExpr { SubDays(start.expr, Literal(days)) }
+  def date_sub(start: Column, days: Int): Column = withExpr { DateSub(start.expr, Literal(days)) }
 
   /**
    * Returns the number of days from `start` to `end`.
@@ -2561,7 +2561,7 @@ object functions {
    * @since 1.5.0
    */
   def trunc(date: Column, format: String): Column = withExpr {
-    TruncateTimestamp(date.expr, Literal(format))
+    TruncInstant(date.expr, Literal(format))
   }
 
   /**

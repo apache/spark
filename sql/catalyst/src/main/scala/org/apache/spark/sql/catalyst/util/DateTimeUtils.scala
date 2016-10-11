@@ -839,9 +839,9 @@ object DateTimeUtils {
    * Returns the trunc timestamp from original timestamp and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should only be 1 - 6.
    */
-  def truncateTimestamp(ts: SQLTimestamp, level: Int): SQLTimestamp = {
+  def truncateInstant(ts: SQLTimestamp, level: Int): SQLTimestamp = {
     if (level == TRUNC_TO_YEAR || level == TRUNC_TO_MONTH) {
-      daysToMillis(truncateDate(millisToDays(ts / 1000L), level)) * 1000L
+      daysToMillis(truncateInstant(millisToDays(ts / 1000L), level)) * 1000L
     } else {
       truncateTime(ts, level)
     }
@@ -851,7 +851,7 @@ object DateTimeUtils {
    * Returns the trunc date from original date and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should only be 1 or 2.
    */
-  private def truncateDate(d: SQLDate, level: Int): SQLDate = {
+  def truncateInstant(d: SQLDate, level: Int): SQLDate = {
     if (level == TRUNC_TO_YEAR) {
       d - DateTimeUtils.getDayInYear(d) + 1
     } else if (level == TRUNC_TO_MONTH) {

@@ -127,7 +127,7 @@ case class AddDays(instant: Expression, days: Expression) extends AddDaysBase(in
 @ExpressionDescription(
   usage = "_FUNC_(instant, num_days) - Returns the date/timestamp that is num_days before instant.",
   extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-29'")
-case class SubDays(instant: Expression, days: Expression) extends AddDaysBase(instant, days) {
+case class DateSub(instant: Expression, days: Expression) extends AddDaysBase(instant, days) {
 
   override def signModifier: Int = -1
 
@@ -935,18 +935,19 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, fmt) - Returns returns timestamp with the time portion truncated to the unit specified by the format model fmt.",
+  usage = "_FUNC_(instant, fmt) - Returns returns date/timestamp with the time portion truncated to the unit specified by the format model fmt.",
   extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01 00:00:00'\n> SELECT _FUNC_('2015-10-27', 'YEAR');\n '2015-01-01 00:00:00'")
 // scalastyle:on line.size.limit
-case class TruncateTimestamp(timestamp: Expression, format: Expression)
+case class TruncInstant(instant: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  override def left: Expression = timestamp
+  override def left: Expression = instant
   override def right: Expression = format
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DateType, TimestampType), StringType)
 
-  override def dataType: DataType = TimestampType
+  override def dataType: DataType = instant.dataType
 
   override def nullable: Boolean = true
 
@@ -965,11 +966,12 @@ case class TruncateTimestamp(timestamp: Expression, format: Expression)
       // unknown format
       null
     } else {
-      val ts = timestamp.eval(input)
-      if (ts == null) {
-        null
-      } else {
-        DateTimeUtils.truncateTimestamp(ts.asInstanceOf[Long], level)
+      (instant.dataType, instant.eval(input)) match {
+        case (_: DateType, date: Int) =>
+          DateTimeUtils.truncateInstant(date, level)
+        case (_: TimestampType, timestamp: Long) =>
+          DateTimeUtils.truncateInstant(timestamp, level)
+        case (_, null) => null
       }
     }
   }
@@ -983,13 +985,13 @@ case class TruncateTimestamp(timestamp: Expression, format: Expression)
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
-        val ts = timestamp.genCode(ctx)
+        val ist = instant.genCode(ctx)
         ev.copy(code = s"""
-          ${ts.code}
-          boolean ${ev.isNull} = ${ts.isNull};
+          ${ist.code}
+          boolean ${ev.isNull} = ${ist.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.truncateTimestamp(${ts.value}, $truncLevel);
+            ${ev.value} = $dtu.truncateInstant(${ist.value}, $truncLevel);
           }""")
       }
     } else {
@@ -1000,7 +1002,7 @@ case class TruncateTimestamp(timestamp: Expression, format: Expression)
           if ($form == -1) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = $dtu.truncateTimestamp($dateVal, $form);
+            ${ev.value} = $dtu.truncateInstant($dateVal, $form);
           }
         """
       })
