@@ -405,6 +405,8 @@ class SessionCatalog(
 
   /**
    * Drop a local temporary view.
+   *
+   * Returns true if this view is dropped successfully, false otherwise.
    */
   def dropTempView(name: String): Boolean = synchronized {
     tempTables.remove(formatTableName(name)).isDefined
@@ -412,6 +414,8 @@ class SessionCatalog(
 
   /**
    * Drop a global temporary view.
+   *
+   * Returns true if this view is dropped successfully, false otherwise.
    */
   def dropGlobalTempView(name: String): Boolean = {
     globalTempViewManager.remove(formatTableName(name))
