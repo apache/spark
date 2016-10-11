@@ -124,11 +124,9 @@ if [ "$SPARK_NICENESS" = "" ]; then
 fi
 
 execute_command() {
-  command="$@"
-  if [ "$SPARK_NO_DAEMONIZE" != "" ]; then
-      eval $command
-  else
-      eval "nohup $command >> \"$log\" 2>&1 < /dev/null &"
+  local command="$@"
+  if [ -z ${SPARK_NO_DAEMONIZE+set} ]; then
+      nohup -- $command >> $log 2>&1 < /dev/null &
       newpid="$!"
 
       echo "$newpid" > "$pid"
@@ -149,6 +147,8 @@ execute_command() {
         tail -2 "$log" | sed 's/^/  /'
         echo "full log in $log"
       fi
+  else
+      $command
   fi
 }
 
@@ -176,11 +176,11 @@ run_command() {
 
   case "$mode" in
     (class)
-      execute_command "nice -n \"$SPARK_NICENESS\" \"${SPARK_HOME}/bin/spark-class\" $command $@"
+      execute_command nice -n $SPARK_NICENESS ${SPARK_HOME}/bin/spark-class $command $@
       ;;
 
     (submit)
-      execute_command "nice -n \"$SPARK_NICENESS\" \"${SPARK_HOME}/bin/spark-submit\" --class $command $@"
+      execute_command nice -n $SPARK_NICENESS bash ${SPARK_HOME}/bin/spark-submit --class $command $@
       ;;
 
     (*)
