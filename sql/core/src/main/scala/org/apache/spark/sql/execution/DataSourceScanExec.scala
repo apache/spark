@@ -228,12 +228,15 @@ case class FileSourceScanExec(
   override val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
     val location = relation.location
-    Map("Format" -> relation.fileFormat.toString,
+    val locationDesc =
+      location.getClass.getSimpleName + seqToString(location.rootPaths)
+    Map(
+      "Format" -> relation.fileFormat.toString,
       "ReadSchema" -> outputSchema.catalogString,
       "Batched" -> supportsBatch.toString,
       "PartitionFilters" -> seqToString(partitionFilters),
       "PushedFilters" -> seqToString(dataFilters),
-      "Location" -> (location.getClass.getSimpleName + seqToString(location.rootPaths)))
+      "Location" -> locationDesc)
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
