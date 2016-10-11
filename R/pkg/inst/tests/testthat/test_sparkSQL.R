@@ -256,6 +256,23 @@ test_that("read/write csv as DataFrame", {
   unlink(csvPath2)
 })
 
+test_that("Support other types for options", {
+  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+  mockLinesCsv <- c("year,make,model,comment,blank",
+  "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+  "1997,Ford,E350,\"Go get one now they are going fast\",",
+  "2015,Chevy,Volt",
+  "NA,Dummy,Placeholder")
+  writeLines(mockLinesCsv, csvPath)
+
+  csvDf <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
+  expected <- read.df(csvPath, "csv", header = TRUE, inferSchema = TRUE)
+  expect_equal(collect(csvDf), collect(expected))
+
+  expect_error(read.df(csvPath, "csv", header = TRUE, maxColumns = 3))
+  unlink(csvPath)
+})
+
 test_that("convert NAs to null type in DataFrames", {
   rdd <- parallelize(sc, list(list(1L, 2L), list(NA, 4L)))
   df <- createDataFrame(rdd, list("a", "b"))
@@ -495,6 +512,19 @@ test_that("read/write json files", {
 
   unlink(jsonPath2)
   unlink(jsonPath3)
+})
+
+test_that("read/write json files - compression option", {
+  df <- read.df(jsonPath, "json")
+
+  jsonPath <- tempfile(pattern = "jsonPath", fileext = ".json")
+  write.json(df, jsonPath, compression = "gzip")
+  jsonDF <- read.json(jsonPath)
+  expect_is(jsonDF, "SparkDataFrame")
+  expect_equal(count(jsonDF), count(df))
+  expect_true(length(list.files(jsonPath, pattern = ".gz")) > 0)
+
+  unlink(jsonPath)
 })
 
 test_that("jsonRDD() on a RDD with json string", {
@@ -1786,6 +1816,21 @@ test_that("read/write ORC files", {
   unsetHiveContext()
 })
 
+test_that("read/write ORC files - compression option", {
+  setHiveContext(sc)
+  df <- read.df(jsonPath, "json")
+
+  orcPath2 <- tempfile(pattern = "orcPath2", fileext = ".orc")
+  write.orc(df, orcPath2, compression = "ZLIB")
+  orcDF <- read.orc(orcPath2)
+  expect_is(orcDF, "SparkDataFrame")
+  expect_equal(count(orcDF), count(df))
+  expect_true(length(list.files(orcPath2, pattern = ".zlib.orc")) > 0)
+
+  unlink(orcPath2)
+  unsetHiveContext()
+})
+
 test_that("read/write Parquet files", {
   df <- read.df(jsonPath, "json")
   # Test write.df and read.df
@@ -1817,6 +1862,23 @@ test_that("read/write Parquet files", {
   unlink(parquetPath4)
 })
 
+test_that("read/write Parquet files - compression option/mode", {
+  df <- read.df(jsonPath, "json")
+  tempPath <- tempfile(pattern = "tempPath", fileext = ".parquet")
+
+  # Test write.df and read.df
+  write.parquet(df, tempPath, compression = "GZIP")
+  df2 <- read.parquet(tempPath)
+  expect_is(df2, "SparkDataFrame")
+  expect_equal(count(df2), 3)
+  expect_true(length(list.files(tempPath, pattern = ".gz.parquet")) > 0)
+
+  write.parquet(df, tempPath, mode = "overwrite")
+  df3 <- read.parquet(tempPath)
+  expect_is(df3, "SparkDataFrame")
+  expect_equal(count(df3), 3)
+})
+
 test_that("read/write text files", {
   # Test write.df and read.df
   df <- read.df(jsonPath, "text")
@@ -1836,6 +1898,19 @@ test_that("read/write text files", {
 
   unlink(textPath)
   unlink(textPath2)
+})
+
+test_that("read/write text files - compression option", {
+  df <- read.df(jsonPath, "text")
+
+  textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+  write.text(df, textPath, compression = "GZIP")
+  textDF <- read.text(textPath)
+  expect_is(textDF, "SparkDataFrame")
+  expect_equal(count(textDF), count(df))
+  expect_true(length(list.files(textPath, pattern = ".gz")) > 0)
+
+  unlink(textPath)
 })
 
 test_that("describe() and summarize() on a DataFrame", {
@@ -2542,6 +2617,41 @@ test_that("Spark version from SparkSession", {
   ver <- callJMethod(sc, "version")
   version <- sparkR.version()
   expect_equal(ver, version)
+})
+
+test_that("Call DataFrameWriter.save() API in Java without path and check argument types", {
+  df <- read.df(jsonPath, "json")
+  # This tests if the exception is thrown from JVM not from SparkR side.
+  # It makes sure that we can omit path argument in write.df API and then it calls
+  # DataFrameWriter.save() without path.
+  expect_error(write.df(df, source = "csv"),
+               "Error in save : illegal argument - 'path' is not specified")
+
+  # Arguments checking in R side.
+  expect_error(write.df(df, "data.tmp", source = c(1, 2)),
+               paste("source should be character, NULL or omitted. It is the datasource specified",
+                     "in 'spark.sql.sources.default' configuration by default."))
+  expect_error(write.df(df, path = c(3)),
+               "path should be charactor, NULL or omitted.")
+  expect_error(write.df(df, mode = TRUE),
+               "mode should be charactor or omitted. It is 'error' by default.")
+})
+
+test_that("Call DataFrameWriter.load() API in Java without path and check argument types", {
+  # This tests if the exception is thrown from JVM not from SparkR side.
+  # It makes sure that we can omit path argument in read.df API and then it calls
+  # DataFrameWriter.load() without path.
+  expect_error(read.df(source = "json"),
+               paste("Error in loadDF : analysis error - Unable to infer schema for JSON at .",
+                     "It must be specified manually"))
+  expect_error(read.df("arbitrary_path"), "Error in loadDF : analysis error - Path does not exist")
+
+  # Arguments checking in R side.
+  expect_error(read.df(path = c(3)),
+               "path should be charactor, NULL or omitted.")
+  expect_error(read.df(jsonPath, source = c(1, 2)),
+               paste("source should be character, NULL or omitted. It is the datasource specified",
+                     "in 'spark.sql.sources.default' configuration by default."))
 })
 
 unlink(parquetPath)
