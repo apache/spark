@@ -276,6 +276,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11" + sep + "00 h")
   }
 
+  def getSuffix(isCompressed: Boolean): String = {
+    if (isCompressed) {
+      ".gz"
+    } else {
+      ""
+    }
+  }
+
   def writeLogFile(path: String, content: Array[Byte]): Unit = {
     val outputStream = if (path.endsWith(".gz")) {
       new GZIPOutputStream(new FileOutputStream(path))
@@ -288,11 +296,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   def testOffsetBytes(isCompressed: Boolean): Unit = {
     val tmpDir2 = Utils.createTempDir()
-    val suffix = if (isCompressed) {
-      ".gz"
-    } else {
-      ""
-    }
+    val suffix = getSuffix(isCompressed)
     val f1Path = tmpDir2 + "/f1" + suffix
     writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
 
@@ -327,11 +331,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   def testOffsetBytesMultipleFiles(isCompressed: Boolean): Unit = {
     val tmpDir = Utils.createTempDir()
-    val suffix = if (isCompressed) {
-      ".gz"
-    } else {
-      ""
-    }
+    val suffix = getSuffix(isCompressed)
     val files = (1 to 3).map(i => new File(tmpDir, i.toString + suffix))
     writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
     writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
