@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{FileNotFoundException, IOException, InputStream, OutputStream}
-import java.nio.ByteBuffer
+import java.io.{FileNotFoundException, InputStream, IOException, OutputStream}
 import java.util.{ConcurrentModificationException, EnumSet, UUID}
 
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.io.IOUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.JavaSerializer
@@ -94,6 +93,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   }
 
   protected def deserialize(in: InputStream): T = {
+    // called inside a try-finally where the underlying stream is closed in the caller
     val inStream = serializer.deserializeStream(in)
     inStream.readObject[T]()
   }
@@ -141,7 +141,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
         try {
           writer(metadata, output)
         } finally {
-          output.close()
+          IOUtils.closeStream(output)
         }
         try {
           // Try to commit the batch
@@ -195,10 +195,9 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     if (fileManager.exists(batchMetadataFile)) {
       val input = fileManager.open(batchMetadataFile)
       try {
-        val bytes = IOUtils.toByteArray(input)
-        Some(deserialize(bytes))
+        Some(deserialize(input))
       } finally {
-        input.close()
+        IOUtils.closeStream(input)
       }
     } else {
       logDebug(s"Unable to find batch $batchMetadataFile")

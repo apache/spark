@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.OutputStream
 import java.util.{LinkedHashMap => JLinkedHashMap}
 import java.util.Map.Entry
 

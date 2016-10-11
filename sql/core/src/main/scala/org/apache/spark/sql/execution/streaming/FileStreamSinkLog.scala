@@ -95,8 +95,8 @@ class FileStreamSinkLog(
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $compactInterval) " +
       "to a positive value.")
 
-  protected override def serializeData(data: SinkFileStatus, out: OutputStream): Unit = {
-    write(data, out)
+  protected override def serializeData(data: SinkFileStatus): String = {
+    write(data)
   }
 
   protected override def deserializeData(encodedString: String): SinkFileStatus = {

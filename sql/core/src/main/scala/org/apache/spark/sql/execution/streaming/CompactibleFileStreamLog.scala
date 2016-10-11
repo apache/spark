@@ -62,7 +62,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
   /**
    * Serialize the data into encoded string.
    */
-  protected def serializeData(t: T, out: OutputStream): Unit
+  protected def serializeData(t: T): String
 
   /**
    * Deserialize the string into data object.
@@ -97,11 +97,12 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
 
   override def serialize(logData: Array[T], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write((metadataLogVersion + "\n").getBytes(UTF_8))
+    out.write(metadataLogVersion.getBytes(UTF_8))
     logData.foreach { data =>
-      serializeData(data, out)
       out.write('\n')
+      out.write(serializeData(data).getBytes(UTF_8))
     }
+    out.flush()
   }
 
   override def deserialize(in: InputStream): Array[T] = {
