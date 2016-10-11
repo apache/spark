@@ -130,6 +130,21 @@ class GaussianMixtureModel private[ml] (
   }
 
   /**
+   * Return the total log-likelihood for this model on the given data.
+   */
+  @Since("2.1.0")
+  def computeLogLikelihood(dataset: Dataset[_]): Double = {
+    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    val sc = dataset.sparkSession.sparkContext
+    val bcweightVec = sc.broadcast(Vectors.dense(weights))
+    transform(dataset).select($(probabilityCol)).map {
+      case Row(probs: Vector) =>
+        val likelihood = BLAS.dot(probs, bcweightVec.value)
+        math.log(likelihood)
+    }.reduce(_ + _)
+  }
+
+  /**
    * Retrieve Gaussian distributions as a DataFrame.
    * Each row represents a Gaussian Distribution.
    * Two columns are defined: mean and cov.
