@@ -30,6 +30,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
+import org.apache.spark.network.sasl.aes.AesEncryption;
+import org.apache.spark.network.sasl.aes.AesCipher;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -88,7 +90,16 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
           throw new RuntimeException(
             new SaslException("Encryption requests by negotiated non-encrypted connection."));
         }
-        SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
+
+        if(conf.saslEncryptionAesEnabled()) {
+          Object result = saslClient.negotiate(client, conf);
+          if (result instanceof AesCipher) {
+            logger.info("Enabling AES encryption for client channel {}", client);
+            AesEncryption.addToChannel(channel, (AesCipher) result);
+          }
+        } else {
+          SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
+        }
         saslClient = null;
         logger.debug("Channel {} configured for SASL encryption.", client);
       }
@@ -105,5 +116,4 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
       }
     }
   }
-
 }

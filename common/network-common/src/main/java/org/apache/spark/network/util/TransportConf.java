@@ -175,4 +175,18 @@ public class TransportConf {
     return conf.getBoolean("spark.network.sasl.serverAlwaysEncrypt", false);
   }
 
+  /**
+   * The trigger for enabling AES cipher for SASL encrypt backend.
+   */
+  public boolean saslEncryptionAesEnabled() {
+    return conf.getBoolean("spark.authenticate.sasl.encryption.aes.enabled", false);
+  }
+
+  /**
+   * The bits of AES cipher key which is effective when AES cipher is enabled. Notice that
+   * the length should be 128, 192 or 256 bits.
+   */
+  public int saslEncryptionAesCipherKeySizeBits() {
+    return conf.getInt("spark.authenticate.sasl.encryption.aes.cipher.keySizeBits", 128);
+  }
 }
