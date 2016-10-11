@@ -270,9 +270,10 @@ abstract class Catalog {
    * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
    *
    * @param viewName the name of the view to be dropped.
+   * @return true if the view is dropped successfully, false otherwise.
    * @since 2.0.0
    */
-  def dropTempView(viewName: String): Unit
+  def dropTempView(viewName: String): Boolean
 
   /**
    * Drops the global temporary view with the given view name in the catalog.
@@ -284,6 +285,7 @@ abstract class Catalog {
    * view, e.g. `SELECT * FROM _global_temp.view1`.
    *
    * @param viewName the name of the view to be dropped.
+   * @return true if the view is dropped successfully, false otherwise.
    * @since 2.1.0
    */
   def dropGlobalTempView(viewName: String): Boolean

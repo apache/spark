@@ -406,8 +406,8 @@ class SessionCatalog(
   /**
    * Drop a local temporary view.
    */
-  def dropTempView(name: String): Unit = synchronized {
-    tempTables.remove(formatTableName(name))
+  def dropTempView(name: String): Boolean = synchronized {
+    tempTables.remove(formatTableName(name)).isDefined
   }
 
   /**
