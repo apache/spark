@@ -397,7 +397,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("function trunc - date") {
     def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
-      checkEvaluation(TruncInstant(Literal.create(input, DateType), Literal.create(fmt, StringType)),
+      checkEvaluation(
+        TruncInstant(Literal.create(input, DateType), Literal.create(fmt, StringType)),
         expected)
       checkEvaluation(
         TruncInstant(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
