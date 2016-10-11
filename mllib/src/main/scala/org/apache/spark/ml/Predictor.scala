@@ -131,7 +131,7 @@ abstract class Predictor[
    * Return the given DataFrame, with [[labelCol]] casted to DoubleType.
    */
     protected def castDataSet(dataset: Dataset[_]): DataFrame = {
-      val labelMeta = dataset.schema.fields.filter(_.name == $(labelCol)).head.metadata
+      val labelMeta = dataset.schema($(labelCol)).metadata
       dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
     }
 }
