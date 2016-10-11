@@ -1872,7 +1872,8 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         from pyspark.sql import functions as F
 
         # Test cumulative sum
-        sel = df.select(df.key,
+        sel = df.select(
+            df.key,
             F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding, 0)))
         rs = sorted(sel.collect())
         expected = [("one", 1), ("two", 3)]
@@ -1880,7 +1881,8 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             self.assertEqual(tuple(r), ex[:len(r)])
 
         # Test boundary values less than JVM's Long.MinValue and make sure we don't overflow
-        sel = df.select(df.key,
+        sel = df.select(
+            df.key,
             F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding - 1, 0)))
         rs = sorted(sel.collect())
         expected = [("one", 1), ("two", 3)]
@@ -1889,7 +1891,8 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
         # Test boundary values greater than JVM's Long.MaxValue and make sure we don't overflow
         frame_end = Window.unboundedFollowing + 1
-        sel = df.select(df.key,
+        sel = df.select(
+            df.key,
             F.sum(df.value).over(Window.rowsBetween(Window.currentRow, frame_end)))
         rs = sorted(sel.collect())
         expected = [("one", 3), ("two", 2)]
