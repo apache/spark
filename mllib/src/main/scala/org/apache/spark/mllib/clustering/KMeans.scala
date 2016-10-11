@@ -420,15 +420,37 @@ object KMeans {
    *             on system time.
    */
   @Since("2.1.0")
-  def train(data: RDD[Vector],
-            k: Int,
-            maxIterations: Int,
-            initializationMode: String,
-            seed: Long): KMeansModel = {
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      initializationMode: String,
+      seed: Long): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setInitializationMode(initializationMode)
       .setSeed(seed)
+      .run(data)
+  }
+
+  /**
+   * Trains a k-means model using the given set of parameters.
+   *
+   * @param data Training points as an `RDD` of `Vector` types.
+   * @param k Number of clusters to create.
+   * @param maxIterations Maximum number of iterations allowed.
+   * @param initializationMode The initialization algorithm. This can either be "random" or
+   *                           "k-means||". (default: "k-means||")
+   */
+  @Since("2.1.0")
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      initializationMode: String): KMeansModel = {
+    new KMeans().setK(k)
+      .setMaxIterations(maxIterations)
+      .setInitializationMode(initializationMode)
       .run(data)
   }
 
@@ -492,7 +514,9 @@ object KMeans {
       data: RDD[Vector],
       k: Int,
       maxIterations: Int): KMeansModel = {
-    train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
+    new KMeans().setK(k)
+      .setMaxIterations(maxIterations)
+      .run(data)
   }
 
   /**
