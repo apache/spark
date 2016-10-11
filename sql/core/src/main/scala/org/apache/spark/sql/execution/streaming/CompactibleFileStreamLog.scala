@@ -106,7 +106,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
   }
 
   override def deserialize(in: InputStream): Array[T] = {
-    val lines = IOUtils.lineIterator(in, "UTF-8").asScala
+    val lines = IOUtils.lineIterator(in, UTF_8).asScala
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
