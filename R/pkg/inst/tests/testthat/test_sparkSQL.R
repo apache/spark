@@ -213,6 +213,9 @@ test_that("createDataFrame uses files for large objects", {
   conf <- callJMethod(sparkSession, "conf")
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
   df <- createDataFrame(iris)
+
+  # Resetting the conf back to default value
+  callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
   expect_equal(dim(df), dim(iris))
 })
 

@@ -126,10 +126,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if (numSlices > length(coll))
     numSlices <- length(coll)
 
-  sizeLimit <- as.numeric(sparkR.conf(
-      "spark.r.maxAllocationLimit",
-      toString(.Machine$integer.max / 10) # Default to a safe value: 200MB
-  ))
+  sizeLimit <- getMaxAllocationLimit(sc)
   objectSize <- object.size(coll)
 
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
@@ -157,6 +154,16 @@ parallelize <- function(sc, coll, numSlices = 1) {
   }
 
   RDD(jrdd, "byte")
+}
+
+getMaxAllocationLimit <- function(sc) {
+  conf <- callJMethod(sc, "getConf")
+  as.numeric(
+    callJMethod(conf,
+      "get",
+      "spark.r.maxAllocationLimit",
+      toString(.Machine$integer.max / 10) # Default to a safe value: 200MB
+  ))
 }
 
 writeToTempFile <- function(serializedSlices) {
