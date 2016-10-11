@@ -52,7 +52,6 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
 
   // Number of input rows in the current trigger
   private val numInputRows = new mutable.HashMap[Source, Long]
-  private var numOutputRows: Option[Long] = None
   private var currentTriggerStartTimestamp: Long = -1
   private var previousTriggerStartTimestamp: Long = -1
   private var latency: Option[Double] = None
@@ -81,7 +80,6 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
 
   def reportTriggerStarted(triggerId: Long): Unit = synchronized {
     numInputRows.clear()
-    numOutputRows = None
     triggerStatus.clear()
     sourceTriggerStatus.values.foreach(_.clear())
 
@@ -114,7 +112,6 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
     // Report number of rows
     val totalNumInputRows = numInputRows.values.sum
     reportTriggerStatus(NUM_INPUT_ROWS, totalNumInputRows)
-    reportTriggerStatus(NUM_OUTPUT_ROWS, numOutputRows.getOrElse(0))
     numInputRows.foreach { case (s, r) =>
       reportSourceTriggerStatus(s, NUM_SOURCE_INPUT_ROWS, r)
     }
@@ -237,7 +234,6 @@ object StreamMetrics extends Logging {
   val SOURCE_GET_BATCH_LATENCY = "latency.sourceGetBatch"
 
   val NUM_INPUT_ROWS = "numRows.input.total"
-  val NUM_OUTPUT_ROWS = "numRows.output"
   val NUM_SOURCE_INPUT_ROWS = "numRows.input.source"
   def NUM_TOTAL_STATE_ROWS(aggId: Int): String = s"numRows.state.aggregation$aggId.total"
   def NUM_UPDATED_STATE_ROWS(aggId: Int): String = s"numRows.state.aggregation$aggId.updated"

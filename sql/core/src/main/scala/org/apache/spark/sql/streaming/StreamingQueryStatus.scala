@@ -39,7 +39,10 @@ import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset}
  *                   writing the corresponding output.
  * @param sourceStatuses Current statuses of the sources.
  * @param sinkStatus Current status of the sink.
- * @param triggerStatus Low-level detailed status of the last completed/currently active trigger.
+ * @param triggerStatus Low-level detailed status of the currently active trigger (e.g. number of
+ *                      rows processed in trigger, latency of intermediate steps, etc.).
+ *                      If no trigger is active, then it will have details of the last completed
+ *                      trigger.
  * @since 2.0.0
  */
 @Experimental
@@ -103,11 +106,34 @@ private[sql] object StreamingQueryStatus {
 
   /** Create an instance of status for python testing */
   def testStatus(): StreamingQueryStatus = {
+    import org.apache.spark.sql.execution.streaming.StreamMetrics._
     StreamingQueryStatus(
-      "query", 1, 123, 1.0, 2.0, Some(345),
-      Array(
-        SourceStatus("MySource1", LongOffset(0).toString, 4.0, 5.0, Map("key" -> "value"))),
-      SinkStatus("MySink", CompositeOffset(Some(LongOffset(1)) :: None :: Nil).toString),
-      Map("key" -> "value"))
+      name = "query",
+      id = 1,
+      timestamp = 123,
+      inputRate = 15.5,
+      processingRate = 23.5,
+      latency = Some(345),
+      sourceStatuses = Array(
+        SourceStatus(
+          desc = "MySource1",
+          offsetDesc = LongOffset(0).toString,
+          inputRate = 15.5,
+          processingRate = 23.5,
+          triggerStatus = Map(
+            NUM_SOURCE_INPUT_ROWS -> "100",
+            SOURCE_GET_OFFSET_LATENCY -> "10",
+            SOURCE_GET_BATCH_LATENCY -> "20"))),
+      sinkStatus = SinkStatus(
+        desc = "MySink",
+        offsetDesc = CompositeOffset(Some(LongOffset(1)) :: None :: Nil).toString),
+      triggerStatus = Map(
+        TRIGGER_ID -> "5",
+        ACTIVE -> "true",
+        DATA_AVAILABLE -> "true",
+        GET_OFFSET_LATENCY -> "10",
+        GET_BATCH_LATENCY -> "20",
+        NUM_INPUT_ROWS -> "100"
+      ))
   }
 }

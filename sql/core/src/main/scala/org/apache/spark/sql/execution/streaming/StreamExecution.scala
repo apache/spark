@@ -117,6 +117,7 @@ class StreamExecution(
   @volatile
   private var currentStatus: StreamingQueryStatus = null
 
+  /** Flag that signals whether any error with input metrics have already been logged */
   @volatile
   private var metricWarningLogged: Boolean = false
 
@@ -255,7 +256,8 @@ class StreamExecution(
 
       // Notify others
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-      postEvent(new QueryTerminated(status, exception.map(_.cause).map(Utils.exceptionString)))
+      postEvent(
+        new QueryTerminated(currentStatus, exception.map(_.cause).map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
   }
@@ -581,7 +583,7 @@ class StreamExecution(
     //
     // 1. We keep track of streaming sources associated with each leaf in the trigger's logical plan
     //    - Each logical plan leaf will be associated with a single streaming source.
-    //    - There can be multiple logical plan leaves associated a streaming source.
+    //    - There can be multiple logical plan leaves associated with a streaming source.
     //    - There can be leaves not associated with any streaming source, because they were
     //      generated from a batch source (e.g. stream-batch joins)
     //
@@ -692,7 +694,7 @@ class StreamExecution(
   case object TERMINATED extends State
 }
 
-object StreamExecution extends Logging {
+object StreamExecution {
   private val _nextId = new AtomicLong(0)
 
   def nextId: Long = _nextId.getAndIncrement()
