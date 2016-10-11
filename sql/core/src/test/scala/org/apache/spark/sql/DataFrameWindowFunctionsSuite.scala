@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{DataType, LongType, StructType}
 /**
  * Window function testing for DataFrame API.
  */
-class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
+class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("reuse window partitionBy") {
