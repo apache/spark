@@ -32,7 +32,7 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputDim(1)
       .setInputCol("keys")
       .setOutputCol("values")
-      .setHasSeed(true)
+      .setSeed(0)
 
     val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, mh, 0.75, 0.5)
     assert(falsePositive < 0.03)
@@ -49,7 +49,7 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputDim(20)
       .setInputCol("keys")
       .setOutputCol("values")
-      .setHasSeed(true)
+      .setSeed(0)
 
     val key: Vector = Vectors.sparse(100,
       (0 until 100).filter(_.toString.contains("1")).map((_, 1.0)))
@@ -75,7 +75,7 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputDim(20)
       .setInputCol("keys")
       .setOutputCol("values")
-      .setHasSeed(true)
+      .setSeed(0)
 
     val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(mh, dfA, dfB, 0.5)
     assert(precision == 1.0)

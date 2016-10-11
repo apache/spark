@@ -37,7 +37,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
-      .setHasSeed(true)
+      .setSeed(0)
 
     val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, rp, 8.0, 2.0)
     assert(falsePositive < 0.07)
@@ -58,7 +58,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(2.5)
-      .setHasSeed(true)
+      .setSeed(0)
 
     val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, rp, 3.0, 2.0)
     assert(falsePositive == 0.0)
@@ -77,7 +77,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
-      .setHasSeed(true)
+      .setSeed(0)
 
     val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, df, key, 100,
       singleProbing = true)
@@ -97,7 +97,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
-      .setHasSeed(true)
+      .setSeed(0)
 
     val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, df, key, 100,
       singleProbing = false)
@@ -121,7 +121,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
-      .setHasSeed(true)
+      .setSeed(0)
 
     val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(rp, dfA, dfB, 1.0)
     assert(precision == 1.0)
@@ -139,7 +139,7 @@ class RandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
-      .setHasSeed(true)
+      .setSeed(0)
 
     val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(rp, df, df, 3.0)
     assert(precision == 1.0)

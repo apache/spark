@@ -38,7 +38,7 @@ private[ml] object LSHTest {
    * This method hashes each elements to hash buckets using LSH, and calculate the false positive
    * and false negative:
    * False positive: Of all (e1, e2) sharing any bucket, the probability of dist(e1, e2) > distFP
-   * False positive: Of all (e1, e2) not sharing buckets, the probability of dist(e1, e2) < distFN
+   * False negative: Of all (e1, e2) not sharing buckets, the probability of dist(e1, e2) < distFN
    *
    * @param dataset The dataset to verify the locality sensitive hashing property.
    * @param lsh The lsh instance to perform the hashing

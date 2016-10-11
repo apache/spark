@@ -23,7 +23,8 @@ import breeze.linalg.normalize
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.param.{BooleanParam, DoubleParam, Params, ParamValidators}
+import org.apache.spark.ml.param.{DoubleParam, Params, ParamValidators}
+import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql.types.StructType
 
@@ -45,18 +46,6 @@ private[ml] trait RandomProjectionParams extends Params {
   val bucketLength: DoubleParam = new DoubleParam(this, "bucketLength",
     "the length of each hash bucket, a larger bucket lowers the false negative rate.",
     ParamValidators.gt(0))
-
-  /**
-   * If true, set the random seed to 0. Otherwise, use default setting in scala.util.Random
-   * @group param
-   */
-  @Since("2.1.0")
-  val hasSeed: BooleanParam = new BooleanParam(this, "hasSeed",
-    "If true, set the random seed to 0.")
-
-  /** @group getParam */
-  @Since("2.1.0")
-  final def getHasSeed: Boolean = $(hasSeed)
 
   /** @group getParam */
   @Since("2.1.0")
@@ -113,7 +102,7 @@ class RandomProjectionModel private[ml] (
 @Experimental
 @Since("2.1.0")
 class RandomProjection(override val uid: String) extends LSH[RandomProjectionModel]
-  with RandomProjectionParams {
+  with RandomProjectionParams with HasSeed {
 
   @Since("2.1.0")
   override def setInputCol(value: String): this.type = super.setInputCol(value)
@@ -129,22 +118,20 @@ class RandomProjection(override val uid: String) extends LSH[RandomProjectionMod
     this(Identifiable.randomUID("random projection"))
   }
 
-  setDefault(outputDim -> 1, outputCol -> "lshFeatures", hasSeed -> false)
-
   /** @group setParam */
   @Since("2.1.0")
   def setBucketLength(value: Double): this.type = set(bucketLength, value)
 
   /** @group setParam */
   @Since("2.1.0")
-  def setHasSeed(value: Boolean): this.type = set(hasSeed, value)
+  def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("2.1.0")
   override protected[this] def createRawLSHModel(inputDim: Int): RandomProjectionModel = {
-    if ($(hasSeed)) Random.setSeed(0)
+    val rand = new Random($(seed))
     val randUnitVectors: Array[Vector] = {
       Array.fill($(outputDim)) {
-        val randArray = Array.fill(inputDim)(Random.nextGaussian())
+        val randArray = Array.fill(inputDim)(rand.nextGaussian())
         Vectors.fromBreeze(normalize(breeze.linalg.Vector(randArray)))
       }
     }

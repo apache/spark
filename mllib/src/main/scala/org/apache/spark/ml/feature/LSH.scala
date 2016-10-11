@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import scala.util.Random
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
@@ -30,7 +30,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
  * Params for [[LSH]].
  */
 @Since("2.1.0")
@@ -51,6 +50,8 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   @Since("2.1.0")
   final def getOutputDim: Int = $(outputDim)
 
+  setDefault(outputDim -> 1, outputCol -> "lshFeatures")
+
   /**
    * Transform the Schema for LSH
    * @param schema The schema of the input dataset without [[outputCol]]
@@ -63,10 +64,8 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
 }
 
 /**
- * :: Experimental ::
  * Model produced by [[LSH]].
  */
-@Experimental
 @Since("2.1.0")
 private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHParams {
   self: T =>
@@ -288,7 +287,6 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
 }
 
 /**
- * :: Experimental ::
  * Locality Sensitive Hashing for different metrics space. Support basic transformation with a new
  * hash column, approximate nearest neighbor search with a dataset and a key, and approximate
  * similarity join of two datasets.
@@ -303,7 +301,6 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
  * (2) Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
  * arXiv:1408.2927 (2014).
  */
-@Experimental
 @Since("2.1.0")
 private[ml] abstract class LSH[T <: LSHModel[T]] extends Estimator[T] with LSHParams {
   self: Estimator[T] =>

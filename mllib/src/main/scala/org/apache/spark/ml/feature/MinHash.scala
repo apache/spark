@@ -21,29 +21,9 @@ import scala.util.Random
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.param.{BooleanParam, Params}
+import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
 import org.apache.spark.sql.types.StructType
-
-/**
- * :: Experimental ::
- * Params for [[MinHash]].
- */
-@Since("2.1.0")
-private[ml] trait MinHashParams extends Params {
-
-  /**
-   * If true, set the random seed to 0. Otherwise, use default setting in scala.util.Random
-   * @group param
-   */
-  @Since("2.1.0")
-  val hasSeed: BooleanParam = new BooleanParam(this, "hasSeed",
-    "If true, set the random seed to 0.")
-
-  /** @group getParam */
-  @Since("2.1.0")
-  final def getHasSeed: Boolean = $(hasSeed)
-}
 
 /**
  * :: Experimental ::
@@ -94,7 +74,7 @@ class MinHashModel private[ml] (override val uid: String, hashFunctions: Seq[Int
  */
 @Experimental
 @Since("2.1.0")
-class MinHash(override val uid: String) extends LSH[MinHashModel] with MinHashParams {
+class MinHash(override val uid: String) extends LSH[MinHashModel] with HasSeed {
 
   // A large prime smaller than sqrt(2^63 − 1)
   private[this] val prime = 2038074743
@@ -113,18 +93,17 @@ class MinHash(override val uid: String) extends LSH[MinHashModel] with MinHashPa
     this(Identifiable.randomUID("min hash"))
   }
 
-  setDefault(outputDim -> 1, outputCol -> "lshFeatures", hasSeed -> false)
-
+  /** @group setParam */
   @Since("2.1.0")
-  def setHasSeed(value: Boolean): this.type = set(hasSeed, value)
+  def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("2.1.0")
   override protected[this] def createRawLSHModel(inputDim: Int): MinHashModel = {
     require(inputDim <= prime / 2, "The input vector dimension is too large for MinHash to handle.")
-    if ($(hasSeed)) Random.setSeed(0)
+    val rand = new Random($(seed))
     val numEntry = inputDim * 2
     val randSeq: Seq[Int] = {
-      Seq.fill($(outputDim))(1 + Random.nextInt(prime - 1))
+      Seq.fill($(outputDim))(1 + rand.nextInt(prime - 1))
     }
     val hashFunctions: Seq[Int => Long] = {
       randSeq.map { randCoefficient: Int =>
