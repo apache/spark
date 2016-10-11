@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Experimental
 @Since("2.1.0")
-class MinHashModel private[ml] (override val uid: String, hashFunctions: Seq[Int => Long])
+class MinHashModel private[ml] (override val uid: String, hashFunctions: Array[Int => Long])
   extends LSHModel[MinHashModel] {
 
   @Since("2.1.0")
@@ -40,9 +40,7 @@ class MinHashModel private[ml] (override val uid: String, hashFunctions: Seq[Int
     elems: Vector =>
       require(elems.numNonzeros > 0, "Must have at least 1 non zero entry.")
       val elemsList = elems.toSparse.indices.toList
-      Vectors.dense(hashFunctions.map(
-        func => elemsList.map(func).min.toDouble
-      ).toArray)
+      Vectors.dense(hashFunctions.map(func => elemsList.map(func).min.toDouble))
   }
 
   @Since("2.1.0")
@@ -102,11 +100,9 @@ class MinHash(override val uid: String) extends LSH[MinHashModel] with HasSeed {
     require(inputDim <= prime / 2, "The input vector dimension is too large for MinHash to handle.")
     val rand = new Random($(seed))
     val numEntry = inputDim * 2
-    val randSeq: Seq[Int] = {
-      Seq.fill($(outputDim))(1 + rand.nextInt(prime - 1))
-    }
-    val hashFunctions: Seq[Int => Long] = {
-      randSeq.map { randCoefficient: Int =>
+    val randArray: Array[Int] = Array.fill($(outputDim))(1 + rand.nextInt(prime - 1))
+    val hashFunctions: Array[Int => Long] = {
+      randArray.map { randCoefficient: Int =>
         // Perfect Hash function, use 2n buckets to reduce collision.
         elem: Int => (1 + elem) * randCoefficient.toLong % prime % numEntry
       }
