@@ -41,6 +41,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
+import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -49,7 +50,6 @@ import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
 import org.slf4j.Logger
-
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -1449,27 +1449,28 @@ private[spark] object Utils extends Logging {
     CallSite(shortForm, longForm)
   }
 
-//  def getFileLength(file: File): Long = {
-//    if (file.getName.endsWith(".gz")) {
-//      var size = 0L
-//      while ()
-//      long size = 0;
-//
-//      while (zis.available() > 0)
-//      {
-//        byte[] buf = new byte[1024];
-//        int read = zis.read(buf);
-//        if (read > 0) size += read;
-//      }
-//    } else {
-//      file.length()
-//    }
-//  }
+  def getFileLength(file: File): Long = {
+    // Uncompress .gz file to determine file size.
+    if (file.getName.endsWith(".gz")) {
+      var fileSize = 0L
+      val gzInputStream = new GZIPInputStream(new FileInputStream(file))
+      val bufSize = 1024
+      val buf = new Array[Byte](bufSize)
+      var numBytes = IOUtils.read(gzInputStream, buf)
+      while (numBytes > 0) {
+        fileSize += numBytes
+        numBytes = IOUtils.read(gzInputStream, buf)
+      }
+      fileSize
+    } else {
+      file.length
+    }
+  }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
   def offsetBytes(path: String, start: Long, end: Long): String = {
     val file = new File(path)
-    val length = file.length()
+    val length = getFileLength(file)
     val effectiveEnd = math.min(length, end)
     val effectiveStart = math.max(0, start)
     val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)
@@ -1494,7 +1495,7 @@ private[spark] object Utils extends Logging {
    * the given order. See figure below for more details.
    */
   def offsetBytes(files: Seq[File], start: Long, end: Long): String = {
-    val fileLengths = files.map { _.length }
+    val fileLengths = files.map(getFileLength)
     val startIndex = math.max(start, 0)
     val endIndex = math.min(end, fileLengths.sum)
     val fileToLength = files.zip(fileLengths).toMap
