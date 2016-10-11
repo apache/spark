@@ -298,14 +298,14 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
-        // The left most bit in the bitmasks corresponds to the last expression in groupByAliases
-        // with 0 indicating this expression is in the grouping set. The following line of code
-        // calculates the bit mask representing the expressions that exist in all the grouping sets.
-        val nonNullBitmask = ~ x.bitmasks.reduce(_ | _)
+        // The rightmost bit in the bitmasks corresponds to the last expression in groupByAliases with 0
+        // indicating this expression is in the grouping set. The following line of code calculates the
+        // bitmask representing the expressions that exist in all the grouping sets (also indicated by 0).
+        val nonNullBitmask = x.bitmasks.reduce(_ | _)
 
         val attrLength = groupByAliases.length
         val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
-          a.toAttribute.withNullability((nonNullBitmask & 1 << (attrLength - idx - 1)) == 0)
+          a.toAttribute.withNullability(((nonNullBitmask >> (attrLength - idx - 1)) & 1) == 1)
         }
 
         val expand = Expand(x.bitmasks, groupByAliases, expandedAttributes, gid, x.child)
