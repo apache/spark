@@ -21,15 +21,16 @@ import scala.math.{Fractional, Numeric, Ordering}
 import scala.math.Numeric.DoubleAsIfIntegral
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
  * The data type representing `Double` values. Please use the singleton [[DataTypes.DoubleType]].
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 class DoubleType private() extends FractionalType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
@@ -51,4 +52,8 @@ class DoubleType private() extends FractionalType {
   private[spark] override def asNullable: DoubleType = this
 }
 
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 case object DoubleType extends DoubleType

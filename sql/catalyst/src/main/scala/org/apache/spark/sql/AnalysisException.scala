@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 
-// TODO: don't swallow original stack trace if it exists
-
 /**
- * :: DeveloperApi ::
  * Thrown when a query fails to analyze, usually because the query itself is invalid.
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 class AnalysisException protected[sql] (
     val message: String,
     val line: Option[Int] = None,
