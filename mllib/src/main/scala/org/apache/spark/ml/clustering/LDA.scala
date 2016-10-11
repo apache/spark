@@ -17,24 +17,33 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
+import org.json4s.JsonAST.JObject
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{Matrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
   EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
   LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
   OnlineLDAOptimizer => OldOnlineLDAOptimizer}
 import org.apache.spark.mllib.impl.PeriodicCheckpointer
-import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.MatrixImplicits._
+import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
+import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.VersionUtils
 
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
@@ -46,8 +55,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @group param
    */
   @Since("1.6.0")
-  final val k = new IntParam(this, "k", "number of topics (clusters) to infer",
-    ParamValidators.gt(1))
+  final val k = new IntParam(this, "k", "The number of topics (clusters) to infer. " +
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("1.6.0")
@@ -76,6 +85,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *     - Values should be >= 0
    *     - default = uniformly (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *
    * @group param
    */
   @Since("1.6.0")
@@ -117,6 +127,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *     - Value should be >= 0
    *     - default = (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *
    * @group param
    */
   @Since("1.6.0")
@@ -161,7 +172,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    */
   @Since("1.6.0")
   final val optimizer = new Param[String](this, "optimizer", "Optimizer or inference" +
-    " algorithm used to estimate the LDA model.  Supported: " + supportedOptimizers.mkString(", "),
+    " algorithm used to estimate the LDA model. Supported: " + supportedOptimizers.mkString(", "),
     (o: String) => ParamValidators.inArray(supportedOptimizers).apply(o.toLowerCase))
 
   /** @group getParam */
@@ -350,6 +361,39 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   }
 }
 
+private object LDAParams {
+
+  /**
+   * Equivalent to [[DefaultParamsReader.getAndSetParams()]], but handles [[LDA]] and [[LDAModel]]
+   * formats saved with Spark 1.6, which differ from the formats in Spark 2.0+.
+   *
+   * @param model    [[LDA]] or [[LDAModel]] instance.  This instance will be modified with
+   *                 [[Param]] values extracted from metadata.
+   * @param metadata Loaded model metadata
+   */
+  def getAndSetParams(model: LDAParams, metadata: Metadata): Unit = {
+    VersionUtils.majorMinorVersion(metadata.sparkVersion) match {
+      case (1, 6) =>
+        implicit val format = DefaultFormats
+        metadata.params match {
+          case JObject(pairs) =>
+            pairs.foreach { case (paramName, jsonValue) =>
+              val origParam =
+                if (paramName == "topicDistribution") "topicDistributionCol" else paramName
+              val param = model.getParam(origParam)
+              val value = param.jsonDecode(compact(render(jsonValue)))
+              model.set(param, value)
+            }
+          case _ =>
+            throw new IllegalArgumentException(
+              s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
+        }
+      case _ => // 2.0+
+        DefaultParamsReader.getAndSetParams(model, metadata)
+    }
+  }
+}
+
 
 /**
  * :: Experimental ::
@@ -382,6 +426,10 @@ sealed abstract class LDAModel private[ml] (
   @Since("1.6.0")
   protected def getModel: OldLDAModel
 
+  private[ml] def getEffectiveDocConcentration: Array[Double] = getModel.docConcentration.toArray
+
+  private[ml] def getEffectiveTopicConcentration: Double = getModel.topicConcentration
+
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).
@@ -405,12 +453,16 @@ sealed abstract class LDAModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     if ($(topicDistributionCol).nonEmpty) {
-      val t = udf(oldLocalModel.getTopicDistributionMethod(sparkSession.sparkContext))
-      dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF
+
+      // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+      val transformer = oldLocalModel.getTopicDistributionMethod(sparkSession.sparkContext)
+
+      val t = udf { (v: Vector) => transformer(OldVectors.fromML(v)).asML }
+      dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF()
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +
         " such as topicDistributionCol to produce results.")
-      dataset.toDF
+      dataset.toDF()
     }
   }
 
@@ -424,7 +476,7 @@ sealed abstract class LDAModel private[ml] (
    * If Online LDA was used and [[optimizeDocConcentration]] was set to false,
    * then this returns the fixed (given) value for the [[docConcentration]] parameter.
    */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def estimatedDocConcentration: Vector = getModel.docConcentration
 
   /**
@@ -436,8 +488,8 @@ sealed abstract class LDAModel private[ml] (
    *          the Expectation-Maximization ("em") [[optimizer]], then this method could involve
    *          collecting a large amount of data to the driver (on the order of vocabSize x k).
    */
-  @Since("1.6.0")
-  def topicsMatrix: Matrix = oldLocalModel.topicsMatrix
+  @Since("2.0.0")
+  def topicsMatrix: Matrix = oldLocalModel.topicsMatrix.asML
 
   /** Indicates whether this instance is of type [[DistributedLDAModel]] */
   @Since("1.6.0")
@@ -566,18 +618,16 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
-        .select("vocabSize", "topicsMatrix", "docConcentration", "topicConcentration",
-          "gammaShape")
-        .head()
-      val vocabSize = data.getAs[Int](0)
-      val topicsMatrix = data.getAs[Matrix](1)
-      val docConcentration = data.getAs[Vector](2)
-      val topicConcentration = data.getAs[Double](3)
-      val gammaShape = data.getAs[Double](4)
+      val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
+      val matrixConverted = MLUtils.convertMatrixColumnsToML(vectorConverted, "topicsMatrix")
+      val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
+          topicConcentration: Double, gammaShape: Double) =
+        matrixConverted.select("vocabSize", "topicsMatrix", "docConcentration",
+          "topicConcentration", "gammaShape").head()
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
         gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      LDAParams.getAndSetParams(model, metadata)
       model
     }
   }
@@ -667,6 +717,8 @@ class DistributedLDAModel private[ml] (
   private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
 
   /**
+   * :: DeveloperApi ::
+   *
    * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
@@ -681,6 +733,8 @@ class DistributedLDAModel private[ml] (
   def getCheckpointFiles: Array[String] = _checkpointFiles
 
   /**
+   * :: DeveloperApi ::
+   *
    * Remove any remaining checkpoint files from training.
    *
    * @see [[getCheckpointFiles]]
@@ -688,8 +742,8 @@ class DistributedLDAModel private[ml] (
   @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
-    val fs = FileSystem.get(sparkSession.sparkContext.hadoopConfiguration)
-    _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, fs))
+    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, hadoopConf))
     _checkpointFiles = Array.empty[String]
   }
 
@@ -719,9 +773,9 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val modelPath = new Path(path, "oldModel").toString
       val oldModel = OldDistributedLDAModel.load(sc, modelPath)
-      val model = new DistributedLDAModel(
-        metadata.uid, oldModel.vocabSize, oldModel, sparkSession, None)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      val model = new DistributedLDAModel(metadata.uid, oldModel.vocabSize,
+        oldModel, sparkSession, None)
+      LDAParams.getAndSetParams(model, metadata)
       model
     }
   }
@@ -868,20 +922,36 @@ class LDA @Since("1.6.0") (
   }
 }
 
-
-private[clustering] object LDA extends DefaultParamsReadable[LDA] {
+@Since("2.0.0")
+object LDA extends MLReadable[LDA] {
 
   /** Get dataset for spark.mllib LDA */
-  def getOldDataset(dataset: Dataset[_], featuresCol: String): RDD[(Long, Vector)] = {
+  private[clustering] def getOldDataset(
+       dataset: Dataset[_],
+       featuresCol: String): RDD[(Long, OldVector)] = {
     dataset
-      .withColumn("docId", monotonicallyIncreasingId())
+      .withColumn("docId", monotonically_increasing_id())
       .select("docId", featuresCol)
       .rdd
       .map { case Row(docId: Long, features: Vector) =>
-        (docId, features)
+        (docId, OldVectors.fromML(features))
       }
   }
 
-  @Since("1.6.0")
+  private class LDAReader extends MLReader[LDA] {
+
+    private val className = classOf[LDA].getName
+
+    override def load(path: String): LDA = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val model = new LDA(metadata.uid)
+      LDAParams.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  override def read: MLReader[LDA] = new LDAReader
+
+  @Since("2.0.0")
   override def load(path: String): LDA = super.load(path)
 }

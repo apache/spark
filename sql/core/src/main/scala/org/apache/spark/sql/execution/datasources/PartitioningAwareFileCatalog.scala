@@ -49,16 +49,25 @@ abstract class PartitioningAwareFileCatalog(
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
-    if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
+    val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
+      Partition(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
         case PartitionDirectory(values, path) =>
-          Partition(
-            values,
-            leafDirToChildrenFiles(path).filterNot(_.getPath.getName startsWith "_"))
+          val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
+            case Some(existingDir) =>
+              // Directory has children files in it, return them
+              existingDir.filter(f => isDataPath(f.getPath))
+
+            case None =>
+              // Directory does not exist, or has no children files
+              Nil
+          }
+          Partition(values, files)
       }
     }
+    logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))
+    selectedPartitions
   }
 
   override def allFiles(): Seq[FileStatus] = {
@@ -67,7 +76,15 @@ abstract class PartitioningAwareFileCatalog(
       paths.flatMap { path =>
         // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
         val fs = path.getFileSystem(hadoopConf)
-        val qualifiedPath = fs.makeQualified(path)
+        val qualifiedPathPre = fs.makeQualified(path)
+        val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
+          // SPARK-17613: Always append `Path.SEPARATOR` to the end of parent directories,
+          // because the `leafFile.getParent` would have returned an absolute path with the
+          // separator at the end.
+          new Path(qualifiedPathPre, Path.SEPARATOR)
+        } else {
+          qualifiedPathPre
+        }
 
         // There are three cases possible with each path
         // 1. The path is a directory and has children files in it. Then it must be present in
@@ -87,7 +104,11 @@ abstract class PartitioningAwareFileCatalog(
 
   protected def inferPartitioning(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
-    val leafDirs = leafDirToChildrenFiles.keys.toSeq
+    val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
+      // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
+      // counted as data files, so that they shouldn't participate partition discovery.
+      files.exists(f => isDataPath(f.getPath))
+    }.keys.toSeq
     partitionSchema match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
@@ -113,7 +134,7 @@ abstract class PartitioningAwareFileCatalog(
         PartitioningUtils.parsePartitions(
           leafDirs,
           PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled(),
+          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
           basePaths = basePaths)
     }
   }
@@ -159,17 +180,17 @@ abstract class PartitioningAwareFileCatalog(
    *
    * By default, the paths of the dataset provided by users will be base paths.
    * Below are three typical examples,
-   * Case 1) `sqlContext.read.parquet("/path/something=true/")`: the base path will be
+   * Case 1) `spark.read.parquet("/path/something=true/")`: the base path will be
    * `/path/something=true/`, and the returned DataFrame will not contain a column of `something`.
-   * Case 2) `sqlContext.read.parquet("/path/something=true/a.parquet")`: the base path will be
+   * Case 2) `spark.read.parquet("/path/something=true/a.parquet")`: the base path will be
    * still `/path/something=true/`, and the returned DataFrame will also not contain a column of
    * `something`.
-   * Case 3) `sqlContext.read.parquet("/path/")`: the base path will be `/path/`, and the returned
+   * Case 3) `spark.read.parquet("/path/")`: the base path will be `/path/`, and the returned
    * DataFrame will have the column of `something`.
    *
    * Users also can override the basePath by setting `basePath` in the options to pass the new base
    * path to the data source.
-   * For example, `sqlContext.read.option("basePath", "/path/").parquet("/path/something=true/")`,
+   * For example, `spark.read.option("basePath", "/path/").parquet("/path/something=true/")`,
    * and the returned DataFrame will have the column of `something`.
    */
   private def basePaths: Set[Path] = {
@@ -187,5 +208,10 @@ abstract class PartitioningAwareFileCatalog(
           val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
           if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
     }
+  }
+
+  private def isDataPath(path: Path): Boolean = {
+    val name = path.getName
+    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
   }
 }

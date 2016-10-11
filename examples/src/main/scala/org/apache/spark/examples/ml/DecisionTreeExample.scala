@@ -23,15 +23,14 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage, Transformer}
 import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
 import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.{MulticlassMetrics, RegressionMetrics}
-import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -40,7 +39,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
  * {{{
  * ./bin/run-example ml.DecisionTreeExample [options]
  * }}}
- * Note that Decision Trees can take a large amount of memory.  If the run-example command above
+ * Note that Decision Trees can take a large amount of memory. If the run-example command above
  * fails, try running via spark-submit and specifying the amount of memory as at least 1g.
  * For local mode, run
  * {{{
@@ -87,7 +86,7 @@ object DecisionTreeExample {
         .text(s"min info gain required to create a split, default: ${defaultParams.minInfoGain}")
         .action((x, c) => c.copy(minInfoGain = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        .text(s"fraction of data to hold out for testing. If given option testInput, " +
           s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[Boolean]("cacheNodeIds")
@@ -106,7 +105,7 @@ object DecisionTreeExample {
          s"default: ${defaultParams.checkpointInterval}")
         .action((x, c) => c.copy(checkpointInterval = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+        .text(s"input path to test dataset. If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")
@@ -125,10 +124,9 @@ object DecisionTreeExample {
       }
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
@@ -157,11 +155,10 @@ object DecisionTreeExample {
    * @param dataFormat  "libsvm" or "dense"
    * @param testInput  Path to test dataset.
    * @param algo  Classification or Regression
-   * @param fracTest  Fraction of input data to hold out for testing.  Ignored if testInput given.
+   * @param fracTest  Fraction of input data to hold out for testing. Ignored if testInput given.
    * @return  (training dataset, test dataset)
    */
   private[ml] def loadDatasets(
-      sc: SparkContext,
       input: String,
       dataFormat: String,
       testInput: String,
@@ -199,19 +196,22 @@ object DecisionTreeExample {
     (training, test)
   }
 
-  def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"DecisionTreeExample with $params")
-    val sc = new SparkContext(conf)
-    params.checkpointDir.foreach(sc.setCheckpointDir)
+  def run(params: Params): Unit = {
+    val spark = SparkSession
+      .builder
+      .appName(s"DecisionTreeExample with $params")
+      .getOrCreate()
+
+    params.checkpointDir.foreach(spark.sparkContext.setCheckpointDir)
     val algo = params.algo.toLowerCase
 
     println(s"DecisionTreeExample with parameters:\n$params")
 
     // Load training and test data and cache it.
     val (training: DataFrame, test: DataFrame) =
-      loadDatasets(sc, params.input, params.dataFormat, params.testInput, algo, params.fracTest)
+      loadDatasets(params.input, params.dataFormat, params.testInput, algo, params.fracTest)
 
-    // Set up Pipeline
+    // Set up Pipeline.
     val stages = new mutable.ArrayBuffer[PipelineStage]()
     // (1) For classification, re-index classes.
     val labelColName = if (algo == "classification") "indexedLabel" else "label"
@@ -228,7 +228,7 @@ object DecisionTreeExample {
       .setOutputCol("indexedFeatures")
       .setMaxCategories(10)
     stages += featuresIndexer
-    // (3) Learn Decision Tree
+    // (3) Learn Decision Tree.
     val dt = algo match {
       case "classification" =>
         new DecisionTreeClassifier()
@@ -255,13 +255,13 @@ object DecisionTreeExample {
     stages += dt
     val pipeline = new Pipeline().setStages(stages.toArray)
 
-    // Fit the Pipeline
+    // Fit the Pipeline.
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
-    // Get the trained Decision Tree from the fitted PipelineModel
+    // Get the trained Decision Tree from the fitted PipelineModel.
     algo match {
       case "classification" =>
         val treeModel = pipelineModel.stages.last.asInstanceOf[DecisionTreeClassificationModel]
@@ -280,7 +280,7 @@ object DecisionTreeExample {
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    // Evaluate model on training, test data
+    // Evaluate model on training, test data.
     algo match {
       case "classification" =>
         println("Training data results:")
@@ -296,11 +296,11 @@ object DecisionTreeExample {
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    sc.stop()
+    spark.stop()
   }
 
   /**
-   * Evaluate the given ClassificationModel on data.  Print the results.
+   * Evaluate the given ClassificationModel on data. Print the results.
    * @param model  Must fit ClassificationModel abstraction
    * @param data  DataFrame with "prediction" and labelColName columns
    * @param labelColName  Name of the labelCol parameter for the model
@@ -314,18 +314,18 @@ object DecisionTreeExample {
     val fullPredictions = model.transform(data).cache()
     val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
     val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
-    // Print number of classes for reference
+    // Print number of classes for reference.
     val numClasses = MetadataUtils.getNumClasses(fullPredictions.schema(labelColName)) match {
       case Some(n) => n
       case None => throw new RuntimeException(
         "Unknown failure when indexing labels for classification.")
     }
-    val accuracy = new MulticlassMetrics(predictions.zip(labels)).precision
+    val accuracy = new MulticlassMetrics(predictions.zip(labels)).accuracy
     println(s"  Accuracy ($numClasses classes): $accuracy")
   }
 
   /**
-   * Evaluate the given RegressionModel on data.  Print the results.
+   * Evaluate the given RegressionModel on data. Print the results.
    * @param model  Must fit RegressionModel abstraction
    * @param data  DataFrame with "prediction" and labelColName columns
    * @param labelColName  Name of the labelCol parameter for the model

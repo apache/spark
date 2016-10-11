@@ -52,7 +52,8 @@ object Cast {
     case (DateType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
 
-    case (_, DateType) => true
+    case (StringType, DateType) => true
+    case (TimestampType, DateType) => true
 
     case (StringType, CalendarIntervalType) => true
 
@@ -112,6 +113,9 @@ object Cast {
 }
 
 /** Cast the child expression to the target data type. */
+@ExpressionDescription(
+  usage = " - Cast value v to the target data type.",
+  extended = "> SELECT _FUNC_('10' as int);\n 10")
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
@@ -228,18 +232,12 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
       buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 1000L))
-    // Hive throws this exception as a Semantic Exception
-    // It is never possible to compare result when hive return with exception,
-    // so we can return null
-    // NULL is more reasonable here, since the query itself obeys the grammar.
-    case _ => _ => null
   }
 
   // IntervalConverter
   private[this] def castToInterval(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => CalendarInterval.fromString(s.toString))
-    case _ => _ => null
   }
 
   // LongConverter
@@ -405,7 +403,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
-    val newRow = new GenericMutableRow(from.fields.length)
+    val newRow = new GenericInternalRow(from.fields.length)
     buildCast[InternalRow](_, row => {
       var i = 0
       while (i < row.numFields) {
@@ -418,7 +416,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   }
 
   private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
-    case dt if dt == child.dataType => identity[Any]
+    case dt if dt == from => identity[Any]
     case StringType => castToString(from)
     case BinaryType => castToBinary(from)
     case DateType => castToDate(from)
@@ -894,7 +892,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val fieldsCasts = from.fields.zip(to.fields).map {
       case (fromField, toField) => nullSafeCastFunction(fromField.dataType, toField.dataType, ctx)
     }
-    val rowClass = classOf[GenericMutableRow].getName
+    val rowClass = classOf[GenericInternalRow].getName
     val result = ctx.freshName("result")
     val tmpRow = ctx.freshName("tmpRow")
 

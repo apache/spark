@@ -17,22 +17,29 @@
 
 # window.R - Utility functions for defining window in DataFrames
 
-#' window.partitionBy
+#' windowPartitionBy
 #'
 #' Creates a WindowSpec with the partitioning defined.
 #'
-#' @rdname window.partitionBy
-#' @name window.partitionBy
+#' @param col A column name or Column by which rows are partitioned to
+#'            windows.
+#' @param ... Optional column names or Columns in addition to col, by
+#'            which rows are partitioned to windows.
+#'
+#' @rdname windowPartitionBy
+#' @name windowPartitionBy
+#' @aliases windowPartitionBy,character-method
 #' @export
 #' @examples
 #' \dontrun{
-#'   ws <- window.partitionBy("key1", "key2")
+#'   ws <- orderBy(windowPartitionBy("key1", "key2"), "key3")
 #'   df1 <- select(df, over(lead("value", 1), ws))
 #'
-#'   ws <- window.partitionBy(df$key1, df$key2)
+#'   ws <- orderBy(windowPartitionBy(df$key1, df$key2), df$key3)
 #'   df1 <- select(df, over(lead("value", 1), ws))
 #' }
-setMethod("window.partitionBy",
+#' @note windowPartitionBy(character) since 2.0.0
+setMethod("windowPartitionBy",
           signature(col = "character"),
           function(col, ...) {
             windowSpec(
@@ -42,10 +49,12 @@ setMethod("window.partitionBy",
                           list(...)))
           })
 
-#' @rdname window.partitionBy
-#' @name window.partitionBy
+#' @rdname windowPartitionBy
+#' @name windowPartitionBy
+#' @aliases windowPartitionBy,Column-method
 #' @export
-setMethod("window.partitionBy",
+#' @note windowPartitionBy(Column) since 2.0.0
+setMethod("windowPartitionBy",
           signature(col = "Column"),
           function(col, ...) {
             jcols <- lapply(list(col, ...), function(c) {
@@ -57,22 +66,29 @@ setMethod("window.partitionBy",
                           jcols))
           })
 
-#' window.orderBy
+#' windowOrderBy
 #'
 #' Creates a WindowSpec with the ordering defined.
 #'
-#' @rdname window.orderBy
-#' @name window.orderBy
+#' @param col A column name or Column by which rows are ordered within
+#'            windows.
+#' @param ... Optional column names or Columns in addition to col, by
+#'            which rows are ordered within windows.
+#'
+#' @rdname windowOrderBy
+#' @name windowOrderBy
+#' @aliases windowOrderBy,character-method
 #' @export
 #' @examples
 #' \dontrun{
-#'   ws <- window.orderBy("key1", "key2")
+#'   ws <- windowOrderBy("key1", "key2")
 #'   df1 <- select(df, over(lead("value", 1), ws))
 #'
-#'   ws <- window.orderBy(df$key1, df$key2)
+#'   ws <- windowOrderBy(df$key1, df$key2)
 #'   df1 <- select(df, over(lead("value", 1), ws))
 #' }
-setMethod("window.orderBy",
+#' @note windowOrderBy(character) since 2.0.0
+setMethod("windowOrderBy",
           signature(col = "character"),
           function(col, ...) {
             windowSpec(
@@ -82,10 +98,12 @@ setMethod("window.orderBy",
                           list(...)))
           })
 
-#' @rdname window.orderBy
-#' @name window.orderBy
+#' @rdname windowOrderBy
+#' @name windowOrderBy
+#' @aliases windowOrderBy,Column-method
 #' @export
-setMethod("window.orderBy",
+#' @note windowOrderBy(Column) since 2.0.0
+setMethod("windowOrderBy",
           signature(col = "Column"),
           function(col, ...) {
             jcols <- lapply(list(col, ...), function(c) {

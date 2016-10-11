@@ -18,24 +18,36 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.StructType
 
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    sql(
-      """
-        |CREATE TABLE parquet_tab1 (c1 INT, c2 STRING)
-        |USING org.apache.spark.sql.parquet.DefaultSource
-      """.stripMargin)
+
+    // Use catalog to create table instead of SQL string here, because we don't support specifying
+    // table properties for data source table with SQL API now.
+    hiveContext.sessionState.catalog.createTable(
+      CatalogTable(
+        identifier = TableIdentifier("parquet_tab1"),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("c1", "int").add("c2", "string"),
+        provider = Some("parquet"),
+        properties = Map("my_key1" -> "v1")
+      ),
+      ignoreIfExists = false
+    )
 
     sql(
       """
-        |CREATE EXTERNAL TABLE parquet_tab2 (c1 INT, c2 STRING)
+        |CREATE TABLE parquet_tab2 (c1 INT, c2 STRING)
         |STORED AS PARQUET
         |TBLPROPERTIES('prop1Key'="prop1Val", '`prop2Key`'="prop2Val")
       """.stripMargin)
@@ -100,32 +112,21 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("show tblproperties of data source tables - basic") {
     checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1")
-        .filter(s"key = 'spark.sql.sources.provider'"),
-      Row("spark.sql.sources.provider", "org.apache.spark.sql.parquet.DefaultSource") :: Nil
+      sql("SHOW TBLPROPERTIES parquet_tab1").filter(s"key = 'my_key1'"),
+      Row("my_key1", "v1") :: Nil
     )
 
     checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1(spark.sql.sources.provider)"),
-      Row("org.apache.spark.sql.parquet.DefaultSource") :: Nil
+      sql(s"SHOW TBLPROPERTIES parquet_tab1('my_key1')"),
+      Row("v1") :: Nil
     )
-
-    checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1")
-        .filter(s"key = 'spark.sql.sources.schema.numParts'"),
-      Row("spark.sql.sources.schema.numParts", "1") :: Nil
-    )
-
-    checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1('spark.sql.sources.schema.numParts')"),
-      Row("1"))
   }
 
   test("show tblproperties for datasource table - errors") {
-    val message1 = intercept[AnalysisException] {
+    val message1 = intercept[NoSuchTableException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message1.contains("'badtable' not found in database 'default'"))
+    assert(message1.contains("Table or view 'badtable' not found in database 'default'"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
@@ -140,7 +141,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show tblproperties for spark temporary table - empty row") {
-    withTempTable("parquet_temp") {
+    withTempView("parquet_temp") {
       sql(
         """
           |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
@@ -269,6 +270,72 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
+  test("Truncate Table") {
+    withTable("non_part_table", "part_table") {
+      sql(
+        """
+          |CREATE TABLE non_part_table (employeeID INT, employeeName STRING)
+          |ROW FORMAT DELIMITED
+          |FIELDS TERMINATED BY '|'
+          |LINES TERMINATED BY '\n'
+        """.stripMargin)
+
+      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table""")
+      checkAnswer(
+        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
+        Row(16, "john") :: Nil)
+
+      val testResults = sql("SELECT * FROM non_part_table").collect()
+
+      sql("TRUNCATE TABLE non_part_table")
+      checkAnswer(sql("SELECT * FROM non_part_table"), Seq.empty[Row])
+
+      sql(
+        """
+          |CREATE TABLE part_table (employeeID INT, employeeName STRING)
+          |PARTITIONED BY (c STRING, d STRING)
+          |ROW FORMAT DELIMITED
+          |FIELDS TERMINATED BY '|'
+          |LINES TERMINATED BY '\n'
+        """.stripMargin)
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="1")""")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '1'"),
+        testResults)
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="2")""")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
+        testResults)
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="2", d="2")""")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '2'"),
+        testResults)
+
+      sql("TRUNCATE TABLE part_table PARTITION(c='1', d='1')")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '1'"),
+        Seq.empty[Row])
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
+        testResults)
+
+      sql("TRUNCATE TABLE part_table PARTITION(c='1')")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1'"),
+        Seq.empty[Row])
+
+      sql("TRUNCATE TABLE part_table")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table"),
+        Seq.empty[Row])
+    }
+  }
+
   test("show columns") {
     checkAnswer(
       sql("SHOW COLUMNS IN parquet_tab3"),
@@ -332,32 +399,31 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show partitions - empty row") {
-    withTempTable("parquet_temp") {
+    withTempView("parquet_temp") {
       sql(
         """
           |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
           |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
       // An empty sequence of row is returned for session temporary table.
-      val message1 = intercept[AnalysisException] {
+      intercept[NoSuchTableException] {
         sql("SHOW PARTITIONS parquet_temp")
-      }.getMessage
-      assert(message1.contains("is not allowed on a temporary table"))
+      }
 
-      val message2 = intercept[AnalysisException] {
+      val message1 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_tab3")
       }.getMessage
-      assert(message2.contains("not allowed on a table that is not partitioned"))
+      assert(message1.contains("not allowed on a table that is not partitioned"))
 
-      val message3 = intercept[AnalysisException] {
+      val message2 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_tab4 PARTITION(abcd=2015, xyz=1)")
       }.getMessage
-      assert(message3.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
+      assert(message2.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
 
-      val message4 = intercept[AnalysisException] {
+      val message3 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_view1")
       }.getMessage
-      assert(message4.contains("is not allowed on a view or index table"))
+      assert(message3.contains("is not allowed on a view"))
     }
   }
 

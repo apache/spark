@@ -51,4 +51,22 @@ case class StructField(
       ("nullable" -> nullable) ~
       ("metadata" -> metadata.jsonValue)
   }
+
+  /**
+   * Updates the StructField with a new comment value.
+   */
+  def withComment(comment: String): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString("comment", comment)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Return the comment of this StructField.
+   */
+  def getComment(): Option[String] = {
+    if (metadata.contains("comment")) Option(metadata.getString("comment")) else None
+  }
 }

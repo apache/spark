@@ -20,19 +20,19 @@ package org.apache.spark.ml.clustering
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.EPSILON
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.param.{IntParam, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{GaussianMixture => MLlibGM}
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
-  Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
+  Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -44,11 +44,12 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol {
 
   /**
-   * Set the number of clusters to create (k). Must be > 1. Default: 2.
+   * Number of independent Gaussians in the mixture model. Must be > 1. Default: 2.
    * @group param
    */
   @Since("2.0.0")
-  final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
+  final val k = new IntParam(this, "k", "Number of independent Gaussians in the mixture model. " +
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -60,9 +61,9 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new OldVectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
-    SchemaUtils.appendColumn(schema, $(probabilityCol), new OldVectorUDT)
+    SchemaUtils.appendColumn(schema, $(probabilityCol), new VectorUDT)
   }
 }
 
@@ -94,8 +95,9 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val predUDF = udf((vector: OldVector) => predict(vector.asML))
-    val probUDF = udf((vector: OldVector) => OldVectors.fromML(predictProbability(vector.asML)))
+    transformSchema(dataset.schema, logging = true)
+    val predUDF = udf((vector: Vector) => predict(vector))
+    val probUDF = udf((vector: Vector) => predictProbability(vector))
     dataset.withColumn($(predictionCol), predUDF(col($(featuresCol))))
       .withColumn($(probabilityCol), probUDF(col($(featuresCol))))
   }
@@ -112,7 +114,7 @@ class GaussianMixtureModel private[ml] (
 
   private[clustering] def predictProbability(features: Vector): Vector = {
     val probs: Array[Double] =
-      GaussianMixtureModel.computeProbabilities(features.toBreeze.toDenseVector, gaussians, weights)
+      GaussianMixtureModel.computeProbabilities(features.asBreeze.toDenseVector, gaussians, weights)
     Vectors.dense(probs)
   }
 
@@ -132,11 +134,16 @@ class GaussianMixtureModel private[ml] (
     val modelGaussians = gaussians.map { gaussian =>
       (OldVectors.fromML(gaussian.mean), OldMatrices.fromML(gaussian.cov))
     }
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    sqlContext.createDataFrame(modelGaussians).toDF("mean", "cov")
+    SparkSession.builder().getOrCreate().createDataFrame(modelGaussians).toDF("mean", "cov")
   }
 
+  /**
+   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
+   *
+   * For [[GaussianMixtureModel]], this does NOT currently save the training [[summary]].
+   * An option to save [[summary]] may be added in the future.
+   *
+   */
   @Since("2.0.0")
   override def write: MLWriter = new GaussianMixtureModel.GaussianMixtureModelWriter(this)
 
@@ -189,7 +196,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val sigmas = gaussians.map(c => OldMatrices.fromML(c.cov))
       val data = Data(weights, mus, sigmas)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -202,7 +209,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val row = sqlContext.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
+      val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
       val weights = row.getSeq[Double](0).toArray
       val mus = row.getSeq[OldVector](1).toArray
       val sigmas = row.getSeq[OldMatrix](2).toArray
@@ -248,6 +255,21 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 /**
  * :: Experimental ::
  * Gaussian Mixture clustering.
+ *
+ * This class performs expectation maximization for multivariate Gaussian
+ * Mixture Models (GMMs).  A GMM represents a composite distribution of
+ * independent Gaussian distributions with associated "mixing" weights
+ * specifying each's contribution to the composite.
+ *
+ * Given a set of sample points, this class will maximize the log-likelihood
+ * for a mixture of k Gaussians, iterating until the log-likelihood changes by
+ * less than convergenceTol, or until it has reached the max number of iterations.
+ * While this process is generally guaranteed to converge, it is not guaranteed
+ * to find a global optimum.
+ *
+ * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
+ *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
+ *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
 @Since("2.0.0")
 @Experimental
@@ -296,7 +318,10 @@ class GaussianMixture @Since("2.0.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
-    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: OldVector) => point }
+    transformSchema(dataset.schema, logging = true)
+    val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+      case Row(point: Vector) => OldVectors.fromML(point)
+    }
 
     val algo = new MLlibGM()
       .setK($(k))

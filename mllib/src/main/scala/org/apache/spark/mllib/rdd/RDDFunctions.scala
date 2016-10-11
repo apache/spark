@@ -24,6 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: DeveloperApi ::
  * Machine learning specific RDD functions.
  */
 @DeveloperApi
@@ -53,6 +54,9 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) extends Serializable {
 
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 object RDDFunctions {
 

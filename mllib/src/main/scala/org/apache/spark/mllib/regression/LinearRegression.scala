@@ -44,7 +44,7 @@ class LinearRegressionModel @Since("1.1.0") (
       dataMatrix: Vector,
       weightMatrix: Vector,
       intercept: Double): Double = {
-    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
+    weightMatrix.asBreeze.dot(dataMatrix.asBreeze) + intercept
   }
 
   @Since("1.3.0")
@@ -86,7 +86,6 @@ object LinearRegressionModel extends Loader[LinearRegressionModel] {
  * See also the documentation for the precise formulation.
  */
 @Since("0.8.0")
-@deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
 class LinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -108,6 +107,7 @@ class LinearRegressionWithSGD private[mllib] (
    * numIterations: 100, miniBatchFraction: 1.0}.
    */
   @Since("0.8.0")
+  @deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
   def this() = this(1.0, 100, 0.0, 1.0)
 
   override protected[mllib] def createModel(weights: Vector, intercept: Double) = {

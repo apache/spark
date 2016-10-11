@@ -75,9 +75,7 @@ public class JavaMetastoreDataSourcesSuite {
     hiveManagedPath = new Path(
       catalog.hiveDefaultTableFilePath(new TableIdentifier("javaSavedTable")));
     fs = hiveManagedPath.getFileSystem(sc.hadoopConfiguration());
-    if (fs.exists(hiveManagedPath)){
-      fs.delete(hiveManagedPath, true);
-    }
+    fs.delete(hiveManagedPath, true);
 
     List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
@@ -85,7 +83,7 @@ public class JavaMetastoreDataSourcesSuite {
     }
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
     df = sqlContext.read().json(rdd);
-    df.registerTempTable("jsonTable");
+    df.createOrReplaceTempView("jsonTable");
   }
 
   @After

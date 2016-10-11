@@ -23,7 +23,8 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, NewInstance, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -93,7 +94,7 @@ object TestingUDT {
       .add("c", DoubleType, nullable = false)
 
     override def serialize(n: NestedStruct): Any = {
-      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
       row.setInt(0, n.a)
       row.setLong(1, n.b)
       row.setDouble(2, n.c)
@@ -287,7 +288,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(serializer.children.head.asInstanceOf[Literal].value === UTF8String.fromString("value"))
     assert(serializer.children.last.isInstanceOf[NewInstance])
     assert(serializer.children.last.asInstanceOf[NewInstance]
-      .cls.isInstanceOf[Class[org.apache.spark.sql.catalyst.util.GenericArrayData]])
+      .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
   }
 
   private val dataTypeForComplexData = dataTypeFor[ComplexData]

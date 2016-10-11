@@ -22,7 +22,7 @@ package org.apache.spark.examples.ml
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.Row
 // $example off$
 import org.apache.spark.sql.SparkSession
@@ -54,7 +54,7 @@ object PipelineExample {
       .setOutputCol("features")
     val lr = new LogisticRegression()
       .setMaxIter(10)
-      .setRegParam(0.01)
+      .setRegParam(0.001)
     val pipeline = new Pipeline()
       .setStages(Array(tokenizer, hashingTF, lr))
 
@@ -74,7 +74,7 @@ object PipelineExample {
     val test = spark.createDataFrame(Seq(
       (4L, "spark i j k"),
       (5L, "l m n"),
-      (6L, "mapreduce spark"),
+      (6L, "spark hadoop spark"),
       (7L, "apache hadoop")
     )).toDF("id", "text")
 

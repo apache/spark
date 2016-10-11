@@ -34,9 +34,4 @@ private[spark] class YarnClusterScheduler(sc: SparkContext) extends YarnSchedule
     logInfo("YarnClusterScheduler.postStartHook done")
   }
 
-  override def stop() {
-    super.stop()
-    ApplicationMaster.sparkContextStopped(sc)
-  }
-
 }

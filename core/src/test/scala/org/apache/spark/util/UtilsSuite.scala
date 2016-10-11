@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream, PrintStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -31,6 +31,7 @@ import scala.util.Random
 
 import com.google.common.io.Files
 import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -39,6 +40,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
+
+  test("truncatedString") {
+    assert(Utils.truncatedString(Nil, "[", ", ", "]", 2) == "[]")
+    assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", -5) == "[, ... 3 more fields]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), ", ") == "1, 2, 3")
+  }
 
   test("timeConversion") {
     // Test -1
@@ -681,14 +690,37 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(!Utils.isInDirectory(nullFile, childFile3))
   }
 
-  test("circular buffer") {
-    val buffer = new CircularBuffer(25)
-    val stream = new java.io.PrintStream(buffer, true, "UTF-8")
+  test("circular buffer: if nothing was written to the buffer, display nothing") {
+    val buffer = new CircularBuffer(4)
+    assert(buffer.toString === "")
+  }
 
-    // scalastyle:off println
-    stream.println("test circular test circular test circular test circular test circular")
-    // scalastyle:on println
-    assert(buffer.toString === "t circular test circular\n")
+  test("circular buffer: if the buffer isn't full, print only the contents written") {
+    val buffer = new CircularBuffer(10)
+    val stream = new PrintStream(buffer, true, "UTF-8")
+    stream.print("test")
+    assert(buffer.toString === "test")
+  }
+
+  test("circular buffer: data written == size of the buffer") {
+    val buffer = new CircularBuffer(4)
+    val stream = new PrintStream(buffer, true, "UTF-8")
+
+    // fill the buffer to its exact size so that it just hits overflow
+    stream.print("test")
+    assert(buffer.toString === "test")
+
+    // add more data to the buffer
+    stream.print("12")
+    assert(buffer.toString === "st12")
+  }
+
+  test("circular buffer: multiple overflow") {
+    val buffer = new CircularBuffer(25)
+    val stream = new PrintStream(buffer, true, "UTF-8")
+
+    stream.print("test circular test circular test circular test circular test circular")
+    assert(buffer.toString === "st circular test circular")
   }
 
   test("nanSafeCompareDoubles") {
@@ -723,18 +755,50 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
-    conf.set("spark.master", "yarn-client")
+    conf.set("spark.master", "yarn")
+    conf.set("spark.submit.deployMode", "client")
     assert(Utils.isDynamicAllocationEnabled(conf) === false)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.dynamicAllocation.enabled", "false")) === false)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.dynamicAllocation.enabled", "true")) === true)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "1")) === false)
+      conf.set("spark.executor.instances", "1")) === true)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "0")) === true)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.dynamicAllocation.testing", "true")))
+  }
+
+  test("getDynamicAllocationInitialExecutors") {
+    val conf = new SparkConf()
+    assert(Utils.getDynamicAllocationInitialExecutors(conf) === 0)
+    assert(Utils.getDynamicAllocationInitialExecutors(
+      conf.set("spark.dynamicAllocation.minExecutors", "3")) === 3)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
+      conf.set("spark.executor.instances", "2")) === 3)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
+      conf.set("spark.executor.instances", "4")) === 4)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
+      conf.set("spark.dynamicAllocation.initialExecutors", "3")) === 4)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
+      conf.set("spark.dynamicAllocation.initialExecutors", "5")) === 5)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
+      conf.set("spark.dynamicAllocation.initialExecutors", "2")
+        .set("spark.executor.instances", "1")) === 3)
+  }
+
+  test("Set Spark CallerContext") {
+    val context = "test"
+    try {
+      val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+      assert(new CallerContext(context).setCurrentContext())
+      assert(s"SPARK_$context" ===
+        callerContext.getMethod("getCurrent").invoke(null).toString)
+    } catch {
+      case e: ClassNotFoundException =>
+        assert(!new CallerContext(context).setCurrentContext())
+    }
   }
 
   test("encodeFileNameToURIRawPath") {
@@ -815,12 +879,46 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
           assert(terminated.isDefined)
           Utils.waitForProcess(process, 5000)
           val duration = System.currentTimeMillis() - start
-          assert(duration < 5000)
+          assert(duration < 6000) // add a little extra time to allow a force kill to finish
           assert(!pidExists(pid))
         } finally {
           signal(pid, "SIGKILL")
         }
       }
     }
+  }
+
+  test("chi square test of randomizeInPlace") {
+    // Parameters
+    val arraySize = 10
+    val numTrials = 1000
+    val threshold = 0.05
+    val seed = 1L
+
+    // results(i)(j): how many times Utils.randomize moves an element from position j to position i
+    val results = Array.ofDim[Long](arraySize, arraySize)
+
+    // This must be seeded because even a fair random process will fail this test with
+    // probability equal to the value of `threshold`, which is inconvenient for a unit test.
+    val rand = new java.util.Random(seed)
+    val range = 0 until arraySize
+
+    for {
+      _ <- 0 until numTrials
+      trial = Utils.randomizeInPlace(range.toArray, rand)
+      i <- range
+    } results(i)(trial(i)) += 1L
+
+    val chi = new ChiSquareTest()
+
+    // We expect an even distribution; this array will be rescaled by `chiSquareTest`
+    val expected = Array.fill(arraySize * arraySize)(1.0)
+    val observed = results.flatten
+
+    // Performs Pearson's chi-squared test. Using the sum-of-squares as the test statistic, gives
+    // the probability of a uniform distribution producing results as extreme as `observed`
+    val pValue = chi.chiSquareTest(expected, observed)
+
+    assert(pValue > threshold)
   }
 }

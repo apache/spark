@@ -50,7 +50,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("BroadcastExchange same result") {
-    val df = sqlContext.range(10)
+    val df = spark.range(10)
     val plan = df.queryExecution.executedPlan
     val output = plan.output
     assert(plan sameResult plan)
@@ -75,7 +75,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("ShuffleExchange same result") {
-    val df = sqlContext.range(10)
+    val df = spark.range(10)
     val plan = df.queryExecution.executedPlan
     val output = plan.output
     assert(plan sameResult plan)

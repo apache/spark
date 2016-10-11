@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift.ThriftHttpCLIService
+import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.SparkContext
@@ -157,7 +157,7 @@ object HiveThriftServer2 extends Logging {
 
 
   /**
-   * A inner sparkListener called in sc.stop to clean up the HiveThriftServer2
+   * An inner sparkListener called in sc.stop to clean up the HiveThriftServer2
    */
   private[thriftserver] class HiveThriftServer2Listener(
       val server: HiveServer2,
@@ -271,7 +271,7 @@ object HiveThriftServer2 extends Logging {
 
 private[hive] class HiveThriftServer2(sqlContext: SQLContext)
   extends HiveServer2
-  with ReflectedCompositeService with Logging {
+  with ReflectedCompositeService {
   // state is tracked internally so that the server only attempts to shut down if it successfully
   // started, and then once only.
   private val started = new AtomicBoolean(false)
@@ -281,18 +281,20 @@ private[hive] class HiveThriftServer2(sqlContext: SQLContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
-    if (isBinaryTransportMode(hiveConf)) {
-      logWarning("Binary mode is not supported, use HTTP mode instead")
+    val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
+      new ThriftHttpCLIService(sparkSqlCliService)
+    } else {
+      new ThriftBinaryCLIService(sparkSqlCliService)
     }
-    val thriftCliService = new ThriftHttpCLIService(sparkSqlCliService)
+
     setSuperField(this, "thriftCLIService", thriftCliService)
     addService(thriftCliService)
     initCompositeService(hiveConf)
   }
 
-  private def isBinaryTransportMode(hiveConf: HiveConf): Boolean = {
+  private def isHTTPTransportMode(hiveConf: HiveConf): Boolean = {
     val transportMode = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
-    transportMode.toLowerCase(Locale.ENGLISH).equals("binary")
+    transportMode.toLowerCase(Locale.ENGLISH).equals("http")
   }
 
 
