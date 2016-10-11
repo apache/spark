@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, Date, PreparedStatement, ResultSet, SQLException, Timestamp}
-import java.util.Properties
 
 import scala.util.control.NonFatal
 
@@ -46,17 +45,18 @@ object JDBCRDD extends Logging {
    * Takes a (schema, table) specification and returns the table's Catalyst
    * schema.
    *
-   * @param url - The JDBC url to fetch information from.
-   * @param table - The table name of the desired table.  This may also be a
-   *   SQL query wrapped in parentheses.
+   * @param options - JDBC options that contains url, table and other information.
    *
    * @return A StructType giving the table's Catalyst schema.
    * @throws SQLException if the table specification is garbage.
    * @throws SQLException if the table contains an unsupported type.
    */
-  def resolveTable(url: String, table: String, properties: Properties): StructType = {
+  def resolveTable(options: JDBCOptions): StructType = {
+    val url = options.url
+    val table = options.table
+    val properties = options.asConnectionProperties
     val dialect = JdbcDialects.get(url)
-    val conn: Connection = JdbcUtils.createConnectionFactory(url, properties)()
+    val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
       try {
@@ -143,43 +143,38 @@ object JDBCRDD extends Logging {
     })
   }
 
-
-
   /**
    * Build and return JDBCRDD from the given information.
    *
    * @param sc - Your SparkContext.
    * @param schema - The Catalyst schema of the underlying database table.
-   * @param url - The JDBC url to connect to.
-   * @param fqTable - The fully-qualified table name (or paren'd SQL query) to use.
    * @param requiredColumns - The names of the columns to SELECT.
    * @param filters - The filters to include in all WHERE clauses.
    * @param parts - An array of JDBCPartitions specifying partition ids and
    *    per-partition WHERE clauses.
+   * @param options - JDBC options that contains url, table and other information.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
   def scanTable(
       sc: SparkContext,
       schema: StructType,
-      url: String,
-      properties: Properties,
-      fqTable: String,
       requiredColumns: Array[String],
       filters: Array[Filter],
-      parts: Array[Partition]): RDD[InternalRow] = {
+      parts: Array[Partition],
+      options: JDBCOptions): RDD[InternalRow] = {
+    val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
-      JdbcUtils.createConnectionFactory(url, properties),
+      JdbcUtils.createConnectionFactory(options),
       pruneSchema(schema, requiredColumns),
-      fqTable,
       quotedColumns,
       filters,
       parts,
       url,
-      properties)
+      options)
   }
 }
 
@@ -192,12 +187,11 @@ private[jdbc] class JDBCRDD(
     sc: SparkContext,
     getConnection: () => Connection,
     schema: StructType,
-    fqTable: String,
     columns: Array[String],
     filters: Array[Filter],
     partitions: Array[Partition],
     url: String,
-    properties: Properties)
+    options: JDBCOptions)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -211,7 +205,7 @@ private[jdbc] class JDBCRDD(
   private val columnList: String = {
     val sb = new StringBuilder()
     columns.foreach(x => sb.append(",").append(x))
-    if (sb.length == 0) "1" else sb.substring(1)
+    if (sb.isEmpty) "1" else sb.substring(1)
   }
 
   /**
@@ -286,7 +280,7 @@ private[jdbc] class JDBCRDD(
     conn = getConnection()
     val dialect = JdbcDialects.get(url)
     import scala.collection.JavaConverters._
-    dialect.beforeFetch(conn, properties.asScala.toMap)
+    dialect.beforeFetch(conn, options.asConnectionProperties.asScala.toMap)
 
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
@@ -294,15 +288,10 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
-    val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
+    val sqlText = s"SELECT $columnList FROM ${options.table} $myWhereClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    val fetchSize = properties.getProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "0").toInt
-    require(fetchSize >= 0,
-      s"Invalid value `${fetchSize.toString}` for parameter " +
-      s"`${JdbcUtils.JDBC_BATCH_FETCH_SIZE}`. The minimum value is 0. When the value is 0, " +
-      "the JDBC driver ignores the value and does the estimates.")
-    stmt.setFetchSize(fetchSize)
+    stmt.setFetchSize(options.fetchSize)
     rs = stmt.executeQuery()
     val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
 

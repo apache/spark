@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.util.Properties
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
@@ -102,10 +100,7 @@ private[sql] object JDBCRelation extends Logging {
 }
 
 private[sql] case class JDBCRelation(
-    url: String,
-    table: String,
-    parts: Array[Partition],
-    properties: Properties = new Properties())(@transient val sparkSession: SparkSession)
+    parts: Array[Partition], jdbcOptions: JDBCOptions)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
@@ -114,7 +109,7 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
+  override val schema: StructType = JDBCRDD.resolveTable(jdbcOptions)
 
   // Check if JDBCRDD.compileFilter can accept input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
@@ -126,15 +121,16 @@ private[sql] case class JDBCRelation(
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
       schema,
-      url,
-      properties,
-      table,
       requiredColumns,
       filters,
-      parts).asInstanceOf[RDD[Row]]
+      parts,
+      jdbcOptions).asInstanceOf[RDD[Row]]
   }
 
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
+    val url = jdbcOptions.url
+    val table = jdbcOptions.table
+    val properties = jdbcOptions.asConnectionProperties
     data.write
       .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)
       .jdbc(url, table, properties)
@@ -142,6 +138,6 @@ private[sql] case class JDBCRelation(
 
   override def toString: String = {
     // credentials should not be included in the plan output, table information is sufficient.
-    s"JDBCRelation(${table})"
+    s"JDBCRelation(${jdbcOptions.table})"
   }
 }
