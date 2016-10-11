@@ -1037,13 +1037,12 @@ setMethod("dim",
 
 #' Download Spark datasets into R
 #'
-#' If applied to a SparkDataFrame, \code{collect} returns a data.frame. If applied to a 
-#' Column, it returns a vector of the same type. 
+#' Converts a SparkDataFrame into a data.frame. 
 #' 
-#' \strong{Note:} Since R data.frames and vectors are
+#' \strong{Note:} Since R data.frames are
 #' held in memory, ensure that you have enough memory on your system to 
 #' accommodate the contents.
-#' @param x A SparkDataFrame or Column
+#' @param x A SparkDataFrame
 #' @param stringsAsFactors (Optional) A logical indicating whether or not string columns
 
 #' should be converted to factors. FALSE by default.
@@ -1066,8 +1065,6 @@ setMethod("dim",
 #' # Collect it
 #' df <- collect(irisDF)
 #' 
-#' # Collect a column
-#' v <- collect(irisDF$Sepal_Length * 100)
 #' }
 #' @note collect since 1.4.0
 setMethod("collect",

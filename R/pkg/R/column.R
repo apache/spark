@@ -67,14 +67,6 @@ setMethod("show", signature = "Column", definition = function(object) {
   }
 })
 
-setMethod("collect", signature = "Column", definition = function(x) {
-  if (is.null(x@df)) {
-    character(0)
-  } else {
-    collect(select(x@df, x))[, 1]
-  }
-})
-
 setMethod("head", signature = "Column", definition = function(x, n=6) {
   if (is.null(x@df)) {
     collect(x)

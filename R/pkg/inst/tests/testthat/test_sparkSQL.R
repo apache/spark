@@ -2258,7 +2258,7 @@ test_that("collect/show/head on Columns", {
   x <- irisDF$Sepal_Length + 100
   y <- cos(x + irisDF$Sepal_Width) ^ 2
   z <- sin(x + irisDF$Sepal_Width) ^ 2
-  expect_equal(any(collect(y + z) == 1), TRUE)
+  expect_equal(any(head(y + z) == 1), TRUE)
 
   # show and print
   expect_equal(capture.output(show(z + y))[1], " [1] 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1")
@@ -2269,12 +2269,12 @@ test_that("collect/show/head on Columns", {
   expect_equal(length(head(z + y, 100)), 100)
 
   # Columns without parent DataFrame
-  expect_equal(is.numeric(collect(rand())), TRUE)
+  expect_equal(is.numeric(head(rand())), TRUE)
 })
 
 test_that("Minimal column test.", {
   x <- column(irisDF$Sepal_Length@jc)
-  expect_equal(collect(select(irisDF, x))[1, 1], 5.1)
+  expect_equal(head(select(irisDF, x))[1, 1], 5.1)
 })
 
 test_that("Histogram", {
