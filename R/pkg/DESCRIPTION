@@ -11,8 +11,7 @@ Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
                     email = "felixcheung@apache.org"),
              person(family = "The Apache Software Foundation", role = c("aut", "cph")))
 URL: http://www.apache.org/ http://spark.apache.org/
-BugReports: https://cwiki.apache.org/confluence/display/SPARK/Contributing+to
-    +Spark#ContributingtoSpark-ContributingBugReports
+BugReports: https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-ContributingBugReports
 Depends:
     R (>= 3.0),
     methods
@@ -26,10 +25,10 @@ Collate:
     'schema.R'
     'generics.R'
     'jobj.R'
-    'RDD.R'
-    'pairRDD.R'
     'column.R'
     'group.R'
+    'RDD.R'
+    'pairRDD.R'
     'DataFrame.R'
     'SQLContext.R'
     'WindowSpec.R'
