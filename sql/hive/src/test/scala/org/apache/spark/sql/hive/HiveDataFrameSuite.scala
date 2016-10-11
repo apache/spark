@@ -36,7 +36,7 @@ class HiveDataFrameSuite extends QueryTest with TestHiveSingleton with SQLTestUt
     assert(hiveClient.getConf("hive.in.test", "") == "true")
   }
 
-  test("inputFiles of pruned and partitioned table") {
+  test("partitioned pruned table reports only selected files") {
     withTable("test") {
       withTempDir { dir =>
         spark.range(5).selectExpr("id", "id as f1", "id as f2").write
