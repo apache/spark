@@ -29,7 +29,7 @@ import java.io.InputStream;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Tests functionality of {@link NioBasedBufferedFileInputStream}
+ * Tests functionality of {@link NioBufferedFileInputStream}
  */
 public class NioBasedBufferedFileInputStreamSuite {
 
@@ -52,7 +52,7 @@ public class NioBasedBufferedFileInputStreamSuite {
 
   @Test
   public void testReadOneByte() throws IOException {
-    InputStream inputStream = new NioBasedBufferedFileInputStream(inputFile);
+    InputStream inputStream = new NioBufferedFileInputStream(inputFile);
     for (int i = 0; i < randomBytes.length; i++) {
       assertEquals(randomBytes[i], (byte) inputStream.read());
     }
@@ -60,7 +60,7 @@ public class NioBasedBufferedFileInputStreamSuite {
 
   @Test
   public void testReadMultipleBytes() throws IOException {
-    InputStream inputStream = new NioBasedBufferedFileInputStream(inputFile);
+    InputStream inputStream = new NioBufferedFileInputStream(inputFile);
     byte[] readBytes = new byte[8 * 1024];
     int i = 0;
     while (i < randomBytes.length) {
@@ -74,7 +74,7 @@ public class NioBasedBufferedFileInputStreamSuite {
 
   @Test
   public void testBytesSkipped() throws IOException {
-    InputStream inputStream = new NioBasedBufferedFileInputStream(inputFile);
+    InputStream inputStream = new NioBufferedFileInputStream(inputFile);
     assertEquals(1024, inputStream.skip(1024));
     for (int i = 1024; i < randomBytes.length; i++) {
       assertEquals(randomBytes[i], (byte) inputStream.read());
@@ -83,7 +83,7 @@ public class NioBasedBufferedFileInputStreamSuite {
 
   @Test
   public void testBytesSkippedAfterRead() throws IOException {
-    InputStream inputStream = new NioBasedBufferedFileInputStream(inputFile);
+    InputStream inputStream = new NioBufferedFileInputStream(inputFile);
     for (int i = 0; i < 1024; i++) {
       assertEquals(randomBytes[i], (byte) inputStream.read());
     }
@@ -95,7 +95,7 @@ public class NioBasedBufferedFileInputStreamSuite {
 
   @Test
   public void testNegativeBytesSkippedAfterRead() throws IOException {
-    InputStream inputStream = new NioBasedBufferedFileInputStream(inputFile);
+    InputStream inputStream = new NioBufferedFileInputStream(inputFile);
     for (int i = 0; i < 1024; i++) {
       assertEquals(randomBytes[i], (byte) inputStream.read());
     }
@@ -111,7 +111,7 @@ public class NioBasedBufferedFileInputStreamSuite {
 
   @Test
   public void testSkipFromFileChannel() throws IOException {
-    InputStream inputStream = new NioBasedBufferedFileInputStream(inputFile, 10);
+    InputStream inputStream = new NioBufferedFileInputStream(inputFile, 10);
     // Since the buffer is smaller than the skipped bytes, this will guarantee
     // we skip from underlying file channel.
     assertEquals(1024, inputStream.skip(1024));
@@ -128,7 +128,7 @@ public class NioBasedBufferedFileInputStreamSuite {
 
   @Test
   public void testBytesSkippedAfterEOF() throws IOException {
-    InputStream inputStream = new NioBasedBufferedFileInputStream(inputFile);
+    InputStream inputStream = new NioBufferedFileInputStream(inputFile);
     assertEquals(randomBytes.length, inputStream.skip(randomBytes.length + 1));
     assertEquals(-1, inputStream.read());
   }

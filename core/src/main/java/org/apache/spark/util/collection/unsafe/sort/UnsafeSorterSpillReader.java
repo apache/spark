@@ -23,7 +23,7 @@ import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 
 import org.apache.spark.SparkEnv;
-import org.apache.spark.io.NioBasedBufferedFileInputStream;
+import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
@@ -71,7 +71,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     }
 
     final InputStream bs =
-        new NioBasedBufferedFileInputStream(file, (int) bufferSizeBytes);
+        new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
     try {
       this.in = serializerManager.wrapStream(blockId, bs);
       this.din = new DataInputStream(this.in);

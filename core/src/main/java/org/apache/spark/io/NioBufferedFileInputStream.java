@@ -30,8 +30,10 @@ import java.nio.file.StandardOpenOption;
  * {@link sun.nio.ch.ChannelInputStream} supports reading a file using nio,
  * but does not support buffering.
  *
+ * TODO: support {@link #mark(int)}/{@link #reset()}
+ *
  */
-public final class NioBasedBufferedFileInputStream extends InputStream {
+public final class NioBufferedFileInputStream extends InputStream {
 
   private static int DEFAULT_BUFFER_SIZE_BYTES = 8192;
 
@@ -39,13 +41,13 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
 
   private final FileChannel fileChannel;
 
-  public NioBasedBufferedFileInputStream(File file, int bufferSizeInBytes) throws IOException {
+  public NioBufferedFileInputStream(File file, int bufferSizeInBytes) throws IOException {
     byteBuffer = ByteBuffer.allocateDirect(bufferSizeInBytes);
     fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
     byteBuffer.flip();
   }
 
-  public NioBasedBufferedFileInputStream(File file) throws IOException {
+  public NioBufferedFileInputStream(File file) throws IOException {
     this(file, DEFAULT_BUFFER_SIZE_BYTES);
   }
 
@@ -58,7 +60,7 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
     if (!byteBuffer.hasRemaining()) {
       byteBuffer.clear();
       int nRead = fileChannel.read(byteBuffer);
-      if (nRead == -1) {
+      if (nRead <= 0) {
         return false;
       }
       byteBuffer.flip();
@@ -91,7 +93,7 @@ public final class NioBasedBufferedFileInputStream extends InputStream {
 
   @Override
   public long skip(long n) throws IOException {
-    if (n < 0L) {
+    if (n <= 0L) {
       return 0L;
     }
     if (byteBuffer.remaining() >= n) {
