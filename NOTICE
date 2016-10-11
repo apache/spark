@@ -162,7 +162,7 @@ Please visit the Netty web site for more information:
 
   * http://netty.io/
 
-Copyright 2011 The Netty Project
+Copyright 2014 The Netty Project
 
 The Netty Project licenses this file to you under the Apache License,
 version 2.0 (the "License"); you may not use this file except in compliance
@@ -198,15 +198,111 @@ Base64 Encoder and Decoder, which can be obtained at:
   * HOMEPAGE:
     * http://iharder.sourceforge.net/current/java/base64/
 
-This product contains a modified version of 'JZlib', a re-implementation of
-zlib in pure Java, which can be obtained at:
+This product contains a modified portion of 'Webbit', an event based
+WebSocket and HTTP server, which can be obtained at:
 
   * LICENSE:
-    * license/LICENSE.jzlib.txt (BSD Style License)
+    * license/LICENSE.webbit.txt (BSD License)
+  * HOMEPAGE:
+    * https://github.com/joewalnes/webbit
+
+This product contains a modified portion of 'SLF4J', a simple logging
+facade for Java, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.slf4j.txt (MIT License)
+  * HOMEPAGE:
+    * http://www.slf4j.org/
+
+This product contains a modified portion of 'ArrayDeque', written by Josh
+Bloch of Google, Inc:
+
+  * LICENSE:
+    * license/LICENSE.deque.txt (Public Domain)
+
+This product contains a modified portion of 'Apache Harmony', an open source
+Java SE, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.harmony.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * http://archive.apache.org/dist/harmony/
+
+This product contains a modified version of Roland Kuhn's ASL2
+AbstractNodeQueue, which is based on Dmitriy Vyukov's non-intrusive MPSC queue.
+It can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.abstractnodequeue.txt (Public Domain)
+  * HOMEPAGE:
+    * https://github.com/akka/akka/blob/wip-2.2.3-for-scala-2.11/akka-actor/src/main/java/akka/dispatch/AbstractNodeQueue.java
+
+This product contains a modified portion of 'jbzip2', a Java bzip2 compression
+and decompression library written by Matthew J. Francis. It can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.jbzip2.txt (MIT License)
+  * HOMEPAGE:
+    * https://code.google.com/p/jbzip2/
+
+This product contains a modified portion of 'libdivsufsort', a C API library to construct
+the suffix array and the Burrows-Wheeler transformed string for any input string of
+a constant-size alphabet written by Yuta Mori. It can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.libdivsufsort.txt (MIT License)
+  * HOMEPAGE:
+    * https://code.google.com/p/libdivsufsort/
+
+This product contains a modified portion of Nitsan Wakart's 'JCTools', Java Concurrency Tools for the JVM,
+ which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.jctools.txt (ASL2 License)
+  * HOMEPAGE:
+    * https://github.com/JCTools/JCTools
+
+This product optionally depends on 'JZlib', a re-implementation of zlib in
+pure Java, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.jzlib.txt (BSD style License)
   * HOMEPAGE:
     * http://www.jcraft.com/jzlib/
 
-This product optionally depends on 'Protocol Buffers', Google's data
+This product optionally depends on 'Compress-LZF', a Java library for encoding and
+decoding data in LZF format, written by Tatu Saloranta. It can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.compress-lzf.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * https://github.com/ning/compress
+
+This product optionally depends on 'lz4', a LZ4 Java compression
+and decompression library written by Adrien Grand. It can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.lz4.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * https://github.com/jpountz/lz4-java
+
+This product optionally depends on 'lzma-java', a LZMA Java compression
+and decompression library, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.lzma-java.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * https://github.com/jponge/lzma-java
+
+This product contains a modified portion of 'jfastlz', a Java port of FastLZ compression
+and decompression library written by William Kinney. It can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.jfastlz.txt (MIT License)
+  * HOMEPAGE:
+    * https://code.google.com/p/jfastlz/
+
+This product contains a modified portion of and optionally depends on 'Protocol Buffers', Google's data
 interchange format, which can be obtained at:
 
   * LICENSE:
@@ -214,13 +310,38 @@ interchange format, which can be obtained at:
   * HOMEPAGE:
     * http://code.google.com/p/protobuf/
 
-This product optionally depends on 'SLF4J', a simple logging facade for Java,
-which can be obtained at:
+This product optionally depends on 'Bouncy Castle Crypto APIs' to generate
+a temporary self-signed X.509 certificate when the JVM does not provide the
+equivalent functionality.  It can be obtained at:
 
   * LICENSE:
-    * license/LICENSE.slf4j.txt (MIT License)
+    * license/LICENSE.bouncycastle.txt (MIT License)
   * HOMEPAGE:
-    * http://www.slf4j.org/
+    * http://www.bouncycastle.org/
+
+This product optionally depends on 'Snappy', a compression library produced
+by Google Inc, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.snappy.txt (New BSD License)
+  * HOMEPAGE:
+    * http://code.google.com/p/snappy/
+
+This product optionally depends on 'JBoss Marshalling', an alternative Java
+serialization API, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.jboss-marshalling.txt (GNU LGPL 2.1)
+  * HOMEPAGE:
+    * http://www.jboss.org/jbossmarshalling
+
+This product optionally depends on 'Caliper', Google's micro-
+benchmarking framework, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.caliper.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * http://code.google.com/p/caliper/
 
 This product optionally depends on 'Apache Commons Logging', a logging
 framework, which can be obtained at:
@@ -230,37 +351,38 @@ framework, which can be obtained at:
   * HOMEPAGE:
     * http://commons.apache.org/logging/
 
-This product optionally depends on 'Apache Log4J', a logging framework,
-which can be obtained at:
+This product optionally depends on 'Apache Log4J', a logging framework, which
+can be obtained at:
 
   * LICENSE:
     * license/LICENSE.log4j.txt (Apache License 2.0)
   * HOMEPAGE:
     * http://logging.apache.org/log4j/
 
-This product optionally depends on 'JBoss Logging', a logging framework,
-which can be obtained at:
+This product optionally depends on 'Aalto XML', an ultra-high performance
+non-blocking XML processor, which can be obtained at:
 
   * LICENSE:
-    * license/LICENSE.jboss-logging.txt (GNU LGPL 2.1)
+    * license/LICENSE.aalto-xml.txt (Apache License 2.0)
   * HOMEPAGE:
-    * http://anonsvn.jboss.org/repos/common/common-logging-spi/
+    * http://wiki.fasterxml.com/AaltoHome
 
-This product optionally depends on 'Apache Felix', an open source OSGi
-framework implementation, which can be obtained at:
+This product contains a modified version of 'HPACK', a Java implementation of
+the HTTP/2 HPACK algorithm written by Twitter. It can be obtained at:
 
   * LICENSE:
-    * license/LICENSE.felix.txt (Apache License 2.0)
+    * license/LICENSE.hpack.txt (Apache License 2.0)
   * HOMEPAGE:
-    * http://felix.apache.org/
+    * https://github.com/twitter/hpack
 
-This product optionally depends on 'Webbit', a Java event based
-WebSocket and HTTP server:
+This product contains a modified portion of 'Apache Commons Lang', a Java library
+provides utilities for the java.lang API, which can be obtained at:
 
   * LICENSE:
-    * license/LICENSE.webbit.txt (BSD License)
+    * license/LICENSE.commons-lang.txt (Apache License 2.0)
   * HOMEPAGE:
-    * https://github.com/joewalnes/webbit
+    * https://commons.apache.org/proper/commons-lang/
+
 
 # Jackson JSON processor
 

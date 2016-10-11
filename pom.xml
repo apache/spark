@@ -554,6 +554,8 @@
         <artifactId>netty-all</artifactId>
         <version>4.0.41.Final</version>
       </dependency>
+      <!-- This isn't used by Spark directly, but managed here for the benefit of Flume
+        and to harmonize transitive dependency versions from Hadoop -->
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty</artifactId>
