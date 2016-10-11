@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.InferSchema
 import org.apache.spark.sql.types.StructType
 
@@ -231,13 +231,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    val props = new Properties()
-    extraOptions.foreach { case (key, value) =>
-      props.put(key, value)
-    }
-    // connectionProperties should override settings in extraOptions
-    props.putAll(connectionProperties)
-    val relation = JDBCRelation(url, table, parts, props)(sparkSession)
+    // connectionProperties should override settings in extraOptions.
+    val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
+    val options = new JDBCOptions(url, table, params)
+    val relation = JDBCRelation(parts, options)(sparkSession)
     sparkSession.baseRelationToDataFrame(relation)
   }
 
