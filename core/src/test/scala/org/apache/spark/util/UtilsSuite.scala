@@ -25,16 +25,17 @@ import java.nio.charset.StandardCharsets
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
 import com.google.common.io.Files
+import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
@@ -274,12 +275,21 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11" + sep + "00 h")
   }
 
-  test("reading offset bytes of a file") {
+  def writeLogFile(path: String, content: Array[Byte], isCompressed: Boolean): Unit = {
+    val outputStream = if (isCompressed) {
+      new GZIPOutputStream(new FileOutputStream(path + ".gz"))
+    } else {
+      new FileOutputStream(path)
+    }
+    IOUtils.write(content, outputStream)
+    outputStream.close()
+  }
+
+  def testOffsetBytes(isCompressed: Boolean): Unit = {
     val tmpDir2 = Utils.createTempDir()
     val f1Path = tmpDir2 + "/f1"
-    val f1 = new FileOutputStream(f1Path)
-    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
-    f1.close()
+    writeLogFile(
+      f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8), isCompressed)
 
     // Read first few bytes
     assert(Utils.offsetBytes(f1Path, 0, 5) === "1\n2\n3")
@@ -302,12 +312,23 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     Utils.deleteRecursively(tmpDir2)
   }
 
-  test("reading offset bytes across multiple files") {
+  test("reading offset bytes of a file") {
+    testOffsetBytes(isCompressed = false)
+  }
+
+  test("reading offset bytes of a file (compressed)") {
+    testOffsetBytes(isCompressed = true)
+  }
+
+  def testOffsetBytesMultipleFiles(isCompressed: Boolean): Unit = {
     val tmpDir = Utils.createTempDir()
     val files = (1 to 3).map(i => new File(tmpDir, i.toString))
-    Files.write("0123456789", files(0), StandardCharsets.UTF_8)
-    Files.write("abcdefghij", files(1), StandardCharsets.UTF_8)
-    Files.write("ABCDEFGHIJ", files(2), StandardCharsets.UTF_8)
+    writeLogFile(
+      files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8), isCompressed)
+    writeLogFile(
+      files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8), isCompressed)
+    writeLogFile(
+      files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8), isCompressed)
 
     // Read first few bytes in the 1st file
     assert(Utils.offsetBytes(files, 0, 5) === "01234")
@@ -331,6 +352,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.offsetBytes(files, -5, 35) === "0123456789abcdefghijABCDEFGHIJ")
 
     Utils.deleteRecursively(tmpDir)
+  }
+
+  test("reading offset bytes across multiple files") {
+    testOffsetBytesMultipleFiles(isCompressed = false)
+  }
+
+  test("reading offset bytes across multiple files (compressed)") {
+    testOffsetBytesMultipleFiles(isCompressed = true)
   }
 
   test("deserialize long value") {
