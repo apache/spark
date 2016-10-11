@@ -2494,7 +2494,7 @@ class Dataset[T] private[sql](
    * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
    * view, e.g. `SELECT * FROM _global_temp.view1`.
    *
-   * @throws TempTableAlreadyExistsException if the view name already exists
+   * @throws AnalysisException if the view name already exists
    *
    * @group basic
    * @since 2.1.0
@@ -2508,12 +2508,7 @@ class Dataset[T] private[sql](
       viewName: String,
       replace: Boolean,
       global: Boolean): CreateViewCommand = {
-    val viewType = if (global) {
-      GlobalTempView
-    } else {
-      LocalTempView
-    }
-
+    val viewType = if (global) GlobalTempView else LocalTempView
     CreateViewCommand(
       name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
       userSpecifiedColumns = Nil,
