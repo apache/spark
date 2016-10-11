@@ -1449,6 +1449,23 @@ private[spark] object Utils extends Logging {
     CallSite(shortForm, longForm)
   }
 
+//  def getFileLength(file: File): Long = {
+//    if (file.getName.endsWith(".gz")) {
+//      var size = 0L
+//      while ()
+//      long size = 0;
+//
+//      while (zis.available() > 0)
+//      {
+//        byte[] buf = new byte[1024];
+//        int read = zis.read(buf);
+//        if (read > 0) size += read;
+//      }
+//    } else {
+//      file.length()
+//    }
+//  }
+
   /** Return a string containing part of a file from byte 'start' to 'end'. */
   def offsetBytes(path: String, start: Long, end: Long): String = {
     val file = new File(path)

@@ -89,6 +89,8 @@ private[spark] class RollingFileAppender(
         inputStream = new FileInputStream(activeFile)
         gzOutputStream = new GZIPOutputStream(new FileOutputStream(gzFile))
         IOUtils.copy(inputStream, gzOutputStream)
+        inputStream.close()
+        gzOutputStream.close()
         activeFile.delete()
       } finally {
         IOUtils.closeQuietly(inputStream)

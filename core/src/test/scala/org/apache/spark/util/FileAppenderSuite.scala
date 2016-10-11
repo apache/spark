@@ -89,7 +89,8 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       new TimeBasedRollingPolicy(rolloverIntervalMillis, s"--HH-mm-ss-SSSS", false),
       sparkConf, 10)
 
-    testRolling(appender, testOutputStream, textToAppend, rolloverIntervalMillis, true)
+    testRolling(
+      appender, testOutputStream, textToAppend, rolloverIntervalMillis, isCompressed = true)
   }
 
   test("rolling file appender - size-based rolling") {
@@ -121,10 +122,10 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val appender = new RollingFileAppender(testInputStream, testFile,
       new SizeBasedRollingPolicy(rolloverSize, false), sparkConf, 99)
 
-    val files = testRolling(appender, testOutputStream, textToAppend, 0, true)
+    val files = testRolling(appender, testOutputStream, textToAppend, 0, isCompressed = true)
     files.foreach { file =>
       logInfo(file.toString + ": " + file.length + " bytes")
-      assert(file.length <= rolloverSize)
+      assert(file.length < rolloverSize)
     }
   }
 
@@ -330,7 +331,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     // verify whether all the data written to rolled over files is same as expected
     val generatedFiles = RollingFileAppender.getSortedRolledOverFiles(
       testFile.getParentFile.toString, testFile.getName)
-    logInfo("Filtered files: \n" + generatedFiles.mkString("\n"))
+    logInfo("Generate files: \n" + generatedFiles.mkString("\n"))
     assert(generatedFiles.size > 1)
     if (isCompressed) {
       assert(
