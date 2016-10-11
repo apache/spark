@@ -914,6 +914,16 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(partitions[0], [(0, 5), (0, 8), (2, 6)])
         self.assertEqual(partitions[1], [(1, 3), (3, 8), (3, 8)])
 
+    def test_repartition_no_skewed(self):
+        num_partitions = 20
+        a = self.sc.parallelize(range(int(1000)), 2)
+        l = a.repartition(num_partitions).glom().map(len).collect()
+        zeros = len([x for x in l if x == 0])
+        self.assertTrue(zeros == 0)
+        l = a.coalesce(num_partitions, True).glom().map(len).collect()
+        zeros = len([x for x in l if x == 0])
+        self.assertTrue(zeros == 0)
+
     def test_distinct(self):
         rdd = self.sc.parallelize((1, 2, 3)*10, 10)
         self.assertEqual(rdd.getNumPartitions(), 10)
