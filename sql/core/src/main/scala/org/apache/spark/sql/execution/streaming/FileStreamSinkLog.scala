@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.OutputStream
+
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
@@ -93,8 +95,8 @@ class FileStreamSinkLog(
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $compactInterval) " +
       "to a positive value.")
 
-  protected override def serializeData(data: SinkFileStatus): String = {
-    write(data)
+  protected override def serializeData(data: SinkFileStatus, out: OutputStream): Unit = {
+    write(data, out)
   }
 
   protected override def deserializeData(encodedString: String): SinkFileStatus = {

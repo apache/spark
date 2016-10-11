@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{FileNotFoundException, IOException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 import java.util.{ConcurrentModificationException, EnumSet, UUID}
 
@@ -29,7 +29,6 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.UninterruptibleThread
@@ -88,12 +87,15 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     }
   }
 
-  protected def serialize(metadata: T): Array[Byte] = {
-    JavaUtils.bufferToArray(serializer.serialize(metadata))
+  protected def serialize(metadata: T, out: OutputStream): Unit = {
+    // called inside a try-finally where the underlying stream is closed in the caller
+    val outStream = serializer.serializeStream(out)
+    outStream.writeObject(metadata)
   }
 
-  protected def deserialize(bytes: Array[Byte]): T = {
-    serializer.deserialize[T](ByteBuffer.wrap(bytes))
+  protected def deserialize(in: InputStream): T = {
+    val inStream = serializer.deserializeStream(in)
+    inStream.readObject[T]()
   }
 
   /**
@@ -114,7 +116,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
       // Only write metadata when the batch has not yet been written
       Thread.currentThread match {
         case ut: UninterruptibleThread =>
-          ut.runUninterruptibly { writeBatch(batchId, serialize(metadata)) }
+          ut.runUninterruptibly { writeBatch(batchId, metadata, serialize) }
         case _ =>
           throw new IllegalStateException(
             "HDFSMetadataLog.add() must be executed on a o.a.spark.util.UninterruptibleThread")
@@ -129,7 +131,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
    * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
    * valid behavior, we still need to prevent it from destroying the files.
    */
-  private def writeBatch(batchId: Long, bytes: Array[Byte]): Unit = {
+  private def writeBatch(batchId: Long, metadata: T, writer: (T, OutputStream) => Unit): Unit = {
     // Use nextId to create a temp file
     var nextId = 0
     while (true) {
@@ -137,7 +139,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
       try {
         val output = fileManager.create(tempPath)
         try {
-          output.write(bytes)
+          writer(metadata, output)
         } finally {
           output.close()
         }

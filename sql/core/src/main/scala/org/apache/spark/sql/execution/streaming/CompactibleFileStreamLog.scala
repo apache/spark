@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.IOException
+import java.io.{InputStream, IOException, OutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.sql.SparkSession
@@ -60,7 +62,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
   /**
    * Serialize the data into encoded string.
    */
-  protected def serializeData(t: T): String
+  protected def serializeData(t: T, out: OutputStream): Unit
 
   /**
    * Deserialize the string into data object.
@@ -93,20 +95,25 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
     }
   }
 
-  override def serialize(logData: Array[T]): Array[Byte] = {
-    (metadataLogVersion +: logData.map(serializeData)).mkString("\n").getBytes(UTF_8)
+  override def serialize(logData: Array[T], out: OutputStream): Unit = {
+    // called inside a try-finally where the underlying stream is closed in the caller
+    out.write((metadataLogVersion + "\n").getBytes(UTF_8))
+    logData.foreach { data =>
+      serializeData(data, out)
+      out.write('\n')
+    }
   }
 
-  override def deserialize(bytes: Array[Byte]): Array[T] = {
-    val lines = new String(bytes, UTF_8).split("\n")
-    if (lines.length == 0) {
+  override def deserialize(in: InputStream): Array[T] = {
+    val lines = IOUtils.lineIterator(in, "UTF-8").asScala
+    if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = lines(0)
+    val version = lines.next()
     if (version != metadataLogVersion) {
       throw new IllegalStateException(s"Unknown log version: ${version}")
     }
-    lines.slice(1, lines.length).map(deserializeData)
+    lines.map(deserializeData).toArray
   }
 
   override def add(batchId: Long, logs: Array[T]): Boolean = {
