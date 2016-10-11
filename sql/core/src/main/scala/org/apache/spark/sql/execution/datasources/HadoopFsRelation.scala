@@ -44,7 +44,7 @@ case class HadoopFsRelation(
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     options: Map[String, String])(val sparkSession: SparkSession)
-  extends BaseRelation {
+  extends BaseRelation with FileRelation {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -66,4 +66,6 @@ case class HadoopFsRelation(
   }
 
   override def sizeInBytes: Long = location.sizeInBytes
+
+  override def inputFiles: Array[String] = location.inputFiles
 }
