@@ -59,6 +59,7 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
   def fit(formula: String, data: DataFrame, smoothing: Double): NaiveBayesWrapper = {
     val rFormula = new RFormula()
       .setFormula(formula)
+      .setForceIndexLabel(true)
     RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
