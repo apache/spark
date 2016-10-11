@@ -371,8 +371,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @group ddl_ops
    * @since 2.0.0
    */
-  override def dropTempView(viewName: String): Unit = {
-    sparkSession.sessionState.catalog.getTempView(viewName).foreach { tempView =>
+  override def dropTempView(viewName: String): Boolean = {
+    sparkSession.sessionState.catalog.getTempView(viewName).exists { tempView =>
       sparkSession.sharedState.cacheManager.uncacheQuery(Dataset.ofRows(sparkSession, tempView))
       sessionCatalog.dropTempView(viewName)
     }
