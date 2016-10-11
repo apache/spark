@@ -1878,17 +1878,23 @@ class Dataset[T] private[sql](
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
-    val groupCols = colNames.map { colName =>
-      allColumns.find(col => resolver(col.name, colName)).getOrElse(
+    val groupCols = colNames.flatMap { colName =>
+      // It is possibly there are more than one columns with the same name,
+      // so we call filter instead of find.
+      val cols = allColumns.filter(col => resolver(col.name, colName))
+      if (cols.isEmpty) {
         throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
+          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+      }
+      cols
     }
     val groupColExprIds = groupCols.map(_.exprId)
     val aggCols = logicalPlan.output.map { attr =>
       if (groupColExprIds.contains(attr.exprId)) {
         attr
       } else {
-        Alias(new First(attr).toAggregateExpression(), attr.name)()
+        // We should keep the original exprId of the attribute.
+        Alias(new First(attr).toAggregateExpression(), attr.name)(exprId = attr.exprId)
       }
     }
     Aggregate(groupCols, aggCols, logicalPlan)
