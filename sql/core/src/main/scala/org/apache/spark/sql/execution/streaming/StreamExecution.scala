@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -185,7 +186,9 @@ class StreamExecution(
       // Mark ACTIVE and then post the event. QueryStarted event is synchronously sent to listeners,
       // so must mark this as ACTIVE first.
       state = ACTIVE
-      sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
+      if (sparkSession.sqlContext.conf.streamingMetricsEnabled) {
+        sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
+      }
       updateStatus()
       postEvent(new QueryStarted(currentStatus)) // Assumption: Does not throw exception.
 

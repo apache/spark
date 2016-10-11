@@ -581,6 +581,12 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
 
+  val STREAMING_METRICS_ENABLED =
+    SQLConfigBuilder("spark.sql.streaming.metricsEnabled")
+      .doc("Whether Dropwizard/Codahale metrics will be reported for active streaming queries.")
+      .booleanConf
+      .createWithDefault(false)
+
   val NDV_MAX_ERROR =
     SQLConfigBuilder("spark.sql.statistics.ndv.maxError")
       .internal()
@@ -640,6 +646,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def streamingSchemaInference: Boolean = getConf(STREAMING_SCHEMA_INFERENCE)
 
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
+
+  def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 

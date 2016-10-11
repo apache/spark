@@ -73,14 +73,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       }
     }
 
-    // This is to make sure that
-    // - Query waits for manual clock to be 600 first time there is data
-    // - Exec plan ends with a node (filter) that supports the numOutputRows metric
-    spark.conf.set("spark.sql.codegen.wholeStage", false)
+    // This is to make sure thatquery waits for manual clock to be 600 first time there is data
     val mapped = inputData.toDS().agg(count("*")).as[Long].coalesce(1).map { x =>
       clock.waitTillTime(600)
       x
-    }.where("value != 100")
+    }
 
     val listener = new QueryStatusCollector
     withListenerAdded(listener) {

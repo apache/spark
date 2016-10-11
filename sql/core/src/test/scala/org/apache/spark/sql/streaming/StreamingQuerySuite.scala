@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
@@ -157,12 +158,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
 
   testQuietly("query statuses") {
     val inputData = MemoryStream[Int]
-
-    // This is make the sure the execution plan ends with a node (filter) that supports
-    // the numOutputRows metric.
-    spark.conf.set("spark.sql.codegen.wholeStage", false)
-    val mapped = inputData.toDS().map(6 / _).where("value > 0")
-
+    val mapped = inputData.toDS().map(6 / _)
     testStream(mapped)(
       AssertOnQuery(q => q.status.name === q.name),
       AssertOnQuery(q => q.status.id === q.id),
@@ -239,6 +235,37 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString)
     )
+  }
+
+  test("codahale metrics") {
+    val inputData = MemoryStream[Int]
+
+    /** Whether metrics of a query is registered for reporting */
+    def isMetricsRegistered(query: StreamingQuery): Boolean = {
+      val sourceName = s"StructuredStreaming.${query.name}"
+      val sources = spark.sparkContext.env.metricsSystem.getSourcesByName(sourceName)
+      require(sources.size <= 1)
+      sources.nonEmpty
+    }
+    // Disabled by default
+    assert(spark.conf.get("spark.sql.streaming.metricsEnabled").toBoolean === false)
+
+    withSQLConf("spark.sql.streaming.metricsEnabled" -> "false") {
+      testStream(inputData.toDF)(
+        AssertOnQuery { q => !isMetricsRegistered(q) },
+        StopStream,
+        AssertOnQuery { q => !isMetricsRegistered(q) }
+      )
+    }
+
+    // Registered when enabled
+    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+      testStream(inputData.toDF)(
+        AssertOnQuery { q => isMetricsRegistered(q) },
+        StopStream,
+        AssertOnQuery { q => !isMetricsRegistered(q) }
+      )
+    }
   }
 
   test("input row calculation with mixed batch and streaming sources") {
