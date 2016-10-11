@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
 
@@ -134,7 +135,7 @@ case class HadoopFsRelation(
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     options: Map[String, String])(val sparkSession: SparkSession)
-  extends BaseRelation {
+  extends BaseRelation with FileRelation {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -156,6 +157,8 @@ case class HadoopFsRelation(
   }
 
   override def sizeInBytes: Long = location.sizeInBytes
+
+  override def inputFiles: Array[String] = location.inputFiles
 }
 
 /**
@@ -334,6 +337,9 @@ trait BasicFileCatalog {
    */
   def listFiles(filters: Seq[Expression]): Seq[Partition]
 
+  /** Returns the list of files that will be read when scanning this relation. */
+  def inputFiles: Array[String]
+
   /** Refresh any cached file listings */
   def refresh(): Unit
 
@@ -355,8 +361,7 @@ trait FileCatalog extends BasicFileCatalog {
   /** Returns all the valid files. */
   def allFiles(): Seq[FileStatus]
 
-  /** Returns the list of files that will be read when scanning this relation. */
-  def inputFiles: Array[String] =
+  override def inputFiles: Array[String] =
     allFiles().map(_.getPath.toUri.toString).toArray
 
   override def sizeInBytes: Long = allFiles().map(_.getLen).sum

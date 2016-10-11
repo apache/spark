@@ -72,7 +72,6 @@ class TableFileCatalog(
 
   override def refresh(): Unit = {}
 
-
   /**
    * Returns a [[ListingFileCatalog]] for this table restricted to the subset of partitions
    * specified by the given partition-pruning filters.
@@ -96,6 +95,8 @@ class TableFileCatalog(
 
     new ListingFileCatalog(sparkSession, rootPaths, parameters, partitionSchema)
   }
+
+  override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
 
   private def listDataLeafFiles(paths: Seq[Path]) =
     listLeafFiles(paths).filter(f => isDataPath(f.getPath))

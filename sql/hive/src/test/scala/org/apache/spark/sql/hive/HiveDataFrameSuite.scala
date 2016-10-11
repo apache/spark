@@ -18,9 +18,10 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.QueryTest
 
-class HiveDataFrameSuite extends QueryTest with TestHiveSingleton {
+class HiveDataFrameSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("table name with schema") {
     // regression test for SPARK-11778
     spark.sql("create schema usrdb")
@@ -33,5 +34,31 @@ class HiveDataFrameSuite extends QueryTest with TestHiveSingleton {
   test("SPARK-15887: hive-site.xml should be loaded") {
     val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
     assert(hiveClient.getConf("hive.in.test", "") == "true")
+  }
+
+  test("inputFiles of pruned and partitioned table") {
+    withTable("test") {
+      withTempDir { dir =>
+        spark.range(5).selectExpr("id", "id as f1", "id as f2").write
+          .partitionBy("f1", "f2")
+          .mode("overwrite")
+          .parquet(dir.getAbsolutePath)
+
+        spark.sql(s"""
+          |create external table test (id long)
+          |partitioned by (f1 int, f2 int)
+          |stored as parquet
+          |location "${dir.getAbsolutePath}"""".stripMargin)
+        spark.sql("msck repair table test")
+
+        val df = spark.sql("select * from test")
+        assert(df.count() == 5)
+        assert(df.inputFiles.length == 5)  // unpruned
+
+        val df2 = spark.sql("select * from test where f2 = 3 or f2 = 4")
+        assert(df2.count() == 2)
+        assert(df2.inputFiles.length == 2)  // pruned, so we have less files
+      }
+    }
   }
 }
