@@ -136,13 +136,6 @@ package object config {
       .createOptional
   // End blacklist confs
 
-  // Note: This is a SQL config but needs to be in core because the REPL depends on it
-  private[spark] val CATALOG_IMPLEMENTATION = ConfigBuilder("spark.sql.catalogImplementation")
-    .internal()
-    .stringConf
-    .checkValues(Set("hive", "in-memory"))
-    .createWithDefault("in-memory")
-
   private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")
       .intConf
