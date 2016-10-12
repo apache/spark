@@ -672,12 +672,14 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param fitIntercept whether to fit an intercept term. Default is TRUE.
 #' @param family the name of family which is a description of the label distribution to be used in the model.
 #'               Supported options:
-#'                 - "auto": Automatically select the family based on the number of classes:
+#'                 \itemize{
+#'                   \item{"auto": Automatically select the family based on the number of classes:
 #'                           If numClasses == 1 || numClasses == 2, set to "binomial".
-#'                           Else, set to "multinomial".
-#'                 - "binomial": Binary logistic regression with pivoting.
-#'                 - "multinomial": Multinomial logistic (softmax) regression without pivoting.
-#'                 Default is "auto".
+#'                           Else, set to "multinomial".}
+#'                   \item{"binomial": Binary logistic regression with pivoting.}
+#'                   \item{"multinomial": Multinomial logistic (softmax) regression without pivoting.
+#'                           Default is "auto".}
+#'                 }
 #' @param standardization whether to standardize the training features before fitting the model. The coefficients
 #'                        of models will be always returned on the original scale, so it will be transparent for
 #'                        users. Note that with/without standardization, the models should be always converged
@@ -685,7 +687,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param threshold in binary classification, in range [0, 1]. If the estimated probability of class label 1
 #'                  is > threshold, then predict 1, else 0. A high threshold encourages the model to predict 0
 #'                  more often; a low threshold encourages the model to predict 1 more often. Note: Setting this with
-#'                  threshold p is equivalent to setting thresholds (Array(1-p, p)). When threshold is set, any user-set
+#'                  threshold p is equivalent to setting thresholds c(1-p, p). When threshold is set, any user-set
 #'                  value for thresholds will be cleared. If both threshold and thresholds are set, then they must be
 #'                  equivalent. Default is 0.5.
 #' @param thresholds in multiclass (or binary) classification to adjust the probability of predicting each class.
@@ -697,6 +699,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param weightCol The weight column name.
 #' @param aggregationDepth depth for treeAggregate (>= 2). If the dimensions of features or the number of partitions
 #'                         are large, this param could be adjusted to a larger size. Default is 2.
+#' @param probability column name for predicted class conditional probabilities. Default is "probability".
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.logit} returns a fitted logistic regression model
 #' @rdname spark.logit
@@ -733,7 +736,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' feature3 <- c(1.322733, 1.348044, 3.861237, 9.686976, 3.447130)
 #' feature4 <- c(1.3246388, 0.5510444, 0.9225810, 1.2147881, 1.6020842)
 #' data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
-#' df <- suppressWarnings(createDataFrame(data))
+#' df <- createDataFrame(data)
 #'
 #' model <- spark.logit(df, label ~ ., family = "multinomial", thresholds=c(0, 1, 1))
 #' predict1 <- collect(select(predict(model, df), "prediction"))
@@ -742,7 +745,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
                    tol = 1E-6, fitIntercept = TRUE, family = "auto", standardization = TRUE,
-                   threshold = 0.5, thresholds = NULL, weightCol = NULL, aggregationDepth = 2) {
+                   threshold = 0.5, thresholds = NULL, weightCol = NULL, aggregationDepth = 2,
+                   probability = "probability") {
             formula <- paste0(deparse(formula), collapse = "")
 
             if (is.null(weightCol)) {
@@ -759,7 +763,8 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                                 as.numeric(tol), as.logical(fitIntercept),
                                 as.character(family), as.logical(standardization),
                                 as.numeric(threshold), thresholds,
-                                as.character(weightCol), as.integer(aggregationDepth))
+                                as.character(weightCol), as.integer(aggregationDepth),
+                                as.character(probability))
             new("LogisticRegressionModel", jobj = jobj)
           })
 
@@ -768,6 +773,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns the predicted values based on an LogisticRegressionModel.
 #' @rdname spark.logit
+#' @aliases predict,LogisticRegressionModel,SparkDataFrame-method
 #' @export
 #' @note predict(LogisticRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "LogisticRegressionModel"),
@@ -789,53 +795,31 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
             jobj <- object@jobj
             is.loaded <- callJMethod(jobj, "isLoaded")
 
-            roc <- if (is.loaded) {
-              NULL
-            } else {
-              dataFrame(callJMethod(jobj, "roc"))
+            if (is.loaded) {
+              stop("Loaded model doesn't have training summary.")
             }
 
-            areaUnderROC <- if (is.loaded) {
-              NULL
-            } else {
-              callJMethod(jobj, "areaUnderROC")
-            }
+            roc <- dataFrame(callJMethod(jobj, "roc"))
 
-            pr <- if (is.loaded) {
-              NULL
-            } else {
-              dataFrame(callJMethod(jobj, "pr"))
-            }
+            areaUnderROC <- callJMethod(jobj, "areaUnderROC")
 
-            fMeasureByThreshold <- if (is.loaded) {
-              NULL
-            } else {
+            pr <- dataFrame(callJMethod(jobj, "pr"))
+
+            fMeasureByThreshold <-
               dataFrame(callJMethod(jobj, "fMeasureByThreshold"))
-            }
 
-            precisionByThreshold <- if (is.loaded) {
-              NULL
-            } else {
+            precisionByThreshold <-
               dataFrame(callJMethod(jobj, "precisionByThreshold"))
-            }
 
-            recallByThreshold <- if (is.loaded) {
-              NULL
-            } else {
+            recallByThreshold <-
               dataFrame(callJMethod(jobj, "recallByThreshold"))
-            }
 
-            totalIterations <- if (is.loaded) {
-              NULL
-            } else {
+            totalIterations <-
               callJMethod(jobj, "totalIterations")
-            }
 
-            objectiveHistory <- if (is.loaded) {
-              NULL
-            } else {
+            objectiveHistory <-
               callJMethod(jobj, "objectiveHistory")
-            }
+
             list(roc = roc, areaUnderROC = areaUnderROC, pr = pr,
                  fMeasureByThreshold = fMeasureByThreshold,
                  precisionByThreshold = precisionByThreshold,

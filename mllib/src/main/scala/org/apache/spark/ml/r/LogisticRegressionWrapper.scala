@@ -85,12 +85,12 @@ private[r] object LogisticRegressionWrapper
       threshold: Double,
       thresholds: Array[Double],
       weightCol: String,
-      aggregationDepth: Int
+      aggregationDepth: Int,
+      probability: String
       ): LogisticRegressionWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
-      .setFeaturesCol("features")
     RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
@@ -113,6 +113,7 @@ private[r] object LogisticRegressionWrapper
       .setWeightCol(weightCol)
       .setAggregationDepth(aggregationDepth)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setProbabilityCol(probability)
 
     if (thresholds != null) {
       logisticRegression.setThresholds(thresholds)
