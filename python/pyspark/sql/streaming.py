@@ -306,6 +306,7 @@ class StreamingQueryStatus(object):
             return None
 
     @property
+    @ignore_unicode_prefix
     @since(2.1)
     def sourceStatuses(self):
         """
@@ -319,6 +320,7 @@ class StreamingQueryStatus(object):
         return [SourceStatus(ss) for ss in self._jsqs.sourceStatuses()]
 
     @property
+    @ignore_unicode_prefix
     @since(2.1)
     def sinkStatus(self):
         """
@@ -330,6 +332,7 @@ class StreamingQueryStatus(object):
         return SinkStatus(self._jsqs.sinkStatus())
 
     @property
+    @ignore_unicode_prefix
     @since(2.1)
     def triggerStatus(self):
         """
@@ -420,6 +423,7 @@ class SourceStatus(object):
         return self._jss.processingRate()
 
     @property
+    @ignore_unicode_prefix
     @since(2.1)
     def triggerStatus(self):
         """
