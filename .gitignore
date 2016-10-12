@@ -48,8 +48,7 @@ docs/_site
 docs/api
 lib_managed/
 lint-r-report.log
-dev/sphinx-report.txt
-dev/pylint-report.txt
+dev/*-report.txt
 log/
 logs/
 out/

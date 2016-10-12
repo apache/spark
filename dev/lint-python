@@ -17,8 +17,17 @@
 # limitations under the License.
 #
 
+
 # expand alias for making virtualenv happy
 shopt -s expand_aliases
+
+if [[ ! -z $CONDA_PREFIX ]]; then
+    echo "You are inside a Anaconda environment. Leaving it"
+    source deactivate
+fi
+
+# nice trap to properly handle Ctrl+c
+trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
 
 VIRTUAL_ENV_DIR="build/venv"
 
@@ -56,6 +65,9 @@ else
     echo "Not inside a virtual environment. Jumping into one in: $VIRTUAL_ENV_DIR"
     $VIRTUALENV_EXEC $VIRTUALENV_ARG $VIRTUAL_ENV_DIR || exit 1
     source $VIRTUAL_ENV_DIR/bin/activate
+fi
+if [[ $DEBUG==true ]]; then
+    echo "Python: $(python --version)"
 fi
 echo "To activate this environment, use: 'source $SPARK_ROOT_DIR/$VIRTUAL_ENV_DIR/bin/activate'"
 
@@ -120,6 +132,7 @@ rm "$PYLINT_REPORT_PATH"
 # Check that the documentation builds acceptably, skip check if sphinx is not installed.
 if hash "$SPHINXBUILD" 2> /dev/null; then
   cd python/docs
+  echo "Building docs..."
   make clean
   # Treat warnings as errors so we stop correctly
   SPHINXOPTS="-a -W" make html &> "$SPHINX_REPORT_PATH" || lint_status=1
