@@ -61,7 +61,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 
   test("partitioned table is cached when partition pruning is off") {
-    withSQLConf("spark.sql.hive.datasourcePartitionPruning" -> "false") {
+    withSQLConf("spark.sql.hive.filesourcePartitionPruning" -> "false") {
       withTable("test") {
         withTempDir { dir =>
           spark.range(5).selectExpr("id", "id as f1", "id as f2").write
