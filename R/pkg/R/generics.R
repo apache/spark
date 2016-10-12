@@ -550,6 +550,10 @@ setGeneric("group_by", function(x, ...) { standardGeneric("group_by") })
 #' @export
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
+#' @param x a SparkDataFrame.
+#' @rdname head
+setGeneric("head")
+
 #' @rdname insertInto
 #' @export
 setGeneric("insertInto", function(x, tableName, ...) { standardGeneric("insertInto") })

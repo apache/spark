@@ -51,7 +51,7 @@ setMethod("initialize", "Column", function(.Object, jc, df) {
   .Object
 })
 
-setMethod("show", signature = "Column", definition = function(object) {
+setMethod("show", signature = "Column", function(object) {
   MAX_ELEMENTS <- 20
   head.df <- head(object, MAX_ELEMENTS)
 

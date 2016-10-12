@@ -1035,16 +1035,10 @@ setMethod("dim",
             c(count(x), ncol(x))
           })
 
-#' Download Spark datasets into R
+#' Collects all the elements of a SparkDataFrame and coerces them into an R data.frame.
 #'
-#' Converts a SparkDataFrame into a data.frame. 
-#' 
-#' \strong{Note:} Since R data.frames are
-#' held in memory, ensure that you have enough memory on your system to 
-#' accommodate the contents.
-#' @param x A SparkDataFrame
-#' @param stringsAsFactors (Optional) A logical indicating whether or not string columns
-
+#' @param x a SparkDataFrame.
+#' @param stringsAsFactors (Optional) a logical indicating whether or not string columns
 #' should be converted to factors. FALSE by default.
 #' @param ... further arguments to be passed to or from other methods.
 #'
@@ -1055,16 +1049,11 @@ setMethod("dim",
 #' @export
 #' @examples
 #'\dontrun{
-#' # Initialize Spark context and SQL context
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#' 
-#' # Create a DataFrame from the Iris dataset
-#' irisDF <- createDataFrame(sqlContext, iris)
-#' 
-#' # Collect it
-#' df <- collect(irisDF)
-#' 
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' collected <- collect(df)
+#' firstName <- collected[[1]]$name
 #' }
 #' @note collect since 1.4.0
 setMethod("collect",
@@ -1178,25 +1167,22 @@ setMethod("take",
           })
 
 #' Head
-#'
-#' Return the first elements of a dataset. If \code{x} is a SparkDataFrame, its first 
+#' Return the first elements of a SparkDataFrame or Column. If \code{x} is a SparkDataFrame, its first 
 #' rows will be returned as a data.frame. If the dataset is a \code{Column}, its first 
 #' elements will be returned as a vector. The number of elements to be returned
 #' is given by parameter \code{num}. Default value for \code{num} is 6.
 #'
-#' @param x A SparkDataFrame or Column
-#' @param num The number of rows to return. Default is 6.
-#' @return A data.frame or vector
+#' @param num the number of rows to return. Default is 6.
+#' @return A data.frame.
 #'
 #' @family SparkDataFrame functions
 #' @aliases head,SparkDataFrame-method
-#' @rdname head
 #' @name head
 #' @export
 #' @examples
 #'\dontrun{
 #' # Initialize Spark context and SQL context
-#' sc <- sparkR.init()
+#' sc <- sparkR.session()
 #' sqlContext <- sparkRSQL.init(sc)
 #' 
 #' # Create a DataFrame from the Iris dataset
@@ -1206,8 +1192,7 @@ setMethod("take",
 #' head(irisDF)
 #' 
 #' # Get the first 20 elements of a Column
-#' head(irisDF$Sepal_Length)
-#' }
+#' head(irisDF$Sepal_Length, 20)
 #' @note head since 1.4.0
 setMethod("head",
           signature(x = "SparkDataFrame"),
