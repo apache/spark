@@ -134,7 +134,7 @@ class SaslRpcHandler extends RpcHandler {
               }
             }
           } else {
-            logger.debug("Enabling encryption for channel {}", client);
+            logger.info("Enabling encryption for channel {}", client);
             SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
           }
           saslServer = null;

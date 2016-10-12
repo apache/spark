@@ -159,6 +159,13 @@ public class AesEncryption {
     @Override
     protected void deallocate() {
       byteChannel.reset();
+      if (region != null) {
+        region.release();
+      }
+
+      if (buf != null) {
+        buf.release();
+      }
     }
   }
 
