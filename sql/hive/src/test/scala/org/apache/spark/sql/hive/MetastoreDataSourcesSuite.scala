@@ -26,12 +26,12 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.SCHEMA_STRING_LENGTH_THRESHOLD
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -699,28 +699,27 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("SPARK-6024 wide schema support") {
-    withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "4000") {
-      withTable("wide_schema") {
-        withTempDir { tempDir =>
-          // We will need 80 splits for this schema if the threshold is 4000.
-          val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType)))
+    assert(spark.sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 4000)
+    withTable("wide_schema") {
+      withTempDir { tempDir =>
+        // We will need 80 splits for this schema if the threshold is 4000.
+        val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType)))
 
-          val tableDesc = CatalogTable(
-            identifier = TableIdentifier("wide_schema"),
-            tableType = CatalogTableType.EXTERNAL,
-            storage = CatalogStorageFormat.empty.copy(
-              properties = Map("path" -> tempDir.getCanonicalPath)
-            ),
-            schema = schema,
-            provider = Some("json")
-          )
-          spark.sessionState.catalog.createTable(tableDesc, ignoreIfExists = false)
+        val tableDesc = CatalogTable(
+          identifier = TableIdentifier("wide_schema"),
+          tableType = CatalogTableType.EXTERNAL,
+          storage = CatalogStorageFormat.empty.copy(
+            properties = Map("path" -> tempDir.getCanonicalPath)
+          ),
+          schema = schema,
+          provider = Some("json")
+        )
+        spark.sessionState.catalog.createTable(tableDesc, ignoreIfExists = false)
 
-          sessionState.refreshTable("wide_schema")
+        sessionState.refreshTable("wide_schema")
 
-          val actualSchema = table("wide_schema").schema
-          assert(schema === actualSchema)
-        }
+        val actualSchema = table("wide_schema").schema
+        assert(schema === actualSchema)
       }
     }
   }
@@ -984,7 +983,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     checkAnswer(
       spark.sql("show TABLES in testdb8156").filter("tableName = 'ttt3'"),
-      Row("ttt3", false))
+      Row("testdb8156", "ttt3", false))
     spark.sql("""use default""")
     spark.sql("""drop database if exists testdb8156 CASCADE""")
   }
