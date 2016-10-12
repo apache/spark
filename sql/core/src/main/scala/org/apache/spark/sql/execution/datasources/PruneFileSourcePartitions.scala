@@ -56,15 +56,15 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
 
       if (partitionKeyFilters.nonEmpty) {
-          val prunedFileCatalog = tableFileCatalog.filterPartitions(partitionKeyFilters.toSeq)
-          val prunedFsRelation =
-            fsRelation.copy(location = prunedFileCatalog)(sparkSession)
-          val prunedLogicalRelation = logicalRelation.copy(relation = prunedFsRelation)
+        val prunedFileCatalog = tableFileCatalog.filterPartitions(partitionKeyFilters.toSeq)
+        val prunedFsRelation =
+          fsRelation.copy(location = prunedFileCatalog)(sparkSession)
+        val prunedLogicalRelation = logicalRelation.copy(relation = prunedFsRelation)
 
-          // Keep partition-pruning predicates so that they are visible in physical planning
-          val filterExpression = filters.reduceLeft(And)
-          val filter = Filter(filterExpression, prunedLogicalRelation)
-          Project(projects, filter)
+        // Keep partition-pruning predicates so that they are visible in physical planning
+        val filterExpression = filters.reduceLeft(And)
+        val filter = Filter(filterExpression, prunedLogicalRelation)
+        Project(projects, filter)
       } else {
         op
       }

@@ -102,7 +102,10 @@ class TableFileCatalog(
     new ListingFileCatalog(sparkSession, rootPaths, parameters, partitionSchema)
   }
 
-  override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
+  // Not used in the hot path of queries when metastore partition pruning is enabled
+  lazy val cachedAllPartitions: ListingFileCatalog = filterPartitions(Nil)
+
+  override def inputFiles: Array[String] = cachedAllPartitions.inputFiles
 
   private def listDataLeafFiles(paths: Seq[Path]) =
     listLeafFiles(paths).filter(f => isDataPath(f.getPath))

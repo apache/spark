@@ -135,6 +135,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
   private def getCached(
       tableIdentifier: QualifiedTableName,
+      pathsInMetastore: Seq[String],
       metastoreRelation: MetastoreRelation,
       schemaInMetastore: StructType,
       expectedFileFormat: Class[_ <: FileFormat],
@@ -152,7 +153,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             // If we have the same paths, same schema, and same partition spec,
             // we will use the cached relation.
             val useCached =
-              relation.location.rootPaths.toSet == Set(metastoreRelationRootPath) &&
+              relation.location.rootPaths.map(_.toString).toSet == pathsInMetastore.toSet &&
                 logical.schema.sameType(schemaInMetastore) &&
                 relation.bucketSpec == expectedBucketSpec &&
                 relation.partitionSchema == partitionSchema.getOrElse(StructType(Nil))
@@ -194,11 +195,31 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
     val bucketSpec = None  // We don't support hive bucketed tables, only ones we write out.
 
+    val lazyPruningEnabled = sparkSession.sqlContext.conf.datasourcePartitionPruning
     val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
 
+      val rootPaths = if (lazyPruningEnabled) {
+        Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
+      } else {
+        // By convention (for example, see TableFileCatalog), the definition of a
+        // partitioned table's paths depends on whether that table has any actual partitions.
+        // Partitioned tables without partitions use the location of the table's base path.
+        // Partitioned tables with partitions use the locations of those partitions' data
+        // locations,_omitting_ the table's base path.
+        val paths = metastoreRelation.getHiveQlPartitions().map { p =>
+          p.getLocation.toString
+        }
+        if (paths.isEmpty) {
+          Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
+        } else {
+          paths
+        }
+      }
+
       val cached = getCached(
         tableIdentifier,
+        rootPaths,
         metastoreRelation,
         metastoreSchema,
         fileFormatClass,
@@ -209,8 +230,15 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val db = metastoreRelation.databaseName
         val table = metastoreRelation.tableName
         val sizeInBytes = metastoreRelation.statistics.sizeInBytes.toLong
-        val fileCatalog =
-          new TableFileCatalog(sparkSession, db, table, Some(partitionSchema), sizeInBytes)
+        val fileCatalog = {
+          val catalog = new TableFileCatalog(
+            sparkSession, db, table, Some(partitionSchema), sizeInBytes)
+          if (lazyPruningEnabled) {
+            catalog
+          } else {
+            catalog.cachedAllPartitions
+          }
+        }
         val partitionSchemaColumnNames = partitionSchema.map(_.name.toLowerCase).toSet
         val dataSchema =
           StructType(metastoreSchema
@@ -234,6 +262,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       val rootPath = metastoreRelation.hiveQlTable.getDataLocation
 
       val cached = getCached(tableIdentifier,
+        Seq(rootPath.toString),
         metastoreRelation,
         metastoreSchema,
         fileFormatClass,
