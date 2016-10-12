@@ -22,10 +22,10 @@ import java.util.{ConcurrentModificationException, EnumSet, UUID}
 
 import scala.reflect.ClassTag
 
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.io.IOUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.JavaSerializer
@@ -141,7 +141,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
         try {
           writer(metadata, output)
         } finally {
-          IOUtils.closeStream(output)
+          IOUtils.closeQuietly(output)
         }
         try {
           // Try to commit the batch
@@ -197,7 +197,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
       try {
         Some(deserialize(input))
       } finally {
-        IOUtils.closeStream(input)
+        IOUtils.closeQuietly(input)
       }
     } else {
       logDebug(s"Unable to find batch $batchMetadataFile")

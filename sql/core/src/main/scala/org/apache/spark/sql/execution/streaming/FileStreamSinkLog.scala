@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.OutputStream
-
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
