@@ -48,7 +48,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FIFO, 0, 0)
+    val rootPool = new Pool("", SchedulingMode.FIFO, 0, Int.MaxValue, 0)
     val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
     schedulableBuilder.buildPools()
 
@@ -78,7 +78,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, Int.MaxValue, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
@@ -88,10 +88,13 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     assert(rootPool.getSchedulableByName("2") != null)
     assert(rootPool.getSchedulableByName("3") != null)
     assert(rootPool.getSchedulableByName("1").minShare === 2)
+    assert(rootPool.getSchedulableByName("1").maxRunningTasks === 512)
     assert(rootPool.getSchedulableByName("1").weight === 1)
     assert(rootPool.getSchedulableByName("2").minShare === 3)
+    assert(rootPool.getSchedulableByName("2").maxRunningTasks === 256)
     assert(rootPool.getSchedulableByName("2").weight === 1)
     assert(rootPool.getSchedulableByName("3").minShare === 0)
+    assert(rootPool.getSchedulableByName("3").maxRunningTasks === Int.MaxValue)
     assert(rootPool.getSchedulableByName("3").weight === 1)
 
     val properties1 = new Properties()
@@ -134,24 +137,57 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("Nested Pool Test") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val xmlPath = getClass.getClassLoader.getResource("nestedpool.xml").getFile()
+    val conf = new SparkConf().set("spark.scheduler.allocation.file", xmlPath)
+    sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
-    val pool0 = new Pool("0", SchedulingMode.FAIR, 3, 1)
-    val pool1 = new Pool("1", SchedulingMode.FAIR, 4, 1)
-    rootPool.addSchedulable(pool0)
-    rootPool.addSchedulable(pool1)
+    val rootPool = new Pool("", SchedulingMode.FAIR, 0, Int.MaxValue, 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    schedulableBuilder.buildPools()
 
-    val pool00 = new Pool("00", SchedulingMode.FAIR, 2, 2)
-    val pool01 = new Pool("01", SchedulingMode.FAIR, 1, 1)
-    pool0.addSchedulable(pool00)
-    pool0.addSchedulable(pool01)
+    val pool0 = rootPool.getSchedulableByName("0")
+    val pool1 = rootPool.getSchedulableByName("1")
+    val pool00 = rootPool.getSchedulableByName("00")
+    val pool01 = rootPool.getSchedulableByName("01")
+    val pool10 = rootPool.getSchedulableByName("10")
+    val pool11 = rootPool.getSchedulableByName("11")
 
-    val pool10 = new Pool("10", SchedulingMode.FAIR, 2, 2)
-    val pool11 = new Pool("11", SchedulingMode.FAIR, 2, 1)
-    pool1.addSchedulable(pool10)
-    pool1.addSchedulable(pool11)
+    // Ensure that the XML file was read in correctly.
+    assert(pool0 != null)
+    assert(pool1 != null)
+    assert(pool00 != null)
+    assert(pool01 != null)
+    assert(pool10 != null)
+    assert(pool11 != null)
+
+    assert(pool0.minShare === 3)
+    assert(pool0.maxRunningTasks === 1024)
+    assert(pool0.weight === 1)
+
+    assert(pool1.minShare === 4)
+    assert(pool1.maxRunningTasks === 128)
+    assert(pool1.weight === 1)
+
+    assert(pool00.minShare === 2)
+    assert(pool00.maxRunningTasks === 512)
+    assert(pool00.weight === 2)
+    assert(pool00.parent === pool0)
+
+    assert(pool01.minShare === 1)
+    assert(pool01.maxRunningTasks === 128)
+    assert(pool01.weight === 1)
+    assert(pool01.parent === pool0)
+
+    assert(pool10.minShare === 2)
+    assert(pool10.maxRunningTasks === 128) // not 256 due to parent
+    assert(pool10.weight === 2)
+    assert(pool10.parent === pool1)
+
+    assert(pool11.minShare === 2)
+    assert(pool11.maxRunningTasks === 64)
+    assert(pool11.weight === 1)
+    assert(pool11.parent === pool1)
 
     val taskSetManager000 = createTaskSetManager(0, 5, taskScheduler)
     val taskSetManager001 = createTaskSetManager(1, 5, taskScheduler)

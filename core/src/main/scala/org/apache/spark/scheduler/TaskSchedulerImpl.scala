@@ -134,7 +134,7 @@ private[spark] class TaskSchedulerImpl(
   def initialize(backend: SchedulerBackend) {
     this.backend = backend
     // temporarily set rootPool name to empty
-    rootPool = new Pool("", schedulingMode, 0, 0)
+    rootPool = new Pool("", schedulingMode, 0, Int.MaxValue, 0)
     schedulableBuilder = {
       schedulingMode match {
         case SchedulingMode.FIFO =>

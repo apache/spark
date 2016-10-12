@@ -97,6 +97,7 @@ private[spark] class TaskSetManager(
   var parent: Pool = null
   var totalResultSize = 0L
   var calculatedTasks = 0
+  val initMaxRunningTasks = Int.MaxValue
 
   val runningTasksSet = new HashSet[Long]
 
@@ -421,7 +422,7 @@ private[spark] class TaskSetManager(
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
-    if (!isZombie) {
+    if (!isZombie && maxRunningTasks > 0) {
       val curTime = clock.getTimeMillis()
 
       var allowedLocality = maxLocality

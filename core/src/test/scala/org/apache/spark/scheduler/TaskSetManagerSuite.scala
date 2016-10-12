@@ -331,6 +331,129 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec2", "host2", ANY).get.index === 3)
   }
 
+  test("Scheduler respects maxRunningTasks setting of its pool") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val clock = new ManualClock
+
+    // set up three pools to contend for three resources
+    val parent = new Pool("parent", SchedulingMode.FAIR, 0, 3, 0)
+    val child0 = new Pool("child0", SchedulingMode.FAIR, 0, 2, 0)
+    val child1 = new Pool("child1", SchedulingMode.FAIR, 0, 2, 0)
+    child0.parent = parent
+    child1.parent = parent
+
+    // add a taskset for each pool
+    val parentManager = new TaskSetManager(
+      sched, FakeTask.createTaskSet(5), MAX_TASK_FAILURES, clock)
+    val child0Manager = new TaskSetManager(
+      sched, FakeTask.createTaskSet(3), MAX_TASK_FAILURES, clock)
+    val child1Manager = new TaskSetManager(
+      sched, FakeTask.createTaskSet(3), MAX_TASK_FAILURES, clock)
+    parentManager.parent = parent
+    child0Manager.parent = child0
+    child1Manager.parent = child1
+
+    // child pool has two tasks...
+    val c0t0 = child0Manager.resourceOffer("exec1", "host1", ANY).get
+    assert(c0t0.index === 0)
+    val c0t1 = child0Manager.resourceOffer("exec1", "host1", ANY).get
+    assert(c0t1.index === 1)
+
+    // but not three!
+    assert(child0Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    assert(child0.maxRunningTasks === 0)
+    assert(child1.maxRunningTasks === 1)
+    assert(parent.maxRunningTasks === 1)
+
+    // ...until one of the others finishes
+    child0Manager.handleSuccessfulTask(c0t0.taskId, createTaskResult())
+    val c0t2 = child0Manager.resourceOffer("exec1", "host1", ANY).get
+    assert(c0t2.index === 2)
+    assert(child0Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    // meanwhile, we can add a task to the other child pool
+    val c1t0 = child1Manager.resourceOffer("exec1", "host1", ANY).get
+    assert(c1t0.index === 0)
+    assert(child1Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    // as three are in use, we can't add any to the other pools
+    assert(parentManager.resourceOffer("exec1", "host1", ANY).isEmpty)
+    assert(child0Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    assert(child0.maxRunningTasks === 0)
+    assert(child1.maxRunningTasks === 0)
+    assert(parent.maxRunningTasks === 0)
+
+    // finish another child task, and add a task to the parent
+    child0Manager.handleSuccessfulTask(c0t1.taskId, createTaskResult())
+    val pt0 = parentManager.resourceOffer("exec1", "host1", ANY).get
+    assert(pt0.index === 0)
+    assert(parentManager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    // three tasks are running, so we can't add things to the other pool
+    assert(child0Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+    assert(child1Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    // finish the parent task. We now have one running in each child pool...
+    parentManager.handleSuccessfulTask(pt0.taskId, createTaskResult())
+
+    // so add another to the first child
+    val c1t1 = child1Manager.resourceOffer("exec1", "host1", ANY).get
+    assert(c1t1.index === 1)
+    assert(child1Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    // check we still can't add tasks to the other pools
+    assert(parentManager.resourceOffer("exec1", "host1", ANY).isEmpty)
+    assert(child0Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    // finish the last task of the child pool. It shouldn't schedule any more!
+    child0Manager.handleSuccessfulTask(c0t2.taskId, createTaskResult())
+    assert(child0Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    // the child 1 pool is already running two tasks, so even if we offer it
+    // more resources it can't accept:
+    assert(child1Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    assert(child0.maxRunningTasks === 1) // limited by parent, otherwise would be 2
+    assert(child0Manager.runningTasks === 0)
+    assert(child1.maxRunningTasks === 0)
+    assert(child1Manager.runningTasks === 2)
+    assert(parent.maxRunningTasks === 1)
+    assert(parentManager.runningTasks === 0)
+
+    // ...so give it to the parent
+    val pt1 = parentManager.resourceOffer("exec1", "host1", ANY).get
+    assert(pt1.index === 1)
+    assert(parentManager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    // now, finish all the tasks in the child ppols, and fill up the parent pool
+    child0Manager.handleSuccessfulTask(c0t2.taskId, createTaskResult())
+    child1Manager.handleSuccessfulTask(c1t0.taskId, createTaskResult())
+    child1Manager.handleSuccessfulTask(c1t1.taskId, createTaskResult())
+    val pt2 = parentManager.resourceOffer("exec1", "host1", ANY).get
+    val pt3 = parentManager.resourceOffer("exec1", "host1", ANY).get
+    assert(parentManager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    assert(child0.maxRunningTasks === 0)
+    assert(child0Manager.runningTasks === 0)
+    assert(child1.maxRunningTasks === 0)
+    assert(child1Manager.runningTasks === 0)
+    assert(parent.maxRunningTasks === 0)
+    assert(parentManager.runningTasks === 3)
+
+    // as the parent's used all three slots in the pool, the child pool can't
+    // run its tasks:
+    assert(child1Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+
+    // at least, until a parent finished
+    parentManager.handleSuccessfulTask(pt1.taskId, createTaskResult())
+    val c1t2 = child1Manager.resourceOffer("exec1", "host1", ANY).get
+    assert(c1t2.index === 2)
+    assert(child1Manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+  }
+
   test("delay scheduling with failed hosts") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"),
@@ -860,7 +983,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   private def createTaskResult(
-      id: Int,
+      id: Int = 0xDEADBEEF, // default to a meaningless, yet obvious result value
       accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {
     val valueSer = SparkEnv.get.serializer.newInstance()
     new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates)

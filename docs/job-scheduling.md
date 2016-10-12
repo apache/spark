@@ -233,6 +233,11 @@ properties:
   The `minShare` property can therefore be another way to ensure that a pool can always get up to a
   certain number of resources (e.g. 10 cores) quickly without giving it a high priority for the rest
   of the cluster. By default, each pool's `minShare` is 0.
+* `maxRunningTasks`: Limit the number of tasks this pool can run concurrently. This includes all the
+  tasks run by nested pools.
+* `parent`: Make this pool a child of the pool named in the `parent` element. The parent pool must be
+  declared before the child in the configuration file; if not (or if the parent isn't declared at all)
+  the pool becomes a top-level pool.
 
 The pool properties can be set by creating an XML file, similar to `conf/fairscheduler.xml.template`,
 and setting a `spark.scheduler.allocation.file` property in your
@@ -263,4 +268,4 @@ within it for the various settings. For example:
 
 A full example is also available in `conf/fairscheduler.xml.template`. Note that any pools not
 configured in the XML file will simply get default values for all settings (scheduling mode FIFO,
-weight 1, and minShare 0).
+weight 1, no limit on running tasks and minShare 0).
