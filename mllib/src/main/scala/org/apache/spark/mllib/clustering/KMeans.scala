@@ -56,7 +56,8 @@ class KMeans private (
   def this() = this(2, 20, KMeans.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong())
 
   /**
-   * Number of clusters to create (k).
+   * Number of clusters to create (k). Note that if the input has fewer than k elements,
+   * then it's possible that fewer than k clusters are created.
    */
   @Since("1.4.0")
   def getK: Int = k
@@ -323,7 +324,7 @@ class KMeans private (
    * Initialize a set of cluster centers at random.
    */
   private def initRandom(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
-    data.takeSample(true, k, new XORShiftRandom(this.seed).nextInt()).map(_.toDense)
+    data.takeSample(false, k, new XORShiftRandom(this.seed).nextInt()).map(_.toDense)
   }
 
   /**
@@ -378,10 +379,10 @@ class KMeans private (
     costs.unpersist(blocking = false)
     bcNewCentersList.foreach(_.destroy(false))
 
-    if (centers.size == k) {
+    if (centers.size <= k) {
       centers.toArray
     } else {
-      // Finally, we might have a set of more or less than k candidate centers; weight each
+      // Finally, we might have a set of more than k candidate centers; weight each
       // candidate by the number of points in the dataset mapping to it and run a local k-means++
       // on the weighted centers to pick k of them
       val bcCenters = data.context.broadcast(centers)
