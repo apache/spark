@@ -223,7 +223,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   override def start(): Unit = {
     val c = consumer
-    c.poll(0)
+    assert(c.poll(0).isEmpty, "Driver shouldn't consume messages; pause if you poll during setup")
     if (currentOffsets.isEmpty) {
       currentOffsets = c.assignment().asScala.map { tp =>
         tp -> c.position(tp)
