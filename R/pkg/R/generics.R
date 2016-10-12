@@ -550,7 +550,7 @@ setGeneric("group_by", function(x, ...) { standardGeneric("group_by") })
 #' @export
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
-#' @param x a SparkDataFrame.
+#' @param x a SparkDataFrame or Column
 #' @rdname head
 setGeneric("head")
 
