@@ -17,6 +17,11 @@
 # limitations under the License.
 #
 
+# expand alias for making virtualenv happy
+shopt -s expand_aliases
+
+VIRTUAL_ENV_DIR="build/venv"
+
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 PATHS_TO_CHECK="./python/pyspark/ ./examples/src/main/python/ ./dev/sparktestsupport"
@@ -26,30 +31,38 @@ PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
 SPHINXBUILD=${SPHINXBUILD:=sphinx-build}
 SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
+VIRTUALENV_EXEC="virtualenv"
+
+# It is a good practice to upgrade pip to the latest version, however, sometimes it might break
+# something. Let freeze this version here. We cannot put it into requirements.txt since the
+# execution of this requirement files might depends on the pip version.
+PIP_VERSION="8.1.2"
 
 cd "$SPARK_ROOT_DIR"
+
+DEBUG=false
+if [[ $1 == "--debug" || $1 == "-d" ]]; then
+    DEBUG=true
+fi
+
+
+if [[ ! -z $VIRTUAL_ENV ]]; then
+    echo "We already are inside a virtual environment: $VIRTUAL_ENV. Using it"
+else
+    echo "Not inside a virtual environment. Jumping into one in: $VIRTUAL_ENV_DIR"
+    $VIRTUALENV_EXEC $VIRTUAL_ENV_DIR || exit 1
+    source $VIRTUAL_ENV_DIR/bin/activate
+fi
+echo "To activate this environment, use: 'source $SPARK_ROOT_DIR/$VIRTUAL_ENV_DIR/bin/activate'"
+
+pip install --upgrade "pip==$PIP_VERSION"
+echo "Installing developer requirements..."
+pip install --upgrade -r dev/requirements.txt
 
 # compileall: https://docs.python.org/2/library/compileall.html
 python -B -m compileall -q -l $PATHS_TO_CHECK > "$PEP8_REPORT_PATH"
 compile_status="${PIPESTATUS[0]}"
 
-# Get pep8 at runtime so that we don't rely on it being installed on the build server.
-#+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
-#+ TODOs:
-#+  - Download pep8 from PyPI. It's more "official".
-PEP8_VERSION="1.7.0"
-PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8-$PEP8_VERSION.py"
-PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/$PEP8_VERSION/pep8.py"
-
-if [ ! -e "$PEP8_SCRIPT_PATH" ]; then
-    curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"    
-    curl_status="$?"
-
-    if [ "$curl_status" -ne 0 ]; then
-        echo "Failed to download pep8.py from \"$PEP8_SCRIPT_REMOTE_PATH\"."
-        exit "$curl_status"
-    fi
-fi
 
 # Easy install pylint in /dev/pylint. To easy_install into a directory, the PYTHONPATH should
 # be set to the directory.
@@ -64,7 +77,8 @@ export "PATH=$PYTHONPATH:$PATH"
 #+ first, but we do so so that the check status can
 #+ be output before the report, like with the
 #+ scalastyle and RAT checks.
-python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 --config=dev/tox.ini $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
+echo "Checking Pep8..."
+pep8 --ignore=E402,E731,E241,W503,E226 --config=dev/tox.ini $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
 pep8_status="${PIPESTATUS[0]}"
 
 if [ "$compile_status" -eq 0 -a "$pep8_status" -eq 0 ]; then
@@ -82,6 +96,22 @@ else
     echo "PEP8 checks passed."
     rm "$PEP8_REPORT_PATH"
 fi
+
+echo "Checking Pylint..."
+for to_be_checked in "$PATHS_TO_CHECK"; do
+    [ $DEBUG == true ] && echo ".. $to_be_checked"
+    pylint --rcfile="$SPARK_ROOT_DIR/python/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
+done
+
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+    lint_status=1
+    echo "Pylint checks failed."
+    cat "$PYLINT_REPORT_PATH"
+else
+    echo "Pylint checks passed."
+fi
+
+rm "$PYLINT_REPORT_PATH"
 
 # Check that the documentation builds acceptably, skip check if sphinx is not installed.
 if hash "$SPHINXBUILD" 2> /dev/null; then

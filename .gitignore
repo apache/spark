@@ -29,6 +29,7 @@ build/*.jar
 build/apache-maven*
 build/scala*
 build/zinc*
+build/venv
 cache
 checkpoint
 conf/*.cmd
@@ -47,6 +48,7 @@ docs/_site
 docs/api
 lib_managed/
 lint-r-report.log
+dev/sphinx-report.txt
 log/
 logs/
 out/
