@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInp
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
 import org.apache.spark.input.PortableDataStream
+import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -543,7 +544,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
   }
 
-  test("HadoopRDD should not skip corrupt gzip files") {
+  test("spark.files.ignoreCorruptFiles should work both HadoopRDD and NewHadoopRDD") {
     val inputFile = File.createTempFile("input-", ".gz")
     try {
       // Create a corrupt gzip file
@@ -565,11 +566,36 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
       // Reading a corrupt gzip file should throw EOFException
       sc = new SparkContext("local", "test")
-      val e = intercept[SparkException] {
+      // Test HadoopRDD
+      var e = intercept[SparkException] {
         sc.textFile(inputFile.toURI.toString).collect()
       }
       assert(e.getCause.isInstanceOf[EOFException])
       assert(e.getCause.getMessage === "Unexpected end of input stream")
+      // Test NewHadoopRDD
+      e = intercept[SparkException] {
+        sc.newAPIHadoopFile(
+          inputFile.toURI.toString,
+          classOf[NewTextInputFormat],
+          classOf[LongWritable],
+          classOf[Text]).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+      sc.stop()
+
+      val conf = new SparkConf().set(IGNORE_CORRUPT_FILES, true)
+      sc = new SparkContext("local", "test", conf)
+      // Test HadoopRDD
+      assert(sc.textFile(inputFile.toURI.toString).collect().isEmpty)
+      // Test NewHadoopRDD
+      assert {
+        sc.newAPIHadoopFile(
+          inputFile.toURI.toString,
+          classOf[NewTextInputFormat],
+          classOf[LongWritable],
+          classOf[Text]).collect().isEmpty
+      }
     } finally {
       inputFile.delete()
     }

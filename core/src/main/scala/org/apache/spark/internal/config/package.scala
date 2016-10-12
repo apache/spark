@@ -170,4 +170,9 @@ package object config {
     .doc("Port to use for the block managed on the driver.")
     .fallbackConf(BLOCK_MANAGER_PORT)
 
+  private[spark] val IGNORE_CORRUPT_FILES = ConfigBuilder("spark.files.ignoreCorruptFiles")
+    .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
+      "encountering corrupt files and contents that have been read will still be returned.")
+    .booleanConf
+    .createWithDefault(false)
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -33,6 +34,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
@@ -84,6 +86,8 @@ class NewHadoopRDD[K, V](
   @transient protected val jobId = new JobID(jobTrackerId, id)
 
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
+
+  private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
   def getConf: Configuration = {
     val conf: Configuration = confBroadcast.value.value
@@ -179,7 +183,16 @@ class NewHadoopRDD[K, V](
 
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
-          finished = !reader.nextKeyValue
+          try {
+            finished = !reader.nextKeyValue
+          } catch {
+            case e: IOException =>
+              if (ignoreCorruptFiles) {
+                finished = true
+              } else {
+                throw e
+              }
+          }
           if (finished) {
             // Close and release the reader here; close() will also be called when the task
             // completes, but for tasks that read from many files, it helps to release the
