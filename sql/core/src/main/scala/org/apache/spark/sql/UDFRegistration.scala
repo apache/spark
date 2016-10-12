@@ -17,17 +17,13 @@
 
 package org.apache.spark.sql
 
-
 import java.io.IOException
-import java.util.{List => JList, Map => JMap}
+import java.lang.reflect.{ParameterizedType, Type}
 
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.internal.Logging
-import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -36,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, DataTypes}
 import org.apache.spark.util.Utils
 
 /**
@@ -422,19 +418,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Register a Java UDF class
-   * @param name
-   * @param className
-   * @param returnType
+   * Register a Java UDF class using reflection, for use from pyspark
+   *
+   * @param name   udf name
+   * @param className   fully qualified class name of udf
+   * @param returnDataType  return type of udf. If it is null, spark would try to infer
+   *                        via reflection.
    */
-  def registerJava(name: String, className: String, returnType: DataType): Unit = {
+  def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
 
     try {
-      // scalastyle:off classforname
-      val clazz = Class.forName(className, false, Utils.getContextOrSparkClassLoader)
-      // scalastyle:on classforname
-      val udfInterfaces = clazz.getGenericInterfaces.filter(_.isInstanceOf[ParameterizedTypeImpl]).map(_.asInstanceOf[ParameterizedTypeImpl])
-        .filter(_.getRawType.getName.startsWith("org.apache.spark.sql.api.java.UDF"))
+      val clazz = Utils.classForName(className)
+      val udfInterfaces = clazz.getGenericInterfaces
+        .filter(_.isInstanceOf[ParameterizedType])
+        .map(_.asInstanceOf[ParameterizedType])
+        .filter(e => e.getRawType.isInstanceOf[Class[_]] && e.getRawType.asInstanceOf[Class[_]].getCanonicalName.startsWith("org.apache.spark.sql.api.java.UDF"))
       if (udfInterfaces.length == 0) {
         throw new IOException(s"UDF class ${className} doesn't implement any UDF interface")
       } else if (udfInterfaces.length > 1) {
@@ -442,6 +440,25 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       } else {
         try {
           val udf = clazz.newInstance()
+          val udfReturnType = udfInterfaces(0).getActualTypeArguments.last
+          var returnType = returnDataType
+          if (returnType == null) {
+            if (udfReturnType.isInstanceOf[Class[_]]) {
+              returnType = udfReturnType.asInstanceOf[Class[_]].getCanonicalName match {
+                case "java.lang.String" => DataTypes.BooleanType
+                case "java.lang.Double" => DataTypes.DoubleType
+                case "java.lang.Float" => DataTypes.FloatType
+                case "java.lang.Byte" => DataTypes.ByteType
+                case "java.lang.Integer" => DataTypes.IntegerType
+                case "java.lang.Long" => DataTypes.LongType
+                case "java.lang.Short" => DataTypes.ShortType
+                case t => throw new RuntimeException("Can not infer the return type: ${udfReturnType}, please declare returnType explicitly.")
+              }
+            } else {
+              throw new RuntimeException("The return type of UDF is not valid, returnType:" + udfReturnType)
+            }
+          }
+
           udfInterfaces(0).getActualTypeArguments.length match {
             case 2 => register(name, udf.asInstanceOf[UDF1[_, _]], returnType)
             case 3 => register(name, udf.asInstanceOf[UDF2[_, _, _]], returnType)

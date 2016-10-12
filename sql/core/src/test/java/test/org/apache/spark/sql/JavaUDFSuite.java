@@ -99,8 +99,13 @@ public class JavaUDFSuite implements Serializable {
   @Test
   public void udf3Test() {
     spark.udf().registerJava("stringLengthTest", StringLengthTest.class.getName(),
-            DataTypes.IntegerType);
+        DataTypes.IntegerType);
     Row result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
+    Assert.assertEquals(9, result.getInt(0));
+
+    // returnType is not provided
+    spark.udf().registerJava("stringLengthTest2", StringLengthTest.class.getName(), null);
+    result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
     Assert.assertEquals(9, result.getInt(0));
   }
 }

@@ -204,22 +204,28 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(2.1)
-    def registerJavaFunction(self, name, javaClassName, returnType=StringType()):
+    def registerJavaFunction(self, name, javaClassName, returnType=None):
         """Register a java UDF so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it default to a string and conversion will automatically
-        be done.  For any other return type, the produced object must match the specified type.
+        When the return type is not given it would infer the returnType via reflection.
         :param name:  name of the UDF
         :param javaClassName: fully qualified name of java class
         :param returnType: a :class:`pyspark.sql.types.DataType` object
 
-        >>> sqlContext.registerJavaFunction("stringLengthString",
-        ...   "test.org.apache.spark.sql.StringLengthTest", IntegerType())
-        >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
-        [Row(stringLengthString(test)=u'4')]
+        >>> sqlContext.registerJavaFunction("javaStringLength",
+        ...   "org.apache.spark.sql.test.JavaStringLength", IntegerType())
+        >>> sqlContext.sql("SELECT javaStringLength('test')").collect()
+        [Row(UDF(test)=4)]
+        >>> sqlContext.registerJavaFunction("javaStringLength2",
+        ...   "org.apache.spark.sql.test.JavaStringLength")
+        >>> sqlContext.sql("SELECT javaStringLength2('test')").collect()
+        [Row(UDF(test)=4)]
+
         """
-        jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
+        jdt = None
+        if returnType is not None:
+            jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
