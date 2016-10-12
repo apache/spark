@@ -315,6 +315,16 @@ class HiveDDLSuite
     assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
   }
 
+  test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      val message = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $tabName (height INT, length INT) TBLPROPERTIES('EXTERNAL'='TRUE')")
+      }.getMessage
+      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
+    }
+  }
+
   test("alter table - SET TBLPROPERTIES EXTERNAL to TRUE") {
     val tabName = "tab1"
     withTable(tabName) {
@@ -325,8 +335,7 @@ class HiveDDLSuite
       val message = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')")
       }.getMessage
-      assert(message.contains("Operation not allowed: ALTER TABLE SET TBLPROPERTIES is not " +
-        "allowed to change the preserved property key: 'EXTERNAL'"))
+      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
       // The table type is not changed to external
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)

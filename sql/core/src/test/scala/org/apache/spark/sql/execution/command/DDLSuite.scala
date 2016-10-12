@@ -658,20 +658,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("alter table - SET TBLPROPERTIES EXTERNAL to TRUE") {
-    val tabName = "tab1"
-    withTable(tabName) {
-      sql(s"CREATE TABLE $tabName (height INT, length INT) USING Parquet")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')")
-      }.getMessage
-      assert(e.contains("Operation not allowed: ALTER TABLE SET TBLPROPERTIES is not " +
-        "allowed to change the preserved property key: 'EXTERNAL'"))
-      assert(spark.sessionState.catalog.getTableMetadata(
-        TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
-    }
-  }
-
   test("alter table: rename") {
     val catalog = spark.sessionState.catalog
     val tableIdent1 = TableIdentifier("tab1", Some("dbx"))

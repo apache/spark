@@ -111,6 +111,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         s"as table property keys may not start with '$DATASOURCE_PREFIX' or '$STATISTICS_PREFIX':" +
         s" ${invalidKeys.mkString("[", ", ", "]")}")
     }
+    // External users are not allowed to set/switch the table type.
+    if (table.properties.contains("EXTERNAL")) {
+      throw new AnalysisException("Cannot set or change the preserved property key: 'EXTERNAL'")
+    }
   }
 
   // --------------------------------------------------------------------------

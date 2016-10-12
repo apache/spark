@@ -225,11 +225,6 @@ case class AlterTableSetPropertiesCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView)
-    // Not allowed to switch the table type.
-    if (properties.contains("EXTERNAL")) {
-      throw new AnalysisException("Operation not allowed: ALTER TABLE SET TBLPROPERTIES " +
-        "is not allowed to change the preserved property key: 'EXTERNAL'")
-    }
     // This overrides old properties
     val newTable = table.copy(properties = table.properties ++ properties)
     catalog.alterTable(newTable)
