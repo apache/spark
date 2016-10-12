@@ -41,8 +41,12 @@ PIP_VERSION="8.1.2"
 cd "$SPARK_ROOT_DIR"
 
 DEBUG=false
+PIP_ARG="-q"
+VIRTUALENV_ARG="-q"
 if [[ $1 == "--debug" || $1 == "-d" ]]; then
     DEBUG=true
+    PIP_ARG=""
+    VIRTUALENV_ARG=""
 fi
 
 
@@ -50,14 +54,14 @@ if [[ ! -z $VIRTUAL_ENV ]]; then
     echo "We already are inside a virtual environment: $VIRTUAL_ENV. Using it"
 else
     echo "Not inside a virtual environment. Jumping into one in: $VIRTUAL_ENV_DIR"
-    $VIRTUALENV_EXEC $VIRTUAL_ENV_DIR || exit 1
+    $VIRTUALENV_EXEC $VIRTUALENV_ARG $VIRTUAL_ENV_DIR || exit 1
     source $VIRTUAL_ENV_DIR/bin/activate
 fi
 echo "To activate this environment, use: 'source $SPARK_ROOT_DIR/$VIRTUAL_ENV_DIR/bin/activate'"
 
-pip install --upgrade "pip==$PIP_VERSION"
-echo "Installing developer requirements..."
-pip install --upgrade -r dev/requirements.txt
+pip install $PIP_ARG --upgrade "pip==$PIP_VERSION"
+echo "Installing developer dependencies (from dev/requirements.txt)..."
+pip install $PIP_ARG --upgrade -r dev/requirements.txt
 
 # compileall: https://docs.python.org/2/library/compileall.html
 python -B -m compileall -q -l $PATHS_TO_CHECK > "$PEP8_REPORT_PATH"
