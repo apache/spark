@@ -64,15 +64,15 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
       // fall back to a sane default value
       logger.warn("Value of config \"spark.unsafe.sorter.spill.reader.buffer.size\" = {} not in " +
-                      "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
-                  DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
+        "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
+        DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
     }
 
     final BufferedInputStream bs =
         new BufferedInputStream(new FileInputStream(file), (int) bufferSizeBytes);
     try {
-      this.in = serializerManager.wrapForCompression(blockId, bs);
+      this.in = serializerManager.wrapStream(blockId, bs);
       this.din = new DataInputStream(this.in);
       numRecords = numRecordsRemaining = din.readInt();
     } catch (IOException e) {

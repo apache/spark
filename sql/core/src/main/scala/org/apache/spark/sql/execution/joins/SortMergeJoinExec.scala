@@ -45,7 +45,7 @@ case class SortMergeJoinExec(
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case Inner =>
+      case _: InnerLike =>
         left.output ++ right.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -64,7 +64,8 @@ case class SortMergeJoinExec(
   }
 
   override def outputPartitioning: Partitioning = joinType match {
-    case Inner => PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+    case _: InnerLike =>
+      PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
     // For left and right outer joins, the output is partitioned by the streamed input's join keys.
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
@@ -111,7 +112,7 @@ case class SortMergeJoinExec(
       val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {
-        case Inner =>
+        case _: InnerLike =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
             private[this] var currentRightMatches: ArrayBuffer[InternalRow] = _
@@ -274,7 +275,7 @@ case class SortMergeJoinExec(
         case j: ExistenceJoin =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
-            private[this] val result: MutableRow = new GenericMutableRow(Array[Any](null))
+            private[this] val result: InternalRow = new GenericInternalRow(Array[Any](null))
             private[this] val smjScanner = new SortMergeJoinScanner(
               createLeftKeyGenerator(),
               createRightKeyGenerator(),
@@ -318,7 +319,7 @@ case class SortMergeJoinExec(
   }
 
   override def supportCodegen: Boolean = {
-    joinType == Inner
+    joinType.isInstanceOf[InnerLike]
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -953,12 +954,12 @@ private class SortMergeFullOuterJoinScanner(
     }
 
     if (leftMatches.size <= leftMatched.capacity) {
-      leftMatched.clear()
+      leftMatched.clearUntil(leftMatches.size)
     } else {
       leftMatched = new BitSet(leftMatches.size)
     }
     if (rightMatches.size <= rightMatched.capacity) {
-      rightMatched.clear()
+      rightMatched.clearUntil(rightMatches.size)
     } else {
       rightMatched = new BitSet(rightMatches.size)
     }

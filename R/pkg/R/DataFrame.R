@@ -55,6 +55,19 @@ setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
   .Object
 })
 
+#' Set options/mode and then return the write object
+#' @noRd
+setWriteOptions <- function(write, path = NULL, mode = "error", ...) {
+    options <- varargsToStrEnv(...)
+    if (!is.null(path)) {
+      options[["path"]] <- path
+    }
+    jmode <- convertToJSaveMode(mode)
+    write <- callJMethod(write, "mode", jmode)
+    write <- callJMethod(write, "options", options)
+    write
+}
+
 #' @export
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @param isCached TRUE if the SparkDataFrame is cached
@@ -397,7 +410,11 @@ setMethod("coltypes",
                 }
 
                 if (is.null(type)) {
-                  stop(paste("Unsupported data type: ", x))
+                  specialtype <- specialtypeshandle(x)
+                  if (is.null(specialtype)) {
+                    stop(paste("Unsupported data type: ", x))
+                  }
+                  type <- PRIMITIVE_TYPES[[specialtype]]
                 }
               }
               type
@@ -723,6 +740,8 @@ setMethod("toJSON",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
+#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
 #' @rdname write.json
@@ -739,8 +758,9 @@ setMethod("toJSON",
 #' @note write.json since 1.6.0
 setMethod("write.json",
           signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
+          function(x, path, mode = "error", ...) {
             write <- callJMethod(x@sdf, "write")
+            write <- setWriteOptions(write, mode = mode, ...)
             invisible(callJMethod(write, "json", path))
           })
 
@@ -751,6 +771,8 @@ setMethod("write.json",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
+#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
 #' @aliases write.orc,SparkDataFrame,character-method
@@ -767,8 +789,9 @@ setMethod("write.json",
 #' @note write.orc since 2.0.0
 setMethod("write.orc",
           signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
+          function(x, path, mode = "error", ...) {
             write <- callJMethod(x@sdf, "write")
+            write <- setWriteOptions(write, mode = mode, ...)
             invisible(callJMethod(write, "orc", path))
           })
 
@@ -779,6 +802,8 @@ setMethod("write.orc",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
+#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
 #' @rdname write.parquet
@@ -796,8 +821,9 @@ setMethod("write.orc",
 #' @note write.parquet since 1.6.0
 setMethod("write.parquet",
           signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
+          function(x, path, mode = "error", ...) {
             write <- callJMethod(x@sdf, "write")
+            write <- setWriteOptions(write, mode = mode, ...)
             invisible(callJMethod(write, "parquet", path))
           })
 
@@ -821,6 +847,8 @@ setMethod("saveAsParquetFile",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
+#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
 #' @aliases write.text,SparkDataFrame,character-method
@@ -837,8 +865,9 @@ setMethod("saveAsParquetFile",
 #' @note write.text since 2.0.0
 setMethod("write.text",
           signature(x = "SparkDataFrame", path = "character"),
-          function(x, path) {
+          function(x, path, mode = "error", ...) {
             write <- callJMethod(x@sdf, "write")
+            write <- setWriteOptions(write, mode = mode, ...)
             invisible(callJMethod(write, "text", path))
           })
 
@@ -1063,6 +1092,13 @@ setMethod("collect",
                   df[[colIndex]] <- col
                 } else {
                   colType <- dtypes[[colIndex]][[2]]
+                  if (is.null(PRIMITIVE_TYPES[[colType]])) {
+                    specialtype <- specialtypeshandle(colType)
+                    if (!is.null(specialtype)) {
+                      colType <- specialtype
+                    }
+                  }
+
                   # Note that "binary" columns behave like complex types.
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
@@ -2265,7 +2301,7 @@ setMethod("join",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, joinExpr = NULL, joinType = NULL) {
             if (is.null(joinExpr)) {
-              sdf <- callJMethod(x@sdf, "join", y@sdf)
+              sdf <- callJMethod(x@sdf, "crossJoin", y@sdf)
             } else {
               if (class(joinExpr) != "Column") stop("joinExpr must be a Column")
               if (is.null(joinType)) {
@@ -2597,7 +2633,7 @@ setMethod("except",
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
-#' @aliases write.df,SparkDataFrame,character-method
+#' @aliases write.df,SparkDataFrame-method
 #' @rdname write.df
 #' @name write.df
 #' @export
@@ -2611,20 +2647,25 @@ setMethod("except",
 #' }
 #' @note write.df since 1.4.0
 setMethod("write.df",
-          signature(df = "SparkDataFrame", path = "character"),
-          function(df, path, source = NULL, mode = "error", ...) {
+          signature(df = "SparkDataFrame"),
+          function(df, path = NULL, source = NULL, mode = "error", ...) {
+            if (!is.null(path) && !is.character(path)) {
+              stop("path should be charactor, NULL or omitted.")
+            }
+            if (!is.null(source) && !is.character(source)) {
+              stop("source should be character, NULL or omitted. It is the datasource specified ",
+                   "in 'spark.sql.sources.default' configuration by default.")
+            }
+            if (!is.character(mode)) {
+              stop("mode should be charactor or omitted. It is 'error' by default.")
+            }
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
-            jmode <- convertToJSaveMode(mode)
-            options <- varargsToEnv(...)
-            if (!is.null(path)) {
-                options[["path"]] <- path
-            }
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)
-            write <- callJMethod(write, "mode", jmode)
-            write <- callJMethod(write, "save", path)
+            write <- setWriteOptions(write, path = path, mode = mode, ...)
+            write <- handledCallJMethod(write, "save")
           })
 
 #' @rdname write.df
@@ -2679,7 +2720,7 @@ setMethod("saveAsTable",
               source <- getDefaultSqlSource()
             }
             jmode <- convertToJSaveMode(mode)
-            options <- varargsToEnv(...)
+            options <- varargsToStrEnv(...)
 
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)

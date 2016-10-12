@@ -19,6 +19,7 @@ package org.apache.spark.internal
 
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.util.Utils
 
 package object config {
 
@@ -90,13 +91,6 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
-  // Note: This is a SQL config but needs to be in core because the REPL depends on it
-  private[spark] val CATALOG_IMPLEMENTATION = ConfigBuilder("spark.sql.catalogImplementation")
-    .internal()
-    .stringConf
-    .checkValues(Set("hive", "in-memory"))
-    .createWithDefault("in-memory")
-
   private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")
       .intConf
@@ -119,4 +113,47 @@ package object config {
   private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
     .intConf
     .createWithDefault(100000)
+
+  // To limit how many applications are shown in the History Server summary ui
+  private[spark] val HISTORY_UI_MAX_APPS =
+    ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
+
+  private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
+    .booleanConf
+    .createWithDefault(false)
+
+  private[spark] val IO_ENCRYPTION_KEYGEN_ALGORITHM =
+    ConfigBuilder("spark.io.encryption.keygen.algorithm")
+      .stringConf
+      .createWithDefault("HmacSHA1")
+
+  private[spark] val IO_ENCRYPTION_KEY_SIZE_BITS = ConfigBuilder("spark.io.encryption.keySizeBits")
+    .intConf
+    .checkValues(Set(128, 192, 256))
+    .createWithDefault(128)
+
+  private[spark] val IO_CRYPTO_CIPHER_TRANSFORMATION =
+    ConfigBuilder("spark.io.crypto.cipher.transformation")
+      .internal()
+      .stringConf
+      .createWithDefaultString("AES/CTR/NoPadding")
+
+  private[spark] val DRIVER_HOST_ADDRESS = ConfigBuilder("spark.driver.host")
+    .doc("Address of driver endpoints.")
+    .stringConf
+    .createWithDefault(Utils.localHostName())
+
+  private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
+    .doc("Address where to bind network listen sockets on the driver.")
+    .fallbackConf(DRIVER_HOST_ADDRESS)
+
+  private[spark] val BLOCK_MANAGER_PORT = ConfigBuilder("spark.blockManager.port")
+    .doc("Port to use for the block manager when a more specific setting is not provided.")
+    .intConf
+    .createWithDefault(0)
+
+  private[spark] val DRIVER_BLOCK_MANAGER_PORT = ConfigBuilder("spark.driver.blockManager.port")
+    .doc("Port to use for the block managed on the driver.")
+    .fallbackConf(BLOCK_MANAGER_PORT)
+
 }

@@ -166,6 +166,16 @@ test_that("convertToJSaveMode", {
     'mode should be one of "append", "overwrite", "error", "ignore"') #nolint
 })
 
+test_that("captureJVMException", {
+  method <- "getSQLDataType"
+  expect_error(tryCatch(callJStatic("org.apache.spark.sql.api.r.SQLUtils", method,
+                                    "unknown"),
+                        error = function(e) {
+                          captureJVMException(e, method)
+                        }),
+               "Error in getSQLDataType : illegal argument - Invalid type unknown")
+})
+
 test_that("hashCode", {
   expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
 })
@@ -181,6 +191,39 @@ test_that("overrideEnvs", {
   expect_equal(config[["spark.master"]], "local")
   expect_equal(config[["param_only"]], "blah")
   expect_equal(config[["config_only"]], "ok")
+})
+
+test_that("rbindRaws", {
+
+  # Mixed Column types
+  r <- serialize(1:5, connection = NULL)
+  r1 <- serialize(1, connection = NULL)
+  r2 <- serialize(letters, connection = NULL)
+  r3 <- serialize(1:10, connection = NULL)
+  inputData <- list(list(1L, r1, "a", r), list(2L, r2, "b", r),
+                    list(3L, r3, "c", r))
+  expected <- data.frame(V1 = 1:3)
+  expected$V2 <- list(r1, r2, r3)
+  expected$V3 <- c("a", "b", "c")
+  expected$V4 <- list(r, r, r)
+  result <- rbindRaws(inputData)
+  expect_equal(expected, result)
+
+  # Single binary column
+  input <- list(list(r1), list(r2), list(r3))
+  expected <- subset(expected, select = "V2")
+  result <- setNames(rbindRaws(input), "V2")
+  expect_equal(expected, result)
+
+})
+
+test_that("varargsToStrEnv", {
+  strenv <- varargsToStrEnv(a = 1, b = 1.1, c = TRUE, d = "abcd")
+  env <- varargsToEnv(a = "1", b = "1.1", c = "true", d = "abcd")
+  expect_equal(strenv, env)
+  expect_error(varargsToStrEnv(a = list(1, "a")),
+               paste0("Unsupported type for a : list. Supported types are logical, ",
+                      "numeric, character and NULL."))
 })
 
 sparkR.session.stop()

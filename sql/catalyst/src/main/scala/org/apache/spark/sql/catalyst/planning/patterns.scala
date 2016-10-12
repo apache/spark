@@ -159,52 +159,32 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
  */
 object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
-  // flatten all inner joins, which are next to each other
-  def flattenJoin(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
-    case Join(left, right, Inner, cond) =>
-      val (plans, conditions) = flattenJoin(left)
-      (plans ++ Seq(right), conditions ++ cond.toSeq)
+  /**
+   * Flatten all inner joins, which are next to each other.
+   * Return a list of logical plans to be joined with a boolean for each plan indicating if it
+   * was involved in an explicit cross join. Also returns the entire list of join conditions for
+   * the left-deep tree.
+   */
+  def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
+      : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
+    case Join(left, right, joinType: InnerLike, cond) =>
+      val (plans, conditions) = flattenJoin(left, joinType)
+      (plans ++ Seq((right, joinType)), conditions ++ cond.toSeq)
 
-    case Filter(filterCondition, j @ Join(left, right, Inner, joinCondition)) =>
+    case Filter(filterCondition, j @ Join(left, right, _: InnerLike, joinCondition)) =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
-    case _ => (Seq(plan), Seq())
+    case _ => (Seq((plan, parentJoinType)), Seq())
   }
 
-  def unapply(plan: LogicalPlan): Option[(Seq[LogicalPlan], Seq[Expression])] = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, Inner, _)) =>
+  def unapply(plan: LogicalPlan): Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
+      = plan match {
+    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _)) =>
       Some(flattenJoin(f))
-    case j @ Join(_, _, Inner, _) =>
+    case j @ Join(_, _, joinType, _) =>
       Some(flattenJoin(j))
     case _ => None
-  }
-}
-
-
-/**
- * A pattern that collects all adjacent unions and returns their children as a Seq.
- */
-object Unions {
-  def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {
-    case u: Union => Some(collectUnionChildren(mutable.Stack(u), Seq.empty[LogicalPlan]))
-    case _ => None
-  }
-
-  // Doing a depth-first tree traversal to combine all the union children.
-  @tailrec
-  private def collectUnionChildren(
-      plans: mutable.Stack[LogicalPlan],
-      children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
-    if (plans.isEmpty) children
-    else {
-      plans.pop match {
-        case Union(grandchildren) =>
-          grandchildren.reverseMap(plans.push(_))
-          collectUnionChildren(plans, children)
-        case other => collectUnionChildren(plans, children :+ other)
-      }
-    }
   }
 }
 

@@ -116,15 +116,14 @@ class Analyzer(
   )
 
   /**
-   * Substitute child plan with cte definitions
+   * Analyze cte definitions and substitute child plan with analyzed cte definitions.
    */
   object CTESubstitution extends Rule[LogicalPlan] {
-    // TODO allow subquery to define CTE
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators  {
       case With(child, relations) =>
         substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
           case (resolved, (name, relation)) =>
-            resolved :+ name -> ResolveRelations(substituteCTE(relation, resolved))
+            resolved :+ name -> execute(substituteCTE(relation, resolved))
         })
       case other => other
     }
@@ -373,7 +372,15 @@ class Analyzer(
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
         def outputName(value: Literal, aggregate: Expression): String = {
-          if (singleAgg) value.toString else value + "_" + aggregate.sql
+          if (singleAgg) {
+            value.toString
+          } else {
+            val suffix = aggregate match {
+              case n: NamedExpression => n.name
+              case _ => aggregate.sql
+            }
+            value + "_" + suffix
+          }
         }
         if (aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
@@ -451,12 +458,12 @@ class Analyzer(
         i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier
-        if (table.database.isDefined && conf.runSQLonFile &&
+        if (table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
             (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))) {
-          // If the table does not exist, and the database part is specified, and we support
-          // running SQL directly on files, then let's just return the original UnresolvedRelation.
-          // It is possible we are matching a query like "select * from parquet.`/path/to/query`".
-          // The plan will get resolved later.
+          // If the database part is specified, and we support running SQL directly on files, and
+          // it's not a temporary view, and the table does not exist, then let's just return the
+          // original UnresolvedRelation. It is possible we are matching a query like "select *
+          // from parquet.`/path/to/query`". The plan will get resolved later.
           // Note that we are testing (!db_exists || !table_exists) because the catalog throws
           // an exception from tableExists if the database does not exist.
           u
@@ -714,9 +721,9 @@ class Analyzer(
       case s @ Sort(orders, global, child)
         if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
-          case s @ SortOrder(UnresolvedOrdinal(index), direction) =>
+          case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering) =>
             if (index > 0 && index <= child.output.size) {
-              SortOrder(child.output(index - 1), direction)
+              SortOrder(child.output(index - 1), direction, nullOrdering)
             } else {
               s.failAnalysis(
                 s"ORDER BY position $index is not in select list " +
@@ -1003,7 +1010,7 @@ class Analyzer(
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(left, "a RIGHT OUTER JOIN")
           j
-        case j @ Join(_, right, jt, _) if jt != Inner =>
+        case j @ Join(_, right, jt, _) if !jt.isInstanceOf[InnerLike] =>
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(right, "a LEFT (OUTER) JOIN")
           j
@@ -1655,27 +1662,17 @@ class Analyzer(
         }
       }.toSeq
 
-      // Third, for every Window Spec, we add a Window operator and set currentChild as the
-      // child of it.
-      var currentChild = child
-      var i = 0
-      while (i < groupedWindowExpressions.size) {
-        val ((partitionSpec, orderSpec), windowExpressions) = groupedWindowExpressions(i)
-        // Set currentChild to the newly created Window operator.
-        currentChild =
-          Window(
-            windowExpressions,
-            partitionSpec,
-            orderSpec,
-            currentChild)
+      // Third, we aggregate them by adding each Window operator for each Window Spec and then
+      // setting this to the child of the next Window operator.
+      val windowOps =
+        groupedWindowExpressions.foldLeft(child) {
+          case (last, ((partitionSpec, orderSpec), windowExpressions)) =>
+            Window(windowExpressions, partitionSpec, orderSpec, last)
+        }
 
-        // Move to next Window Spec.
-        i += 1
-      }
-
-      // Finally, we create a Project to output currentChild's output
+      // Finally, we create a Project to output windowOps's output
       // newExpressionsWithWindowFunctions.
-      Project(currentChild.output ++ newExpressionsWithWindowFunctions, currentChild)
+      Project(windowOps.output ++ newExpressionsWithWindowFunctions, windowOps)
     } // end of addWindow
 
     // We have to use transformDown at here to make sure the rule of
@@ -1899,7 +1896,7 @@ class Analyzer(
         joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true))
-      case Inner =>
+      case _ : InnerLike =>
         leftKeys ++ lUniqueOutput ++ rUniqueOutput
       case _ =>
         sys.error("Unsupported natural join type " + joinType)

@@ -26,10 +26,9 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
@@ -41,6 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
@@ -68,6 +68,7 @@ import org.apache.spark.util.Utils
  *     .getOrCreate()
  * }}}
  */
+@InterfaceStability.Stable
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState])
@@ -137,6 +138,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def listenerManager: ExecutionListenerManager = sessionState.listenerManager
 
   /**
@@ -147,6 +149,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Unstable
   def experimental: ExperimentalMethods = sessionState.experimentalMethods
 
   /**
@@ -190,6 +193,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
 
   /**
@@ -229,6 +233,7 @@ class SparkSession private(
    * @return 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def emptyDataset[T: Encoder]: Dataset[T] = {
     val encoder = implicitly[Encoder[T]]
     new Dataset(self, LocalRelation(encoder.schema.toAttributes), encoder)
@@ -241,6 +246,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SparkSession.setActiveSession(this)
     val encoder = Encoders.product[A]
@@ -254,6 +260,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
     SparkSession.setActiveSession(this)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
@@ -293,6 +300,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @DeveloperApi
+  @InterfaceStability.Evolving
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD, schema, needsConversion = true)
   }
@@ -306,6 +314,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @DeveloperApi
+  @InterfaceStability.Evolving
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD.rdd, schema)
   }
@@ -319,6 +328,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @DeveloperApi
+  @InterfaceStability.Evolving
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
     Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
@@ -410,6 +420,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
@@ -428,6 +439,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     Dataset[T](self, ExternalRDD(data, self))
   }
@@ -449,6 +461,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
   }
@@ -461,6 +474,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(end: Long): Dataset[java.lang.Long] = range(0, end)
 
   /**
@@ -471,6 +485,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
     range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
   }
@@ -483,6 +498,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, numPartitions = sparkContext.defaultParallelism)
   }
@@ -496,6 +512,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
     new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
   }
@@ -596,6 +613,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def readStream: DataStreamReader = new DataStreamReader(self)
 
 
@@ -614,6 +632,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   object implicits extends SQLImplicits with Serializable {
     protected override def _sqlContext: SQLContext = SparkSession.this.sqlContext
   }
@@ -670,11 +689,13 @@ class SparkSession private(
 }
 
 
+@InterfaceStability.Stable
 object SparkSession {
 
   /**
    * Builder for [[SparkSession]].
    */
+  @InterfaceStability.Stable
   class Builder extends Logging {
 
     private[this] val options = new scala.collection.mutable.HashMap[String, String]
@@ -791,7 +812,7 @@ object SparkSession {
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
-        options.foreach { case (k, v) => session.conf.set(k, v) }
+        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
         if (options.nonEmpty) {
           logWarning("Use an existing SparkSession, some configuration may not take effect.")
         }
@@ -803,7 +824,7 @@ object SparkSession {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
-          options.foreach { case (k, v) => session.conf.set(k, v) }
+          options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
           if (options.nonEmpty) {
             logWarning("Use an existing SparkSession, some configuration may not take effect.")
           }
@@ -829,7 +850,7 @@ object SparkSession {
           sc
         }
         session = new SparkSession(sparkContext)
-        options.foreach { case (k, v) => session.conf.set(k, v) }
+        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
         defaultSession.set(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the
@@ -937,7 +958,7 @@ object SparkSession {
   }
 
   /**
-   * Return true if Hive classes can be loaded, otherwise false.
+   * @return true if Hive classes can be loaded, otherwise false.
    */
   private[spark] def hiveClassesArePresent: Boolean = {
     try {

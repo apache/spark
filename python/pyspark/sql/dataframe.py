@@ -61,7 +61,7 @@ class DataFrame(object):
         people = sqlContext.read.parquet("...")
         department = sqlContext.read.parquet("...")
 
-        people.filter(people.age > 30).join(department, people.deptId == department.id)\
+        people.filter(people.age > 30).join(department, people.deptId == department.id) \\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
     .. versionadded:: 1.3
@@ -131,7 +131,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createTempView(self, name):
-        """Creates a temporary view with this DataFrame.
+        """Creates a local temporary view with this DataFrame.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -153,7 +153,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createOrReplaceTempView(self, name):
-        """Creates or replaces a temporary view with this DataFrame.
+        """Creates or replaces a local temporary view with this DataFrame.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -168,6 +168,27 @@ class DataFrame(object):
 
         """
         self._jdf.createOrReplaceTempView(name)
+
+    @since(2.1)
+    def createGlobalTempView(self, name):
+        """Creates a global temporary view with this DataFrame.
+
+        The lifetime of this temporary view is tied to this Spark application.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
+
+        >>> df.createGlobalTempView("people")
+        >>> df2 = spark.sql("select * from global_temp.people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
+        True
+        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        ...
+        AnalysisException: u"Temporary table 'people' already exists;"
+        >>> spark.catalog.dropGlobalTempView("people")
+
+        """
+        self._jdf.createGlobalTempView(name)
 
     @property
     @since(1.4)
@@ -357,10 +378,7 @@ class DataFrame(object):
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
-            port = self._sc._jvm.org.apache.spark.sql.execution.python.EvaluatePython.takeAndServe(
-                self._jdf, num)
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+        return self.limit(num).collect()
 
     @since(1.3)
     def foreach(self, f):
@@ -644,7 +662,7 @@ class DataFrame(object):
             on = [on]
 
         if on is None or len(on) == 0:
-            jdf = self._jdf.join(other._jdf)
+            jdf = self._jdf.crossJoin(other._jdf)
         elif isinstance(on[0], basestring):
             if how is None:
                 jdf = self._jdf.join(other._jdf, self._jseq(on), "inner")

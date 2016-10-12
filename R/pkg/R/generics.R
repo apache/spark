@@ -633,7 +633,7 @@ setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
 
 #' @rdname write.df
 #' @export
-setGeneric("write.df", function(df, path, source = NULL, mode = "error", ...) {
+setGeneric("write.df", function(df, path = NULL, source = NULL, mode = "error", ...) {
   standardGeneric("write.df")
 })
 
@@ -651,15 +651,17 @@ setGeneric("write.jdbc", function(x, url, tableName, mode = "error", ...) {
 
 #' @rdname write.json
 #' @export
-setGeneric("write.json", function(x, path) { standardGeneric("write.json") })
+setGeneric("write.json", function(x, path, ...) { standardGeneric("write.json") })
 
 #' @rdname write.orc
 #' @export
-setGeneric("write.orc", function(x, path) { standardGeneric("write.orc") })
+setGeneric("write.orc", function(x, path, ...) { standardGeneric("write.orc") })
 
 #' @rdname write.parquet
 #' @export
-setGeneric("write.parquet", function(x, path) { standardGeneric("write.parquet") })
+setGeneric("write.parquet", function(x, path, ...) {
+  standardGeneric("write.parquet")
+})
 
 #' @rdname write.parquet
 #' @export
@@ -667,7 +669,7 @@ setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParqu
 
 #' @rdname write.text
 #' @export
-setGeneric("write.text", function(x, path) { standardGeneric("write.text") })
+setGeneric("write.text", function(x, path, ...) { standardGeneric("write.text") })
 
 #' @rdname schema
 #' @export
@@ -732,7 +734,7 @@ setGeneric("withColumnRenamed",
 
 #' @rdname write.df
 #' @export
-setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
+setGeneric("write.df", function(df, path = NULL, ...) { standardGeneric("write.df") })
 
 #' @rdname randomSplit
 #' @export
@@ -1375,3 +1377,7 @@ setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml")
 #' @rdname spark.als
 #' @export
 setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
+
+#' @rdname spark.kstest
+#' @export
+setGeneric("spark.kstest", function(data, ...) { standardGeneric("spark.kstest") })

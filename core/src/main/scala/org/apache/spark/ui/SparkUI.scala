@@ -126,6 +126,10 @@ private[spark] class SparkUI private (
       ))
     ))
   }
+
+  def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
+    getApplicationInfoList.find(_.id == appId)
+  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)

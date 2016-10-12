@@ -315,9 +315,9 @@ class DataStreamReader(OptionUtils):
         :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema.
         :param options: all other string options
 
-        >>> json_sdf = spark.readStream.format("json")\
-                                       .schema(sdf_schema)\
-                                       .load(tempfile.mkdtemp())
+        >>> json_sdf = spark.readStream.format("json") \\
+        ...     .schema(sdf_schema) \\
+        ...     .load(tempfile.mkdtemp())
         >>> json_sdf.isStreaming
         True
         >>> json_sdf.schema == sdf_schema
@@ -497,7 +497,8 @@ class DataStreamReader(OptionUtils):
                                          being read should be skipped. If None is set, it uses
                                          the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
-                          the default value, empty string.
+                          the default value, empty string. Since 2.0.1, this ``nullValue`` param
+                          applies to all supported types including the string type.
         :param nanValue: sets the string representation of a non-number value. If None is set, it
                          uses the default value, ``NaN``.
         :param positiveInf: sets the string representation of a positive infinity value. If None
@@ -516,7 +517,7 @@ class DataStreamReader(OptionUtils):
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
                                   value being read. If None is set, it uses the default value,
-                                  ``1000000``.
+                                  ``-1`` meaning unlimited length.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
@@ -591,7 +592,7 @@ class DataStreamWriter(object):
 
         .. note:: Experimental.
 
-        :param source: string, name of the data source, e.g. 'json', 'parquet'.
+        :param source: string, name of the data source, which for now can be 'parquet'.
 
         >>> writer = sdf.writeStream.format('json')
         """

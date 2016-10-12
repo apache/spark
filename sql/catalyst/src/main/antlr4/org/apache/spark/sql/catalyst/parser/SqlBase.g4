@@ -16,6 +16,30 @@
 
 grammar SqlBase;
 
+@members {
+  /**
+   * Verify whether current token is a valid decimal token (which contains dot).
+   * Returns true if the character that follows the token is not a digit or letter or underscore.
+   *
+   * For example:
+   * For char stream "2.3", "2." is not a valid decimal token, because it is followed by digit '3'.
+   * For char stream "2.3_", "2.3" is not a valid decimal token, because it is followed by '_'.
+   * For char stream "2.3W", "2.3" is not a valid decimal token, because it is followed by 'W'.
+   * For char stream "12.0D 34.E2+0.12 "  12.0D is a valid decimal token because it is folllowed
+   * by a space. 34.E2 is a valid decimal token because it is followed by symbol '+'
+   * which is not a digit or letter or underscore.
+   */
+  public boolean isValidDecimal() {
+    int nextChar = _input.LA(1);
+    if (nextChar >= 'A' && nextChar <= 'Z' || nextChar >= '0' && nextChar <= '9' ||
+      nextChar == '_') {
+      return false;
+    } else {
+      return true;
+    }
+  }
+}
+
 tokens {
     DELIMITER
 }
@@ -62,7 +86,7 @@ statement
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier                                    #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq?)?                     #analyze
+        (identifier | FOR COLUMNS identifierSeq)?                      #analyze
     | ALTER (TABLE | VIEW) from=tableIdentifier
         RENAME TO to=tableIdentifier                                   #renameTable
     | ALTER (TABLE | VIEW) tableIdentifier
@@ -87,11 +111,12 @@ statement
     | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?                   #dropTable
     | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
-    | CREATE (OR REPLACE)? TEMPORARY? VIEW (IF NOT EXISTS)? tableIdentifier
+    | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
+        VIEW (IF NOT EXISTS)? tableIdentifier
         identifierCommentList? (COMMENT STRING)?
         (PARTITIONED ON identifierList)?
         (TBLPROPERTIES tablePropertyList)? AS query                    #createView
-    | CREATE (OR REPLACE)? TEMPORARY VIEW
+    | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
     | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
@@ -112,7 +137,7 @@ statement
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
-    | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
+    | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH .*?                                                      #refreshResource
@@ -238,7 +263,7 @@ ctes
     ;
 
 namedQuery
-    : name=identifier AS? '(' queryNoWith ')'
+    : name=identifier AS? '(' query ')'
     ;
 
 tableProvider
@@ -324,7 +349,7 @@ queryPrimary
     ;
 
 sortItem
-    : expression ordering=(ASC | DESC)?
+    : expression ordering=(ASC | DESC)? (NULLS nullOrder=(LAST | FIRST))?
     ;
 
 querySpecification
@@ -374,15 +399,17 @@ setQuantifier
     ;
 
 relation
-    : left=relation
-      ((CROSS | joinType) JOIN right=relation joinCriteria?
-      | NATURAL joinType JOIN right=relation
-      )                                           #joinRelation
-    | relationPrimary                             #relationDefault
+    : relationPrimary joinRelation*
+    ;
+
+joinRelation
+    : (joinType) JOIN right=relationPrimary joinCriteria?
+    | NATURAL joinType JOIN right=relationPrimary
     ;
 
 joinType
     : INNER?
+    | CROSS
     | LEFT OUTER?
     | LEFT SEMI
     | RIGHT OUTER?
@@ -501,16 +528,16 @@ valueExpression
     ;
 
 primaryExpression
-    : constant                                                                                 #constantDefault
-    | name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
+    | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
+    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    | CAST '(' expression AS dataType ')'                                                      #cast
+    | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' expression (',' expression)+ ')'                                                     #rowConstructor
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
     | '(' query ')'                                                                            #subqueryExpression
-    | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END                   #simpleCase
-    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
-    | CAST '(' expression AS dataType ')'                                                      #cast
+    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -558,7 +585,7 @@ intervalValue
 dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
-    | complex=STRUCT ('<' colTypeList? '>' | NEQ)               #complexDataType
+    | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
 
@@ -567,7 +594,15 @@ colTypeList
     ;
 
 colType
-    : identifier ':'? dataType (COMMENT STRING)?
+    : identifier dataType (COMMENT STRING)?
+    ;
+
+complexColTypeList
+    : complexColType (',' complexColType)*
+    ;
+
+complexColType
+    : identifier ':' dataType (COMMENT STRING)?
     ;
 
 whenClause
@@ -627,7 +662,6 @@ quotedIdentifier
 
 number
     : MINUS? DECIMAL_VALUE            #decimalLiteral
-    | MINUS? SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
     | MINUS? INTEGER_VALUE            #integerLiteral
     | MINUS? BIGINT_LITERAL           #bigIntLiteral
     | MINUS? SMALLINT_LITERAL         #smallIntLiteral
@@ -639,10 +673,11 @@ number
 nonReserved
     : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | DATABASES
     | ADD
-    | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY | STRUCT
+    | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | LAST | FIRST
+    | MAP | ARRAY | STRUCT
     | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
-    | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | TEMPORARY | OPTIONS
+    | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | GLOBAL | TEMPORARY | OPTIONS
     | GROUPING | CUBE | ROLLUP
     | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
@@ -727,6 +762,8 @@ UNBOUNDED: 'UNBOUNDED';
 PRECEDING: 'PRECEDING';
 FOLLOWING: 'FOLLOWING';
 CURRENT: 'CURRENT';
+FIRST: 'FIRST';
+LAST: 'LAST';
 ROW: 'ROW';
 WITH: 'WITH';
 VALUES: 'VALUES';
@@ -828,6 +865,7 @@ CACHE: 'CACHE';
 UNCACHE: 'UNCACHE';
 LAZY: 'LAZY';
 FORMATTED: 'FORMATTED';
+GLOBAL: 'GLOBAL';
 TEMPORARY: 'TEMPORARY' | 'TEMP';
 OPTIONS: 'OPTIONS';
 UNSET: 'UNSET';
@@ -915,23 +953,18 @@ INTEGER_VALUE
     ;
 
 DECIMAL_VALUE
-    : DIGIT+ '.' DIGIT*
-    | '.' DIGIT+
-    ;
-
-SCIENTIFIC_DECIMAL_VALUE
-    : DIGIT+ ('.' DIGIT*)? EXPONENT
-    | '.' DIGIT+ EXPONENT
+    : DIGIT+ EXPONENT
+    | DECIMAL_DIGITS EXPONENT? {isValidDecimal()}?
     ;
 
 DOUBLE_LITERAL
-    :
-    (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'D'
+    : DIGIT+ EXPONENT? 'D'
+    | DECIMAL_DIGITS EXPONENT? 'D' {isValidDecimal()}?
     ;
 
 BIGDECIMAL_LITERAL
-    :
-    (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'BD'
+    : DIGIT+ EXPONENT? 'BD'
+    | DECIMAL_DIGITS EXPONENT? 'BD' {isValidDecimal()}?
     ;
 
 IDENTIFIER
@@ -940,6 +973,11 @@ IDENTIFIER
 
 BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
+    ;
+
+fragment DECIMAL_DIGITS
+    : DIGIT+ '.' DIGIT*
+    | '.' DIGIT+
     ;
 
 fragment EXPONENT

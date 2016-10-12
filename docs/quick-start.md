@@ -74,10 +74,10 @@ Spark's primary abstraction is a distributed collection of items called a Resili
 RDDs have _[actions](programming-guide.html#actions)_, which return values, and _[transformations](programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
 
 {% highlight python %}
->>> textFile.count() # Number of items in this RDD
+>>> textFile.count()  # Number of items in this RDD
 126
 
->>> textFile.first() # First item in this RDD
+>>> textFile.first()  # First item in this RDD
 u'# Apache Spark'
 {% endhighlight %}
 
@@ -90,7 +90,7 @@ Now let's use a transformation. We will use the [`filter`](programming-guide.htm
 We can chain together transformations and actions:
 
 {% highlight python %}
->>> textFile.filter(lambda line: "Spark" in line).count() # How many lines contain "Spark"?
+>>> textFile.filter(lambda line: "Spark" in line).count()  # How many lines contain "Spark"?
 15
 {% endhighlight %}
 
@@ -240,7 +240,8 @@ object SimpleApp {
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
     val numBs = logData.filter(line => line.contains("b")).count()
-    println("Lines with a: %s, Lines with b: %s".format(numAs, numBs))
+    println(s"Lines with a: $numAs, Lines with b: $numBs")
+    sc.stop()
   }
 }
 {% endhighlight %}
@@ -328,6 +329,8 @@ public class SimpleApp {
     }).count();
 
     System.out.println("Lines with a: " + numAs + ", lines with b: " + numBs);
+    
+    sc.stop()
   }
 }
 {% endhighlight %}
@@ -407,6 +410,8 @@ numAs = logData.filter(lambda s: 'a' in s).count()
 numBs = logData.filter(lambda s: 'b' in s).count()
 
 print("Lines with a: %i, lines with b: %i" % (numAs, numBs))
+
+sc.stop()
 {% endhighlight %}
 
 

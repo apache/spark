@@ -19,16 +19,18 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.java.function.FilterFunction
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
-import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
+import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -86,6 +88,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       // Operator combine
       CollapseRepartition,
       CollapseProject,
+      CollapseWindow,
       CombineFilters,
       CombineLimits,
       CombineUnions,
@@ -107,6 +110,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RewriteCorrelatedScalarSubquery,
       EliminateSerialization,
       RemoveAliasOnlyProject) ::
+    Batch("Check Cartesian Products", Once,
+      CheckCartesianProducts(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -534,6 +539,17 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 }
 
 /**
+ * Collapse Adjacent Window Expression.
+ * - If the partition specs and order specs are the same, collapse into the parent.
+ */
+object CollapseWindow extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case w @ Window(we1, ps1, os1, Window(we2, ps2, os2, grandChild)) if ps1 == ps2 && os1 == os2 =>
+      w.copy(windowExpressions = we1 ++ we2, child = grandChild)
+  }
+}
+
+/**
  * Generate a list of additional filters from an operator's existing constraint but remove those
  * that are either already part of the operator's condition or are part of the operator's child
  * constraints. These filters are currently inserted to the existing conditions in the Filter
@@ -576,8 +592,25 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
  * Combines all adjacent [[Union]] operators into a single [[Union]].
  */
 object CombineUnions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Unions(children) => Union(children)
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case u: Union => flattenUnion(u, false)
+    case Distinct(u: Union) => Distinct(flattenUnion(u, true))
+  }
+
+  private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
+    val stack = mutable.Stack[LogicalPlan](union)
+    val flattened = mutable.ArrayBuffer.empty[LogicalPlan]
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case Distinct(Union(children)) if flattenDistinct =>
+          stack.pushAll(children.reverse)
+        case Union(children) =>
+          stack.pushAll(children.reverse)
+        case child =>
+          flattened += child
+      }
+    }
+    Union(flattened)
   }
 }
 
@@ -707,7 +740,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       val (pushDown, rest) = candidates.partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
       val stayUp = rest ++ containingNonDeterministic
@@ -838,7 +871,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
         split(splitConjunctivePredicates(filterCondition), left, right)
       joinType match {
-        case Inner =>
+        case _: InnerLike =>
           // push down the single side `where` condition into respective sides
           val newLeft = leftFilterConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -848,7 +881,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             commonFilterCondition.partition(e => !SubqueryExpression.hasCorrelatedSubquery(e))
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
-          val join = Join(newLeft, newRight, Inner, newJoinCond)
+          val join = Join(newLeft, newRight, joinType, newJoinCond)
           if (others.nonEmpty) {
             Filter(others.reduceLeft(And), join)
           } else {
@@ -885,7 +918,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
       joinType match {
-        case Inner | LeftExistence(_) =>
+        case _: InnerLike | LeftExistence(_) =>
           // push down the single side only join filter for both sides sub queries
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -930,6 +963,46 @@ object CombineLimits extends Rule[LogicalPlan] {
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Least(Seq(ne, le)), grandChild)
   }
+}
+
+/**
+ * Check if there any cartesian products between joins of any type in the optimized plan tree.
+ * Throw an error if a cartesian product is found without an explicit cross join specified.
+ * This rule is effectively disabled if the CROSS_JOINS_ENABLED flag is true.
+ *
+ * This rule must be run AFTER the ReorderJoin rule since the join conditions for each join must be
+ * collected before checking if it is a cartesian product. If you have
+ * SELECT * from R, S where R.r = S.s,
+ * the join between R and S is not a cartesian product and therefore should be allowed.
+ * The predicate R.r = S.s is not recognized as a join condition until the ReorderJoin rule.
+ */
+case class CheckCartesianProducts(conf: CatalystConf)
+    extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Check if a join is a cartesian product. Returns true if
+   * there are no join conditions involving references from both left and right.
+   */
+  def isCartesianProduct(join: Join): Boolean = {
+    val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
+    !conditions.map(_.references).exists(refs => refs.exists(join.left.outputSet.contains)
+        && refs.exists(join.right.outputSet.contains))
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan =
+    if (conf.crossJoinEnabled) {
+      plan
+    } else plan transform {
+      case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, condition)
+        if isCartesianProduct(j) =>
+          throw new AnalysisException(
+            s"""Detected cartesian product for ${j.joinType.sql} join between logical plans
+               |${left.treeString(false).trim}
+               |and
+               |${right.treeString(false).trim}
+               |Join condition is missing or trivial.
+               |Use the CROSS JOIN syntax to allow cartesian products between these relations."""
+            .stripMargin)
+    }
 }
 
 /**
@@ -1055,9 +1128,16 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
  */
 object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case a @ Aggregate(grouping, _, _) =>
+    case a @ Aggregate(grouping, _, _) if grouping.nonEmpty =>
       val newGrouping = grouping.filter(!_.foldable)
-      a.copy(groupingExpressions = newGrouping)
+      if (newGrouping.nonEmpty) {
+        a.copy(groupingExpressions = newGrouping)
+      } else {
+        // All grouping expressions are literals. We should not drop them all, because this can
+        // change the return semantics when the input of the Aggregate is empty (SPARK-17114). We
+        // instead replace this by single, easy to hash/sort, literal expression.
+        a.copy(groupingExpressions = Seq(Literal(0, IntegerType)))
+      }
   }
 }
 
