@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.types.{DataType, DoubleType, NullType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -32,10 +31,7 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-abstract class RDG extends LeafExpression with Nondeterministic {
-
-  protected def seed: Long
-
+abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterministic {
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize and initialize it.
@@ -46,12 +42,18 @@ abstract class RDG extends LeafExpression with Nondeterministic {
     rng = new XORShiftRandom(seed + partitionIndex)
   }
 
+  @transient protected lazy val seed: Long = child match {
+    case Literal(s, IntegerType) => s.asInstanceOf[Int]
+    case Literal(s, LongType) => s.asInstanceOf[Long]
+    case _ => throw new AnalysisException(
+      s"Input argument to $prettyName must be an integer/long literal.")
+  }
+
   override def nullable: Boolean = false
 
   override def dataType: DataType = DoubleType
 
-  // NOTE: Even if the user doesn't provide a seed, Spark SQL adds a default seed.
-  override def sql: String = s"$prettyName($seed)"
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegerType, LongType))
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
@@ -66,16 +68,8 @@ abstract class RDG extends LeafExpression with Nondeterministic {
        0.8446490682263027
   """)
 // scalastyle:on line.size.limit
-case class Rand(seed: Long) extends RDG {
+case class Rand(child: Expression) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
-
-  def this() = this(Utils.random.nextLong())
-
-  def this(seed: Expression) = this(seed match {
-    case IntegerLiteral(s) => s
-    case Literal(null, NullType) => 0
-    case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
-  })
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
@@ -86,6 +80,11 @@ case class Rand(seed: Long) extends RDG {
     ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""", isNull = "false")
   }
+}
+
+object Rand {
+  def apply(seed: Long): Rand = Rand(Literal(seed))
+  def apply(): Rand = Rand(Literal(Utils.random.nextLong()))
 }
 
 /** Generate a random column with i.i.d. values drawn from the standard normal distribution. */
@@ -100,16 +99,8 @@ case class Rand(seed: Long) extends RDG {
        1.1164209726833079
   """)
 // scalastyle:on line.size.limit
-case class Randn(seed: Long) extends RDG {
+case class Randn(child: Expression) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
-
-  def this() = this(Utils.random.nextLong())
-
-  def this(seed: Expression) = this(seed match {
-    case IntegerLiteral(s) => s
-    case Literal(null, NullType) => 0
-    case _ => throw new AnalysisException("Input argument to randn must be an integer literal.")
-  })
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
@@ -120,4 +111,9 @@ case class Randn(seed: Long) extends RDG {
     ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""", isNull = "false")
   }
+}
+
+object Randn {
+  def apply(seed: Long): Randn = Randn(Literal(seed))
+  def apply(): Randn = Randn(Literal(Utils.random.nextLong()))
 }

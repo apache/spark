@@ -1635,6 +1635,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+<<<<<<< 5213bd60f4be0795e23362f555dcdcf1a1d060cd
   private def verifyNullabilityInFilterExec(
       df: DataFrame,
       expr: String,
@@ -1729,8 +1730,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.filter($"array1" === $"array2").count() == 1)
   }
 
-  test("SPARK-17854: rand allows null as input seed") {
+  test("SPARK-17854: rand/randn allows null and long as input seed") {
     checkAnswer(testData.selectExpr("rand(NULL)"), testData.selectExpr("rand(0)"))
+    checkAnswer(testData.selectExpr("rand(0L)"), testData.selectExpr("rand(0)"))
     checkAnswer(testData.selectExpr("randn(NULL)"), testData.selectExpr("randn(0)"))
+    checkAnswer(testData.selectExpr("randn(0L)"), testData.selectExpr("randn(0)"))
   }
 }
