@@ -24,7 +24,7 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions, SparkSQLJsonProcessingException}
 import org.apache.spark.sql.catalyst.util.ParseModes
@@ -59,23 +59,23 @@ private[this] object JsonPathParser extends RegexParsers {
 
   // parse `[*]` and `[123]` subscripts
   def subscript: Parser[List[PathInstruction]] =
-    for {
-      operand <- '[' ~> ('*' ^^^ Wildcard | long ^^ Index) <~ ']'
-    } yield {
-      Subscript :: operand :: Nil
-    }
+  for {
+    operand <- '[' ~> ('*' ^^^ Wildcard | long ^^ Index) <~ ']'
+  } yield {
+    Subscript :: operand :: Nil
+  }
 
   // parse `.name` or `['name']` child expressions
   def named: Parser[List[PathInstruction]] =
-    for {
-      name <- '.' ~> "[^\\.\\[]+".r | "[\\'" ~> "[^\\'\\?]+" <~ "\\']"
-    } yield {
-      Key :: Named(name) :: Nil
-    }
+  for {
+    name <- '.' ~> "[^\\.\\[]+".r | "[\\'" ~> "[^\\'\\?]+" <~ "\\']"
+  } yield {
+    Key :: Named(name) :: Nil
+  }
 
   // child wildcards: `..`, `.*` or `['*']`
   def wildcard: Parser[List[PathInstruction]] =
-    (".*" | "['*']") ^^^ List(Wildcard)
+  (".*" | "['*']") ^^^ List(Wildcard)
 
   def node: Parser[List[PathInstruction]] =
     wildcard |
@@ -200,10 +200,10 @@ case class GetJsonObject(json: Expression, path: Expression)
    * have been written to the generator
    */
   private def evaluatePath(
-      p: JsonParser,
-      g: JsonGenerator,
-      style: WriteStyle,
-      path: List[PathInstruction]): Boolean = {
+                            p: JsonParser,
+                            g: JsonGenerator,
+                            style: WriteStyle,
+                            path: List[PathInstruction]): Boolean = {
     (p.getCurrentToken, path) match {
       case (VALUE_STRING, Nil) if style == RawStyle =>
         // there is no array wildcard or slice parent, emit this string without quotes
@@ -327,22 +327,32 @@ case class GetJsonObject(json: Expression, path: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - like get_json_object, but it takes multiple names and return a tuple. All the input parameters and output column types are string.")
 // scalastyle:on line.size.limit
-case class JsonTuple(children: Seq[Expression]) extends Generator {
+case class JsonTuple(children: Seq[Expression])
+  extends Generator with CodegenFallback {
+
+  import SharedFactory._
+
+  override def nullable: Boolean = {
+    // a row is always returned
+    false
+  }
 
   // if processing fails this shared value will be returned
   @transient private lazy val nullRow: Seq[InternalRow] =
-    new GenericInternalRow(fieldExpressions.length) :: Nil
+  new GenericInternalRow(Array.ofDim[Any](fieldExpressions.length)) :: Nil
 
   // the json body is the first child
   @transient private lazy val jsonExpr: Expression = children.head
 
   // the fields to query are the remaining children
-  @transient private lazy val fieldExpressions: Array[Expression] = children.tail.toArray
+  @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
   // eagerly evaluate any foldable the field names
-  @transient private lazy val foldableFieldNames: Array[String] = fieldExpressions.map {
-    case expr if expr.foldable => expr.eval().asInstanceOf[UTF8String].toString
-    case _ => null
+  @transient private lazy val foldableFieldNames: IndexedSeq[String] = {
+    fieldExpressions.map {
+      case expr if expr.foldable => expr.eval().asInstanceOf[UTF8String].toString
+      case _ => null
+    }.toIndexedSeq
   }
 
   // and count the number of foldable fields, we'll use this later to optimize evaluation
@@ -364,9 +374,25 @@ case class JsonTuple(children: Seq[Expression]) extends Generator {
     }
   }
 
-  override def eval(input: InternalRow): Seq[InternalRow] = {
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
     if (json == null) {
+      return nullRow
+    }
+
+    try {
+      Utils.tryWithResource(jsonFactory.createParser(json.getBytes)) {
+        parser => parseRow(parser, input)
+      }
+    } catch {
+      case _: JsonProcessingException =>
+        nullRow
+    }
+  }
+
+  private def parseRow(parser: JsonParser, input: InternalRow): Seq[InternalRow] = {
+    // only objects are supported
+    if (parser.nextToken() != JsonToken.START_OBJECT) {
       return nullRow
     }
 
@@ -388,84 +414,7 @@ case class JsonTuple(children: Seq[Expression]) extends Generator {
       }
     }
 
-    val values = JsonTuple.extractTuple(json, fieldNames)
-    if (values != null) {
-      new GenericInternalRow(values) :: Nil
-    } else {
-      nullRow
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val iteratorClass = classOf[Iterator[_]].getName
-    val rowClass = classOf[GenericInternalRow].getName
-
-    // Add an empty row to default to.
-    val fieldCount = fieldExpressions.length
-    val nullRow = ctx.freshName("nullRow")
-    ctx.addMutableState(
-      rowClass,
-      nullRow,
-      s"this.$nullRow = new $rowClass(${fieldCount.toString});")
-
-    // Add the field names as a class field and add the foldable field names.
-    val fieldNames = ctx.freshName("fieldNames")
-    val fieldNameValues = foldableFieldNames.map {
-      case null => "null"
-      case s => '"' + s + '"'
-    }
-    val fieldNamesInitCode = s"this.$fieldNames = new String[]{${fieldNameValues.mkString(", ")}};"
-    ctx.addMutableState("String[]", fieldNames, fieldNamesInitCode)
-
-    // Resolve the non-foldable field names.
-    val evalFieldNames = foldableFieldNames.zip(fieldExpressions).zipWithIndex.collect {
-      case ((null, e), i) =>
-        val code = e.genCode(ctx)
-        s"""
-           |${code.code}
-           |$fieldNames[$i] = ${code.isNull} ? null : ${code.value};
-         """.stripMargin
-    }
-
-    // Create the generated code.
-    val jsonSource = jsonExpr.genCode(ctx)
-    val raw = ctx.freshName("raw")
-    val row = ctx.freshName("row")
-    val jsonTupleClass = classOf[JsonTuple].getName
-    ev.copy(code = s"""
-         |${jsonSource.code}
-         |boolean ${ev.isNull} = false;
-         |InternalRow $row = $nullRow;
-         |if (!(${jsonSource.isNull})) {
-         |  ${evalFieldNames.mkString("")}
-         |  Object[] $raw = $jsonTupleClass.extractTuple(${jsonSource.value}, $fieldNames);
-         |  $row = $raw != null ? new $rowClass($raw) : $nullRow;
-         |}
-         |$iteratorClass<InternalRow> ${ev.value} = $iteratorClass$$.MODULE$$.single($row);
-    """.stripMargin)
-  }
-}
-
-object JsonTuple {
-  import SharedFactory._
-
-  def extractTuple(json: UTF8String, fieldNames: Array[String]): Array[Any] = {
-    try {
-      Utils.tryWithResource(jsonFactory.createParser(json.getBytes)) { parser =>
-        extractTuple(parser, fieldNames)
-      }
-    } catch {
-      case _: JsonProcessingException => null
-    }
-  }
-
-  private def extractTuple(parser: JsonParser, fieldNames: Array[String]): Array[Any] = {
-    // only objects are supported
-    if (parser.nextToken() != JsonToken.START_OBJECT) {
-      return null
-    }
-
-    val values = Array.ofDim[Any](fieldNames.length)
+    val row = Array.ofDim[Any](fieldNames.length)
 
     // start reading through the token stream, looking for any requested field names
     while (parser.nextToken() != JsonToken.END_OBJECT) {
@@ -482,15 +431,16 @@ object JsonTuple {
               generator => copyCurrentStructure(generator, parser)
             }
 
-            values(idx) = UTF8String.fromBytes(output.toByteArray)
+            row(idx) = UTF8String.fromBytes(output.toByteArray)
           }
         }
       }
+
       // always skip children, it's cheap enough to do even if copyCurrentStructure was called
       parser.skipChildren()
     }
 
-    values
+    new GenericInternalRow(row) :: Nil
   }
 
   private def copyCurrentStructure(generator: JsonGenerator, parser: JsonParser): Unit = {
