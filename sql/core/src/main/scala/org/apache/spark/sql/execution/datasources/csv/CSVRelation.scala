@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile, WriterContainer}
 import org.apache.spark.sql.types._
@@ -88,7 +88,7 @@ object CSVRelation extends Logging {
       case (field, index) => safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
     }
     val requiredSize = requiredFields.length
-    val row = new GenericMutableRow(requiredSize)
+    val row = new GenericInternalRow(requiredSize)
 
     (tokens: Array[String], numMalformedRows) => {
       if (params.dropMalformed && schemaFields.length != tokens.length) {

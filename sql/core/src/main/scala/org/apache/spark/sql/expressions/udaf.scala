@@ -106,7 +106,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   /**
    * Creates a [[Column]] for this UDAF using given [[Column]]s as input arguments.
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
     val aggregateExpression =
       AggregateExpression(
@@ -120,7 +120,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    * Creates a [[Column]] for this UDAF using the distinct values of the given
    * [[Column]]s as input arguments.
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def distinct(exprs: Column*): Column = {
     val aggregateExpression =
       AggregateExpression(

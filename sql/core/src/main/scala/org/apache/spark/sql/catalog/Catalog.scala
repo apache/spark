@@ -262,13 +262,36 @@ abstract class Catalog {
       options: Map[String, String]): DataFrame
 
   /**
-   * Drops the temporary view with the given view name in the catalog.
+   * Drops the local temporary view with the given view name in the catalog.
    * If the view has been cached before, then it will also be uncached.
    *
+   * Local temporary view is session-scoped. Its lifetime is the lifetime of the session that
+   * created it, i.e. it will be automatically dropped when the session terminates. It's not
+   * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
+   *
+   * Note that, the return type of this method was Unit in Spark 2.0, but changed to Boolean
+   * in Spark 2.1.
+   *
    * @param viewName the name of the view to be dropped.
+   * @return true if the view is dropped successfully, false otherwise.
    * @since 2.0.0
    */
-  def dropTempView(viewName: String): Unit
+  def dropTempView(viewName: String): Boolean
+
+  /**
+   * Drops the global temporary view with the given view name in the catalog.
+   * If the view has been cached before, then it will also be uncached.
+   *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   *
+   * @param viewName the name of the view to be dropped.
+   * @return true if the view is dropped successfully, false otherwise.
+   * @since 2.1.0
+   */
+  def dropGlobalTempView(viewName: String): Boolean
 
   /**
    * Returns true if the table is currently cached in-memory.
