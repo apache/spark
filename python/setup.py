@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
-VERSION = __version__
-JAR_PATH = "MY AWESOME JAR PATH"
+VERSION = '2.1.0-SNAPSHOT'
+JARS_PATH = "../assembly/target/scala-2.11/jars/*.jar"
 
 setup(
     name='pyspark',
@@ -17,12 +17,12 @@ setup(
               'pyspark.streaming'],
     include_package_data=True,
     package_data={
-        'spark.jar': [JAR_PATH]},
+        'jars': [JARS_PATH]},
     license='http://www.apache.org/licenses/LICENSE-2.0',
     install_requires=['py4j==0.10.3'],
     extras_require={
         'ml': ['numpy>=1.7'],
-        'mllib': ['numpy<=1.7']
+        'mllib': ['numpy<=1.7'],
         'sql': ['pandas']
     }
 )

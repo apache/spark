@@ -1,1 +1,1 @@
-include somepath/to/spark/jar/*.jar
+include ../assembly/target/scala-2.11/jars/*.jar
