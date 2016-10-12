@@ -235,18 +235,15 @@ private[kafka010] case class KafkaSource(
    * Fetch the earliest offsets of partitions.
    */
   private def fetchEarliestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
-    // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
-    assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
     // Poll to get the latest assigned partitions
     consumer.poll(0)
     val partitions = consumer.assignment()
     consumer.pause(partitions)
-    logDebug(s"Partitioned assigned to consumer: $partitions")
+    logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the beginning")
 
-    logDebug("Seeked to the beginning")
     consumer.seekToBeginning(partitions)
     val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
-    logDebug(s"Got offsets for partition : $partitionOffsets")
+    logDebug(s"Got earliest offsets for partition : $partitionOffsets")
     partitionOffsets
   }
 
@@ -254,18 +251,15 @@ private[kafka010] case class KafkaSource(
    * Fetch the latest offset of partitions.
    */
   private def fetchLatestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
-    // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
-    assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
     // Poll to get the latest assigned partitions
     consumer.poll(0)
     val partitions = consumer.assignment()
     consumer.pause(partitions)
-    logDebug(s"Partitioned assigned to consumer: $partitions")
+    logDebug(s"Partitions assigned to consumer: $partitions. Seeking to the end.")
 
-    logDebug("Seeked to the end")
     consumer.seekToEnd(partitions)
     val partitionOffsets = partitions.asScala.map(p => p -> consumer.position(p)).toMap
-    logDebug(s"Got offsets for partition : $partitionOffsets")
+    logDebug(s"Got latest offsets for partition : $partitionOffsets")
     partitionOffsets
   }
 
@@ -275,8 +269,6 @@ private[kafka010] case class KafkaSource(
    */
   private def fetchNewPartitionEarliestOffsets(
       newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
-    // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
-    assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
     // Poll to get the latest assigned partitions
     consumer.poll(0)
     val partitions = consumer.assignment()
@@ -289,7 +281,7 @@ private[kafka010] case class KafkaSource(
       // So we need to ignore them
       partitions.contains(p)
     }.map(p => p -> consumer.position(p)).toMap
-    logDebug(s"Got offsets for new partitions: $partitionToOffsets")
+    logDebug(s"Got earliest offsets for new partitions: $partitionToOffsets")
     partitionToOffsets
   }
 
@@ -303,6 +295,9 @@ private[kafka010] case class KafkaSource(
    */
   private def withRetriesWithoutInterrupt(
       body: => Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+    // Make sure `KafkaConsumer.poll` won't be interrupted (KAFKA-1894)
+    assert(Thread.currentThread().isInstanceOf[StreamExecutionThread])
+
     synchronized {
       var result: Option[Map[TopicPartition, Long]] = None
       var attempt = 1
