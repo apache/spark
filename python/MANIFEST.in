@@ -1,0 +1,1 @@
+include somepath/to/spark/jar/*.jar
