@@ -1193,6 +1193,7 @@ setMethod("take",
 #' 
 #' # Get the first 20 elements of a Column
 #' head(irisDF$Sepal_Length, 20)
+#' }
 #' @note head since 1.4.0
 setMethod("head",
           signature(x = "SparkDataFrame"),
