@@ -59,23 +59,23 @@ private[this] object JsonPathParser extends RegexParsers {
 
   // parse `[*]` and `[123]` subscripts
   def subscript: Parser[List[PathInstruction]] =
-  for {
-    operand <- '[' ~> ('*' ^^^ Wildcard | long ^^ Index) <~ ']'
-  } yield {
-    Subscript :: operand :: Nil
-  }
+    for {
+      operand <- '[' ~> ('*' ^^^ Wildcard | long ^^ Index) <~ ']'
+    } yield {
+      Subscript :: operand :: Nil
+    }
 
   // parse `.name` or `['name']` child expressions
   def named: Parser[List[PathInstruction]] =
-  for {
-    name <- '.' ~> "[^\\.\\[]+".r | "[\\'" ~> "[^\\'\\?]+" <~ "\\']"
-  } yield {
-    Key :: Named(name) :: Nil
-  }
+    for {
+      name <- '.' ~> "[^\\.\\[]+".r | "[\\'" ~> "[^\\'\\?]+" <~ "\\']"
+    } yield {
+      Key :: Named(name) :: Nil
+    }
 
   // child wildcards: `..`, `.*` or `['*']`
   def wildcard: Parser[List[PathInstruction]] =
-  (".*" | "['*']") ^^^ List(Wildcard)
+    (".*" | "['*']") ^^^ List(Wildcard)
 
   def node: Parser[List[PathInstruction]] =
     wildcard |
@@ -200,10 +200,10 @@ case class GetJsonObject(json: Expression, path: Expression)
    * have been written to the generator
    */
   private def evaluatePath(
-                            p: JsonParser,
-                            g: JsonGenerator,
-                            style: WriteStyle,
-                            path: List[PathInstruction]): Boolean = {
+      p: JsonParser,
+      g: JsonGenerator,
+      style: WriteStyle,
+      path: List[PathInstruction]): Boolean = {
     (p.getCurrentToken, path) match {
       case (VALUE_STRING, Nil) if style == RawStyle =>
         // there is no array wildcard or slice parent, emit this string without quotes
@@ -339,7 +339,7 @@ case class JsonTuple(children: Seq[Expression])
 
   // if processing fails this shared value will be returned
   @transient private lazy val nullRow: Seq[InternalRow] =
-  new GenericInternalRow(Array.ofDim[Any](fieldExpressions.length)) :: Nil
+    new GenericInternalRow(Array.ofDim[Any](fieldExpressions.length)) :: Nil
 
   // the json body is the first child
   @transient private lazy val jsonExpr: Expression = children.head
