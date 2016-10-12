@@ -2609,7 +2609,7 @@ test_that("enableHiveSupport on SparkSession", {
   unsetHiveContext()
   # if we are still here, it must be built with hive
   conf <- callJMethod(sparkSession, "conf")
-  value <- callJMethod(conf, "get", "spark.sql.catalogImplementation", "")
+  value <- callJMethod(conf, "get", "spark.sql.catalogImplementation")
   expect_equal(value, "hive")
 })
 
