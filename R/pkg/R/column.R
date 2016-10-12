@@ -31,6 +31,7 @@ setOldClass("jobj")
 #' @rdname column
 #'
 #' @slot jc reference to JVM SparkDataFrame column
+#' @slot df the parent SparkDataFrame of the Column object
 #' @export
 #' @note Column since 1.4.0
 setClass("Column",
