@@ -87,7 +87,11 @@ abstract class Predictor[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
-    val casted = castDataSet(dataset)
+
+    // Cast LabelCol to DoubleType and keep the metadata.
+    val labelMeta = dataset.schema($(labelCol)).metadata
+    val casted = dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
+
     copyValues(train(casted).setParent(this))
   }
 
@@ -126,14 +130,6 @@ abstract class Predictor[
       case Row(label: Double, features: Vector) => LabeledPoint(label, features)
     }
   }
-
-  /**
-   * Return the given DataFrame, with [[labelCol]] casted to DoubleType.
-   */
-    protected def castDataSet(dataset: Dataset[_]): DataFrame = {
-      val labelMeta = dataset.schema($(labelCol)).metadata
-      dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
-    }
 }
 
 /**
