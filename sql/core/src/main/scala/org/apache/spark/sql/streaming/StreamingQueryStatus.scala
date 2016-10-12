@@ -129,8 +129,8 @@ private[sql] object StreamingQueryStatus {
         offsetDesc = CompositeOffset(Some(LongOffset(1)) :: None :: Nil).toString),
       triggerStatus = Map(
         TRIGGER_ID -> "5",
-        ACTIVE -> "true",
-        DATA_AVAILABLE -> "true",
+        IS_TRIGGER_ACTIVE -> "true",
+        IS_DATA_PRESENT_IN_TRIGGER -> "true",
         GET_OFFSET_LATENCY -> "10",
         GET_BATCH_LATENCY -> "20",
         NUM_INPUT_ROWS -> "100"

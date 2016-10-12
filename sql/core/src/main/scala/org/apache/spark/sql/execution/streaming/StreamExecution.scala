@@ -212,14 +212,14 @@ class StreamExecution(
               constructNextBatch()
             }
             if (dataAvailable) {
-              streamMetrics.reportTriggerStatus(DATA_AVAILABLE, true)
+              streamMetrics.reportTriggerStatus(IS_DATA_PRESENT_IN_TRIGGER, true)
               streamMetrics.reportTriggerStatus(STATUS_MESSAGE, "Processing new data")
               updateStatus()
               runBatch()
               // We'll increase currentBatchId after we complete processing current batch's data
               currentBatchId += 1
             } else {
-              streamMetrics.reportTriggerStatus(DATA_AVAILABLE, false)
+              streamMetrics.reportTriggerStatus(IS_DATA_PRESENT_IN_TRIGGER, false)
               streamMetrics.reportTriggerStatus(STATUS_MESSAGE, "No new data")
               updateStatus()
               Thread.sleep(pollingDelayMs)
@@ -364,8 +364,6 @@ class StreamExecution(
    * Processes any data available between `availableOffsets` and `committedOffsets`.
    */
   private def runBatch(): Unit = {
-    val startTime = System.nanoTime()
-
     // TODO: Move this to IncrementalExecution.
 
     // Request unprocessed data from all sources.
@@ -407,17 +405,15 @@ class StreamExecution(
       case a: Attribute if replacementMap.contains(a) => replacementMap(a)
     }
 
-    val optimizerStart = System.nanoTime()
-    lastExecution = new IncrementalExecution(
-      sparkSession,
-      triggerLogicalPlan,
-      outputMode,
-      checkpointFile("state"),
-      currentBatchId)
-
-    val executedPlan = lastExecution.executedPlan // Force the lazy generation of execution plan
-    val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
-    logDebug(s"Optimized batch in ${optimizerTime}ms")
+    val executedPlan = reportTimeTaken(OPTIMIZER_LATENCY) {
+      lastExecution = new IncrementalExecution(
+        sparkSession,
+        triggerLogicalPlan,
+        outputMode,
+        checkpointFile("state"),
+        currentBatchId)
+      lastExecution.executedPlan // Force the lazy generation of execution plan
+    }
 
     val nextBatch =
       new Dataset(sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
@@ -432,8 +428,6 @@ class StreamExecution(
       awaitBatchLock.unlock()
     }
 
-    val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
-    logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
     // Update committed offsets.
     committedOffsets ++= availableOffsets
   }
@@ -644,8 +638,12 @@ class StreamExecution(
     val startTime = triggerClock.getTimeMillis()
     val result = body
     val endTime = triggerClock.getTimeMillis()
-    streamMetrics.reportTriggerStatus(triggerStatusKey, math.max(endTime - startTime, 0))
+    val timeTaken = math.max(endTime - startTime, 0)
+    streamMetrics.reportTriggerStatus(triggerStatusKey, timeTaken)
     updateStatus()
+    if (triggerStatusKey == TRIGGER_LATENCY) {
+      logInfo(s"Completed up to $availableOffsets in $timeTaken ms")
+    }
     result
   }
 

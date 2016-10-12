@@ -85,7 +85,7 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
 
     reportTriggerStatus(TRIGGER_ID, triggerId)
     sources.foreach(s => reportSourceTriggerStatus(s, TRIGGER_ID, triggerId))
-    reportTriggerStatus(ACTIVE, true)
+    reportTriggerStatus(IS_TRIGGER_ACTIVE, true)
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
     reportTriggerStatus(START_TIMESTAMP, currentTriggerStartTimestamp)
   }
@@ -107,7 +107,7 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
     val currentTriggerFinishTimestamp = triggerClock.getTimeMillis()
     reportTriggerStatus(FINISH_TIMESTAMP, currentTriggerFinishTimestamp)
     reportTriggerStatus(STATUS_MESSAGE, "")
-    reportTriggerStatus(ACTIVE, false)
+    reportTriggerStatus(IS_TRIGGER_ACTIVE, false)
 
     // Report number of rows
     val totalNumInputRows = numInputRows.values.sum
@@ -217,8 +217,8 @@ object StreamMetrics extends Logging {
 
 
   val TRIGGER_ID = "triggerId"
-  val ACTIVE = "isActive"
-  val DATA_AVAILABLE = "isDataAvailable"
+  val IS_TRIGGER_ACTIVE = "isTriggerActive"
+  val IS_DATA_PRESENT_IN_TRIGGER = "isDataPresentInTrigger"
   val STATUS_MESSAGE = "statusMessage"
 
   val START_TIMESTAMP = "timestamp.triggerStart"
@@ -229,9 +229,10 @@ object StreamMetrics extends Logging {
   val GET_OFFSET_LATENCY = "latency.getOffset"
   val OFFSET_WAL_WRITE_LATENCY = "latency.offsetLogWrite"
   val GET_BATCH_LATENCY = "latency.getBatch"
+  val OPTIMIZER_LATENCY = "latency.optimizer"
   val TRIGGER_LATENCY = "latency.fullTrigger"
-  val SOURCE_GET_OFFSET_LATENCY = "latency.sourceGetOffset"
-  val SOURCE_GET_BATCH_LATENCY = "latency.sourceGetBatch"
+  val SOURCE_GET_OFFSET_LATENCY = "latency.getOffset.source"
+  val SOURCE_GET_BATCH_LATENCY = "latency.getBatch.source"
 
   val NUM_INPUT_ROWS = "numRows.input.total"
   val NUM_SOURCE_INPUT_ROWS = "numRows.input.source"

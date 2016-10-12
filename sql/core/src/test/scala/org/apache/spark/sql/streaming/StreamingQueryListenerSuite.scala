@@ -17,22 +17,16 @@
 
 package org.apache.spark.sql.streaming
 
-import scala.collection.mutable
-import scala.collection.JavaConverters._
-
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
-import org.scalatest.concurrent.AsyncAssertions.Waiter
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.util.{JsonProtocol, ManualClock}
 
 
@@ -97,7 +91,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           // onQueryProgress
           val status = listener.lastTriggerStatus.get
           assert(status.triggerStatus.get("triggerId") == "0")
-          assert(status.triggerStatus.get("isActive") === "false")
+          assert(status.triggerStatus.get("isTriggerActive") === "false")
+          assert(status.triggerStatus.get("isDataPresentInTrigger") === "true")
 
           assert(status.triggerStatus.get("timestamp.triggerStart") === "0")
           assert(status.triggerStatus.get("timestamp.afterGetOffset") === "100")
@@ -106,6 +101,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
           assert(status.triggerStatus.get("latency.getOffset") === "100")
           assert(status.triggerStatus.get("latency.getBatch") === "200")
+          assert(status.triggerStatus.get("latency.optimizer") === "0")
           assert(status.triggerStatus.get("latency.offsetLogWrite") === "0")
           assert(status.triggerStatus.get("latency.fullTrigger") === "600")
 
@@ -115,8 +111,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
           assert(status.sourceStatuses.size === 1)
           assert(status.sourceStatuses(0).triggerStatus.get("triggerId") === "0")
-          assert(status.sourceStatuses(0).triggerStatus.get("latency.sourceGetOffset") === "100")
-          assert(status.sourceStatuses(0).triggerStatus.get("latency.sourceGetBatch") === "200")
+          assert(status.sourceStatuses(0).triggerStatus.get("latency.getOffset.source") === "100")
+          assert(status.sourceStatuses(0).triggerStatus.get("latency.getBatch.source") === "200")
           assert(status.sourceStatuses(0).triggerStatus.get("numRows.input.source") === "2")
           true
         },
@@ -273,57 +269,4 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 object StreamingQueryListenerSuite {
   // Singleton reference to clock that does not get serialized in task closures
   @volatile var clock: ManualClock = null
-
-  class QueryStatusCollector extends StreamingQueryListener {
-    // to catch errors in the async listener events
-    @volatile private var asyncTestWaiter = new Waiter
-
-    @volatile var startStatus: StreamingQueryStatus = null
-    @volatile var terminationStatus: StreamingQueryStatus = null
-    @volatile var terminationException: Option[String] = null
-
-    private val progressStatuses = new mutable.ArrayBuffer[StreamingQueryStatus]
-
-    /** Get the info of the last trigger that processed data */
-    def lastTriggerStatus: Option[StreamingQueryStatus] = synchronized {
-      progressStatuses.filter { i =>
-        i.triggerStatus.get("isActive").toBoolean == false &&
-          i.triggerStatus.get("isDataAvailable").toBoolean == true
-      }.lastOption
-    }
-
-    def reset(): Unit = {
-      startStatus = null
-      terminationStatus = null
-      progressStatuses.clear()
-      asyncTestWaiter = new Waiter
-    }
-
-    def checkAsyncErrors(): Unit = {
-      asyncTestWaiter.await(timeout(10 seconds))
-    }
-
-
-    override def onQueryStarted(queryStarted: QueryStarted): Unit = {
-      asyncTestWaiter {
-        startStatus = queryStarted.queryStatus
-      }
-    }
-
-    override def onQueryProgress(queryProgress: QueryProgress): Unit = {
-      asyncTestWaiter {
-        assert(startStatus != null, "onQueryProgress called before onQueryStarted")
-        synchronized { progressStatuses += queryProgress.queryStatus }
-      }
-    }
-
-    override def onQueryTerminated(queryTerminated: QueryTerminated): Unit = {
-      asyncTestWaiter {
-        assert(startStatus != null, "onQueryTerminated called before onQueryStarted")
-        terminationStatus = queryTerminated.queryStatus
-        terminationException = queryTerminated.exception
-      }
-      asyncTestWaiter.dismiss()
-    }
-  }
 }
