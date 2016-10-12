@@ -995,23 +995,23 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
-    ...     Row(label=0.0, features=Vectors.dense([0.0, 0.0])),
-    ...     Row(label=0.0, features=Vectors.dense([0.0, 1.0])),
-    ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0]))])
-    >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial")
+    ...     Row(label=0.0, weight=0.1, features=Vectors.dense([0.0, 0.0])),
+    ...     Row(label=0.0, weight=0.5, features=Vectors.dense([0.0, 1.0])),
+    ...     Row(label=1.0, weight=1.0, features=Vectors.dense([1.0, 0.0]))])
+    >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
     >>> model = nb.fit(df)
     >>> model.pi
-    DenseVector([-0.51..., -0.91...])
+    DenseVector([-0.81..., -0.58...])
     >>> model.theta
-    DenseMatrix(2, 2, [-1.09..., -0.40..., -0.40..., -1.09...], 1)
+    DenseMatrix(2, 2, [-0.91..., -0.51..., -0.40..., -1.09...], 1)
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> result = model.transform(test0).head()
     >>> result.prediction
     1.0
     >>> result.probability
-    DenseVector([0.42..., 0.57...])
+    DenseVector([0.32..., 0.67...])
     >>> result.rawPrediction
-    DenseVector([-1.60..., -1.32...])
+    DenseVector([-1.72..., -0.99...])
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().prediction
     1.0
