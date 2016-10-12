@@ -17,6 +17,8 @@
 
 package org.apache.spark.internal
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.Utils
@@ -90,6 +92,49 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val MAX_TASK_FAILURES =
+    ConfigBuilder("spark.task.maxFailures")
+      .intConf
+      .createWithDefault(4)
+
+  // Blacklist confs
+  private[spark] val BLACKLIST_ENABLED =
+    ConfigBuilder("spark.blacklist.enabled")
+      .booleanConf
+      .createOptional
+
+  private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
+    ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerExecutor")
+      .intConf
+      .createWithDefault(1)
+
+  private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
+    ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerNode")
+      .intConf
+      .createWithDefault(2)
+
+  private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
+    ConfigBuilder("spark.blacklist.stage.maxFailedTasksPerExecutor")
+      .intConf
+      .createWithDefault(2)
+
+  private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
+    ConfigBuilder("spark.blacklist.stage.maxFailedExecutorsPerNode")
+      .intConf
+      .createWithDefault(2)
+
+  private[spark] val BLACKLIST_TIMEOUT_CONF =
+    ConfigBuilder("spark.blacklist.timeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
+  private[spark] val BLACKLIST_LEGACY_TIMEOUT_CONF =
+    ConfigBuilder("spark.scheduler.executorTaskBlacklistTime")
+      .internal()
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+  // End blacklist confs
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")

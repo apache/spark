@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
+import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
 
 class FakeSchedulerBackend extends SchedulerBackend {
@@ -31,7 +32,6 @@ class FakeSchedulerBackend extends SchedulerBackend {
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
     with Logging {
-
 
   var failedTaskSetException: Option[Throwable] = None
   var failedTaskSetReason: String = null
@@ -60,10 +60,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) =>
-      sc.conf.set(k, v)
+      conf.set(k, v)
     }
+    sc = new SparkContext(conf)
     taskScheduler = new TaskSchedulerImpl(sc)
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
@@ -287,9 +288,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // schedulable on another executor.  However, that executor may fail later on, leaving the
     // first task with no place to run.
     val taskScheduler = setupScheduler(
-      // set this to something much longer than the test duration so that executors don't get
-      // removed from the blacklist during the test
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
+      config.BLACKLIST_ENABLED.key -> "true"
     )
 
     val taskSet = FakeTask.createTaskSet(2)
@@ -328,8 +327,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(tsm.isZombie)
     assert(failedTaskSet)
     val idx = failedTask.index
-    assert(failedTaskSetReason == s"Aborting TaskSet 0.0 because task $idx (partition $idx) has " +
-      s"already failed on executors (executor0), and no other executors are available.")
+    assert(failedTaskSetReason === s"Aborting TaskSet 0.0 because task $idx (partition $idx) " +
+      s"cannot run anywhere due to node and executor blacklist.  Blacklisting behavior can be " +
+      s"configured via spark.blacklist.*.")
   }
 
   test("don't abort if there is an executor available, though it hasn't had scheduled tasks yet") {
@@ -339,9 +339,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // available and not bail on the job
 
     val taskScheduler = setupScheduler(
-      // set this to something much longer than the test duration so that executors don't get
-      // removed from the blacklist during the test
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
+      config.BLACKLIST_ENABLED.key -> "true"
     )
 
     val taskSet = FakeTask.createTaskSet(2, (0 until 2).map { _ => Seq(TaskLocation("host0")) }: _*)
@@ -377,7 +375,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskScheduler = setupScheduler()
 
     taskScheduler.submitTasks(FakeTask.createTaskSet(2, 0,
-      (0 until 2).map { _ => Seq(TaskLocation("host0", "executor2"))}: _*
+      (0 until 2).map { _ => Seq(TaskLocation("host0", "executor2")) }: _*
     ))
 
     val taskDescs = taskScheduler.resourceOffers(IndexedSeq(

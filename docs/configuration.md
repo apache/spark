@@ -1246,6 +1246,49 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.blacklist.enabled</code></td>
+  <td>
+    false
+  </td>
+  <td>
+    If set to "true", prevent Spark from scheduling tasks on executors that have been blacklisted
+    due to too many task failures. The blacklisting algorithm can be further controlled by the
+    other "spark.blacklist" configuration options.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.task.maxTaskAttemptsPerExecutor</code></td>
+  <td>1</td>
+  <td>
+    (Experimental) For a given task, how many times it can be retried on one executor before the
+    executor is blacklisted for that task.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.task.maxTaskAttemptsPerNode</code></td>
+  <td>2</td>
+  <td>
+    (Experimental) For a given task, how many times it can be retried on one node, before the entire
+    node is blacklisted for that task.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.stage.maxFailedTasksPerExecutor</code>
+  <td>2</td>
+  <td>
+    (Experimental) How many different tasks must fail on one executor, within one stage, before the
+    executor is blacklisted for that stage.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.stage.maxFailedExecutorsPerNode</code></td>
+  <td>2</td>
+  <td>
+    (Experimental) How many different executors are marked as blacklisted for a given stage, before
+    the entire node is marked as failed for the stage.
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
