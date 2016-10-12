@@ -69,6 +69,9 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
   """)
 // scalastyle:on line.size.limit
 case class Rand(child: Expression) extends RDG {
+
+  def this() = this(Literal(Utils.random.nextLong()))
+
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -84,7 +87,6 @@ case class Rand(child: Expression) extends RDG {
 
 object Rand {
   def apply(seed: Long): Rand = Rand(Literal(seed))
-  def apply(): Rand = Rand(Literal(Utils.random.nextLong()))
 }
 
 /** Generate a random column with i.i.d. values drawn from the standard normal distribution. */
@@ -100,6 +102,9 @@ object Rand {
   """)
 // scalastyle:on line.size.limit
 case class Randn(child: Expression) extends RDG {
+
+  def this() = this(Literal(Utils.random.nextLong()))
+
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -115,5 +120,4 @@ case class Randn(child: Expression) extends RDG {
 
 object Randn {
   def apply(seed: Long): Randn = Randn(Literal(seed))
-  def apply(): Randn = Randn(Literal(Utils.random.nextLong()))
 }
