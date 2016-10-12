@@ -61,8 +61,16 @@ private[spark] class Pool(
 
   override def addSchedulable(schedulable: Schedulable) {
     require(schedulable != null)
-    schedulableQueue.add(schedulable)
-    schedulableNameToSchedulable.put(schedulable.name, schedulable)
+    val previousSchedulable = schedulableNameToSchedulable.put(schedulable.name, schedulable)
+    if (previousSchedulable == null) {
+      schedulableQueue.add(schedulable)
+    } else {
+      logWarning(s"Duplicate Schedulable added: ${schedulable.name}")
+      schedulableQueue.remove(previousSchedulable)
+      if (!schedulableQueue.contains(schedulable)) {
+        schedulableQueue.add(schedulable)
+      }
+    }
     schedulable.parent = this
   }
 
