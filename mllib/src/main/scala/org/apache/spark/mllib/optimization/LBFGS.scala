@@ -226,6 +226,9 @@ object LBFGS extends Logging {
             (grad1, loss1 + loss2)
           })
 
+      // broadcasted model is not needed anymore
+      bcW.destroy()
+
       /**
        * regVal is sum of weight squares if it's L2 updater;
        * for other updater, the same logic is followed.
