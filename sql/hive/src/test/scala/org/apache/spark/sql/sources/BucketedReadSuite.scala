@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.net.URI
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -411,8 +412,8 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   test("error if there exists any malformed bucket files") {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
-      val tableDir = new File(hiveContext
-        .sparkSession.getWarehousePath, "bucketed_table")
+      val warehouseFilePath = new URI(hiveContext.sparkSession.getWarehousePath).getPath
+      val tableDir = new File(warehouseFilePath, "bucketed_table")
       Utils.deleteRecursively(tableDir)
       df1.write.parquet(tableDir.getAbsolutePath)
 
