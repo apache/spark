@@ -285,20 +285,20 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val listener = new QueryStatusCollector
     spark.streams.addListener(listener)
     try {
-        testStream(mapped)(
+      testStream(mapped)(
         makeSureGetOffsetCalled,
         AddKafkaData(Set(topic), 1, 2, 3),
         CheckAnswer(2, 3, 4),
-          AssertOnQuery { query =>
-            eventually(timeout(streamingTimeout)) {
-              assert(listener.lastTriggerStatus.nonEmpty)
-            }
-            val status = listener.lastTriggerStatus.get
-            assert(status.triggerStatus.get("numRows.input.total").toInt > 0)
-            assert(status.sourceStatuses(0).processingRate > 0.0)
-            true
+        AssertOnQuery { query =>
+          eventually(timeout(streamingTimeout)) {
+            assert(listener.lastTriggerStatus.nonEmpty)
           }
-        )
+          val status = listener.lastTriggerStatus.get
+          assert(status.triggerDetails.get("numRows.input.total").toInt > 0)
+          assert(status.sourceStatuses(0).processingRate > 0.0)
+          true
+        }
+      )
     } finally {
       spark.streams.removeListener(listener)
     }

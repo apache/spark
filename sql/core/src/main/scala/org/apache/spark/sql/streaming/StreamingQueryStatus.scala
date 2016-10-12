@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset}
  *                   writing the corresponding output.
  * @param sourceStatuses Current statuses of the sources.
  * @param sinkStatus Current status of the sink.
- * @param triggerStatus Low-level detailed status of the currently active trigger (e.g. number of
+ * @param triggerDetails Low-level details of the currently active trigger (e.g. number of
  *                      rows processed in trigger, latency of intermediate steps, etc.).
  *                      If no trigger is active, then it will have details of the last completed
  *                      trigger.
@@ -55,7 +55,7 @@ class StreamingQueryStatus private(
   val latency: Option[Double],
   val sourceStatuses: Array[SourceStatus],
   val sinkStatus: SinkStatus,
-  val triggerStatus: ju.Map[String, String]) {
+  val triggerDetails: ju.Map[String, String]) {
 
   import StreamingQueryStatus._
 
@@ -64,7 +64,7 @@ class StreamingQueryStatus private(
       s"Source ${i + 1}:" + indent(s.prettyString)
     }
     val sinkStatusLines = sinkStatus.prettyString
-    val triggerStatusLines = triggerStatus.asScala.map { case (k, v) => s"$k: $v" }.toSeq.sorted
+    val triggerDetailsLines = triggerDetails.asScala.map { case (k, v) => s"$k: $v" }.toSeq.sorted
     val numSources = sourceStatuses.length
     val numSourcesString = s"$numSources source" + { if (numSources > 1) "s" else "" }
 
@@ -75,8 +75,8 @@ class StreamingQueryStatus private(
         |Input rate: $inputRate rows/sec
         |Processing rate $processingRate rows/sec
         |Latency: ${latency.getOrElse("-")} ms
-        |Trigger status:
-        |${indent(triggerStatusLines)}
+        |Trigger details:
+        |${indent(triggerDetailsLines)}
         |Source statuses [$numSourcesString]:
         |${indent(sourceStatusLines)}
         |Sink status: ${indent(sinkStatusLines)}""".stripMargin
@@ -96,9 +96,9 @@ private[sql] object StreamingQueryStatus {
       latency: Option[Double],
       sourceStatuses: Array[SourceStatus],
       sinkStatus: SinkStatus,
-      triggerStatus: Map[String, String]): StreamingQueryStatus = {
+      triggerDetails: Map[String, String]): StreamingQueryStatus = {
     new StreamingQueryStatus(name, id, timestamp, inputRate, processingRate,
-      latency, sourceStatuses, sinkStatus, triggerStatus.asJava)
+      latency, sourceStatuses, sinkStatus, triggerDetails.asJava)
   }
 
   def indent(strings: Iterable[String]): String = strings.map(indent).mkString("\n")
@@ -120,14 +120,14 @@ private[sql] object StreamingQueryStatus {
           offsetDesc = LongOffset(0).toString,
           inputRate = 15.5,
           processingRate = 23.5,
-          triggerStatus = Map(
+          triggerDetails = Map(
             NUM_SOURCE_INPUT_ROWS -> "100",
             SOURCE_GET_OFFSET_LATENCY -> "10",
             SOURCE_GET_BATCH_LATENCY -> "20"))),
       sinkStatus = SinkStatus(
         desc = "MySink",
         offsetDesc = CompositeOffset(Some(LongOffset(1)) :: None :: Nil).toString),
-      triggerStatus = Map(
+      triggerDetails = Map(
         TRIGGER_ID -> "5",
         IS_TRIGGER_ACTIVE -> "true",
         IS_DATA_PRESENT_IN_TRIGGER -> "true",

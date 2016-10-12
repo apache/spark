@@ -212,11 +212,11 @@ class StreamingQueryStatus(object):
             Input rate: 15.5 rows/sec
             Processing rate 23.5 rows/sec
             Latency: 345.0 ms
-            Trigger status:
-                isActive: true
-                isDataAvailable: true
-                latency.getBatch: 20
-                latency.getOffset: 10
+            Trigger details:
+                isDataPresentInTrigger: true
+                isTriggerActive: true
+                latency.getBatch.total: 20
+                latency.getOffset.total: 10
                 numRows.input.total: 100
                 triggerId: 5
             Source statuses [1 source]:
@@ -224,10 +224,10 @@ class StreamingQueryStatus(object):
                     Available offset: #0
                     Input rate: 15.5 rows/sec
                     Processing rate: 23.5 rows/sec
-                    Trigger status:
+                    Trigger details:
                         numRows.input.source: 100
-                        latency.sourceGetOffset: 10
-                        latency.sourceGetBatch: 20
+                        latency.getOffset.source: 10
+                        latency.getBatch.source: 20
             Sink status:     MySink
                 Committed offsets: [#1, -]
         """
@@ -334,18 +334,19 @@ class StreamingQueryStatus(object):
     @property
     @ignore_unicode_prefix
     @since(2.1)
-    def triggerStatus(self):
+    def triggerDetails(self):
         """
         Low-level detailed status of the currently active trigger (e.g. number of rows processed
         in trigger, latency of intermediate steps, etc.).
 
         If no trigger is currently active, then it will have details of the last completed trigger.
 
-        >>> sqs.triggerStatus
-        {u'latency.getOffset': u'10', u'triggerId': u'5', u'isDataAvailable': u'true',
-        u'numRows.input.total': u'100', u'latency.getBatch': u'20', u'isActive': u'true'}
+        >>> sqs.triggerDetails
+        {u'triggerId': u'5', u'latency.getBatch.total': u'20', u'numRows.input.total': u'100',
+        u'isTriggerActive': u'true', u'latency.getOffset.total': u'10',
+        u'isDataPresentInTrigger': u'true'}
         """
-        return self._jsqs.triggerStatus()
+        return self._jsqs.triggerDetails()
 
 
 class SourceStatus(object):
@@ -369,10 +370,10 @@ class SourceStatus(object):
             Available offset: #0
             Input rate: 15.5 rows/sec
             Processing rate: 23.5 rows/sec
-            Trigger status:
+            Trigger details:
                 numRows.input.source: 100
-                latency.sourceGetOffset: 10
-                latency.sourceGetBatch: 20
+                latency.getOffset.source: 10
+                latency.getBatch.source: 20
         """
         return self._jss.toString()
 
@@ -425,18 +426,18 @@ class SourceStatus(object):
     @property
     @ignore_unicode_prefix
     @since(2.1)
-    def triggerStatus(self):
+    def triggerDetails(self):
         """
         Low-level detailed status of the currently active trigger (e.g. number of rows processed
         in trigger, latency of intermediate steps, etc.).
 
         If no trigger is currently active, then it will have details of the last completed trigger.
 
-        >>> sqs.sourceStatuses[0].triggerStatus
-        {u'numRows.input.source': u'100', u'latency.sourceGetOffset': u'10',
-        u'latency.sourceGetBatch': u'20'}
+        >>> sqs.sourceStatuses[0].triggerDetails
+        {u'numRows.input.source': u'100', u'latency.getOffset.source': u'10',
+        u'latency.getBatch.source': u'20'}
        """
-        return self._jss.triggerStatus()
+        return self._jss.triggerDetails()
 
 
 class SinkStatus(object):

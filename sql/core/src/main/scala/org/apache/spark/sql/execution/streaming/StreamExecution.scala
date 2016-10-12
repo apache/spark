@@ -200,7 +200,7 @@ class StreamExecution(
 
       triggerExecutor.execute(() => {
         streamMetrics.reportTriggerStarted(currentBatchId)
-        streamMetrics.reportTriggerStatus(STATUS_MESSAGE, "Finding new data from sources")
+        streamMetrics.reportTriggerDetail(STATUS_MESSAGE, "Finding new data from sources")
         updateStatus()
         val isTerminated = reportTimeTaken(TRIGGER_LATENCY) {
           if (isActive) {
@@ -212,15 +212,15 @@ class StreamExecution(
               constructNextBatch()
             }
             if (dataAvailable) {
-              streamMetrics.reportTriggerStatus(IS_DATA_PRESENT_IN_TRIGGER, true)
-              streamMetrics.reportTriggerStatus(STATUS_MESSAGE, "Processing new data")
+              streamMetrics.reportTriggerDetail(IS_DATA_PRESENT_IN_TRIGGER, true)
+              streamMetrics.reportTriggerDetail(STATUS_MESSAGE, "Processing new data")
               updateStatus()
               runBatch()
               // We'll increase currentBatchId after we complete processing current batch's data
               currentBatchId += 1
             } else {
-              streamMetrics.reportTriggerStatus(IS_DATA_PRESENT_IN_TRIGGER, false)
-              streamMetrics.reportTriggerStatus(STATUS_MESSAGE, "No new data")
+              streamMetrics.reportTriggerDetail(IS_DATA_PRESENT_IN_TRIGGER, false)
+              streamMetrics.reportTriggerDetail(STATUS_MESSAGE, "No new data")
               updateStatus()
               Thread.sleep(pollingDelayMs)
             }
@@ -624,41 +624,41 @@ class StreamExecution(
 
     streamMetrics.reportNumInputRows(sourceToNumInputRows)
     stateNodes.zipWithIndex.foreach { case (s, i) =>
-      streamMetrics.reportTriggerStatus(
+      streamMetrics.reportTriggerDetail(
         NUM_TOTAL_STATE_ROWS(i + 1),
         s.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L))
-      streamMetrics.reportTriggerStatus(
+      streamMetrics.reportTriggerDetail(
         NUM_UPDATED_STATE_ROWS(i + 1),
         s.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
     }
     updateStatus()
   }
 
-  private def reportTimeTaken[T](triggerStatusKey: String)(body: => T): T = {
+  private def reportTimeTaken[T](triggerDetailKey: String)(body: => T): T = {
     val startTime = triggerClock.getTimeMillis()
     val result = body
     val endTime = triggerClock.getTimeMillis()
     val timeTaken = math.max(endTime - startTime, 0)
-    streamMetrics.reportTriggerStatus(triggerStatusKey, timeTaken)
+    streamMetrics.reportTriggerDetail(triggerDetailKey, timeTaken)
     updateStatus()
-    if (triggerStatusKey == TRIGGER_LATENCY) {
+    if (triggerDetailKey == TRIGGER_LATENCY) {
       logInfo(s"Completed up to $availableOffsets in $timeTaken ms")
     }
     result
   }
 
-  private def reportTimeTaken[T](source: Source, triggerStatusKey: String)(body: => T): T = {
+  private def reportTimeTaken[T](source: Source, triggerDetailKey: String)(body: => T): T = {
     val startTime = triggerClock.getTimeMillis()
     val result = body
     val endTime = triggerClock.getTimeMillis()
-    streamMetrics.reportSourceTriggerStatus(
-      source, triggerStatusKey, math.max(endTime - startTime, 0))
+    streamMetrics.reportSourceTriggerDetail(
+      source, triggerDetailKey, math.max(endTime - startTime, 0))
     updateStatus()
     result
   }
 
-  private def reportTimestamp(triggerStatusKey: String): Unit = {
-    streamMetrics.reportTriggerStatus(triggerStatusKey, triggerClock.getTimeMillis)
+  private def reportTimestamp(triggerDetailKey: String): Unit = {
+    streamMetrics.reportTriggerDetail(triggerDetailKey, triggerClock.getTimeMillis)
     updateStatus()
   }
 
@@ -667,10 +667,10 @@ class StreamExecution(
     val sourceStatuses = sources.map { s =>
       SourceStatus(
         s.toString,
-        localAvailableOffsets.get(s).map(_.toString).getOrElse("-"),
+        localAvailableOffsets.get(s).map(_.toString).getOrElse("-"), // TODO: use json if available
         streamMetrics.currentSourceInputRate(s),
         streamMetrics.currentSourceProcessingRate(s),
-        streamMetrics.currentSourceTriggerStatus(s))
+        streamMetrics.currentSourceTriggerDetails(s))
     }.toArray
     val sinkStatus = SinkStatus(
       sink.toString,
@@ -686,7 +686,7 @@ class StreamExecution(
         latency = streamMetrics.currentLatency(),
         sourceStatuses = sourceStatuses,
         sinkStatus = sinkStatus,
-        triggerStatus = streamMetrics.currentTriggerStatus())
+        triggerDetails = streamMetrics.currentTriggerDetails())
   }
 
   trait State

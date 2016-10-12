@@ -625,8 +625,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     /** Get the info of the last trigger that processed data */
     def lastTriggerStatus: Option[StreamingQueryStatus] = synchronized {
       progressStatuses.filter { i =>
-        i.triggerStatus.get("isTriggerActive").toBoolean == false &&
-          i.triggerStatus.get("isDataPresentInTrigger").toBoolean == true
+        i.triggerDetails.get("isTriggerActive").toBoolean == false &&
+          i.triggerDetails.get("isDataPresentInTrigger").toBoolean == true
       }.lastOption
     }
 

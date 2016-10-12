@@ -1014,7 +1014,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
               assert(listener.lastTriggerStatus.nonEmpty)
             }
             val status = listener.lastTriggerStatus.get
-            assert(status.triggerStatus.get("numRows.input.total") === "1")
+            assert(status.triggerDetails.get("numRows.input.total") === "1")
             assert(status.sourceStatuses(0).processingRate > 0.0)
             true
           }

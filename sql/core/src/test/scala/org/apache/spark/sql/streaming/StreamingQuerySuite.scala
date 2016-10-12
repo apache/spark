@@ -45,49 +45,6 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  abstract class AddFileData extends AddData {
-    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
-      require(
-        query.nonEmpty,
-        "Cannot add data when there is no query for finding the active file stream source")
-
-      val sources = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source, _) if source.isInstanceOf[FileStreamSource] =>
-          source.asInstanceOf[FileStreamSource]
-      }
-      if (sources.isEmpty) {
-        throw new Exception(
-          "Could not find file source in the StreamExecution logical plan to add data to")
-      } else if (sources.size > 1) {
-        throw new Exception(
-          "Could not select the file source in the StreamExecution logical plan as there" +
-            "are multiple file sources:\n\t" + sources.mkString("\n\t"))
-      }
-      val source = sources.head
-      val newOffset = source.withBatchingLocked {
-        addData(source)
-        source.currentOffset + 1
-      }
-      logInfo(s"Added file to $source at offset $newOffset")
-      (source, newOffset)
-    }
-
-    protected def addData(source: FileStreamSource): Unit
-  }
-
-  case class AddTextFileData(content: String, src: File, tmp: File)
-    extends AddFileData {
-
-    override def addData(source: FileStreamSource): Unit = {
-      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
-      val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
-      require(stringToFile(tempFile, content).renameTo(finalFile))
-      logInfo(s"Written text '$content' to file $finalFile")
-    }
-  }
-
-
   test("names unique across active queries, ids unique across all started queries") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map { 6 / _}
@@ -275,9 +232,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     // Trigger input has 10 rows, static input has 2 rows,
     // therefore after the first trigger, the calculated input rows should be 10
     val status = getFirstTriggerStatus(streamingInputDF.join(staticInputDF, "value"))
-    assert(status.triggerStatus.get("numRows.input.total") === "10")
+    assert(status.triggerDetails.get("numRows.input.total") === "10")
     assert(status.sourceStatuses.size === 1)
-    assert(status.sourceStatuses(0).triggerStatus.get("numRows.input.source") === "10")
+    assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "10")
   }
 
   test("input row calculation with trigger DF having multiple leaves") {
@@ -288,9 +245,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
 
     // After the first trigger, the calculated input rows should be 10
     val status = getFirstTriggerStatus(streamingInputDF)
-    assert(status.triggerStatus.get("numRows.input.total") === "10")
+    assert(status.triggerDetails.get("numRows.input.total") === "10")
     assert(status.sourceStatuses.size === 1)
-    assert(status.sourceStatuses(0).triggerStatus.get("numRows.input.source") === "10")
+    assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "10")
   }
 
   testQuietly("StreamExecution metadata garbage collection") {

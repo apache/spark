@@ -90,30 +90,30 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           // Check the correctness of the trigger info of the first completed batch reported by
           // onQueryProgress
           val status = listener.lastTriggerStatus.get
-          assert(status.triggerStatus.get("triggerId") == "0")
-          assert(status.triggerStatus.get("isTriggerActive") === "false")
-          assert(status.triggerStatus.get("isDataPresentInTrigger") === "true")
+          assert(status.triggerDetails.get("triggerId") == "0")
+          assert(status.triggerDetails.get("isTriggerActive") === "false")
+          assert(status.triggerDetails.get("isDataPresentInTrigger") === "true")
 
-          assert(status.triggerStatus.get("timestamp.triggerStart") === "0")
-          assert(status.triggerStatus.get("timestamp.afterGetOffset") === "100")
-          assert(status.triggerStatus.get("timestamp.afterGetBatch") === "300")
-          assert(status.triggerStatus.get("timestamp.triggerFinish") === "600")
+          assert(status.triggerDetails.get("timestamp.triggerStart") === "0")
+          assert(status.triggerDetails.get("timestamp.afterGetOffset") === "100")
+          assert(status.triggerDetails.get("timestamp.afterGetBatch") === "300")
+          assert(status.triggerDetails.get("timestamp.triggerFinish") === "600")
 
-          assert(status.triggerStatus.get("latency.getOffset") === "100")
-          assert(status.triggerStatus.get("latency.getBatch") === "200")
-          assert(status.triggerStatus.get("latency.optimizer") === "0")
-          assert(status.triggerStatus.get("latency.offsetLogWrite") === "0")
-          assert(status.triggerStatus.get("latency.fullTrigger") === "600")
+          assert(status.triggerDetails.get("latency.getOffset.total") === "100")
+          assert(status.triggerDetails.get("latency.getBatch.total") === "200")
+          assert(status.triggerDetails.get("latency.optimizer") === "0")
+          assert(status.triggerDetails.get("latency.offsetLogWrite") === "0")
+          assert(status.triggerDetails.get("latency.fullTrigger") === "600")
 
-          assert(status.triggerStatus.get("numRows.input.total") === "2")
-          assert(status.triggerStatus.get("numRows.state.aggregation1.total") === "1")
-          assert(status.triggerStatus.get("numRows.state.aggregation1.updated") === "1")
+          assert(status.triggerDetails.get("numRows.input.total") === "2")
+          assert(status.triggerDetails.get("numRows.state.aggregation1.total") === "1")
+          assert(status.triggerDetails.get("numRows.state.aggregation1.updated") === "1")
 
           assert(status.sourceStatuses.size === 1)
-          assert(status.sourceStatuses(0).triggerStatus.get("triggerId") === "0")
-          assert(status.sourceStatuses(0).triggerStatus.get("latency.getOffset.source") === "100")
-          assert(status.sourceStatuses(0).triggerStatus.get("latency.getBatch.source") === "200")
-          assert(status.sourceStatuses(0).triggerStatus.get("numRows.input.source") === "2")
+          assert(status.sourceStatuses(0).triggerDetails.get("triggerId") === "0")
+          assert(status.sourceStatuses(0).triggerDetails.get("latency.getOffset.source") === "100")
+          assert(status.sourceStatuses(0).triggerDetails.get("latency.getBatch.source") === "200")
+          assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "2")
           true
         },
         CheckAnswer(2)
@@ -188,7 +188,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryStarted serialization") {
-    val queryStarted = new StreamingQueryListener.QueryStarted(testQueryStatus)
+    val queryStarted = new StreamingQueryListener.QueryStarted(StreamingQueryStatus.testStatus)
     val json = JsonProtocol.sparkEventToJson(queryStarted)
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryStarted]
@@ -196,7 +196,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryProgress serialization") {
-    val queryProcess = new StreamingQueryListener.QueryProgress(testQueryStatus)
+    val queryProcess = new StreamingQueryListener.QueryProgress(StreamingQueryStatus.testStatus)
     val json = JsonProtocol.sparkEventToJson(queryProcess)
     val newQueryProcess = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryProgress]
@@ -206,7 +206,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("QueryTerminated serialization") {
     val exception = new RuntimeException("exception")
     val queryQueryTerminated = new StreamingQueryListener.QueryTerminated(
-    testQueryStatus,
+      StreamingQueryStatus.testStatus,
       Some(exception.getMessage))
     val json =
       JsonProtocol.sparkEventToJson(queryQueryTerminated)
@@ -254,15 +254,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       PrivateMethod[StreamingQueryListenerBus]('listenerBus)
     val listenerBus = spark.streams invokePrivate listenerBusMethod()
     listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
-  }
-
-  private val testQueryStatus: StreamingQueryStatus = {
-    StreamingQueryStatus(
-      "name", 1, 123, 1.0, 2.0, Some(345),
-      Array(
-        SourceStatus("source1", LongOffset(0).toString, 0.0, 0.0, Map("a" -> "b"))),
-      SinkStatus("sink", CompositeOffset(Some(LongOffset(1)) :: None :: Nil).toString),
-      Map("a" -> "b"))
   }
 }
 
