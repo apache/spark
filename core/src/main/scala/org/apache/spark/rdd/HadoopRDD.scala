@@ -256,12 +256,7 @@ class HadoopRDD[K, V](
         try {
           finished = !reader.next(key, value)
         } catch {
-          case e: IOException =>
-            if (ignoreCorruptFiles) {
-              finished = true
-            } else {
-              throw e
-            }
+          case e: IOException if ignoreCorruptFiles => finished = true
         }
         if (!finished) {
           inputMetrics.incRecordsRead(1)

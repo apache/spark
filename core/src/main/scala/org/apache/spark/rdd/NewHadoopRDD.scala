@@ -186,12 +186,7 @@ class NewHadoopRDD[K, V](
           try {
             finished = !reader.nextKeyValue
           } catch {
-            case e: IOException =>
-              if (ignoreCorruptFiles) {
-                finished = true
-              } else {
-                throw e
-              }
+            case e: IOException if ignoreCorruptFiles => finished = true
           }
           if (finished) {
             // Close and release the reader here; close() will also be called when the task
