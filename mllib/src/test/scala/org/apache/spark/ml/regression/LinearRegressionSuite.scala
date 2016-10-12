@@ -761,9 +761,9 @@ class LinearRegressionSuite
       assert(model.summary.meanAbsoluteError ~== 0.07961668 relTol 1E-4)
       assert(model.summary.r2 ~== 0.9998737 relTol 1E-4)
 
-      // Normal solver uses "WeightedLeastSquares". When no regularization is applied,
-      // this algorithm uses a direct solver and does not generate an objective history because
-      // it does not run through iterations.
+      // Normal solver uses "WeightedLeastSquares". If no regularization is applied or only L2
+      // regularization is applied, this algorithm uses a direct solver and does not generate an
+      // objective history because it does not run through iterations.
       if (solver == "l-bfgs") {
         // Objective function should be monotonically decreasing for linear regression
         assert(

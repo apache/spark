@@ -26,14 +26,14 @@ import org.apache.spark.mllib.linalg.CholeskyDecomposition
 private[ml] class NormalEquationSolution(
     val fitIntercept: Boolean,
     private val _coefficients: Array[Double],
-    val aaInv: Option[DenseVector],
+    val aaInv: Option[Array[Double]],
     val objectiveHistory: Option[Array[Double]]) {
 
-  def coefficients: DenseVector = {
+  def coefficients: Array[Double] = {
     if (fitIntercept) {
-      new DenseVector(_coefficients.slice(0, _coefficients.length - 1))
+      _coefficients.slice(0, _coefficients.length - 1)
     } else {
-      new DenseVector(_coefficients)
+      _coefficients
     }
   }
 
@@ -69,7 +69,7 @@ private[ml] class CholeskySolver(val fitIntercept: Boolean) extends NormalEquati
     val x = CholeskyDecomposition.solve(aaBar.values, abBar.values)
     val aaInv = CholeskyDecomposition.inverse(aaBar.values, k)
 
-    new NormalEquationSolution(fitIntercept, x, Some(new DenseVector(aaInv)), None)
+    new NormalEquationSolution(fitIntercept, x, Some(aaInv), None)
   }
 }
 
@@ -143,13 +143,13 @@ private[ml] class QuasiNewtonSolver(
         }
         coefValues(numFeatures) = bBar - dotProd
       }
-      val xxb = new DenseVector(new Array[Double](numFeaturesPlusIntercept))
-      BLAS.dspmv(numFeaturesPlusIntercept, 1.0, aa, coef, xxb)
-      // loss = 1/2 (Y^T W Y - 2 beta^T X^T W Y + beta^T X^T W X beta)
-      val loss = 0.5 * bbBar - BLAS.dot(ab, coef) + 0.5 * BLAS.dot(coef, xxb)
-      // -gradient = X^T W X beta - X^T W Y
-      BLAS.axpy(-1.0, ab, xxb)
-      (loss, xxb.asBreeze.toDenseVector)
+      val aax = new DenseVector(new Array[Double](numFeaturesPlusIntercept))
+      BLAS.dspmv(numFeaturesPlusIntercept, 1.0, aa, coef, 1.0, aax)
+      // loss = 1/2 (b^T W b - 2 x^T A^T W b + x^T A^T W A x)
+      val loss = 0.5 * bbBar - BLAS.dot(ab, coef) + 0.5 * BLAS.dot(coef, aax)
+      // -gradient = A^T W A x - A^T W b
+      BLAS.axpy(-1.0, ab, aax)
+      (loss, aax.asBreeze.toDenseVector)
     }
   }
 }

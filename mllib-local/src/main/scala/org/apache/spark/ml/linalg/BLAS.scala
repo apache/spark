@@ -244,12 +244,20 @@ private[spark] object BLAS extends Serializable {
   }
 
   /**
-   * y += alpha * A * x
+   * y := alpha*A*x + beta*y
    *
-   * @param A The upper triangular part of A in a [[DenseVector]] (column major)
+   * @param A The upper triangular part of A in a [[DenseVector]] (column major).
+   * @param x The [[DenseVector]] transformed by A.
+   * @param y The [[DenseVector]] to be modified in place.
    */
-  def dspmv(n: Int, alpha: Double, A: DenseVector, x: DenseVector, y: DenseVector): Unit = {
-    f2jBLAS.dspmv("U", n, alpha, A.values, x.values, 1, 1.0, y.values, 1)
+  def dspmv(
+      n: Int,
+      alpha: Double,
+      A: DenseVector,
+      x: DenseVector,
+      beta: Double,
+      y: DenseVector): Unit = {
+    f2jBLAS.dspmv("U", n, alpha, A.values, x.values, 1, beta, y.values, 1)
   }
 
   /**
