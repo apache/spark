@@ -507,10 +507,10 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
-  <td><code>spark.mesos.fetchCache.enable</code></td>
+  <td><code>spark.mesos.fetcherCache.enable</code></td>
   <td><code>false</code></td>
   <td>
-    If set to `true`, all URIs (example: `spark.executor.uri`, `spark.mesos.uris`) will be eligible for caching by the [Mesos fetch cache](http://mesos.apache.org/documentation/latest/fetcher/)
+    If set to `true`, all URIs (example: `spark.executor.uri`, `spark.mesos.uris`) will be eligible for caching by the [Mesos fetcher cache](http://mesos.apache.org/documentation/latest/fetcher/)
   </td>
 </tr>
 </table>

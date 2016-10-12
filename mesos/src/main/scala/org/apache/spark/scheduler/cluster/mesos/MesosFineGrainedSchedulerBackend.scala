@@ -59,8 +59,6 @@ private[spark] class MesosFineGrainedSchedulerBackend(
 
   private[mesos] val mesosExecutorCores = sc.conf.getDouble("spark.mesos.mesosExecutor.cores", 1)
 
-  private val useFetchCache = sc.conf.getBoolean("spark.mesos.fetchCache.enable", false)
-
   // Offer constraints
   private[this] val slaveOfferConstraints =
     parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
@@ -139,7 +137,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       // glob the directory "correctly".
       val basename = uri.get.split('/').last.split('.').head
       command.setValue(s"cd ${basename}*; $prefixEnv ./bin/spark-class $executorBackendName")
-      command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetchCache))
+      command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
     }
     val builder = MesosExecutorInfo.newBuilder()
     val (resourcesAfterCpu, usedCpuResources) =
@@ -150,7 +148,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     builder.addAllResources(usedCpuResources.asJava)
     builder.addAllResources(usedMemResources.asJava)
 
-    sc.conf.getOption("spark.mesos.uris").foreach(setupUris(_, command, useFetchCache))
+    sc.conf.getOption("spark.mesos.uris").foreach(setupUris(_, command))
 
     val executorInfo = builder
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
