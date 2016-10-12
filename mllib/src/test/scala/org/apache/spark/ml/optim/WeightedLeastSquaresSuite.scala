@@ -279,11 +279,38 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
       }
     }
 
-    // TODO: add checks for cholesky output with regularization?
-    // should not fail when regularization is added
-    new WeightedLeastSquares(fitIntercept = true, regParam = 0.5, elasticNetParam = 0.0,
-      standardizeFeatures = true, standardizeLabel = true,
-      solverType = WeightedLeastSquares.Cholesky).fit(constantFeaturesInstances)
+    // Cholesky also fails when regularization is added but we don't wish to standardize
+    val wls = new WeightedLeastSquares(true, regParam = 0.5, elasticNetParam = 0.0,
+      standardizeFeatures = false, standardizeLabel = false,
+      solverType = WeightedLeastSquares.Cholesky)
+    intercept[SingularMatrixException] {
+      wls.fit(constantFeaturesInstances)
+    }
+
+    /*
+      for (intercept in c(FALSE, TRUE)) {
+        model <- glmnet(A, b, weights=w, intercept=intercept, lambda=0.5,
+                       standardize=T, alpha=0.0, thresh=1E-14)
+        print(as.vector(coef(model)))
+      }
+      [1] 0.000000 0.000000 2.235802
+      [1] 9.798771 0.000000 1.365503
+     */
+    // should not fail when regularization and standardization are added
+    val expectedCholesky = Seq(
+      Vectors.dense(0.0, 0.0, 2.235802),
+      Vectors.dense(9.798771, 0.0, 1.365503)
+    )
+    var idx = 0
+    for (fitIntercept <- Seq(false, true)) {
+      val wls = new WeightedLeastSquares(fitIntercept = fitIntercept, regParam = 0.5,
+        elasticNetParam = 0.0, standardizeFeatures = true,
+        standardizeLabel = true, solverType = WeightedLeastSquares.Cholesky)
+        .fit(constantFeaturesInstances)
+      val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
+      assert(actual ~== expectedCholesky(idx) absTol 1e-6)
+      idx += 1
+    }
 
     /*
       for (intercept in c(FALSE, TRUE)) {
@@ -329,16 +356,19 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
       Vectors.dense(9.798771, 0.000000, 1.365503),
       Vectors.dense(9.919095, 0.000000, 1.353933),
       Vectors.dense(10.052804, 0.000000, 1.341077))
-    var idx = 0
+
+    idx = 0
     for (fitIntercept <- Seq(false, true);
          standardization <- Seq(false, true);
          (lambda, alpha) <- Seq((0.0, 0.0), (0.5, 0.0), (0.5, 0.5), (0.5, 1.0))) {
-      val wls = new WeightedLeastSquares(fitIntercept, regParam = lambda, elasticNetParam = alpha,
-        standardizeFeatures = standardization, standardizeLabel = true,
-        solverType = WeightedLeastSquares.QuasiNewton)
-      val model = wls.fit(constantFeaturesInstances)
-      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-      assert(actual ~== expectedQuasiNewton(idx) absTol 1e-6)
+      for (solver <- Seq(WeightedLeastSquares.Auto, WeightedLeastSquares.Cholesky)) {
+        val wls = new WeightedLeastSquares(fitIntercept, regParam = lambda, elasticNetParam = alpha,
+          standardizeFeatures = standardization, standardizeLabel = true,
+          solverType = WeightedLeastSquares.QuasiNewton)
+        val model = wls.fit(constantFeaturesInstances)
+        val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+        assert(actual ~== expectedQuasiNewton(idx) absTol 1e-6)
+      }
       idx += 1
     }
   }
