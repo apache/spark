@@ -52,9 +52,11 @@ cd "$SPARK_ROOT_DIR"
 DEBUG=false
 PIP_ARG="-q"
 VIRTUALENV_ARG="-q"
+SPHINX_ARGS="-q"
 if [[ $1 == "--debug" || $1 == "-d" ]]; then
     DEBUG=true
     PIP_ARG=""
+    SPHINX_ARGS=""
     VIRTUALENV_ARG=""
 fi
 
@@ -135,13 +137,13 @@ if hash "$SPHINXBUILD" 2> /dev/null; then
   echo "Building docs..."
   make clean
   # Treat warnings as errors so we stop correctly
-  SPHINXOPTS="-a -W" make html &> "$SPHINX_REPORT_PATH" || lint_status=1
+  SPHINXOPTS="-a -W $SPHINX_ARGS" make html &> "$SPHINX_REPORT_PATH" || lint_status=1
   if [ "$lint_status" -ne 0 ]; then
     echo "pydoc checks failed."
     cat "$SPHINX_REPORT_PATH"
     echo "re-running make html to print full warning list"
     make clean
-    SPHINXOPTS="-a" make html
+    SPHINXOPTS="-a $SPHINX_ARGS" make html
     rm "$SPHINX_REPORT_PATH"
     exit "$lint_status"
   else
