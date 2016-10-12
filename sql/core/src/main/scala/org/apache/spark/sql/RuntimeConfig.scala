@@ -36,7 +36,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: String): Unit = {
-    assertNotGlobalSQLConf(key)
+    requireNonStaticConf(key)
     sqlConf.setConfString(key, value)
   }
 
@@ -46,7 +46,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Boolean): Unit = {
-    assertNotGlobalSQLConf(key)
+    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
@@ -56,7 +56,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Long): Unit = {
-    assertNotGlobalSQLConf(key)
+    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
@@ -125,7 +125,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def unset(key: String): Unit = {
-    assertNotGlobalSQLConf(key)
+    requireNonStaticConf(key)
     sqlConf.unsetConf(key)
   }
 
@@ -136,7 +136,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
     sqlConf.contains(key)
   }
 
-  private def assertNotGlobalSQLConf(key: String): Unit = {
+  private def requireNonStaticConf(key: String): Unit = {
     if (StaticSQLConf.globalConfKeys.contains(key)) {
       throw new AnalysisException(s"Cannot modify the value of a static config: $key")
     }
