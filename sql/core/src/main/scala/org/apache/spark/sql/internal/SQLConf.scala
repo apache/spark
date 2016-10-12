@@ -576,6 +576,12 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
+  val IGNORE_CORRUPT_FILES = SQLConfigBuilder("spark.sql.files.ignoreCorruptFiles")
+    .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
+      "encountering corrupt files and contents that have been read will still be returned.")
+    .booleanConf
+    .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -742,6 +748,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
   def warehousePath: String = new Path(getConf(WAREHOUSE_PATH)).toString
+
+  def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
