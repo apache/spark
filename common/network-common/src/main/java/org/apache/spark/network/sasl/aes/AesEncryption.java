@@ -72,20 +72,24 @@ public class AesEncryption {
     public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
       ByteBuf in = (ByteBuf) data;
 
-      while (in.isReadable()) {
-        byteChannel.feedData(in);
-        cis = cipher.CreateInputStream(byteChannel);
+      try {
+        while (in.isReadable()) {
+          byteChannel.feedData(in);
+          cis = cipher.CreateInputStream(byteChannel);
 
-        int i;
-        byte[] decryptedData = new byte[byteChannel.length()];
-        int offset = 0;
-        while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > 0) {
-          offset += i;
-          if (offset >= decryptedData.length) break;
+          int i;
+          byte[] decryptedData = new byte[byteChannel.length()];
+          int offset = 0;
+          while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > 0) {
+            offset += i;
+            if (offset >= decryptedData.length) break;
+          }
+          byteChannel.reset();
+
+          ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, offset));
         }
-        byteChannel.reset();
-
-        ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, offset));
+      } finally {
+        in.release();
       }
     }
 
