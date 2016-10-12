@@ -183,9 +183,9 @@ case class GenerateExec(
         (initArrayData, "", values)
     }
 
-    // In case of outer we need to make sure the loop is executed at-least once when the array/map
-    // contains no input. We do this by setting the looping index to -1 if there is no input,
-    // evaluation of the array is prevented by a check in the accessor code.
+    // In case of outer=true we need to make sure the loop is executed at-least once when the
+    // array/map contains no input. We do this by setting the looping index to -1 if there is no
+    // input, evaluation of the array is prevented by a check in the accessor code.
     val numElements = ctx.freshName("numElements")
     val init = if (outer) s"$numElements == 0 ? -1 : 0" else "0"
     val numOutput = metricTerm(ctx, "numOutputRows")
@@ -225,10 +225,10 @@ case class GenerateExec(
         }
     }
 
-    // In case of outer we need to make sure the loop is executed at-least-once when the iterator
-    // contains no input. We do this by adding an 'outer' variable which guarantees execution of
-    // the first iteration even if there is no input. Evaluation of the iterator is prevented by
-    // checks in the next() and accessor code.
+    // In case of outer=true we need to make sure the loop is executed at-least-once when the
+    // iterator contains no input. We do this by adding an 'outer' variable which guarantees
+    // execution of the first iteration even if there is no input. Evaluation of the iterator is
+    // prevented by checks in the next() and accessor code.
     val hasNextCode = s"$hasNext = $iterator.hasNext()"
     val outerVal = ctx.freshName("outer")
     def concatIfOuter(s1: String, s2: String): String = s1 + (if (outer) s2 else "")
