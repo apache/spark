@@ -48,12 +48,12 @@ class SignRandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext
     val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
     val key = Vectors.dense(1.2, 3.4)
 
-    val mh = new SignRandomProjection()
+    val srp = new SignRandomProjection()
       .setInputCol("keys")
       .setOutputCol("values")
       .setSeed(0)
 
-    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(mh, df, key, 30,
+    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(srp, df, key, 30,
       singleProbing = true)
     assert(precision >= 0.8)
     assert(recall >= 0.8)
@@ -70,12 +70,12 @@ class SignRandomProjectionSuite extends SparkFunSuite with MLlibTestSparkContext
     }
     val dfB = spark.createDataFrame(dataB.map(Tuple1.apply)).toDF("keys")
 
-    val mh = new SignRandomProjection()
+    val srp = new SignRandomProjection()
       .setInputCol("keys")
       .setOutputCol("values")
       .setSeed(0)
 
-    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(mh, dfA, dfB, 0.5)
+    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(srp, dfA, dfB, 0.5)
     assert(precision == 1.0)
     assert(recall >= 0.8)
   }
