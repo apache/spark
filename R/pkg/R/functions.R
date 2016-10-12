@@ -2848,7 +2848,7 @@ setMethod("rand", signature(seed = "missing"),
 
             # By assigning a one-row data.frame, the result of this function can be collected
             # returning a one-element Column
-            df <- as.DataFrame(data.frame(0))
+            df <- getEmptySparkRDataFrame()
             column(jc, df)
           })
 
@@ -2863,7 +2863,7 @@ setMethod("rand", signature(seed = "numeric"),
 
             # By assigning a one-row data.frame, the result of this function can be collected
             # returning a one-element Column
-            df <- as.DataFrame(data.frame(0))
+            df <- getEmptySparkRDataFrame()
             column(jc, df)
           })
 
@@ -2885,7 +2885,7 @@ setMethod("randn", signature(seed = "missing"),
 
             # By assigning a one-row data.frame, the result of this function can be collected
             # returning a one-element Column
-            df <- as.DataFrame(data.frame(0))
+            df <- getEmptySparkRDataFrame()
             column(jc, df)
           })
 
@@ -2897,7 +2897,7 @@ setMethod("randn", signature(seed = "missing"),
 setMethod("randn", signature(seed = "numeric"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "randn", as.integer(seed))
-            df <- as.DataFrame(data.frame(0))
+            df <- getEmptySparkRDataFrame()
             column(jc, df)
           })
 
@@ -3051,7 +3051,7 @@ setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
 
             # By assigning a one-row data.frame, the result of this function can be collected
             # returning a one-element Column
-            df <- as.DataFrame(data.frame(0))
+            df <- getEmptySparkRDataFrame()
             column(jc, df)
           })
 

@@ -1166,8 +1166,9 @@ setMethod("take",
             collect(limited)
           })
 
-#' Head
-#' Return the first elements of a SparkDataFrame or Column. If \code{x} is a SparkDataFrame, its first 
+#' Return the first part of a SparkDataFrame or Column
+#' 
+#' If \code{x} is a SparkDataFrame, its first 
 #' rows will be returned as a data.frame. If the dataset is a \code{Column}, its first 
 #' elements will be returned as a vector. The number of elements to be returned
 #' is given by parameter \code{num}. Default value for \code{num} is 6.
@@ -1182,11 +1183,10 @@ setMethod("take",
 #' @examples
 #'\dontrun{
 #' # Initialize Spark context and SQL context
-#' sc <- sparkR.session()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' 
 #' # Create a DataFrame from the Iris dataset
-#' irisDF <- createDataFrame(sqlContext, iris)
+#' irisDF <- as.DataFrame(iris)
 #' 
 #' # Get the first 6 elements of the DataFrame
 #' head(irisDF)
@@ -3327,3 +3327,11 @@ setMethod("randomSplit",
             }
             sapply(sdfs, dataFrame)
           })
+
+# A global singleton for an empty SparkR DataFrame.
+getEmptySparkRDataFrame <- function() {
+  if (is.null(.sparkREnv$EMPTY_DF)) {
+    .sparkREnv$EMPTY_DF <- as.DataFrame(data.frame(0))
+  }
+  return(.sparkREnv$EMPTY_DF)
+}
