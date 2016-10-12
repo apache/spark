@@ -2569,9 +2569,9 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     >>> selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
     >>> model = selector.fit(df)
     >>> model.transform(df).head().selectedFeatures
-    DenseVector([1.0])
+    DenseVector([18.0])
     >>> model.selectedFeatures
-    [3]
+    [2]
     >>> chiSqSelectorPath = temp_path + "/chi-sq-selector"
     >>> selector.save(chiSqSelectorPath)
     >>> loadedSelector = ChiSqSelector.load(chiSqSelectorPath)
