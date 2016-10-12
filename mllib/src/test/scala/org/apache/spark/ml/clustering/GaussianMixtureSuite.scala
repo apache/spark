@@ -160,7 +160,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val model = new GaussianMixtureModel("gmm", Array(0.2, 0.8), Array(gaussian1, gaussian2))
 
     val llk = model.computeLogLikelihood(dataset)
-    assert(llk ~== -52.804472030823533 relTol 1E-4)
+    assert(llk ~== -52.804472030823533 relTol 1E-6)
     /*
        Using the following Python code to compute the log-likelihood:
 

@@ -138,8 +138,6 @@ class GaussianMixtureModel private[ml] (
 
     val spark = dataset.sparkSession
 
-    import spark.implicits._
-
     val bcWeightAndDists =
       spark.sparkContext.broadcast(weights.zip(gaussians))
 
