@@ -100,16 +100,16 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
             // Nothing
           } else if ($isNullA) {
             return ${
-        order.nullOrdering match {
-          case NullsFirst => "-1"
-          case NullsLast => "1"
-        }};
+              order.nullOrdering match {
+                case NullsFirst => "-1"
+                case NullsLast => "1"
+              }};
           } else if ($isNullB) {
             return ${
-        order.nullOrdering match {
-          case NullsFirst => "1"
-          case NullsLast => "-1"
-        }};
+              order.nullOrdering match {
+                case NullsFirst => "1"
+                case NullsLast => "-1"
+              }};
           } else {
             int comp = ${ctx.genComp(order.child.dataType, primitiveA, primitiveB)};
             if (comp != 0) {
@@ -133,12 +133,13 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 
         private Object[] references;
         ${ctx.declareMutableStates()}
-        ${ctx.declareAddedFunctions()}
 
         public SpecificOrdering(Object[] references) {
           this.references = references;
           ${ctx.initMutableStates()}
         }
+
+        ${ctx.declareAddedFunctions()}
 
         public int compare(InternalRow a, InternalRow b) {
           InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.

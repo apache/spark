@@ -629,35 +629,23 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for ChiSqSelector.fit() when the seletion type is KBest. This stub returns a
+   * Java stub for ChiSqSelector.fit(). This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
    */
-  def fitChiSqSelectorKBest(numTopFeatures: Int,
-    data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
-    new ChiSqSelector().setNumTopFeatures(numTopFeatures).fit(data.rdd)
-  }
-
-  /**
-   * Java stub for ChiSqSelector.fit() when the selection type is Percentile. This stub returns a
-   * handle to the Java object instead of the content of the Java object.
-   * Extra care needs to be taken in the Python code to ensure it gets freed on
-   * exit; see the Py4J documentation.
-   */
-  def fitChiSqSelectorPercentile(percentile: Double,
-    data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
-    new ChiSqSelector().setPercentile(percentile).fit(data.rdd)
-  }
-
-  /**
-   * Java stub for ChiSqSelector.fit() when the selection type is FPR. This stub returns a
-   * handle to the Java object instead of the content of the Java object.
-   * Extra care needs to be taken in the Python code to ensure it gets freed on
-   * exit; see the Py4J documentation.
-   */
-  def fitChiSqSelectorFPR(alpha: Double, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
-    new ChiSqSelector().setAlpha(alpha).fit(data.rdd)
+  def fitChiSqSelector(
+      selectorType: String,
+      numTopFeatures: Int,
+      percentile: Double,
+      alpha: Double,
+      data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector()
+      .setSelectorType(selectorType)
+      .setNumTopFeatures(numTopFeatures)
+      .setPercentile(percentile)
+      .setAlpha(alpha)
+      .fit(data.rdd)
   }
 
   /**
