@@ -320,9 +320,9 @@ case class Partition(values: InternalRow, files: Seq[FileStatus])
 trait BasicFileCatalog {
 
   /**
-   * Returns the list of root input paths from which the catalog will get files. These paths
-   * should *not* include any table partition directories. Partition directories are discovered or
-   * provided by a metastore catalog.
+   * Returns the list of root input paths from which the catalog will get files. There may be a
+   * single root path from which partitions are discovered, or individual partitions may be
+   * specified by each path.
    */
   def rootPaths: Seq[Path]
 
@@ -361,6 +361,7 @@ trait FileCatalog extends BasicFileCatalog {
   /** Returns all the valid files. */
   def allFiles(): Seq[FileStatus]
 
+  /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
     allFiles().map(_.getPath.toUri.toString).toArray
 

@@ -269,6 +269,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HIVE_DATASOURCE_PARTITION_PRUNING =
+    SQLConfigBuilder("spark.sql.hive.datasourcePartitionPruning")
+      .doc("When true, enable metastore partition pruning for Datasource tables as well. " +
+           "This is currently implemented for converted Hive tables only.")
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
@@ -674,6 +681,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+
+  def datasourcePartitionPruning: Boolean = getConf(HIVE_DATASOURCE_PARTITION_PRUNING)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
