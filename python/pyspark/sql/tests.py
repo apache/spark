@@ -1508,6 +1508,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
+    # Regression test for invalid join methods when on is None, Spark-14761
+    def test_invalid_join_method(self):
+        df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
+        df2 = self.spark.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
+        self.assertRaises(IllegalArgumentException, lambda: df1.join(df2, how="invalid-join-type"))
+
     def test_conf(self):
         spark = self.spark
         spark.conf.set("bogo", "sipeo")
