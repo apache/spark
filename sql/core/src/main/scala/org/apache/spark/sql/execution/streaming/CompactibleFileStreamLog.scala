@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.io.{InputStream, IOException, OutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 
-import scala.io.Source
+import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -104,7 +104,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
   }
 
   override def deserialize(in: InputStream): Array[T] = {
-    val lines = Source.fromInputStream(in, UTF_8.name()).getLines()
+    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
