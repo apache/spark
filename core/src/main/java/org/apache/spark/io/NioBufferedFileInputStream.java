@@ -15,6 +15,7 @@ package org.apache.spark.io;
 
 import org.apache.spark.storage.StorageUtils;
 
+import javax.annotation.concurrent.ThreadSafe;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,6 +34,7 @@ import java.nio.file.StandardOpenOption;
  * TODO: support {@link #mark(int)}/{@link #reset()}
  *
  */
+@ThreadSafe
 public final class NioBufferedFileInputStream extends InputStream {
 
   private static int DEFAULT_BUFFER_SIZE_BYTES = 8192;
@@ -72,7 +74,7 @@ public final class NioBufferedFileInputStream extends InputStream {
   }
 
   @Override
-  public int read() throws IOException {
+  public synchronized int read() throws IOException {
     if (!refill()) {
       return -1;
     }
@@ -80,9 +82,14 @@ public final class NioBufferedFileInputStream extends InputStream {
   }
 
   @Override
-  public int read(byte[] b, int offset, int len) throws IOException {
+  public synchronized int read(byte[] b, int offset, int len) throws IOException {
     if (!refill()) {
       return -1;
+    }
+    if ((offset | len | (offset + len) | (b.length - (offset + len))) < 0) {
+      throw new IndexOutOfBoundsException();
+    } else if (len == 0) {
+      return 0;
     }
     len = Math.min(len, byteBuffer.remaining());
     byteBuffer.get(b, offset, len);
@@ -90,12 +97,12 @@ public final class NioBufferedFileInputStream extends InputStream {
   }
 
   @Override
-  public int available() throws IOException {
+  public synchronized int available() throws IOException {
     return byteBuffer.remaining();
   }
 
   @Override
-  public long skip(long n) throws IOException {
+  public synchronized long skip(long n) throws IOException {
     if (n <= 0L) {
       return 0L;
     }
@@ -115,7 +122,7 @@ public final class NioBufferedFileInputStream extends InputStream {
   private long skipFromFileChannel(long n) throws IOException {
     long currentFilePosition = fileChannel.position();
     long size = fileChannel.size();
-    if (currentFilePosition + n > size) {
+    if (n > size - currentFilePosition) {
       fileChannel.position(size);
       return size - currentFilePosition;
     } else {
