@@ -29,6 +29,7 @@ build/*.jar
 build/apache-maven*
 build/scala*
 build/zinc*
+build/venv
 cache
 checkpoint
 conf/*.cmd

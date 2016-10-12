@@ -1,3 +1,10 @@
+# Please keep this list ordered
+
 jira==1.0.3
+numpy==1.11.1
+pep8==1.7.0
 PyGithub==1.26.0
+pylint==1.6.4
+requests==2.11.1
+Sphinx==1.4.6
 Unidecode==0.04.19
