@@ -155,7 +155,7 @@ case class HyperLogLogPlusPlus(
     aggBufferAttributes.map(_.newInstance())
 
   /** Fill all words with zeros. */
-  override def initialize(buffer: MutableRow): Unit = {
+  override def initialize(buffer: InternalRow): Unit = {
     var word = 0
     while (word < numWords) {
       buffer.setLong(mutableAggBufferOffset + word, 0)
@@ -168,7 +168,7 @@ case class HyperLogLogPlusPlus(
    *
    * Variable names in the HLL++ paper match variable names in the code.
    */
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+  override def update(buffer: InternalRow, input: InternalRow): Unit = {
     val v = child.eval(input)
     if (v != null) {
       // Create the hashed value 'x'.
@@ -200,7 +200,7 @@ case class HyperLogLogPlusPlus(
    * Merge the HLL buffers by iterating through the registers in both buffers and select the
    * maximum number of leading zeros for each register.
    */
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {

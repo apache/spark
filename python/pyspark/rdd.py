@@ -2017,8 +2017,7 @@ class RDD(object):
          >>> len(rdd.repartition(10).glom().collect())
          10
         """
-        jrdd = self._jrdd.repartition(numPartitions)
-        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
+        return self.coalesce(numPartitions, shuffle=True)
 
     def coalesce(self, numPartitions, shuffle=False):
         """
@@ -2029,7 +2028,15 @@ class RDD(object):
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
         [[1, 2, 3, 4, 5]]
         """
-        jrdd = self._jrdd.coalesce(numPartitions, shuffle)
+        if shuffle:
+            # In Scala's repartition code, we will distribute elements evenly across output
+            # partitions. However, the RDD from Python is serialized as a single binary data,
+            # so the distribution fails and produces highly skewed partitions. We need to
+            # convert it to a RDD of java object before repartitioning.
+            data_java_rdd = self._to_java_object_rdd().coalesce(numPartitions, shuffle)
+            jrdd = self.ctx._jvm.SerDeUtil.javaToPython(data_java_rdd)
+        else:
+            jrdd = self._jrdd.coalesce(numPartitions, shuffle)
         return RDD(jrdd, self.ctx, self._jrdd_deserializer)
 
     def zip(self, other):
