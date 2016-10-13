@@ -904,7 +904,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
         task.index == index && !sched.endedTasks.contains(task.taskId)
       }.getOrElse {
         throw new RuntimeException(s"couldn't find index $index in " +
-          s"tasks: ${tasks.map{t => t.index -> t.taskId}} with endedTasks:" +
+          s"tasks: ${tasks.map { t => t.index -> t.taskId }} with endedTasks:" +
           s" ${sched.endedTasks.keys}")
       }
     }
@@ -972,6 +972,22 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     verify(sched.backend).killTask(origTask2.taskId, "exec2", true)
     assert(manager.tasksSuccessful === 5)
     assert(manager.isZombie)
+  }
+
+  test("check uniqueness of TaskSetManager name") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1, 0, 0)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, new ManualClock)
+    assert(manager.name === "TaskSet_0.0")
+
+    val taskSet2 = FakeTask.createTaskSet(1, 0, 1)
+    val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES, new ManualClock)
+    assert(manager2.name === "TaskSet_0.1")
+
+    val taskSet3 = FakeTask.createTaskSet(1, 1, 1)
+    val manager3 = new TaskSetManager(sched, taskSet3, MAX_TASK_FAILURES, new ManualClock)
+    assert(manager3.name === "TaskSet_1.1")
   }
 
   private def createTaskResult(
