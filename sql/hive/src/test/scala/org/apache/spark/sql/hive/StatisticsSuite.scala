@@ -378,7 +378,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
             ColumnStat(InternalRow(0L, intSeq.max, intSeq.min, intSeq.distinct.length.toLong))
           case StringType =>
             ColumnStat(InternalRow(0L, stringSeq.map(_.length).sum / stringSeq.length.toDouble,
-              stringSeq.map(_.length).max.toLong, stringSeq.distinct.length.toLong))
+              stringSeq.map(_.length).max.toInt, stringSeq.distinct.length.toLong))
           case BooleanType =>
             ColumnStat(InternalRow(0L, booleanSeq.count(_.equals(true)).toLong,
               booleanSeq.count(_.equals(false)).toLong))
