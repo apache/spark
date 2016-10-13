@@ -27,22 +27,21 @@ import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.regression.GBTRegressor
 import org.apache.spark.ml.tree.{InternalNode, LeafNode, Node}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.tree.impurity.{ImpurityAggregator, ImpurityCalculator}
 import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 
 object GBTSuiteHelper extends SparkFunSuite {
-  implicit val approxEquals = TolerantNumerics.tolerantDoubleEquality(1e-3)
-
   /**
    * @param labels set of GBT labels
    * @param agg the aggregator to use
    * @return the calculator from aggregation on the labels
    */
-  def computeCalculator(labels: Seq[Double],
-                        agg: ImpurityAggregator): ImpurityCalculator = {
-    implicit val encoder = Encoders.scalaDouble
+  def computeCalculator(
+      labels: Seq[Double],
+      agg: ImpurityAggregator): ImpurityCalculator = {
     val stats = new Array[Double](agg.statsSize)
     labels.foreach(label => agg.update(stats, offset = 0, label, instanceWeight = 1))
     agg.getCalculator(stats, offset = 0)
@@ -59,10 +58,11 @@ object GBTSuiteHelper extends SparkFunSuite {
    *                           (previous prediction, labels, responses) to the
    *                           the expected prediction
    */
-  def verifyCalculator(actualAgg: ImpurityAggregator,
-                       loss: Loss,
-                       expectedImpurity: Seq[Double] => Double,
-                       expectedPrediction: (Double, Seq[Double], Seq[Double]) => Double): Unit = {
+  def verifyCalculator(
+      actualAgg: ImpurityAggregator,
+      loss: Loss,
+      expectedImpurity: Seq[Double] => Double,
+      expectedPrediction: (Double, Seq[Double], Seq[Double]) => Double): Unit = {
     val npoints = 6
     for (cutoff <- 0 to npoints) withClue(s"for cutoff $cutoff\n") {
       val labels = (0 until npoints).map(x => if (x < cutoff) -1.0 else 1.0)
@@ -72,8 +72,9 @@ object GBTSuiteHelper extends SparkFunSuite {
       val calculator = computeCalculator(psuedoResiduals, actualAgg)
       withClue(s"for calculator $calculator\n") {
         assert(calculator.count === npoints)
-        assert(calculator.calculate() === expectedImpurity(psuedoResiduals))
-        assert(calculator.predict === expectedPrediction(prediction, labels, psuedoResiduals))
+        assert(calculator.calculate() ~== expectedImpurity(psuedoResiduals) absTol 1e-3)
+        assert(calculator.predict ~==
+            expectedPrediction(prediction, labels, psuedoResiduals) absTol 1e-3)
       }
     }
   }
@@ -87,11 +88,12 @@ object GBTSuiteHelper extends SparkFunSuite {
    * @param loss loss function for gradients
    * @param expectedImpurity expected impurity aggregator for statistics
    */
-  def verifyGBTConstruction(spark: SparkSession,
-                            classification: Boolean,
-                            impurityName: String,
-                            loss: Loss,
-                            expectedImpurity: ImpurityAggregator): Unit = {
+  def verifyGBTConstruction(
+      spark: SparkSession,
+      classification: Boolean,
+      impurityName: String,
+      loss: Loss,
+      expectedImpurity: ImpurityAggregator): Unit = {
     // We create a dataset that can be optimally classified with a root tree
     // and one round of gradient boosting. The first tree will not be a perfect classifier,
     // so the leaf node predictions will differ for different impurity measures. This is expected
@@ -197,8 +199,8 @@ object GBTSuiteHelper extends SparkFunSuite {
       val expectedCalculator = trueCalculator(featureMap: _*)
       withClue(s"actualImpurity $actualImpurity\nexpectedImpurity $expectedCalculator\n\n") {
         assert(actualImpurity.count === expectedCalculator.count)
-        assert(actualImpurity.calculate() === expectedCalculator.calculate())
-        assert(actualImpurity.predict === expectedCalculator.predict)
+        assert(actualImpurity.calculate() ~== expectedCalculator.calculate() absTol 1e-3)
+        assert(actualImpurity.predict ~== expectedCalculator.predict absTol 1e-3)
       }
     }
 

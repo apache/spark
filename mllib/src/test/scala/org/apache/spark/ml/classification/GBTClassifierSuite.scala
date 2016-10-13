@@ -286,7 +286,7 @@ private object GBTClassifierSuite extends SparkFunSuite {
       validationData: Option[RDD[LabeledPoint]],
       gbt: GBTClassifier,
       categoricalFeatures: Map[Int, Int]): Unit = {
-    assert(gbt.getImpurity == "variance")
+    assert(gbt.getImpurity === "variance")
     val numFeatures = data.first().features.size
     val oldBoostingStrategy =
       gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification, Variance)
