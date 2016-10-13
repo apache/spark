@@ -110,6 +110,10 @@ private[spark] object RBackend extends Logging {
       val boundPort = sparkRBackend.init()
       val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
       val listenPort = serverSocket.getLocalPort()
+      // Connection timeout is set by socket client. To make it configurable we will pass the
+      // timeout value to client inside the temp file
+      val conf = new SparkConf()
+      val backendConnectionTimeout = conf.getInt("spark.r.backendConnectionTimeout", 6000)
 
       // tell the R process via temporary file
       val path = args(0)
@@ -118,6 +122,7 @@ private[spark] object RBackend extends Logging {
       dos.writeInt(boundPort)
       dos.writeInt(listenPort)
       SerDe.writeString(dos, RUtils.rPackages.getOrElse(""))
+      dos.writeInt(backendConnectionTimeout)
       dos.close()
       f.renameTo(new File(path))
 

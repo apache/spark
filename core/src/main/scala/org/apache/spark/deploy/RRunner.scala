@@ -51,6 +51,9 @@ object RRunner {
       cmd
     }
 
+    //  Connection timeout set by R process on its connection to RBackend in seconds.
+    val backendConnectionTimeout = sys.props.getOrElse("spark.r.backendConnectionTimeout", "6000")
+
     // Check if the file path exists.
     // If not, change directory to current working directory for YARN cluster mode
     val rF = new File(rFile)
@@ -81,6 +84,7 @@ object RRunner {
         val builder = new ProcessBuilder((Seq(rCommand, rFileNormalized) ++ otherArgs).asJava)
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
+        env.put("SPARKR_BACKEND_CONNECTION_TIMEOUT", backendConnectionTimeout)
         val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)
         // Put the R package directories into an env variable of comma-separated paths
         env.put("SPARKR_PACKAGE_DIR", rPackageDir.mkString(","))

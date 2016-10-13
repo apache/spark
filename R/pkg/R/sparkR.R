@@ -154,6 +154,7 @@ sparkR.sparkContext <- function(
   packages <- processSparkPackages(sparkPackages)
 
   existingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
+  connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
   if (existingPort != "") {
     if (length(packages) != 0) {
       warning(paste("sparkPackages has no effect when using spark-submit or sparkR shell",
@@ -187,6 +188,7 @@ sparkR.sparkContext <- function(
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     rLibPath <- readString(f)
+    connectionTimeout <- readInt(f)
     close(f)
     file.remove(path)
     if (length(backendPort) == 0 || backendPort == 0 ||
@@ -204,7 +206,7 @@ sparkR.sparkContext <- function(
 
   .sparkREnv$backendPort <- backendPort
   tryCatch({
-    connectBackend("localhost", backendPort)
+    connectBackend("localhost", backendPort, timeout = connectionTimeout)
   },
   error = function(err) {
     stop("Failed to connect JVM\n")

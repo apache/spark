@@ -1874,6 +1874,14 @@ showDF(properties, numRows = 200, truncate = FALSE)
     <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.backendConnectionTimeout</code></td>
+  <td>6000</td>
+  <td>
+    Connection timeout set by R process on its connection to RBackend in seconds.
+  </td>
+</tr>
+
 </table>
 
 #### Deploy
