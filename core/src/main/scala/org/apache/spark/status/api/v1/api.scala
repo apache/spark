@@ -20,6 +20,8 @@ import java.util.Date
 
 import scala.collection.Map
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+
 import org.apache.spark.JobExecutionStatus
 
 class ApplicationInfo private[spark](
@@ -31,6 +33,9 @@ class ApplicationInfo private[spark](
     val memoryPerExecutorMB: Option[Int],
     val attempts: Seq[ApplicationAttemptInfo])
 
+@JsonIgnoreProperties(
+  value = Array("startTimeEpoch", "endTimeEpoch", "lastUpdatedEpoch"),
+  allowGetters = true)
 class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
     val startTime: Date,
@@ -40,9 +45,13 @@ class ApplicationAttemptInfo private[spark](
     val sparkUser: String,
     val completed: Boolean = false,
     val appSparkVersion: String) {
-    def getStartTimeEpoch: Long = startTime.getTime
-    def getEndTimeEpoch: Long = endTime.getTime
-    def getLastUpdatedEpoch: Long = lastUpdated.getTime
+
+  def getStartTimeEpoch: Long = startTime.getTime
+
+  def getEndTimeEpoch: Long = endTime.getTime
+
+  def getLastUpdatedEpoch: Long = lastUpdated.getTime
+
 }
 
 class ExecutorStageSummary private[spark](

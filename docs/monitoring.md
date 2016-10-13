@@ -220,6 +220,13 @@ The history server can be configured as follows:
       Number of threads that will be used by history server to process event logs.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.store.path</td>
+    <td>/var/lib/spark-history</td>
+    <td>
+        Local directory where history server will cache application history data.
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
