@@ -117,18 +117,26 @@ trait SchemaRelationProvider {
 /**
  * ::Experimental::
  * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
+ *
+ * @since 2.0.0
  */
 @Experimental
-@InterfaceStability.Evolving
+@InterfaceStability.Unstable
 trait StreamSourceProvider {
 
-  /** Returns the name and schema of the source that can be used to continually read data. */
+  /**
+   * Returns the name and schema of the source that can be used to continually read data.
+   * @since 2.0.0
+   */
   def sourceSchema(
       sqlContext: SQLContext,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): (String, StructType)
 
+  /**
+   * @since 2.0.0
+   */
   def createSource(
       sqlContext: SQLContext,
       metadataPath: String,
@@ -140,9 +148,11 @@ trait StreamSourceProvider {
 /**
  * ::Experimental::
  * Implemented by objects that can produce a streaming [[Sink]] for a specific format or system.
+ *
+ * @since 2.0.0
  */
 @Experimental
-@InterfaceStability.Evolving
+@InterfaceStability.Unstable
 trait StreamSinkProvider {
   def createSink(
       sqlContext: SQLContext,
