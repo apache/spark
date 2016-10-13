@@ -18,6 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.language.existentials
@@ -268,7 +269,7 @@ private[r] object JVMObjectTracker {
 
   // TODO: We support only one connection now, so an integer is fine.
   // Investigate using use atomic integer in the future.
-  private[this] var objCounter: Int = 0
+  private[this] val objCounter: AtomicInteger = new AtomicInteger(0)
 
   def getObject(id: String): Object = {
     objMap(id)
@@ -280,7 +281,7 @@ private[r] object JVMObjectTracker {
 
   def put(obj: Object): String = {
     val objId = objCounter.toString
-    objCounter = objCounter + 1
+    objCounter.incrementAndGet()
     objMap.put(objId, obj)
     objId
   }
