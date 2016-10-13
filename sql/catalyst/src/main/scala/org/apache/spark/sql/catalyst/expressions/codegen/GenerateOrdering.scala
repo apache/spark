@@ -72,7 +72,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
    * Generates the code for ordering based on the given order.
    */
   def genComparisons(ctx: CodegenContext, ordering: Seq[SortOrder]): String = {
-    val comparisons = ordering.map { order =>
+    def comparisons(orderingGroup: Seq[SortOrder]) = orderingGroup.map { order =>
       val eval = order.child.genCode(ctx)
       val asc = order.isAscending
       val isNullA = ctx.freshName("isNullA")
@@ -118,7 +118,45 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           }
       """
     }.mkString("\n")
-    comparisons
+
+    /*
+     * 40 = 7000 bytes / 170 (around 170 bytes per ordering comparison).
+     * The maximum byte code size to be compiled for HotSpot is 8000 bytes.
+     * We should keep less than 8000 bytes.
+     */
+    val numberOfComparisonsThreshold = 40
+
+    if (ordering.size <= numberOfComparisonsThreshold) {
+      s"""
+         |  InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
+         |  ${comparisons(ordering)}
+      """.stripMargin
+    } else {
+      val groupedOrderingItr = ordering.grouped(numberOfComparisonsThreshold)
+      var groupedOrderingLength = 0
+      groupedOrderingItr.zipWithIndex.foreach { case (orderingGroup, i) =>
+        groupedOrderingLength += 1
+        val funcName = s"compare_$i"
+        val funcCode =
+          s"""
+             |private int $funcName(InternalRow a, InternalRow b) {
+             |  InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
+             |  ${comparisons(orderingGroup)}
+             |  return 0;
+             |}
+          """.stripMargin
+        ctx.addNewFunction(funcName, funcCode)
+      }
+
+      (0 to groupedOrderingLength - 1).map { i =>
+        s"""
+           |int comp_$i = compare_$i(a, b);
+           |if (comp_$i != 0) {
+           |  return comp_$i;
+           |}
+        """.stripMargin
+      }.mkString
+    }
   }
 
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
@@ -142,7 +180,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
         ${ctx.declareAddedFunctions()}
 
         public int compare(InternalRow a, InternalRow b) {
-          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
           $comparisons
           return 0;
         }
