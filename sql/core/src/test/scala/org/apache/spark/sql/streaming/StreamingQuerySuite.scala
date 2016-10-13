@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.File
-
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
