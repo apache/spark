@@ -459,7 +459,7 @@ object HadoopFsRelation extends Logging {
       // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
       val jobConf = new JobConf(serializableConfiguration.value, this.getClass)
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-      paths.map(new Path(_)).flatMap { path =>
+      paths.filterNot(shouldFilterOut).map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(serializableConfiguration.value)
         listLeafFiles(fs, fs.getFileStatus(path), pathFilter)
       }

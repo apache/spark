@@ -174,7 +174,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * </ul>
-   *
+   * <li>`excludeFiles` (default `.*._COPYING_,_temporary`: Exclude files and directories(comma
+   * separated list), which should not to be tracked by the streaming source.</li>
    * @since 2.0.0
    */
   def json(path: String): DataFrame = format("json").load(path)
@@ -235,6 +236,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
    * </li>
+   * <li>`excludeFiles` (default `.*._COPYING_,_temporary`: Exclude files and directories(comma
+   * separated list), which should not to be tracked by the streaming source.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -253,7 +256,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * Parquet part-files. This will override
    * `spark.sql.parquet.mergeSchema`.</li>
    * </ul>
-   *
+   * <li>`excludeFiles` (default `.*._COPYING_,_temporary`: Exclude files and directories(comma
+   * separated list), which should not to be tracked by the streaming source.</li>
    * @since 2.0.0
    */
   def parquet(path: String): DataFrame = {
@@ -278,7 +282,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
    * </ul>
-   *
+   * <li>`excludeFiles` (default `.*._COPYING_,_temporary`: Exclude files and directories(comma
+   * separated list), which should not to be tracked by the streaming source.</li>
    * @since 2.0.0
    */
   def text(path: String): DataFrame = format("text").load(path)
