@@ -58,13 +58,6 @@ abstract class SessionFileCatalog(sparkSession: SparkSession)
 
     mutable.LinkedHashSet(files: _*)
   }
-
-  // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
-  // counted as data files, so that they shouldn't participate partition discovery.
-  protected def isDataPath(path: Path): Boolean = {
-    val name = path.getName
-    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
-  }
 }
 
 object SessionFileCatalog extends Logging {
