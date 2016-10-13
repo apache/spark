@@ -64,7 +64,8 @@ object PredictorSuite {
       new MockPredictionModel(uid)
     }
 
-    override def copy(extra: ParamMap): MockPredictor = defaultCopy(extra)
+    override def copy(extra: ParamMap): MockPredictor =
+      throw new NotImplementedError()
   }
 
   class MockPredictionModel(override val uid: String)
