@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.SparkFunSuite
@@ -133,9 +134,12 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
           |{"path":"/a/b/y","size":200,"isDir":false,"modificationTime":2000,"blockReplication":2,"blockSize":20000,"action":"delete"}
           |{"path":"/a/b/z","size":300,"isDir":false,"modificationTime":3000,"blockReplication":3,"blockSize":30000,"action":"add"}""".stripMargin
       // scalastyle:on
-      assert(expected === new String(sinkLog.serialize(logs), UTF_8))
-
-      assert(VERSION === new String(sinkLog.serialize(Array()), UTF_8))
+      val baos = new ByteArrayOutputStream()
+      sinkLog.serialize(logs, baos)
+      assert(expected === baos.toString(UTF_8.name()))
+      baos.reset()
+      sinkLog.serialize(Array(), baos)
+      assert(VERSION === baos.toString(UTF_8.name()))
     }
   }
 
@@ -174,9 +178,9 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
           blockSize = 30000L,
           action = FileStreamSinkLog.ADD_ACTION))
 
-      assert(expected === sinkLog.deserialize(logs.getBytes(UTF_8)))
+      assert(expected === sinkLog.deserialize(new ByteArrayInputStream(logs.getBytes(UTF_8))))
 
-      assert(Nil === sinkLog.deserialize(VERSION.getBytes(UTF_8)))
+      assert(Nil === sinkLog.deserialize(new ByteArrayInputStream(VERSION.getBytes(UTF_8))))
     }
   }
 
