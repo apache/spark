@@ -586,6 +586,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         checkAnswer(
           sql("SELECT * FROM test_added_partitions"),
           Seq(("foo", 0), ("bar", 0), ("baz", 1)).toDF("a", "b"))
+
+        // Also verify the inputFiles implementation
+        assert(sql("select * from test_added_partitions").inputFiles.length == 2)
       }
     }
   }
