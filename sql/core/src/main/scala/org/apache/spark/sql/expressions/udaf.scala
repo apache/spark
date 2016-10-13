@@ -26,6 +26,8 @@ import org.apache.spark.sql.types._
 /**
  * :: Experimental ::
  * The base class for implementing user-defined aggregate functions (UDAF).
+ *
+ * @since 1.5.0
  */
 @Experimental
 @InterfaceStability.Evolving
@@ -137,6 +139,8 @@ abstract class UserDefinedAggregateFunction extends Serializable {
  * A [[Row]] representing a mutable aggregation buffer.
  *
  * This is not meant to be extended outside of Spark.
+ *
+ * @since 1.5.0
  */
 @Experimental
 @InterfaceStability.Evolving
