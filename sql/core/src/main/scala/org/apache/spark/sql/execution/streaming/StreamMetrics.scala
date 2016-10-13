@@ -106,7 +106,7 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
     require(currentTriggerStartTimestamp >= 0)
     val currentTriggerFinishTimestamp = triggerClock.getTimeMillis()
     reportTriggerDetail(FINISH_TIMESTAMP, currentTriggerFinishTimestamp)
-    reportTriggerDetail(STATUS_MESSAGE, "")
+    triggerDetails.remove(STATUS_MESSAGE)
     reportTriggerDetail(IS_TRIGGER_ACTIVE, false)
 
     // Report number of rows
@@ -190,6 +190,7 @@ class StreamMetrics(sources: Set[Source], triggerClock: Clock, codahaleSourceNam
   }
 
   def stop(): Unit = synchronized {
+    triggerDetails.clear()
     inputRates.valuesIterator.foreach { _.stop() }
     processingRates.valuesIterator.foreach { _.stop() }
     latency = None

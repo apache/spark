@@ -25,25 +25,35 @@ import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ManualClock
 
 class StreamMetricsSuite extends SparkFunSuite {
+  import StreamMetrics._
 
   // To make === between double tolerate inexact values
   implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
 
-  test("rates and latencies - basic life cycle") {
+  test("rates, latencies, trigger details - basic life cycle") {
     val sm = newStreamMetrics(source)
     assert(sm.currentInputRate() === 0.0)
     assert(sm.currentProcessingRate() === 0.0)
     assert(sm.currentSourceInputRate(source) === 0.0)
     assert(sm.currentSourceProcessingRate(source) === 0.0)
     assert(sm.currentLatency() === None)
+    assert(sm.currentTriggerDetails().isEmpty)
 
-    // When trigger started, the rates should not change
+    // When trigger started, the rates should not change, but should return
+    // reported trigger details
     sm.reportTriggerStarted(1)
+    sm.reportTriggerDetail("key", "value")
+    sm.reportSourceTriggerDetail(source, "key2", "value2")
     assert(sm.currentInputRate() === 0.0)
     assert(sm.currentProcessingRate() === 0.0)
     assert(sm.currentSourceInputRate(source) === 0.0)
     assert(sm.currentSourceProcessingRate(source) === 0.0)
     assert(sm.currentLatency() === None)
+    assert(sm.currentTriggerDetails() ===
+      Map(TRIGGER_ID -> "1", IS_TRIGGER_ACTIVE -> "true",
+        START_TIMESTAMP -> "0", "key" -> "value"))
+    assert(sm.currentSourceTriggerDetails(source) ===
+      Map(TRIGGER_ID -> "1", "key2" -> "value2"))
 
     // Finishing the trigger should calculate the rates, except input rate which needs
     // to have another trigger interval
@@ -55,10 +65,24 @@ class StreamMetricsSuite extends SparkFunSuite {
     assert(sm.currentSourceInputRate(source) === 0.0)
     assert(sm.currentSourceProcessingRate(source) === 100.0)
     assert(sm.currentLatency() === None)
+    assert(sm.currentTriggerDetails() ===
+      Map(TRIGGER_ID -> "1", IS_TRIGGER_ACTIVE -> "false",
+        START_TIMESTAMP -> "0", FINISH_TIMESTAMP -> "1000",
+        NUM_INPUT_ROWS -> "100", "key" -> "value"))
+    assert(sm.currentSourceTriggerDetails(source) ===
+      Map(TRIGGER_ID -> "1", NUM_SOURCE_INPUT_ROWS -> "100", "key2" -> "value2"))
 
-    // Another trigger should calculate the input rate
+    // After another trigger starts, the rates and latencies should not change until
+    // new rows are reported
     clock.advance(1000)
     sm.reportTriggerStarted(2)
+    assert(sm.currentInputRate() === 0.0)
+    assert(sm.currentProcessingRate() === 100.0)
+    assert(sm.currentSourceInputRate(source) === 0.0)
+    assert(sm.currentSourceProcessingRate(source) === 100.0)
+    assert(sm.currentLatency() === None)
+
+    // Reporting new rows should update the rates and latencies
     sm.reportNumInputRows(Map(source -> 200L))     // 200 input rows
     clock.advance(500)
     sm.reportTriggerFinished()
@@ -75,6 +99,7 @@ class StreamMetricsSuite extends SparkFunSuite {
     assert(sm.currentSourceInputRate(source) === 0.0)
     assert(sm.currentSourceProcessingRate(source) === 0.0)
     assert(sm.currentLatency() === None)
+    assert(sm.currentTriggerDetails().isEmpty)
   }
 
   test("rates and latencies - after trigger with no data") {
