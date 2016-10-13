@@ -86,10 +86,14 @@ class WindowSpec private[sql](
    * "current row", while "-1" means the row before the current row, and "5" means the fifth row
    * after the current row.
    *
-   * @param start boundary start, inclusive.
-   *              The frame is unbounded if this is the minimum long value.
-   * @param end boundary end, inclusive.
-   *            The frame is unbounded if this is the maximum long value.
+   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
+   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * values directly.
+   *
+   * @param start boundary start, inclusive. The frame is unbounded if this is
+   *              the minimum long value ([[Window.unboundedPreceding]]).
+   * @param end boundary end, inclusive. The frame is unbounded if this is the
+   *            maximum long value  ([[Window.unboundedFollowing]]).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rowsBetween.
@@ -104,10 +108,14 @@ class WindowSpec private[sql](
    * while "-1" means one off before the current row, and "5" means the five off after the
    * current row.
    *
-   * @param start boundary start, inclusive.
-   *              The frame is unbounded if this is the minimum long value.
-   * @param end boundary end, inclusive.
-   *            The frame is unbounded if this is the maximum long value.
+   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
+   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * values directly.
+   *
+   * @param start boundary start, inclusive. The frame is unbounded if this is
+   *              the minimum long value ([[Window.unboundedPreceding]]).
+   * @param end boundary end, inclusive. The frame is unbounded if this is the
+   *            maximum long value  ([[Window.unboundedFollowing]]).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rangeBetween.
