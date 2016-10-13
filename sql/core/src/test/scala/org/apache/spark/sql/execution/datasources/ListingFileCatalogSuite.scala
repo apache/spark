@@ -17,26 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{File, FilenameFilter}
+import org.apache.spark.SparkFunSuite
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.SharedSQLContext
+class ListingFileCatalogSuite extends SparkFunSuite {
 
-class HadoopFsRelationSuite extends QueryTest with SharedSQLContext {
+  test("file filtering") {
+    assert(!ListingFileCatalog.shouldFilterOut("abcd"))
+    assert(ListingFileCatalog.shouldFilterOut(".ab"))
+    assert(ListingFileCatalog.shouldFilterOut("_cd"))
 
-  test("sizeInBytes should be the total size of all files") {
-    withTempDir{ dir =>
-      dir.delete()
-      spark.range(1000).write.parquet(dir.toString)
-      // ignore hidden files
-      val allFiles = dir.listFiles(new FilenameFilter {
-        override def accept(dir: File, name: String): Boolean = {
-          !name.startsWith(".")
-        }
-      })
-      val totalSize = allFiles.map(_.length()).sum
-      val df = spark.read.parquet(dir.toString)
-      assert(df.queryExecution.logical.statistics.sizeInBytes === BigInt(totalSize))
-    }
+    assert(!ListingFileCatalog.shouldFilterOut("_metadata"))
+    assert(!ListingFileCatalog.shouldFilterOut("_common_metadata"))
+    assert(ListingFileCatalog.shouldFilterOut("_ab_metadata"))
+    assert(ListingFileCatalog.shouldFilterOut("_cd_common_metadata"))
   }
 }
