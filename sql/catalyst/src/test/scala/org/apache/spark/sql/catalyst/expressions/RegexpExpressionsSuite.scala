@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
  * Unit tests for regular expression (regexp) related SQL expressions.
@@ -27,6 +27,8 @@ import org.apache.spark.sql.types.StringType
 class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("LIKE literal Regular Expression") {
+
+    // null handling
     checkEvaluation(Literal.create(null, StringType).like("a"), null)
     checkEvaluation(Literal.create("a", StringType).like(Literal.create(null, StringType)), null)
     checkEvaluation(Literal.create(null, StringType).like(Literal.create(null, StringType)), null)
@@ -39,6 +41,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       Literal.create(null, StringType).like(NonFoldableLiteral.create(null, StringType)), null)
 
+    // simple patterns
     checkEvaluation("abdef" like "abdef", true)
     checkEvaluation("a_%b" like "a\\__b", true)
     checkEvaluation("addb" like "a_%b", true)
@@ -54,20 +57,32 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("ab" like "a%b", true)
     checkEvaluation("a\nb" like "a%b", true)
 
+    //empty input
+    checkEvaluation("" like "", true)
+    checkEvaluation("a" like "", false)
+    checkEvaluation("" like "a", false)
+
+
+    // SI-17647 double-escaping backslash
     checkEvaluation("""\\\\""" like """%\\%""", true) // triple quotes to avoid java string escaping
-    checkEvaluation("""\_%""" like """%\\__""", true)
-    checkEvaluation("""\_%""" like "%\\\\__", true)
-    checkEvaluation("""\_%""" like """%\\_%""", true)
-    checkEvaluation("""\\\\%%""" like """\\%""", true)
-    checkEvaluation("""\%\""" like """%\%%""", true)
-    checkEvaluation("\\\n\n%\\" like "\\\\___\\\\", true)
     checkEvaluation("""%%""" like """%%""", true)
     checkEvaluation("""\__""" like """\\\__""", true)
-
     checkEvaluation("""\\\__""" like """%\\%\%""", false)
-    checkEvaluation("""\_""" like """\_\_""", false)
     checkEvaluation("""_\\\%""" like """%\\""", false)
-    checkEvaluation("""_\\__""" like """_\___""", false)
+
+    // unicode
+    checkEvaluation("a\u20ACa" like "_\u20AC_", true)
+    checkEvaluation("a€a" like "_€_", true)
+    checkEvaluation("a€a" like "_\u20AC_", true)
+    checkEvaluation("a\u20ACa" like "_€_", true)
+
+    // escaping at end position
+    checkEvaluation("""a\""" like """a\""", false) // TODO: should throw an exception?
+
+    // case
+    checkEvaluation("A" like "a%", false)
+    checkEvaluation("a" like "A%", false)
+    checkEvaluation("AaA" like "_a_", true)
 
   }
 
@@ -90,6 +105,28 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("a\nb" like regEx, true, create_row("a%b"))
 
     checkEvaluation(Literal.create(null, StringType) like regEx, null, create_row("bc%"))
+
+    checkEvaluation("" like regEx, true, create_row(""))
+    checkEvaluation("a" like regEx, false, create_row(""))
+    checkEvaluation("" like regEx, false, create_row("a"))
+
+    checkEvaluation("""\\\\""" like regEx, true, create_row("""%\\%"""))
+    checkEvaluation("""%%""" like regEx, true, create_row("""%%"""))
+    checkEvaluation("""\__""" like regEx, true, create_row("""\\\__"""))
+    checkEvaluation("""\\\__""" like regEx, false, create_row("""%\\%\%"""))
+    checkEvaluation("""_\\\%""" like regEx, false, create_row("""%\\"""))
+
+    checkEvaluation("a\u20ACa" like regEx, true, create_row("_\u20AC_"))
+    checkEvaluation("a€a" like regEx, true, create_row("_€_"))
+    checkEvaluation("a€a" like regEx, true, create_row("_\u20AC_"))
+    checkEvaluation("a\u20ACa" like regEx, true, create_row("_€_"))
+
+    checkEvaluation("""a\""" like regEx, false, create_row("""a\"""))  // TODO: should throw an exception?
+
+    checkEvaluation("A" like regEx, false, create_row("a%"))
+    checkEvaluation("a" like regEx, false, create_row("A%"))
+    checkEvaluation("AaA" like regEx, true, create_row("_a_"))
+
   }
 
   test("RLIKE literal Regular Expression") {

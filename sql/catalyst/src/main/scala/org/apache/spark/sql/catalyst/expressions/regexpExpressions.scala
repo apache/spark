@@ -68,7 +68,22 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  * Simple RegEx pattern matching function
  */
 @ExpressionDescription(
-  usage = "str _FUNC_ pattern - Returns true if `str` matches `pattern`, or false otherwise.")
+  usage = "str _FUNC_ pattern - Returns true if str matches pattern, " +
+    "null if any arguments are null, false otherwise.",
+  extended = """
+    |The pattern is a string which is matched literally, with exception to the
+    |following symbols:
+    |
+    |    _ matches any one character in the input (similar to . in posix
+    |    regular expressions)
+    |
+    |    % matches zero ore more characters in the input (similar to .* in
+    |    posix regular expressions)
+    |
+    |The default escape character is '\\'. Any character after the escape
+    |character will be matched against literally.
+    |
+    |Use RLIKE to match with standard regular expressions.""")
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
