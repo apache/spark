@@ -998,6 +998,20 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       }
     }
   }
+
+  test("input row metrics") {
+    withTempDirs { case (src, tmp) =>
+      val input = spark.readStream.format("text").load(src.getCanonicalPath)
+      testStream(input)(
+        AddTextFileData("100", src, tmp),
+        CheckAnswer("100"),
+        AssertOnLastQueryStatus { status =>
+          assert(status.triggerDetails.get("numRows.input.total") === "1")
+          assert(status.sourceStatuses(0).processingRate > 0.0)
+        }
+      )
+    }
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {

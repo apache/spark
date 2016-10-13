@@ -77,6 +77,9 @@ trait StateStore {
    */
   def updates(): Iterator[StoreUpdate]
 
+  /** Number of keys in the state store */
+  def numKeys(): Long
+
   /**
    * Whether all updates have been committed
    */
