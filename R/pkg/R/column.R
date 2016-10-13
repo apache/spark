@@ -52,6 +52,7 @@ setMethod("initialize", "Column", function(.Object, jc, df) {
   .Object
 })
 
+#' @rdname show
 setMethod("show", signature = "Column", function(object) {
   MAX_ELEMENTS <- 20
   head.df <- head(object, MAX_ELEMENTS)
@@ -68,6 +69,7 @@ setMethod("show", signature = "Column", function(object) {
   }
 })
 
+#' @rdname head
 setMethod("head", signature = "Column", definition = function(x, n=6) {
   if (is.null(x@df)) {
     collect(x)
