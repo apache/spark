@@ -53,27 +53,8 @@ class TableFileCatalog(
 
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
-  override def listFiles(filters: Seq[Expression]): Seq[Partition] = partitionSchema match {
-    case Some(partitionSchema) =>
-      val catalogTablePartitions = externalCatalog.listPartitionsByFilter(db, table, filters)
-      val partitionPaths = catalogTablePartitions.flatMap {
-        case CatalogTablePartition(spec, storage, _) =>
-          storage.locationUri.map(new Path(_))
-      }
-      val dataLeafFiles = listDataLeafFiles(partitionPaths).toSeq
-      catalogTablePartitions.flatMap {
-        case CatalogTablePartition(spec, storage, _) =>
-          storage.locationUri.map(new Path(_)).map { partitionPath =>
-            val files = dataLeafFiles.filter(_.getPath.getParent == partitionPath)
-            val values =
-              InternalRow.fromSeq(partitionSchema.map { case StructField(name, dataType, _, _) =>
-                Cast(Literal(spec(name)), dataType).eval()
-              })
-            Partition(values, files)
-          }
-      }
-    case None =>
-      Partition(InternalRow.empty, listDataLeafFiles(rootPaths).toSeq) :: Nil
+  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
+    filterPartitions(filters).listFiles(Nil)
   }
 
   override def refresh(): Unit = {}
@@ -85,25 +66,67 @@ class TableFileCatalog(
    * @param filters partition-pruning filters
    */
   def filterPartitions(filters: Seq[Expression]): ListingFileCatalog = {
-    val rootPaths = partitionSchema match {
-      case Some(_) =>
-        externalCatalog
-          .listPartitionsByFilter(db, table, filters)
-          .flatMap(_.storage.locationUri)
-          .map(new Path(_))
-      case None =>
-        this.rootPaths
+    if (filters.isEmpty) {
+      cachedAllPartitions
+    } else {
+      filterPartitions0(filters)
     }
-    val parameters =
-      baseLocation
-        .map(loc => Map(PartitioningAwareFileCatalog.BASE_PATH_PARAM -> loc))
-        .getOrElse(Map.empty)
-
-    new ListingFileCatalog(sparkSession, rootPaths, parameters, partitionSchema)
   }
 
-  override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
+  private def filterPartitions0(filters: Seq[Expression]): ListingFileCatalog = {
+    val parameters = baseLocation
+      .map(loc => Map(PartitioningAwareFileCatalog.BASE_PATH_PARAM -> loc))
+      .getOrElse(Map.empty)
+    partitionSchema match {
+      case Some(schema) =>
+        val selectedPartitions = externalCatalog.listPartitionsByFilter(db, table, filters)
+        val partitions = selectedPartitions.map { p =>
+          PartitionDirectory(p.toRow(schema), p.storage.locationUri.get)
+        }
+        val partitionSpec = PartitionSpec(schema, partitions)
+        new PrunedTableFileCatalog(
+          sparkSession, new Path(baseLocation.get), partitionSpec)
+      case None =>
+        new ListingFileCatalog(sparkSession, rootPaths, parameters, None)
+    }
+  }
+
+  // Not used in the hot path of queries when metastore partition pruning is enabled
+  lazy val cachedAllPartitions: ListingFileCatalog = filterPartitions0(Nil)
+
+  override def inputFiles: Array[String] = cachedAllPartitions.inputFiles
 
   private def listDataLeafFiles(paths: Seq[Path]) =
     listLeafFiles(paths).filter(f => isDataPath(f.getPath))
+}
+
+/**
+ * An override of the standard HDFS listing based catalog, that overrides the partition spec with
+ * the information from the metastore.
+ *
+ * @param tableBasePath The default base path of the Hive metastore table
+ * @param partitionSpec The partition specifications from Hive metastore
+ */
+private class PrunedTableFileCatalog(
+    sparkSession: SparkSession,
+    tableBasePath: Path,
+    override val partitionSpec: PartitionSpec)
+  extends ListingFileCatalog(
+    sparkSession,
+    PrunedTableFileCatalog.getPaths(tableBasePath, partitionSpec),
+    Map.empty,
+    Some(partitionSpec.partitionColumns)) {
+}
+
+object PrunedTableFileCatalog {
+  /** Get the list of paths to list files in the for a metastore table */
+  def getPaths(tableBasePath: Path, partitionSpec: PartitionSpec): Seq[Path] = {
+    // If there are no partitions currently specified then use base path,
+    // otherwise use the paths corresponding to the partitions.
+    if (partitionSpec.partitions.isEmpty) {
+      Seq(tableBasePath)
+    } else {
+      partitionSpec.partitions.map(_.path)
+    }
+  }
 }

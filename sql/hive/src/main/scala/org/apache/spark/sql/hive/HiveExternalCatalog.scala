@@ -653,12 +653,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             val index = partitionSchema.indexWhere(_.name == att.name)
             BoundReference(index, partitionSchema(index).dataType, nullable = true)
         })
-      clientPrunedPartitions.filter { case CatalogTablePartition(spec, _, _) =>
-        val row =
-          InternalRow.fromSeq(partitionSchema.map { case StructField(name, dataType, _, _) =>
-            Cast(Literal(spec(name)), dataType).eval()
-          })
-        boundPredicate(row)
+      clientPrunedPartitions.filter { case p: CatalogTablePartition =>
+        boundPredicate(p.toRow(partitionSchema))
       }
     } else {
       client.getPartitions(catalogTable)
