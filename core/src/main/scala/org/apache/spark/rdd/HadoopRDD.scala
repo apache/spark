@@ -139,6 +139,9 @@ class HadoopRDD[K, V](
 
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
 
+  private val ignoreCorruptFiles =
+    sparkContext.conf.getBoolean("spark.files.ignoreCorruptFiles", true)
+
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
     val conf: Configuration = broadcastedConf.value.value
@@ -245,8 +248,7 @@ class HadoopRDD[K, V](
         try {
           finished = !reader.next(key, value)
         } catch {
-          case eof: EOFException =>
-            finished = true
+          case _: EOFException if ignoreCorruptFiles => finished = true
         }
         if (!finished) {
           inputMetrics.incRecordsRead(1)
