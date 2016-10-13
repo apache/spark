@@ -1615,4 +1615,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       qe.assertAnalyzed()
     }
   }
+
+  test("SPARK-17409: Do Not Optimize Query in CTAS More Than Once") {
+    withTable("bar") {
+      withTempView("foo") {
+        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
+          sql("select 0 as id").createOrReplaceTempView("foo")
+          val df = sql("select * from foo group by id")
+          // If we optimize the query in CTAS more than once, the following saveAsTable will fail
+          // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
+          df.write.mode("overwrite").saveAsTable("bar")
+          checkAnswer(spark.table("bar"), Row(0) :: Nil)
+          val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
+          assert(tableMetadata.provider == Some("json"),
+            "the expected table is a data source table using json")
+        }
+      }
+    }
+  }
 }

@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-class MetastoreRelationSuite extends SparkFunSuite {
+class MetastoreRelationSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("makeCopy and toJSON should work") {
     val table = CatalogTable(
       identifier = TableIdentifier("test", Some("db")),
@@ -35,5 +37,17 @@ class MetastoreRelationSuite extends SparkFunSuite {
     relation.makeCopy(Array("db", "test"))
     // No exception should be thrown
     relation.toJSON
+  }
+
+  test("SPARK-17409: Do Not Optimize Query in CTAS More Than Once") {
+    withTable("bar") {
+      withTempView("foo") {
+        sql("select 0 as id").createOrReplaceTempView("foo")
+        sql("CREATE TABLE bar AS SELECT * FROM foo group by id")
+        checkAnswer(spark.table("bar"), Row(0) :: Nil)
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
+        assert(tableMetadata.provider == Some("hive"), "the expected table is a Hive serde table")
+      }
+    }
   }
 }
