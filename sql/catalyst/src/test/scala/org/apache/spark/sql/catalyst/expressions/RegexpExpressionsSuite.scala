@@ -57,7 +57,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("ab" like "a%b", true)
     checkEvaluation("a\nb" like "a%b", true)
 
-    //empty input
+    // empty input
     checkEvaluation("" like "", true)
     checkEvaluation("a" like "", false)
     checkEvaluation("" like "a", false)
@@ -71,10 +71,12 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("""_\\\%""" like """%\\""", false)
 
     // unicode
+    // scalastyle:off nonascii
     checkEvaluation("a\u20ACa" like "_\u20AC_", true)
     checkEvaluation("a€a" like "_€_", true)
     checkEvaluation("a€a" like "_\u20AC_", true)
     checkEvaluation("a\u20ACa" like "_€_", true)
+    // scalastyle:on nonascii
 
     // escaping at end position
     checkEvaluation("""a\""" like """a\""", false) // TODO: should throw an exception?
@@ -116,12 +118,15 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("""\\\__""" like regEx, false, create_row("""%\\%\%"""))
     checkEvaluation("""_\\\%""" like regEx, false, create_row("""%\\"""))
 
+    // scalastyle:off nonascii
     checkEvaluation("a\u20ACa" like regEx, true, create_row("_\u20AC_"))
     checkEvaluation("a€a" like regEx, true, create_row("_€_"))
     checkEvaluation("a€a" like regEx, true, create_row("_\u20AC_"))
     checkEvaluation("a\u20ACa" like regEx, true, create_row("_€_"))
+    // scalastyle:on nonascii
 
-    checkEvaluation("""a\""" like regEx, false, create_row("""a\"""))  // TODO: should throw an exception?
+    // TODO: should throw an exception?
+    checkEvaluation("""a\""" like regEx, false, create_row("""a\"""))
 
     checkEvaluation("A" like regEx, false, create_row("a%"))
     checkEvaluation("a" like regEx, false, create_row("A%"))
