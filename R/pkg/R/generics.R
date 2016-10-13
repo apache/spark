@@ -552,7 +552,6 @@ setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
 #' @param x a SparkDataFrame or Column
 #' @rdname head
-#setGeneric("head")
 
 #' @rdname insertInto
 #' @export
