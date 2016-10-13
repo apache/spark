@@ -336,7 +336,7 @@ class StreamingQueryStatus(object):
     @since(2.1)
     def triggerDetails(self):
         """
-        Low-level detailed status of the currently active trigger (e.g. number of rows processed
+        Low-level details of the currently active trigger (e.g. number of rows processed
         in trigger, latency of intermediate steps, etc.).
 
         If no trigger is currently active, then it will have details of the last completed trigger.
@@ -428,7 +428,7 @@ class SourceStatus(object):
     @since(2.1)
     def triggerDetails(self):
         """
-        Low-level detailed status of the currently active trigger (e.g. number of rows processed
+        Low-level details of the currently active trigger (e.g. number of rows processed
         in trigger, latency of intermediate steps, etc.).
 
         If no trigger is currently active, then it will have details of the last completed trigger.
