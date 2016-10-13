@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions._
 
@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
  * @since 1.4.0
  */
 @Experimental
+@InterfaceStability.Evolving
 object Window {
 
   /**
@@ -177,4 +178,5 @@ object Window {
  * @since 1.4.0
  */
 @Experimental
+@InterfaceStability.Evolving
 class Window private()  // So we can see Window in JavaDoc.
