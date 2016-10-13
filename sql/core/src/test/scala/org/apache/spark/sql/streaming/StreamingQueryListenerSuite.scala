@@ -20,8 +20,6 @@ package org.apache.spark.sql.streaming
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.DataFrame
@@ -73,52 +71,43 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       x
     }
 
-    val listener = new QueryStatusCollector
-    withListenerAdded(listener) {
-      testStream(mapped, OutputMode.Complete)(
-        StartStream(triggerClock = clock),
-        AddData(inputData, 1, 2),
-        AdvanceManualClock(100),  // unblock getOffset, will block on getBatch
-        AdvanceManualClock(200),  // unblock getBatch, will block on computation
-        AdvanceManualClock(300),  // unblock computation
-        AssertOnQuery("Incorrect trigger info") { query =>
-          require(clock.getTimeMillis() === 600)
-          eventually(Timeout(streamingTimeout)) {
-            assert(listener.lastTriggerStatus.nonEmpty)
-          }
+    testStream(mapped, OutputMode.Complete)(
+      StartStream(triggerClock = clock),
+      AddData(inputData, 1, 2),
+      AdvanceManualClock(100),  // unblock getOffset, will block on getBatch
+      AdvanceManualClock(200),  // unblock getBatch, will block on computation
+      AdvanceManualClock(300),  // unblock computation
+      AssertOnQuery { _ => clock.getTimeMillis() === 600 },
+      AssertOnLastQueryStatus { status: StreamingQueryStatus =>
+        // Check the correctness of the trigger info of the last completed batch reported by
+        // onQueryProgress
+        assert(status.triggerDetails.get("triggerId") == "0")
+        assert(status.triggerDetails.get("isTriggerActive") === "false")
+        assert(status.triggerDetails.get("isDataPresentInTrigger") === "true")
 
-          // Check the correctness of the trigger info of the first completed batch reported by
-          // onQueryProgress
-          val status = listener.lastTriggerStatus.get
-          assert(status.triggerDetails.get("triggerId") == "0")
-          assert(status.triggerDetails.get("isTriggerActive") === "false")
-          assert(status.triggerDetails.get("isDataPresentInTrigger") === "true")
+        assert(status.triggerDetails.get("timestamp.triggerStart") === "0")
+        assert(status.triggerDetails.get("timestamp.afterGetOffset") === "100")
+        assert(status.triggerDetails.get("timestamp.afterGetBatch") === "300")
+        assert(status.triggerDetails.get("timestamp.triggerFinish") === "600")
 
-          assert(status.triggerDetails.get("timestamp.triggerStart") === "0")
-          assert(status.triggerDetails.get("timestamp.afterGetOffset") === "100")
-          assert(status.triggerDetails.get("timestamp.afterGetBatch") === "300")
-          assert(status.triggerDetails.get("timestamp.triggerFinish") === "600")
+        assert(status.triggerDetails.get("latency.getOffset.total") === "100")
+        assert(status.triggerDetails.get("latency.getBatch.total") === "200")
+        assert(status.triggerDetails.get("latency.optimizer") === "0")
+        assert(status.triggerDetails.get("latency.offsetLogWrite") === "0")
+        assert(status.triggerDetails.get("latency.fullTrigger") === "600")
 
-          assert(status.triggerDetails.get("latency.getOffset.total") === "100")
-          assert(status.triggerDetails.get("latency.getBatch.total") === "200")
-          assert(status.triggerDetails.get("latency.optimizer") === "0")
-          assert(status.triggerDetails.get("latency.offsetLogWrite") === "0")
-          assert(status.triggerDetails.get("latency.fullTrigger") === "600")
+        assert(status.triggerDetails.get("numRows.input.total") === "2")
+        assert(status.triggerDetails.get("numRows.state.aggregation1.total") === "1")
+        assert(status.triggerDetails.get("numRows.state.aggregation1.updated") === "1")
 
-          assert(status.triggerDetails.get("numRows.input.total") === "2")
-          assert(status.triggerDetails.get("numRows.state.aggregation1.total") === "1")
-          assert(status.triggerDetails.get("numRows.state.aggregation1.updated") === "1")
-
-          assert(status.sourceStatuses.size === 1)
-          assert(status.sourceStatuses(0).triggerDetails.get("triggerId") === "0")
-          assert(status.sourceStatuses(0).triggerDetails.get("latency.getOffset.source") === "100")
-          assert(status.sourceStatuses(0).triggerDetails.get("latency.getBatch.source") === "200")
-          assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "2")
-          true
-        },
-        CheckAnswer(2)
-      )
-    }
+        assert(status.sourceStatuses.length === 1)
+        assert(status.sourceStatuses(0).triggerDetails.get("triggerId") === "0")
+        assert(status.sourceStatuses(0).triggerDetails.get("latency.getOffset.source") === "100")
+        assert(status.sourceStatuses(0).triggerDetails.get("latency.getBatch.source") === "200")
+        assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "2")
+      },
+      CheckAnswer(2)
+    )
   }
 
   test("adding and removing listener") {

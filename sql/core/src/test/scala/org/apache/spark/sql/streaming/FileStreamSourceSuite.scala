@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import java.io.File
 
 import org.scalatest.PrivateMethodTester
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
@@ -1002,26 +1001,15 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   test("input row metrics") {
     withTempDirs { case (src, tmp) =>
-      val input = spark.readStream.format("text").load(src.getCanonicalPath).as[String]
-      val listener = new QueryStatusCollector
-      spark.streams.addListener(listener)
-      try {
-        testStream(input)(
-          AddTextFileData("100", src, tmp),
-          CheckAnswer("100"),
-          AssertOnQuery { query =>
-            eventually(timeout(streamingTimeout)) {
-              assert(listener.lastTriggerStatus.nonEmpty)
-            }
-            val status = listener.lastTriggerStatus.get
-            assert(status.triggerDetails.get("numRows.input.total") === "1")
-            assert(status.sourceStatuses(0).processingRate > 0.0)
-            true
-          }
-        )
-      } finally {
-        spark.streams.removeListener(listener)
-      }
+      val input = spark.readStream.format("text").load(src.getCanonicalPath)
+      testStream(input)(
+        AddTextFileData("100", src, tmp),
+        CheckAnswer("100"),
+        AssertOnLastQueryStatus { status =>
+          assert(status.triggerDetails.get("numRows.input.total") === "1")
+          assert(status.sourceStatuses(0).processingRate > 0.0)
+        }
+      )
     }
   }
 }

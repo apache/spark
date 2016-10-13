@@ -201,6 +201,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     }
   }
 
+  case class AssertOnLastQueryStatus(condition: StreamingQueryStatus => Unit)
+    extends StreamAction
+
+
   /**
    * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
@@ -302,8 +306,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
     val testThread = Thread.currentThread()
     val metadataRoot = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+    val statusCollector = new QueryStatusCollector
 
     try {
+      spark.streams.addListener(statusCollector)
       startedTest.foreach { action =>
         logInfo(s"Processing test stream action: $action")
         action match {
@@ -403,6 +409,13 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             val streamToAssert = Option(currentStream).getOrElse(lastStream)
             verify({ a.run(); true }, s"Assert failed: ${a.message}")
 
+          case a: AssertOnLastQueryStatus =>
+            Eventually.eventually(timeout(streamingTimeout)) {
+              require(statusCollector.lastTriggerStatus.nonEmpty)
+            }
+            val status = statusCollector.lastTriggerStatus.get
+            verify({ a.condition(status); true }, "Assert on last query status failed")
+
           case a: AddData =>
             try {
               // Add data and get the source where it was added, and the expected offset of the
@@ -477,6 +490,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       if (currentStream != null && currentStream.microBatchThread.isAlive) {
         currentStream.stop()
       }
+      spark.streams.removeListener(statusCollector)
     }
   }
 

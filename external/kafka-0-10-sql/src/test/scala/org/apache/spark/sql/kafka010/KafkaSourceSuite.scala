@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
@@ -281,26 +280,15 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .as[(String, String)]
 
     val mapped = kafka.map(kv => kv._2.toInt + 1)
-    val listener = new QueryStatusCollector
-    spark.streams.addListener(listener)
-    try {
-      testStream(mapped)(
-        makeSureGetOffsetCalled,
-        AddKafkaData(Set(topic), 1, 2, 3),
-        CheckAnswer(2, 3, 4),
-        AssertOnQuery { query =>
-          eventually(timeout(streamingTimeout)) {
-            assert(listener.lastTriggerStatus.nonEmpty)
-          }
-          val status = listener.lastTriggerStatus.get
-          assert(status.triggerDetails.get("numRows.input.total").toInt > 0)
-          assert(status.sourceStatuses(0).processingRate > 0.0)
-          true
-        }
-      )
-    } finally {
-      spark.streams.removeListener(listener)
-    }
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      AddKafkaData(Set(topic), 1, 2, 3),
+      CheckAnswer(2, 3, 4),
+      AssertOnLastQueryStatus { status =>
+        assert(status.triggerDetails.get("numRows.input.total").toInt > 0)
+        assert(status.sourceStatuses(0).processingRate > 0.0)
+      }
+    )
   }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
