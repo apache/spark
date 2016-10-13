@@ -204,7 +204,7 @@ case class WindowExec(
         val factory = key match {
           // Offset Frame
           case ("OFFSET", RowFrame, Some(offset), Some(h)) if offset == h =>
-            target: MutableRow =>
+            target: InternalRow =>
               new OffsetWindowFunctionFrame(
                 target,
                 ordinal,
@@ -217,7 +217,7 @@ case class WindowExec(
 
           // Growing Frame.
           case ("AGGREGATE", frameType, None, Some(high)) =>
-            target: MutableRow => {
+            target: InternalRow => {
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
                 processor,
@@ -226,7 +226,7 @@ case class WindowExec(
 
           // Shrinking Frame.
           case ("AGGREGATE", frameType, Some(low), None) =>
-            target: MutableRow => {
+            target: InternalRow => {
               new UnboundedFollowingWindowFunctionFrame(
                 target,
                 processor,
@@ -235,7 +235,7 @@ case class WindowExec(
 
           // Moving Frame.
           case ("AGGREGATE", frameType, Some(low), Some(high)) =>
-            target: MutableRow => {
+            target: InternalRow => {
               new SlidingWindowFunctionFrame(
                 target,
                 processor,
@@ -245,7 +245,7 @@ case class WindowExec(
 
           // Entire Partition Frame.
           case ("AGGREGATE", frameType, None, None) =>
-            target: MutableRow => {
+            target: InternalRow => {
               new UnboundedWindowFunctionFrame(target, processor)
             }
         }
@@ -312,7 +312,7 @@ case class WindowExec(
         val inputFields = child.output.length
         var sorter: UnsafeExternalSorter = null
         var rowBuffer: RowBuffer = null
-        val windowFunctionResult = new SpecificMutableRow(expressions.map(_.dataType))
+        val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))
         val frames = factories.map(_(windowFunctionResult))
         val numFrames = frames.length
         private[this] def fetchNextPartition() {

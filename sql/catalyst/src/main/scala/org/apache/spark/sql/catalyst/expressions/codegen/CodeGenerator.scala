@@ -178,7 +178,10 @@ class CodegenContext {
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map(_._3).mkString("\n")
+    val initCodes = mutableStates.distinct.map(_._3 + "\n")
+    // The generated initialization code may exceed 64kb function size limit in JVM if there are too
+    // many mutable states, so split it into multiple functions.
+    splitExpressions(initCodes, "init", Nil)
   }
 
   /**
@@ -604,6 +607,11 @@ class CodegenContext {
       // Cannot split these expressions because they are not created from a row object.
       return expressions.mkString("\n")
     }
+    splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
+  }
+
+  private def splitExpressions(
+      expressions: Seq[String], funcName: String, arguments: Seq[(String, String)]): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -623,11 +631,11 @@ class CodegenContext {
       // inline execution if only one block
       blocks.head
     } else {
-      val apply = freshName("apply")
+      val func = freshName(funcName)
       val functions = blocks.zipWithIndex.map { case (body, i) =>
-        val name = s"${apply}_$i"
+        val name = s"${func}_$i"
         val code = s"""
-           |private void $name(InternalRow $row) {
+           |private void $name(${arguments.map { case (t, name) => s"$t $name" }.mkString(", ")}) {
            |  $body
            |}
          """.stripMargin
@@ -635,7 +643,7 @@ class CodegenContext {
         name
       }
 
-      functions.map(name => s"$name($row);").mkString("\n")
+      functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")});").mkString("\n")
     }
   }
 
@@ -811,7 +819,7 @@ class CodeAndComment(val body: String, val comment: collection.Map[String, Strin
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
-  protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+  protected val genericMutableRowType: String = classOf[GenericInternalRow].getName
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
@@ -881,7 +889,6 @@ object CodeGenerator extends Logging {
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
       classOf[UnsafeMapData].getName,
-      classOf[MutableRow].getName,
       classOf[Expression].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
