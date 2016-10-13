@@ -22,6 +22,8 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 
+import com.google.common.cache.{CacheBuilder, CacheLoader}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -115,6 +117,17 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
   }
 
+  private val UNCOMPRESSED_FILE_LENGTH_CACHE_SIZE = 100
+  // Cache the file size, since it is expensive to compute the uncompressed file size.
+  private val uncompressedFileLengthCache = CacheBuilder.newBuilder()
+    .maximumSize(UNCOMPRESSED_FILE_LENGTH_CACHE_SIZE)
+    .build[String, Long](new CacheLoader[String, Long]() {
+      override def load(path: String): Long = {
+        Utils.getFileLength(new File(path))
+      }
+    }
+  )
+
   /** Get the part of the log files given the offset and desired length of bytes */
   private def getLog(
       logDirectory: String,
@@ -138,7 +151,14 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, logType)
       logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")
 
-      val totalLength = files.map { _.length }.sum
+      val fileLengths = files.map { file =>
+        if (file.getName.endsWith(".gz")) {
+          uncompressedFileLengthCache.get(file.getAbsolutePath)
+        } else {
+          file.length
+        }
+      }
+      val totalLength = fileLengths.sum
       val offset = offsetOption.getOrElse(totalLength - byteLength)
       val startIndex = {
         if (offset < 0) {
@@ -151,7 +171,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       }
       val endIndex = math.min(startIndex + byteLength, totalLength)
       logDebug(s"Getting log from $startIndex to $endIndex")
-      val logText = Utils.offsetBytes(files, startIndex, endIndex)
+      val logText = Utils.offsetBytes(files, fileLengths, startIndex, endIndex)
       logDebug(s"Got log of length ${logText.length} bytes")
       (logText, startIndex, endIndex, totalLength)
     } catch {

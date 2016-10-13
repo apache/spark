@@ -284,7 +284,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
   }
 
-  def writeLogFile(path: String, content: Array[Byte]): Unit = {
+  def writeLogFile(path: String, content: Array[Byte]): Long = {
     val outputStream = if (path.endsWith(".gz")) {
       new GZIPOutputStream(new FileOutputStream(path))
     } else {
@@ -292,6 +292,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
     IOUtils.write(content, outputStream)
     outputStream.close()
+    content.size
   }
 
   def testOffsetBytes(isCompressed: Boolean): Unit = {
@@ -299,24 +300,25 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val suffix = getSuffix(isCompressed)
     val f1Path = tmpDir2 + "/f1" + suffix
     writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
+    val f1Length = Utils.getFileLength(new File(f1Path))
 
     // Read first few bytes
-    assert(Utils.offsetBytes(f1Path, 0, 5) === "1\n2\n3")
+    assert(Utils.offsetBytes(f1Path, f1Length, 0, 5) === "1\n2\n3")
 
     // Read some middle bytes
-    assert(Utils.offsetBytes(f1Path, 4, 11) === "3\n4\n5\n6")
+    assert(Utils.offsetBytes(f1Path, f1Length, 4, 11) === "3\n4\n5\n6")
 
     // Read last few bytes
-    assert(Utils.offsetBytes(f1Path, 12, 18) === "7\n8\n9\n")
+    assert(Utils.offsetBytes(f1Path, f1Length, 12, 18) === "7\n8\n9\n")
 
     // Read some nonexistent bytes in the beginning
-    assert(Utils.offsetBytes(f1Path, -5, 5) === "1\n2\n3")
+    assert(Utils.offsetBytes(f1Path, f1Length, -5, 5) === "1\n2\n3")
 
     // Read some nonexistent bytes at the end
-    assert(Utils.offsetBytes(f1Path, 12, 22) === "7\n8\n9\n")
+    assert(Utils.offsetBytes(f1Path, f1Length, 12, 22) === "7\n8\n9\n")
 
     // Read some nonexistent bytes on both ends
-    assert(Utils.offsetBytes(f1Path, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
+    assert(Utils.offsetBytes(f1Path, f1Length, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
 
     Utils.deleteRecursively(tmpDir2)
   }
@@ -336,27 +338,28 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
     writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
     writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8))
+    val fileLengths = files.map(Utils.getFileLength)
 
     // Read first few bytes in the 1st file
-    assert(Utils.offsetBytes(files, 0, 5) === "01234")
+    assert(Utils.offsetBytes(files, fileLengths, 0, 5) === "01234")
 
     // Read bytes within the 1st file
-    assert(Utils.offsetBytes(files, 5, 8) === "567")
+    assert(Utils.offsetBytes(files, fileLengths, 5, 8) === "567")
 
     // Read bytes across 1st and 2nd file
-    assert(Utils.offsetBytes(files, 8, 18) === "89abcdefgh")
+    assert(Utils.offsetBytes(files, fileLengths, 8, 18) === "89abcdefgh")
 
     // Read bytes across 1st, 2nd and 3rd file
-    assert(Utils.offsetBytes(files, 5, 24) === "56789abcdefghijABCD")
+    assert(Utils.offsetBytes(files, fileLengths, 5, 24) === "56789abcdefghijABCD")
 
     // Read some nonexistent bytes in the beginning
-    assert(Utils.offsetBytes(files, -5, 18) === "0123456789abcdefgh")
+    assert(Utils.offsetBytes(files, fileLengths, -5, 18) === "0123456789abcdefgh")
 
     // Read some nonexistent bytes at the end
-    assert(Utils.offsetBytes(files, 18, 35) === "ijABCDEFGHIJ")
+    assert(Utils.offsetBytes(files, fileLengths, 18, 35) === "ijABCDEFGHIJ")
 
     // Read some nonexistent bytes on both ends
-    assert(Utils.offsetBytes(files, -5, 35) === "0123456789abcdefghijABCDEFGHIJ")
+    assert(Utils.offsetBytes(files, fileLengths, -5, 35) === "0123456789abcdefghijABCDEFGHIJ")
 
     Utils.deleteRecursively(tmpDir)
   }

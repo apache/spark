@@ -1469,7 +1469,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
-  def offsetBytes(path: String, start: Long, end: Long): String = {
+  def offsetBytes(path: String, fileSize: Long, start: Long, end: Long): String = {
     val file = new File(path)
     val length = getFileLength(file)
     val effectiveEnd = math.min(length, end)
@@ -1495,8 +1495,7 @@ private[spark] object Utils extends Logging {
    * and `endIndex` is based on the cumulative size of all the files take in
    * the given order. See figure below for more details.
    */
-  def offsetBytes(files: Seq[File], start: Long, end: Long): String = {
-    val fileLengths = files.map(getFileLength)
+  def offsetBytes(files: Seq[File], fileLengths: Seq[Long], start: Long, end: Long): String = {
     val startIndex = math.max(start, 0)
     val endIndex = math.min(end, fileLengths.sum)
     val fileToLength = files.zip(fileLengths).toMap
@@ -1504,7 +1503,7 @@ private[spark] object Utils extends Logging {
 
     val stringBuffer = new StringBuffer((endIndex - startIndex).toInt)
     var sum = 0L
-    for (file <- files) {
+    files.zip(fileLengths).foreach { case (file, fileLength) =>
       val startIndexOfFile = sum
       val endIndexOfFile = sum + fileToLength(file)
       logDebug(s"Processing file $file, " +
@@ -1523,19 +1522,19 @@ private[spark] object Utils extends Logging {
 
       if (startIndex <= startIndexOfFile  && endIndex >= endIndexOfFile) {
         // Case C: read the whole file
-        stringBuffer.append(offsetBytes(file.getAbsolutePath, 0, fileToLength(file)))
+        stringBuffer.append(offsetBytes(file.getAbsolutePath, fileLength, 0, fileToLength(file)))
       } else if (startIndex > startIndexOfFile && startIndex < endIndexOfFile) {
         // Case A and B: read from [start of required range] to [end of file / end of range]
         val effectiveStartIndex = startIndex - startIndexOfFile
         val effectiveEndIndex = math.min(endIndex - startIndexOfFile, fileToLength(file))
         stringBuffer.append(Utils.offsetBytes(
-          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+          file.getAbsolutePath, fileLength, effectiveStartIndex, effectiveEndIndex))
       } else if (endIndex > startIndexOfFile && endIndex < endIndexOfFile) {
         // Case D: read from [start of file] to [end of require range]
         val effectiveStartIndex = math.max(startIndex - startIndexOfFile, 0)
         val effectiveEndIndex = endIndex - startIndexOfFile
         stringBuffer.append(Utils.offsetBytes(
-          file.getAbsolutePath, effectiveStartIndex, effectiveEndIndex))
+          file.getAbsolutePath, fileLength, effectiveStartIndex, effectiveEndIndex))
       }
       sum += fileToLength(file)
       logDebug(s"After processing file $file, string built is ${stringBuffer.toString}")
