@@ -158,11 +158,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Respect the configurations set by --hiveconf from the command line
     // (based on Hive's CliDriver).
-    val it = sessionState.getOverriddenConfigurations.entrySet().iterator()
-    while (it.hasNext) {
-      val kv = it.next()
-      SparkSQLEnv.sqlContext.setConf(kv.getKey, kv.getValue)
-    }
+    setConfMap(sessionState.getOverriddenConfigurations)
+    setConfMap(sessionState.getHiveVariables)
 
     if (sessionState.execString != null) {
       System.exit(cli.processLine(sessionState.execString))
@@ -264,6 +261,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   def isRemoteMode(state: CliSessionState): Boolean = {
     //    sessionState.isRemoteMode
     state.isHiveServerQuery
+  }
+
+  def setConfMap(confMap: java.util.Map[String, String]): Unit = {
+    val iterator = confMap.entrySet().iterator()
+    while (iterator.hasNext) {
+      val kv = iterator.next()
+      SparkSQLEnv.sqlContext.setConf(kv.getKey, kv.getValue)
+    }
   }
 
 }
