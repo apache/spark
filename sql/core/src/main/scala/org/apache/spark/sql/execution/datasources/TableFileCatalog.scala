@@ -20,10 +20,8 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.CatalogTablePartition
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -95,9 +93,6 @@ class TableFileCatalog(
   lazy val cachedAllPartitions: ListingFileCatalog = filterPartitions0(Nil)
 
   override def inputFiles: Array[String] = cachedAllPartitions.inputFiles
-
-  private def listDataLeafFiles(paths: Seq[Path]) =
-    listLeafFiles(paths).filter(f => isDataPath(f.getPath))
 }
 
 /**

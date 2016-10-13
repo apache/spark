@@ -207,6 +207,13 @@ abstract class PartitioningAwareFileCatalog(
           if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
     }
   }
+
+  // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
+  // counted as data files, so that they shouldn't participate partition discovery.
+  private def isDataPath(path: Path): Boolean = {
+    val name = path.getName
+    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
+  }
 }
 
 object PartitioningAwareFileCatalog {
