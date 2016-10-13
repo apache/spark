@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.HashSet
+import java.util.Collections
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -107,18 +109,20 @@ package object debug {
   case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
-    class SetAccumulator[T] extends AccumulatorV2[T, HashSet[T]] {
-      private val _set = new HashSet[T]()
+    class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
+      private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
       override def isZero: Boolean = _set.isEmpty
-      override def copy(): AccumulatorV2[T, HashSet[T]] = {
+      override def copy(): AccumulatorV2[T, java.util.Set[T]] = {
         val newAcc = new SetAccumulator[T]()
-        newAcc._set ++= _set
+        newAcc._set.addAll(_set)
         newAcc
       }
       override def reset(): Unit = _set.clear()
-      override def add(v: T): Unit = _set += v
-      override def merge(other: AccumulatorV2[T, HashSet[T]]): Unit = _set ++= other.value
-      override def value: HashSet[T] = _set
+      override def add(v: T): Unit = _set.add(v)
+      override def merge(other: AccumulatorV2[T, java.util.Set[T]]): Unit = {
+        _set.addAll(other.value)
+      }
+      override def value: java.util.Set[T] = _set
     }
 
     /**
@@ -138,7 +142,9 @@ package object debug {
       debugPrint(s"== ${child.simpleString} ==")
       debugPrint(s"Tuples output: ${tupleCount.value}")
       child.output.zip(columnStats).foreach { case (attr, metric) =>
-        val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
+        // This is called on driver. All accumulator updates have a fixed value. So it's safe to use
+        // `asScala` which accesses the internal values using `java.util.Iterator`.
+        val actualDataTypes = metric.elementTypes.value.asScala.mkString("{", ",", "}")
         debugPrint(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }

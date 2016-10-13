@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
-import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -30,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
@@ -41,27 +40,13 @@ import org.apache.spark.util.NextIterator
  * Util functions for JDBC tables.
  */
 object JdbcUtils extends Logging {
-
-  // the property names are case sensitive
-  val JDBC_BATCH_FETCH_SIZE = "fetchsize"
-  val JDBC_BATCH_INSERT_SIZE = "batchsize"
-  val JDBC_TXN_ISOLATION_LEVEL = "isolationLevel"
-
   /**
    * Returns a factory for creating connections to the given JDBC URL.
    *
-   * @param url the JDBC url to connect to.
-   * @param properties JDBC connection properties.
+   * @param options - JDBC options that contains url, table and other information.
    */
-  def createConnectionFactory(url: String, properties: Properties): () => Connection = {
-    val userSpecifiedDriverClass = Option(properties.getProperty("driver"))
-    userSpecifiedDriverClass.foreach(DriverRegistry.register)
-    // Performing this part of the logic on the driver guards against the corner-case where the
-    // driver returned for a URL is different on the driver and executors due to classpath
-    // differences.
-    val driverClass: String = userSpecifiedDriverClass.getOrElse {
-      DriverManager.getDriver(url).getClass.getCanonicalName
-    }
+  def createConnectionFactory(options: JDBCOptions): () => Connection = {
+    val driverClass: String = options.driverClass
     () => {
       DriverRegistry.register(driverClass)
       val driver: Driver = DriverManager.getDrivers.asScala.collectFirst {
@@ -71,7 +56,7 @@ object JdbcUtils extends Logging {
         throw new IllegalStateException(
           s"Did not find registered driver with class $driverClass")
       }
-      driver.connect(url, properties)
+      driver.connect(options.url, options.asConnectionProperties)
     }
   }
 
@@ -283,7 +268,7 @@ object JdbcUtils extends Logging {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(schema)
-      private[this] val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
+      private[this] val mutableRow = new SpecificInternalRow(schema.fields.map(x => x.dataType))
 
       override protected def close(): Unit = {
         try {
@@ -314,22 +299,22 @@ object JdbcUtils extends Logging {
   // A `JDBCValueGetter` is responsible for getting a value from `ResultSet` into a field
   // for `MutableRow`. The last argument `Int` means the index for the value to be set in
   // the row and also used for the value in `ResultSet`.
-  private type JDBCValueGetter = (ResultSet, MutableRow, Int) => Unit
+  private type JDBCValueGetter = (ResultSet, InternalRow, Int) => Unit
 
   /**
    * Creates `JDBCValueGetter`s according to [[StructType]], which can set
-   * each value from `ResultSet` to each field of [[MutableRow]] correctly.
+   * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
   private def makeGetters(schema: StructType): Array[JDBCValueGetter] =
     schema.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
 
   private def makeGetter(dt: DataType, metadata: Metadata): JDBCValueGetter = dt match {
     case BooleanType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setBoolean(pos, rs.getBoolean(pos + 1))
 
     case DateType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
         val dateVal = rs.getDate(pos + 1)
         if (dateVal != null) {
@@ -347,49 +332,49 @@ object JdbcUtils extends Logging {
     // retrieve it, you will get wrong result 199.99.
     // So it is needed to set precision and scale for Decimal based on JDBC metadata.
     case DecimalType.Fixed(p, s) =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         val decimal =
           nullSafeConvert[java.math.BigDecimal](rs.getBigDecimal(pos + 1), d => Decimal(d, p, s))
         row.update(pos, decimal)
 
     case DoubleType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setDouble(pos, rs.getDouble(pos + 1))
 
     case FloatType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setFloat(pos, rs.getFloat(pos + 1))
 
     case IntegerType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setInt(pos, rs.getInt(pos + 1))
 
     case LongType if metadata.contains("binarylong") =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         val bytes = rs.getBytes(pos + 1)
         var ans = 0L
         var j = 0
-        while (j < bytes.size) {
+        while (j < bytes.length) {
           ans = 256 * ans + (255 & bytes(j))
           j = j + 1
         }
         row.setLong(pos, ans)
 
     case LongType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setLong(pos, rs.getLong(pos + 1))
 
     case ShortType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setShort(pos, rs.getShort(pos + 1))
 
     case StringType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
         row.update(pos, UTF8String.fromString(rs.getString(pos + 1)))
 
     case TimestampType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
           row.setLong(pos, DateTimeUtils.fromJavaTimestamp(t))
@@ -398,7 +383,7 @@ object JdbcUtils extends Logging {
         }
 
     case BinaryType =>
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.update(pos, rs.getBytes(pos + 1))
 
     case ArrayType(et, _) =>
@@ -437,7 +422,7 @@ object JdbcUtils extends Logging {
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
 
-      (rs: ResultSet, row: MutableRow, pos: Int) =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
         val array = nullSafeConvert[Object](
           rs.getArray(pos + 1).getArray,
           array => new GenericArrayData(elementConversion.apply(array)))
@@ -550,10 +535,6 @@ object JdbcUtils extends Logging {
       batchSize: Int,
       dialect: JdbcDialect,
       isolationLevel: Int): Iterator[Byte] = {
-    require(batchSize >= 1,
-      s"Invalid value `${batchSize.toString}` for parameter " +
-      s"`${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
-
     val conn = getConnection()
     var committed = false
 
@@ -590,12 +571,12 @@ object JdbcUtils extends Logging {
       val stmt = insertStatement(conn, table, rddSchema, dialect)
       val setters: Array[JDBCValueSetter] = rddSchema.fields.map(_.dataType)
         .map(makeSetter(conn, dialect, _)).toArray
+      val numFields = rddSchema.fields.length
 
       try {
         var rowCount = 0
         while (iterator.hasNext) {
           val row = iterator.next()
-          val numFields = rddSchema.fields.length
           var i = 0
           while (i < numFields) {
             if (row.isNullAt(i)) {
@@ -657,10 +638,10 @@ object JdbcUtils extends Logging {
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(df: DataFrame, url: String): String = {
+  def schemaString(schema: StructType, url: String): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    df.schema.fields foreach { field =>
+    schema.fields foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
@@ -676,25 +657,41 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       url: String,
       table: String,
-      properties: Properties) {
+      options: JDBCOptions) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       getJdbcType(field.dataType, dialect).jdbcNullType
     }
 
     val rddSchema = df.schema
-    val getConnection: () => Connection = createConnectionFactory(url, properties)
-    val batchSize = properties.getProperty(JDBC_BATCH_INSERT_SIZE, "1000").toInt
-    val isolationLevel =
-      properties.getProperty(JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
-        case "NONE" => Connection.TRANSACTION_NONE
-        case "READ_UNCOMMITTED" => Connection.TRANSACTION_READ_UNCOMMITTED
-        case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED
-        case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
-        case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
-      }
+    val getConnection: () => Connection = createConnectionFactory(options)
+    val batchSize = options.batchSize
+    val isolationLevel = options.isolationLevel
     df.foreachPartition(iterator => savePartition(
       getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect, isolationLevel)
     )
+  }
+
+  /**
+   * Creates a table with a given schema.
+   */
+  def createTable(
+      schema: StructType,
+      url: String,
+      table: String,
+      createTableOptions: String,
+      conn: Connection): Unit = {
+    val strSchema = schemaString(schema, url)
+    // Create the table if the table does not exist.
+    // To allow certain options to append when create a new table, which can be
+    // table_options or partition_options.
+    // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+    val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
+    val statement = conn.createStatement
+    try {
+      statement.executeUpdate(sql)
+    } finally {
+      statement.close()
+    }
   }
 }

@@ -39,7 +39,7 @@ class WindowSpec private[sql](
    * Defines the partitioning columns in a [[WindowSpec]].
    * @since 1.4.0
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def partitionBy(colName: String, colNames: String*): WindowSpec = {
     partitionBy((colName +: colNames).map(Column(_)): _*)
   }
@@ -48,7 +48,7 @@ class WindowSpec private[sql](
    * Defines the partitioning columns in a [[WindowSpec]].
    * @since 1.4.0
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def partitionBy(cols: Column*): WindowSpec = {
     new WindowSpec(cols.map(_.expr), orderSpec, frame)
   }
@@ -57,7 +57,7 @@ class WindowSpec private[sql](
    * Defines the ordering columns in a [[WindowSpec]].
    * @since 1.4.0
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def orderBy(colName: String, colNames: String*): WindowSpec = {
     orderBy((colName +: colNames).map(Column(_)): _*)
   }
@@ -66,7 +66,7 @@ class WindowSpec private[sql](
    * Defines the ordering columns in a [[WindowSpec]].
    * @since 1.4.0
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def orderBy(cols: Column*): WindowSpec = {
     val sortOrder: Seq[SortOrder] = cols.map { col =>
       col.expr match {
@@ -86,12 +86,17 @@ class WindowSpec private[sql](
    * "current row", while "-1" means the row before the current row, and "5" means the fifth row
    * after the current row.
    *
-   * @param start boundary start, inclusive.
-   *              The frame is unbounded if this is the minimum long value.
-   * @param end boundary end, inclusive.
-   *            The frame is unbounded if this is the maximum long value.
+   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
+   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * values directly.
+   *
+   * @param start boundary start, inclusive. The frame is unbounded if this is
+   *              the minimum long value ([[Window.unboundedPreceding]]).
+   * @param end boundary end, inclusive. The frame is unbounded if this is the
+   *            maximum long value  ([[Window.unboundedFollowing]]).
    * @since 1.4.0
    */
+  // Note: when updating the doc for this method, also update Window.rowsBetween.
   def rowsBetween(start: Long, end: Long): WindowSpec = {
     between(RowFrame, start, end)
   }
@@ -103,12 +108,17 @@ class WindowSpec private[sql](
    * while "-1" means one off before the current row, and "5" means the five off after the
    * current row.
    *
-   * @param start boundary start, inclusive.
-   *              The frame is unbounded if this is the minimum long value.
-   * @param end boundary end, inclusive.
-   *            The frame is unbounded if this is the maximum long value.
+   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
+   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * values directly.
+   *
+   * @param start boundary start, inclusive. The frame is unbounded if this is
+   *              the minimum long value ([[Window.unboundedPreceding]]).
+   * @param end boundary end, inclusive. The frame is unbounded if this is the
+   *            maximum long value  ([[Window.unboundedFollowing]]).
    * @since 1.4.0
    */
+  // Note: when updating the doc for this method, also update Window.rangeBetween.
   def rangeBetween(start: Long, end: Long): WindowSpec = {
     between(RangeFrame, start, end)
   }

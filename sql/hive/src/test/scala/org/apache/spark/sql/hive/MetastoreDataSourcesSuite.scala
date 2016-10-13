@@ -31,6 +31,7 @@ import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.SCHEMA_STRING_LENGTH_THRESHOLD
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -338,7 +339,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         }.getMessage
 
         assert(
-          message.contains("Table ctasJsonTable already exists."),
+          message.contains("Table default.ctasJsonTable already exists."),
           "We should complain that ctasJsonTable already exists")
 
         // The following statement should be fine if it has IF NOT EXISTS.
@@ -698,28 +699,27 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("SPARK-6024 wide schema support") {
-    withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "4000") {
-      withTable("wide_schema") {
-        withTempDir { tempDir =>
-          // We will need 80 splits for this schema if the threshold is 4000.
-          val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType)))
+    assert(spark.sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 4000)
+    withTable("wide_schema") {
+      withTempDir { tempDir =>
+        // We will need 80 splits for this schema if the threshold is 4000.
+        val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType)))
 
-          val tableDesc = CatalogTable(
-            identifier = TableIdentifier("wide_schema"),
-            tableType = CatalogTableType.EXTERNAL,
-            storage = CatalogStorageFormat.empty.copy(
-              properties = Map("path" -> tempDir.getCanonicalPath)
-            ),
-            schema = schema,
-            provider = Some("json")
-          )
-          spark.sessionState.catalog.createTable(tableDesc, ignoreIfExists = false)
+        val tableDesc = CatalogTable(
+          identifier = TableIdentifier("wide_schema"),
+          tableType = CatalogTableType.EXTERNAL,
+          storage = CatalogStorageFormat.empty.copy(
+            properties = Map("path" -> tempDir.getCanonicalPath)
+          ),
+          schema = schema,
+          provider = Some("json")
+        )
+        spark.sessionState.catalog.createTable(tableDesc, ignoreIfExists = false)
 
-          sessionState.refreshTable("wide_schema")
+        sessionState.refreshTable("wide_schema")
 
-          val actualSchema = table("wide_schema").schema
-          assert(schema === actualSchema)
-        }
+        val actualSchema = table("wide_schema").schema
+        assert(schema === actualSchema)
       }
     }
   }
@@ -906,7 +906,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
-      assert(e.getMessage.contains("The file format of the existing table appendOrcToParquet " +
+      assert(e.getMessage.contains(
+        "The file format of the existing table default.appendOrcToParquet " +
         "is `org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat`. " +
         "It doesn't match the specified format `orc`"))
     }
@@ -917,7 +918,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
           .saveAsTable("appendParquetToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table appendParquetToJson " +
+      assert(e.getMessage.contains(
+        "The file format of the existing table default.appendParquetToJson " +
         "is `org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `parquet`"))
     }
@@ -928,7 +930,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         createDF(10, 19).write.mode(SaveMode.Append).format("text")
           .saveAsTable("appendTextToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table appendTextToJson is " +
+      assert(e.getMessage.contains(
+        "The file format of the existing table default.appendTextToJson is " +
         "`org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `text`"))
     }
@@ -980,7 +983,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     checkAnswer(
       spark.sql("show TABLES in testdb8156").filter("tableName = 'ttt3'"),
-      Row("ttt3", false))
+      Row("testdb8156", "ttt3", false))
     spark.sql("""use default""")
     spark.sql("""drop database if exists testdb8156 CASCADE""")
   }
@@ -1148,6 +1151,56 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
       }
       assert(e.getMessage.contains("doesn't match"))
+    }
+  }
+
+  test("save API - format hive") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val e = intercept[ClassNotFoundException] {
+        spark.range(10).write.format("hive").mode(SaveMode.Ignore).save(path)
+      }.getMessage
+      assert(e.contains("Failed to find data source: hive"))
+    }
+  }
+
+  test("saveAsTable API - format hive") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      val e = intercept[AnalysisException] {
+        spark.range(10).write.format("hive").mode(SaveMode.Overwrite).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains("Cannot create hive serde table with saveAsTable API"))
+    }
+  }
+
+  test("create a data source table using hive") {
+    val tableName = "tab1"
+    withTable (tableName) {
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName
+             |(col1 int)
+             |USING hive
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains("Cannot create hive serde table with CREATE TABLE USING"))
+    }
+  }
+
+  test("create a temp view using hive") {
+    val tableName = "tab1"
+    withTable (tableName) {
+      val e = intercept[ClassNotFoundException] {
+        sql(
+          s"""
+             |CREATE TEMPORARY VIEW $tableName
+             |(col1 int)
+             |USING hive
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains("Failed to find data source: hive"))
     }
   }
 

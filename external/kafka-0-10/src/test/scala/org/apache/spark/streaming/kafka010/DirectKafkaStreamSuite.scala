@@ -108,7 +108,7 @@ class DirectKafkaStreamSuite
     val expectedTotal = (data.values.sum * topics.size) - 2
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
 
-    ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    ssc = new StreamingContext(sparkConf, Milliseconds(1000))
     val stream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String](
         ssc,
@@ -150,7 +150,7 @@ class DirectKafkaStreamSuite
       allReceived.addAll(Arrays.asList(rdd.map(r => (r.key, r.value)).collect(): _*))
     }
     ssc.start()
-    eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
+    eventually(timeout(100000.milliseconds), interval(1000.milliseconds)) {
       assert(allReceived.size === expectedTotal,
         "didn't get expected number of messages, messages:\n" +
           allReceived.asScala.mkString("\n"))
@@ -159,20 +159,22 @@ class DirectKafkaStreamSuite
   }
 
   test("pattern based subscription") {
-    val topics = List("pat1", "pat2", "advanced3")
-    // Should match 2 out of 3 topics
+    val topics = List("pat1", "pat2", "pat3", "advanced3")
+    // Should match 3 out of 4 topics
     val pat = """pat\d""".r.pattern
     val data = Map("a" -> 7, "b" -> 9)
     topics.foreach { t =>
       kafkaTestUtils.createTopic(t)
       kafkaTestUtils.sendMessages(t, data)
     }
-    val offsets = Map(new TopicPartition("pat2", 0) -> 3L)
-    // 2 matching topics, one of which starts 3 messages later
-    val expectedTotal = (data.values.sum * 2) - 3
+    val offsets = Map(
+      new TopicPartition("pat2", 0) -> 3L,
+      new TopicPartition("pat3", 0) -> 4L)
+    // 3 matching topics, two of which start a total of 7 messages later
+    val expectedTotal = (data.values.sum * 3) - 7
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
 
-    ssc = new StreamingContext(sparkConf, Milliseconds(200))
+    ssc = new StreamingContext(sparkConf, Milliseconds(1000))
     val stream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String](
         ssc,
@@ -214,7 +216,7 @@ class DirectKafkaStreamSuite
       allReceived.addAll(Arrays.asList(rdd.map(r => (r.key, r.value)).collect(): _*))
     }
     ssc.start()
-    eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
+    eventually(timeout(100000.milliseconds), interval(1000.milliseconds)) {
       assert(allReceived.size === expectedTotal,
         "didn't get expected number of messages, messages:\n" +
           allReceived.asScala.mkString("\n"))
