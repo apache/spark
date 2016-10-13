@@ -915,4 +915,9 @@ object StaticSQLConf {
     .internal()
     .intConf
     .createWithDefault(4000)
+
+  val DEBUG_MODE = buildConf("spark.sql.debug")
+    .internal()
+    .booleanConf
+    .createWithDefault(false)
 }

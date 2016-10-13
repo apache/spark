@@ -19,6 +19,7 @@ package org.apache.spark.sql.internal
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -254,18 +255,21 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("global SQL conf comes from SparkConf") {
-    val newSession = SparkSession.builder()
-      .config(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000")
-      .getOrCreate()
-
-    assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD.key) == "2000")
-    checkAnswer(
-      newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
-      Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
+  test("static SQL conf comes from SparkConf") {
+    val previousValue = sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
+    try {
+      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, 2000)
+      val newSession = new SparkSession(sparkContext)
+      assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 2000)
+      checkAnswer(
+        newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
+        Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
+    } finally {
+      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, previousValue)
+    }
   }
 
-  test("cannot set/unset global SQL conf") {
+  test("cannot set/unset static SQL conf") {
     val e1 = intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
     assert(e1.message.contains("Cannot modify the value of a static config"))
     val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
