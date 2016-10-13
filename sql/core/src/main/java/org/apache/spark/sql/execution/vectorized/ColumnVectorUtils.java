@@ -26,6 +26,7 @@ import java.util.List;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -98,20 +99,25 @@ public class ColumnVectorUtils {
    * For example, an array of IntegerType will return an int[].
    * Throws exceptions for unhandled schemas.
    */
-  public static Object toPrimitiveJavaArray(ColumnVector.Array array) {
-    DataType dt = array.data.dataType();
-    if (dt instanceof IntegerType) {
-      int[] result = new int[array.length];
-      ColumnVector data = array.data;
-      for (int i = 0; i < result.length; i++) {
-        if (data.isNullAt(array.offset + i)) {
-          throw new RuntimeException("Cannot handle NULL values.");
-        }
-        result[i] = data.getInt(array.offset + i);
-      }
-      return result;
+  public static Object toPrimitiveJavaArray(ArrayData a) {
+    if (!(a instanceof ColumnVector.Array)) {
+      return a.toIntArray();
     } else {
-      throw new UnsupportedOperationException();
+      ColumnVector.Array array = (ColumnVector.Array)a;
+      DataType dt = array.data.dataType();
+      if (dt instanceof IntegerType) {
+        int[] result = new int[array.length];
+        ColumnVector data = array.data;
+        for (int i = 0; i < result.length; i++) {
+          if (data.isNullAt(array.offset + i)) {
+            throw new RuntimeException("Cannot handle NULL values.");
+          }
+          result[i] = data.getInt(array.offset + i);
+        }
+        return result;
+      } else {
+        throw new UnsupportedOperationException();
+      }
     }
   }
 
