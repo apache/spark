@@ -371,9 +371,9 @@ trait MesosSchedulerUtils extends Logging {
 
   def setupUris(uris: String,
                 builder: CommandInfo.Builder,
-                useFetchCache: Boolean = false): Unit = {
+                useFetcherCache: Boolean = false): Unit = {
     uris.split(",").foreach { uri =>
-      builder.addUris(CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache))
+      builder.addUris(CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetcherCache))
     }
   }
 
