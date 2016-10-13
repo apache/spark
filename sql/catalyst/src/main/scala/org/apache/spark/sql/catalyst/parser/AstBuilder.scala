@@ -497,23 +497,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     if (GROUPING != null) {
       // GROUP BY .... GROUPING SETS (...)
-      val expressionMap = groupByExpressions.zipWithIndex.toMap
-      val numExpressions = expressionMap.size
-      val mask = (1 << numExpressions) - 1
-      val masks = ctx.groupingSet.asScala.map {
-        _.expression.asScala.foldLeft(mask) {
-          case (bitmap, eCtx) =>
-            // Find the index of the expression.
-            val e = typedVisit[Expression](eCtx)
-            val index = expressionMap.find(_._1.semanticEquals(e)).map(_._2).getOrElse(
-              throw new ParseException(
-                s"$e doesn't show up in the GROUP BY list", ctx))
-            // 0 means that the column at the given index is a grouping column, 1 means it is not,
-            // so we unset the bit in bitmap.
-            bitmap & ~(1 << (numExpressions - 1 - index))
+      val selectedGroupByExprs = ctx.groupingSet.asScala.map {
+        _.expression.asScala.foldLeft(Seq.empty[Expression]) {
+          case (exprs, eCtx) =>
+            exprs :+ typedVisit[Expression](eCtx)
         }
       }
-      GroupingSets(masks, groupByExpressions, query, selectExpressions)
+      GroupingSets(selectedGroupByExprs, groupByExpressions, query, selectExpressions)
     } else {
       // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
       val mappedGroupByExpressions = if (CUBE != null) {

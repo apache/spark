@@ -217,10 +217,16 @@ class Analyzer(
      *  Group Count: N + 1 (N is the number of group expressions)
      *
      *  We need to get all of its subsets for the rule described above, the subset is
-     *  represented as the bit masks.
+     *  represented as sequence of expressions.
      */
-    def bitmasks(r: Rollup): Seq[Int] = {
-      Seq.tabulate(r.groupByExprs.length + 1)(idx => (1 << idx) - 1)
+    def selectGroupExprsRollup(exprs: Seq[Expression]): Seq[Seq[Expression]] = {
+      if (exprs.length == 0) {
+        Seq(Seq.empty[Expression])
+      } else {
+        selectGroupExprsRollup(exprs.drop(1)).map { expandExprs =>
+          exprs.take(1) ++ expandExprs
+        } ++ Seq(Seq.empty[Expression])
+      }
     }
 
     /*
@@ -230,10 +236,17 @@ class Analyzer(
      *  Group Count: 2 ^ N (N is the number of group expressions)
      *
      *  We need to get all of its subsets for a given GROUPBY expression, the subsets are
-     *  represented as the bit masks.
+     *  represented as sequence of expressions.
      */
-    def bitmasks(c: Cube): Seq[Int] = {
-      Seq.tabulate(1 << c.groupByExprs.length)(i => i)
+    def selectGroupExprsCube(exprs: Seq[Expression]): Seq[Seq[Expression]] = {
+      if (exprs.length == 0) {
+        Seq(Seq.empty[Expression])
+      } else {
+        val expandExprsList = selectGroupExprsCube(exprs.drop(1))
+        expandExprsList.map { expandExprs =>
+          exprs.take(1) ++ expandExprs
+        } ++ expandExprsList
+      }
     }
 
     private def hasGroupingAttribute(expr: Expression): Boolean = {
@@ -282,9 +295,11 @@ class Analyzer(
           s"${VirtualColumn.hiveGroupingIdName} is deprecated; use grouping_id() instead")
 
       case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
-        GroupingSets(bitmasks(c), groupByExprs, child, aggregateExpressions)
+        GroupingSets(
+          selectGroupExprsCube(c.groupByExprs), groupByExprs, child, aggregateExpressions)
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
-        GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
+        GroupingSets(
+          selectGroupExprsRollup(r.groupByExprs), groupByExprs, child, aggregateExpressions)
 
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
@@ -299,18 +314,29 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
-        // The rightmost bit in the bitmasks corresponds to the last expression in groupByAliases
-        // with 0 indicating this expression is in the grouping set. The following line of code
-        // calculates the bitmask representing the expressions that absent in at least one grouping
-        // set (indicated by 1).
-        val nullBitmask = x.bitmasks.reduce(_ | _)
-
-        val attrLength = groupByAliases.length
+        // Change the nullability of group by aliases if necessary. For example, if we have
+        // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
+        // should change the nullabilty of b to be TRUE.
         val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
-          a.toAttribute.withNullability(((nullBitmask >> (attrLength - idx - 1)) & 1) == 1)
+          if (x.selectedGroupByExprs.exists(!_.contains(a.child))) {
+            a.toAttribute.withNullability(true)
+          } else {
+            a.toAttribute
+          }
         }
 
-        val expand = Expand(x.bitmasks, groupByAliases, expandedAttributes, gid, x.child)
+        val groupingSetsAttributes = x.selectedGroupByExprs.map { groupingSetExprs =>
+          groupingSetExprs.map { expr =>
+            val alias = groupByAliases.find(_.child.semanticEquals(expr)).getOrElse(
+              failAnalysis(s"$expr doesn't show up in the GROUP BY list"))
+            // Map alias to expanded attribute.
+            expandedAttributes.find(_.semanticEquals(alias.toAttribute)).getOrElse(
+              alias.toAttribute)
+          }
+        }
+
+        val expand = Expand(
+          groupingSetsAttributes, groupByAliases, expandedAttributes, gid, x.child)
         val groupingAttrs = expand.output.drop(x.child.output.length)
 
         val aggregations: Seq[NamedExpression] = x.aggregations.map { case expr =>

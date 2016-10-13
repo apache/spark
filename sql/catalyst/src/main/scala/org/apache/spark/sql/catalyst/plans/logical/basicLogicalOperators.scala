@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import scala.collection.mutable.ArrayBuffer
-
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes
@@ -523,59 +522,64 @@ case class Window(
 
 object Expand {
   /**
-   * Extract attribute set according to the grouping id.
+   * Build bit mask from attributes of selected grouping set.
    *
-   * @param bitmask bitmask to represent the selected of the attribute sequence
-   * @param attrs the attributes in sequence
-   * @return the attributes of non selected specified via bitmask (with the bit set to 1)
+   * @param groupingSetAttrs The attributes of selected grouping set
+   * @param attrMap Mapping group by attributes to its index in attributes sequence
+   * @return The bitmask which represents the selected attributes out of group by attributes.
+   *         A bit in the bitmask is corresponding to an attribute in group by attributes sequence,
+   *         the selected attribute has corresponding bit set to 0 and otherwise set to 1.
    */
-  private def buildNonSelectAttrSet(
-      bitmask: Int,
-      attrs: Seq[Attribute]): AttributeSet = {
-    val nonSelect = new ArrayBuffer[Attribute]()
+  private def buildBitmask(
+    groupingSetAttrs: Seq[Attribute],
+    attrMap: Map[Attribute, Int]): Int = {
+    val numAttributes = attrMap.size
+    val mask = (1 << numAttributes) - 1
 
-    var bit = attrs.length - 1
-    while (bit >= 0) {
-      if (((bitmask >> bit) & 1) == 1) nonSelect += attrs(attrs.length - bit - 1)
-      bit -= 1
+    groupingSetAttrs.foldLeft(mask) {
+      case (bitmap, attr) =>
+        // Find the index of the attribute in sequence.
+        val index = attrMap.get(attr).getOrElse(
+          throw new AnalysisException(s"$attr doesn't show up in the GROUP BY list")
+        )
+        // 0 means that the column at the given index is a grouping column, 1 means it is not,
+        // so we unset the bit in bitmap.
+        bitmap & ~(1 << (numAttributes - 1 - index))
     }
-
-    AttributeSet(nonSelect)
   }
 
   /**
    * Apply the all of the GroupExpressions to every input row, hence we will get
    * multiple output rows for an input row.
    *
-   * @param bitmasks The bitmask set represents the grouping sets
+   * @param groupingSetsAttrs The attributes of grouping sets
    * @param groupByAliases The aliased original group by expressions
    * @param groupByAttrs The attributes of aliased group by expressions
    * @param gid Attribute of the grouping id
    * @param child Child operator
    */
   def apply(
-    bitmasks: Seq[Int],
+    groupingSetsAttrs: Seq[Seq[Attribute]],
     groupByAliases: Seq[Alias],
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
     child: LogicalPlan): Expand = {
+    val attrMap = groupByAttrs.zipWithIndex.toMap
+
     // Create an array of Projections for the child projection, and replace the projections'
     // expressions which equal GroupBy expressions with Literal(null), if those expressions
-    // are not set for this grouping set (according to the bit mask).
-    val projections = bitmasks.map { bitmask =>
-      // get the non selected grouping attributes according to the bit mask
-      val nonSelectedGroupAttrSet = buildNonSelectAttrSet(bitmask, groupByAttrs)
-
+    // are not set for this grouping set.
+    val projections = groupingSetsAttrs.map { groupingSetAttrs =>
       child.output ++ groupByAttrs.map { attr =>
-        if (nonSelectedGroupAttrSet.contains(attr)) {
+        if (!groupingSetAttrs.contains(attr)) {
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
           Literal.create(null, attr.dataType)
         } else {
           attr
         }
-      // groupingId is the last output, here we use the bit mask as the concrete value for it.
-      } :+ Literal.create(bitmask, IntegerType)
+        // groupingId is the last output, here we use the bit mask as the concrete value for it.
+      } :+ Literal.create(buildBitmask(groupingSetAttrs, attrMap), IntegerType)
     }
 
     // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
@@ -616,16 +620,15 @@ case class Expand(
  *
  * We will transform GROUPING SETS into logical plan Aggregate(.., Expand) in Analyzer
  *
- * @param bitmasks     A list of bitmasks, each of the bitmask indicates the selected
- *                     GroupBy expressions
- * @param groupByExprs The Group By expressions candidates, take effective only if the
- *                     associated bit in the bitmask set to 1.
+ * @param selectedGroupByExprs A sequence of selected GroupBy expressions, all exprs should
+ *                     exists in groupByExprs.
+ * @param groupByExprs The Group By expressions candidates.
  * @param child        Child operator
  * @param aggregations The Aggregation expressions, those non selected group by expressions
  *                     will be considered as constant null if it appears in the expressions
  */
 case class GroupingSets(
-    bitmasks: Seq[Int],
+    selectedGroupByExprs: Seq[Seq[Expression]],
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
     aggregations: Seq[NamedExpression]) extends UnaryNode {
