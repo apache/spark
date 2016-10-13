@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
-import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -35,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, Filter}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.SerializableConfiguration
 
 /**
  * ::Experimental::
@@ -351,153 +346,4 @@ trait FileCatalog {
 
   /** Refresh the file listing */
   def refresh(): Unit
-}
-
-
-/**
- * Helper methods for gathering metadata from HDFS.
- */
-object HadoopFsRelation extends Logging {
-
-  /** Checks if we should filter out this path name. */
-  def shouldFilterOut(pathName: String): Boolean = {
-    // We filter everything that starts with _ and ., except _common_metadata and _metadata
-    // because Parquet needs to find those metadata files from leaf files returned by this method.
-    // We should refactor this logic to not mix metadata files with data files.
-    ((pathName.startsWith("_") && !pathName.contains("=")) || pathName.startsWith(".")) &&
-      !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
-  }
-
-  /**
-   * Create a LocatedFileStatus using FileStatus and block locations.
-   */
-  def createLocatedFileStatus(f: FileStatus, locations: Array[BlockLocation]): LocatedFileStatus = {
-    // The other constructor of LocatedFileStatus will call FileStatus.getPermission(), which is
-    // very slow on some file system (RawLocalFileSystem, which is launch a subprocess and parse the
-    // stdout).
-    val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
-      f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
-    if (f.isSymlink) {
-      lfs.setSymlink(f.getSymlink)
-    }
-    lfs
-  }
-
-  // We don't filter files/directories whose name start with "_" except "_temporary" here, as
-  // specific data sources may take advantages over them (e.g. Parquet _metadata and
-  // _common_metadata files). "_temporary" directories are explicitly ignored since failed
-  // tasks/jobs may leave partial/corrupted data files there.  Files and directories whose name
-  // start with "." are also ignored.
-  def listLeafFiles(fs: FileSystem, status: FileStatus, filter: PathFilter): Array[FileStatus] = {
-    logTrace(s"Listing ${status.getPath}")
-    val name = status.getPath.getName.toLowerCase
-    if (shouldFilterOut(name)) {
-      Array.empty[FileStatus]
-    } else {
-      val statuses = {
-        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
-        val stats = files ++ dirs.flatMap(dir => listLeafFiles(fs, dir, filter))
-        if (filter != null) stats.filter(f => filter.accept(f.getPath)) else stats
-      }
-      // statuses do not have any dirs.
-      statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
-        case f: LocatedFileStatus => f
-
-        // NOTE:
-        //
-        // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
-        //   operations, calling `getFileBlockLocations` does no harm here since these file system
-        //   implementations don't actually issue RPC for this method.
-        //
-        // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
-        //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
-        //   paths exceeds threshold.
-        case f => createLocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
-      }
-    }
-  }
-
-  // `FileStatus` is Writable but not serializable.  What make it worse, somehow it doesn't play
-  // well with `SerializableWritable`.  So there seems to be no way to serialize a `FileStatus`.
-  // Here we use `FakeFileStatus` to extract key components of a `FileStatus` to serialize it from
-  // executor side and reconstruct it on driver side.
-  case class FakeBlockLocation(
-      names: Array[String],
-      hosts: Array[String],
-      offset: Long,
-      length: Long)
-
-  case class FakeFileStatus(
-      path: String,
-      length: Long,
-      isDir: Boolean,
-      blockReplication: Short,
-      blockSize: Long,
-      modificationTime: Long,
-      accessTime: Long,
-      blockLocations: Array[FakeBlockLocation])
-
-  def listLeafFilesInParallel(
-      paths: Seq[Path],
-      hadoopConf: Configuration,
-      sparkSession: SparkSession): mutable.LinkedHashSet[FileStatus] = {
-    assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
-    logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
-
-    val sparkContext = sparkSession.sparkContext
-    val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-    val serializedPaths = paths.map(_.toString)
-
-    // Set the number of parallelism to prevent following file listing from generating many tasks
-    // in case of large #defaultParallelism.
-    val numParallelism = Math.min(paths.size, 10000)
-
-    val fakeStatuses = sparkContext
-        .parallelize(serializedPaths, numParallelism)
-        .mapPartitions { paths =>
-      // Dummy jobconf to get to the pathFilter defined in configuration
-      // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
-      val jobConf = new JobConf(serializableConfiguration.value, this.getClass)
-      val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-      paths.map(new Path(_)).flatMap { path =>
-        val fs = path.getFileSystem(serializableConfiguration.value)
-        listLeafFiles(fs, fs.getFileStatus(path), pathFilter)
-      }
-    }.map { status =>
-      val blockLocations = status match {
-        case f: LocatedFileStatus =>
-          f.getBlockLocations.map { loc =>
-            FakeBlockLocation(
-              loc.getNames,
-              loc.getHosts,
-              loc.getOffset,
-              loc.getLength)
-          }
-
-        case _ =>
-          Array.empty[FakeBlockLocation]
-      }
-
-      FakeFileStatus(
-        status.getPath.toString,
-        status.getLen,
-        status.isDirectory,
-        status.getReplication,
-        status.getBlockSize,
-        status.getModificationTime,
-        status.getAccessTime,
-        blockLocations)
-    }.collect()
-
-    val hadoopFakeStatuses = fakeStatuses.map { f =>
-      val blockLocations = f.blockLocations.map { loc =>
-        new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
-      }
-      new LocatedFileStatus(
-        new FileStatus(
-          f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path)),
-        blockLocations)
-    }
-    mutable.LinkedHashSet(hadoopFakeStatuses: _*)
-  }
 }
