@@ -230,13 +230,21 @@ case class FileSourceScanExec(
     val location = relation.location
     val locationDesc =
       location.getClass.getSimpleName + seqToString(location.rootPaths)
-    Map(
-      "Format" -> relation.fileFormat.toString,
-      "ReadSchema" -> outputSchema.catalogString,
-      "Batched" -> supportsBatch.toString,
-      "PartitionFilters" -> seqToString(partitionFilters),
-      "PushedFilters" -> seqToString(dataFilters),
-      "Location" -> locationDesc)
+    val metadata =
+      Map(
+        "Format" -> relation.fileFormat.toString,
+        "ReadSchema" -> outputSchema.catalogString,
+        "Batched" -> supportsBatch.toString,
+        "PartitionFilters" -> seqToString(partitionFilters),
+        "PushedFilters" -> seqToString(dataFilters),
+        "Location" -> locationDesc)
+    val withOptPartitionCount =
+      relation.partitionSchemaOption.map { _ =>
+        metadata + ("PartitionCount" -> selectedPartitions.size.toString)
+      } getOrElse {
+        metadata
+      }
+    withOptPartitionCount
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
