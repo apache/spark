@@ -104,7 +104,7 @@ object SparkSubmit {
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
                         """.format(SPARK_VERSION))
-    printStream.println("Using Scala %s (%s, Java %s)".format(
+    printStream.println("Using Scala %s, %s, %s".format(
       Properties.versionString, Properties.javaVmName, Properties.javaVersion))
     printStream.println("Branch %s".format(SPARK_BRANCH))
     printStream.println("Compiled by user %s on %s".format(SPARK_BUILD_USER, SPARK_BUILD_DATE))
