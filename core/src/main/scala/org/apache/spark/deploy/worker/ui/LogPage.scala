@@ -121,8 +121,8 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
   // Cache the file size, since it is expensive to compute the uncompressed file size.
   private val uncompressedFileLengthCache = CacheBuilder.newBuilder()
     .maximumSize(UNCOMPRESSED_FILE_LENGTH_CACHE_SIZE)
-    .build[String, Long](new CacheLoader[String, Long]() {
-      override def load(path: String): Long = {
+    .build[String, java.lang.Long](new CacheLoader[String, java.lang.Long]() {
+      override def load(path: String): java.lang.Long = {
         Utils.getFileLength(new File(path))
       }
     }
@@ -151,9 +151,9 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       val files = RollingFileAppender.getSortedRolledOverFiles(logDirectory, logType)
       logDebug(s"Sorted log files of type $logType in $logDirectory:\n${files.mkString("\n")}")
 
-      val fileLengths = files.map { file =>
+      val fileLengths: Seq[Long] = files.map { file =>
         if (file.getName.endsWith(".gz")) {
-          uncompressedFileLengthCache.get(file.getAbsolutePath)
+          uncompressedFileLengthCache.get(file.getAbsolutePath).toLong
         } else {
           file.length
         }
