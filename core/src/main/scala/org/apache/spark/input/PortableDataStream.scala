@@ -27,6 +27,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat, CombineFileRecordReader, CombineFileSplit}
 
+import org.apache.spark.internal.config
+import org.apache.spark.SparkContext
+
 /**
  * A general format for reading whole files in as streams, byte arrays,
  * or other functions to be added
@@ -40,10 +43,14 @@ private[spark] abstract class StreamFileInputFormat[T]
    * Allow minPartitions set by end-user in order to keep compatibility with old Hadoop API
    * which is set through setMaxSplitSize
    */
-  def setMinPartitions(context: JobContext, minPartitions: Int) {
+  def setMinPartitions(sc: SparkContext, context: JobContext, minPartitions: Int) {
+    val defaultMaxSplitBytes = sc.getConf.get(config.FILES_MAX_PARTITION_BYTES)
+    val openCostInBytes = sc.getConf.get(config.FILES_OPEN_COST_IN_BYTES)
+    val defaultParallelism = sc.defaultParallelism
     val files = listStatus(context).asScala
-    val totalLen = files.filterNot(_.isDirectory).map(_.getLen).sum
-    val maxSplitSize = math.ceil(totalLen / math.max(minPartitions, files.size)).toLong
+    val totalBytes = files.filterNot(_.isDirectory).map(_.getLen + openCostInBytes).sum
+    val bytesPerCore = totalBytes / defaultParallelism
+    val maxSplitSize = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
     super.setMaxSplitSize(maxSplitSize)
   }
 

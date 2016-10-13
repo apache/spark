@@ -1020,6 +1020,22 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.files.maxPartitionBytes</code></td>
+  <td>134217728 (128 MB)</td>
+  <td>
+    The maximum number of bytes to pack into a single partition when reading files.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.files.openCostInBytes</code></td>
+  <td>4194304 (4 MB)</td>
+  <td>
+    The estimated cost to open a file, measured by the number of bytes could be scanned in the same
+    time. This is used when putting multiple files into a partition. It is better to over estimate,
+    then the partitions with small files will be faster than partitions with bigger files.
+  </td>
+</tr>
+<tr>
     <td><code>spark.hadoop.cloneConf</code></td>
     <td>false</td>
     <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This

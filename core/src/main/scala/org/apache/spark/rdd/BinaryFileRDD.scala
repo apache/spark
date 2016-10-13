@@ -43,7 +43,7 @@ private[spark] class BinaryFileRDD[T](
       case _ =>
     }
     val jobContext = new JobContextImpl(conf, jobId)
-    inputFormat.setMinPartitions(jobContext, minPartitions)
+    inputFormat.setMinPartitions(sc, jobContext, minPartitions)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
