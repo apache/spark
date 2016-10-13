@@ -1508,6 +1508,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
+    # Regression test for invalid join methods when on is None, Spark-14761
+    def test_invalid_join_method(self):
+        df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
+        df2 = self.spark.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
+        self.assertRaises(IllegalArgumentException, lambda: df1.join(df2, how="invalid-join-type"))
+
     def test_conf(self):
         spark = self.spark
         spark.conf.set("bogo", "sipeo")
@@ -1702,6 +1708,20 @@ class SQLTests(ReusedPySparkTestCase):
             "does_not_exist",
             lambda: spark.catalog.uncacheTable("does_not_exist"))
 
+    def test_read_text_file_list(self):
+        df = self.spark.read.text(['python/test_support/sql/text-test.txt',
+                                   'python/test_support/sql/text-test.txt'])
+        count = df.count()
+        self.assertEquals(count, 4)
+
+    def test_BinaryType_serialization(self):
+        # Pyrolite version <= 4.9 could not serialize BinaryType with Python3 SPARK-17808
+        schema = StructType([StructField('mybytes', BinaryType())])
+        data = [[bytearray(b'here is my data')],
+                [bytearray(b'and here is some more')]]
+        df = self.spark.createDataFrame(data, schema=schema)
+        df.collect()
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
@@ -1850,6 +1870,38 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             ("2", 1, 2, 1, 4, 3, 2, 2, 2),
             ("2", 2, 2, 2, 4, 4, 4, 3, 2)
         ]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+    def test_window_functions_cumulative_sum(self):
+        df = self.spark.createDataFrame([("one", 1), ("two", 2)], ["key", "value"])
+        from pyspark.sql import functions as F
+
+        # Test cumulative sum
+        sel = df.select(
+            df.key,
+            F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding, 0)))
+        rs = sorted(sel.collect())
+        expected = [("one", 1), ("two", 3)]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+        # Test boundary values less than JVM's Long.MinValue and make sure we don't overflow
+        sel = df.select(
+            df.key,
+            F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding - 1, 0)))
+        rs = sorted(sel.collect())
+        expected = [("one", 1), ("two", 3)]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+        # Test boundary values greater than JVM's Long.MaxValue and make sure we don't overflow
+        frame_end = Window.unboundedFollowing + 1
+        sel = df.select(
+            df.key,
+            F.sum(df.value).over(Window.rowsBetween(Window.currentRow, frame_end)))
+        rs = sorted(sel.collect())
+        expected = [("one", 3), ("two", 2)]
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
 

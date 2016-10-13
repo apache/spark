@@ -24,7 +24,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.internal.SQLConf
@@ -729,7 +729,7 @@ object TestingUDT {
         .add("c", DoubleType, nullable = false)
 
     override def serialize(n: NestedStruct): Any = {
-      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
       row.setInt(0, n.a)
       row.setLong(1, n.b)
       row.setDouble(2, n.c)

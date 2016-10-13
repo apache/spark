@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.command.{ColumnStatStruct, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{DataType, StructType}
 
 
@@ -110,6 +111,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
         s"as table property keys may not start with '$DATASOURCE_PREFIX' or '$STATISTICS_PREFIX':" +
         s" ${invalidKeys.mkString("[", ", ", "]")}")
+    }
+    // External users are not allowed to set/switch the table type. In Hive metastore, the table
+    // type can be switched by changing the value of a case-sensitive table property `EXTERNAL`.
+    if (table.properties.contains("EXTERNAL")) {
+      throw new AnalysisException("Cannot set or change the preserved property key: 'EXTERNAL'")
     }
   }
 
@@ -201,11 +207,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Serialized JSON schema string may be too long to be stored into a single metastore table
       // property. In this case, we split the JSON string and store each part as a separate table
       // property.
-      // TODO: the threshold should be set by `spark.sql.sources.schemaStringLengthThreshold`,
-      // however the current SQLConf is session isolated, which is not applicable to external
-      // catalog. We should re-enable this conf instead of hard code the value here, after we have
-      // global SQLConf.
-      val threshold = 4000
+      val threshold = conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
       val schemaJsonString = tableDefinition.schema.json
       // Split the JSON string.
       val parts = schemaJsonString.grouped(threshold).toSeq
@@ -464,13 +466,18 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         } else {
           table.storage
         }
+        val tableProps = if (conf.get(DEBUG_MODE)) {
+          table.properties
+        } else {
+          getOriginalTableProperties(table)
+        }
         table.copy(
           storage = storage,
           schema = getSchemaFromTableProperties(table),
           provider = Some(provider),
           partitionColumnNames = getPartitionColumnsFromTableProperties(table),
           bucketSpec = getBucketSpecFromTableProperties(table),
-          properties = getOriginalTableProperties(table))
+          properties = tableProps)
       } getOrElse {
         table.copy(provider = Some("hive"))
       }
