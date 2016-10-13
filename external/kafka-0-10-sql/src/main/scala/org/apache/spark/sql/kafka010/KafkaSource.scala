@@ -272,17 +272,18 @@ private[kafka010] case class KafkaSource(
     // Poll to get the latest assigned partitions
     consumer.poll(0)
     val partitions = consumer.assignment()
+    consumer.pause(partitions)
     logDebug(s"\tPartitioned assigned to consumer: $partitions")
 
     // Get the earliest offset of each partition
     consumer.seekToBeginning(partitions)
-    val partitionToOffsets = newPartitions.filter { p =>
+    val partitionOffsets = newPartitions.filter { p =>
       // When deleting topics happen at the same time, some partitions may not be in `partitions`.
       // So we need to ignore them
       partitions.contains(p)
     }.map(p => p -> consumer.position(p)).toMap
-    logDebug(s"Got earliest offsets for new partitions: $partitionToOffsets")
-    partitionToOffsets
+    logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
+    partitionOffsets
   }
 
   /**
