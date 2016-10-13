@@ -125,33 +125,23 @@ private[spark] object SerDe {
   }
 
   def readDate(in: DataInputStream): Date = {
-    try {
-      val inStr = readString(in)
-      if (inStr == "NA") {
-        null
-      } else {
-        Date.valueOf(inStr)
-      }
-    } catch {
-      // On windows we get NegativeArraySizeException for NAs in R
-      case _: NegativeArraySizeException => null
+    val inStr = readString(in)
+    if (inStr == "NA") {
+      null
+    } else {
+      Date.valueOf(inStr)
     }
   }
 
   def readTime(in: DataInputStream): Timestamp = {
-    try {
-      val seconds = in.readDouble()
-      if (java.lang.Double.isNaN(seconds)) {
-        null
-      } else {
-        val sec = Math.floor(seconds).toLong
-        val t = new Timestamp(sec * 1000L)
-        t.setNanos(((seconds - sec) * 1e9).toInt)
-        t
-      }
-    } catch {
-      // On windows we get NegativeArraySizeException for NAs in R
-      case _: NegativeArraySizeException => null
+    val seconds = in.readDouble()
+    if (java.lang.Double.isNaN(seconds)) {
+      null
+    } else {
+      val sec = Math.floor(seconds).toLong
+      val t = new Timestamp(sec * 1000L)
+      t.setNanos(((seconds - sec) * 1e9).toInt)
+      t
     }
   }
 
