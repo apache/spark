@@ -26,7 +26,7 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
-class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import PredictorSuite._
 
@@ -75,6 +75,7 @@ object PredictorSuite {
     override def predict(features: Vector): Double =
       throw new NotImplementedError()
 
-    override def copy(extra: ParamMap): MockPredictionModel = defaultCopy(extra)
+    override def copy(extra: ParamMap): MockPredictionModel =
+      throw new NotImplementedError()
   }
 }
