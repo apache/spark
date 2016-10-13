@@ -197,6 +197,8 @@ private[state] class HDFSBackedStateStoreProvider(
       allUpdates.values().asScala.toIterator
     }
 
+    override def numKeys(): Long = mapToUpdate.size()
+
     /**
      * Whether all updates have been committed
      */
