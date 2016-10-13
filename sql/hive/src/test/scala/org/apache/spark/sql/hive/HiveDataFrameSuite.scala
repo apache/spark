@@ -62,6 +62,10 @@ class HiveDataFrameSuite extends QueryTest with TestHiveSingleton with SQLTestUt
         val df3 = spark.sql("select * from test where PARTCOL1 = 3 or partcol2 = 4")
         assert(df3.count() == 2)
         assert(df3.inputFiles.length == 2)
+
+        val df4 = spark.sql("select * from test where partCol1 = 999")
+        assert(df4.count() == 0)
+        assert(df4.inputFiles.length == 0)
       }
     }
   }
