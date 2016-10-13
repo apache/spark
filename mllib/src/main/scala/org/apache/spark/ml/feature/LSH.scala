@@ -261,7 +261,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
 
     // Do a hash join on where the exploded hash values are equal.
     val joinedDataset = explodedA.join(explodedB, explodeCols)
-      .drop(explodeCols: _*)
+      .drop(explodeCols: _*).distinct()
 
     // Add a new column to store the distance of the two records.
     val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y), DataTypes.DoubleType)
@@ -271,7 +271,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
     )
 
     // Filter the joined datasets where the distance are smaller than the threshold.
-    joinedDatasetWithDist.filter(col(distCol) < threshold).distinct()
+    joinedDatasetWithDist.filter(col(distCol) < threshold)
   }
 
   /**
