@@ -32,7 +32,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.functions.{col, lit, udf, rand}
 import org.apache.spark.sql.types.LongType
 
 class LogisticRegressionSuite
@@ -40,6 +40,7 @@ class LogisticRegressionSuite
 
   import testImplicits._
 
+  private val seed = 42
   @transient var smallBinaryDataset: Dataset[_] = _
   @transient var smallMultinomialDataset: Dataset[_] = _
   @transient var binaryDataset: Dataset[_] = _
@@ -49,7 +50,7 @@ class LogisticRegressionSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    smallBinaryDataset = generateLogisticInput(1.0, 1.0, nPoints = 100, seed = 42).toDF()
+    smallBinaryDataset = generateLogisticInput(1.0, 1.0, nPoints = 100, seed = seed).toDF()
 
     smallMultinomialDataset = {
       val nPoints = 100
@@ -61,7 +62,7 @@ class LogisticRegressionSuite
       val xVariance = Array(0.6856, 0.1899)
 
       val testData = generateMultinomialLogisticInput(
-        coefficients, xMean, xVariance, addIntercept = true, nPoints, 42)
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
 
       val df = sc.parallelize(testData, 4).toDF()
       df.cache()
@@ -76,9 +77,9 @@ class LogisticRegressionSuite
 
       val testData =
         generateMultinomialLogisticInput(coefficients, xMean, xVariance,
-          addIntercept = true, nPoints, 42)
+          addIntercept = true, nPoints, seed)
 
-      sc.parallelize(testData, 4).toDF()
+      sc.parallelize(testData, 4).toDF().withColumn("weight", rand(seed))
     }
 
     multinomialDataset = {
@@ -91,9 +92,9 @@ class LogisticRegressionSuite
       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
 
       val testData = generateMultinomialLogisticInput(
-        coefficients, xMean, xVariance, addIntercept = true, nPoints, 42)
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
 
-      val df = sc.parallelize(testData, 4).toDF()
+      val df = sc.parallelize(testData, 4).toDF().withColumn("weight", rand(seed))
       df.cache()
       df
     }
@@ -103,12 +104,12 @@ class LogisticRegressionSuite
    * Enable the ignored test to export the dataset into CSV format,
    * so we can validate the training accuracy compared with R's glmnet package.
    */
-  ignore("export test data into CSV format") {
-    binaryDataset.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+  test("export test data into CSV format") {
+    binaryDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
+      label + "," + weight + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/binaryDataset")
-    multinomialDataset.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+    multinomialDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
+      label + "," + weight + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
   }
 
@@ -519,31 +520,34 @@ class LogisticRegressionSuite
 
   test("binary logistic regression with intercept without regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(true).setStandardization(true)
+      .setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true).setStandardization(false)
+      .setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using glmnet package.
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0, lambda = 0))
+      coefficients
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                          s0
+      (Intercept)  2.7355261
+      data.V3     -0.5734389
+      data.V4      0.8911736
+      data.V5     -0.3878645
+      data.V6     -0.8060570
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 0))
-       coefficients
-
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                           s0
-       (Intercept)  2.8366423
-       data.V2     -0.5895848
-       data.V3      0.8931147
-       data.V4     -0.3925051
-       data.V5     -0.7996864
-     */
-    val interceptR = 2.8366423
-    val coefficientsR = Vectors.dense(-0.5895848, 0.8931147, -0.3925051, -0.7996864)
+    */
+    val coefficientsR = Vectors.dense(-0.5734389, 0.8911736, -0.3878645, -0.8060570)
+    val interceptR = 2.7355261
 
     assert(model1.intercept ~== interceptR relTol 1E-3)
     assert(model1.coefficients ~= coefficientsR relTol 1E-3)
@@ -555,398 +559,358 @@ class LogisticRegressionSuite
 
   test("binary logistic regression without intercept without regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false).setStandardization(true)
+      .setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(false).setStandardization(false)
+      .setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using glmnet package.
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients =
-           coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 0, intercept=FALSE))
-       coefficients
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 0, intercept=FALSE))
+      coefficients
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                          s0
+      (Intercept)  .
+      data.V3     -0.3448461
+      data.V4      1.2776453
+      data.V5     -0.3539178
+      data.V6     -0.7469384
 
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                           s0
-       (Intercept)   .
-       data.V2     -0.3534996
-       data.V3      1.2964482
-       data.V4     -0.3571741
-       data.V5     -0.7407946
-     */
-    val interceptR = 0.0
-    val coefficientsR = Vectors.dense(-0.3534996, 1.2964482, -0.3571741, -0.7407946)
+    */
+    val coefficientsR = Vectors.dense(-0.3448461, 1.2776453, -0.3539178, -0.7469384)
 
-    assert(model1.intercept ~== interceptR relTol 1E-3)
+    assert(model1.intercept ~== 0.0 relTol 1E-3)
     assert(model1.coefficients ~= coefficientsR relTol 1E-2)
 
     // Without regularization, with or without standardization should converge to the same solution.
-    assert(model2.intercept ~== interceptR relTol 1E-3)
+    assert(model2.intercept ~== 0.0 relTol 1E-3)
     assert(model2.coefficients ~= coefficientsR relTol 1E-2)
   }
 
   test("binary logistic regression with intercept with L1 regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
-      .setElasticNetParam(1.0).setRegParam(0.12).setStandardization(true)
+      .setElasticNetParam(1.0).setRegParam(0.12).setStandardization(true).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true)
-      .setElasticNetParam(1.0).setRegParam(0.12).setStandardization(false)
+      .setElasticNetParam(1.0).setRegParam(0.12).setStandardization(false).setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using glmnet package.
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12))
-       coefficients
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 1,
+      lambda = 0.12, standardize=T))
+      coefficients
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept) -0.06775980
+      data.V3      .
+      data.V4      .
+      data.V5     -0.03933146
+      data.V6     -0.03047580
 
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept) -0.05627428
-       data.V2       .
-       data.V3       .
-       data.V4     -0.04325749
-       data.V5     -0.02481551
-     */
-    val interceptR1 = -0.05627428
-    val coefficientsR1 = Vectors.dense(0.0, 0.0, -0.04325749, -0.02481551)
+    */
+    val coefficientsRStd = Vectors.dense(0.0, 0.0, -0.03933146, -0.03047580)
+    val interceptRStd = -0.06775980
 
-    assert(model1.intercept ~== interceptR1 relTol 1E-2)
-    assert(model1.coefficients ~= coefficientsR1 absTol 2E-2)
+    assert(model1.intercept ~== interceptRStd relTol 1E-2)
+    assert(model1.coefficients ~= coefficientsRStd absTol 2E-2)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using glmnet package.
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
-           standardize=FALSE))
-       coefficients
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 1,
+      lambda = 0.12, standardize=F))
+      coefficients
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                          s0
+      (Intercept)  0.3544768
+      data.V3      .
+      data.V4      .
+      data.V5     -0.1626191
+      data.V6      .
 
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                           s0
-       (Intercept)  0.3722152
-       data.V2       .
-       data.V3       .
-       data.V4     -0.1665453
-       data.V5       .
-     */
-    val interceptR2 = 0.3722152
-    val coefficientsR2 = Vectors.dense(0.0, 0.0, -0.1665453, 0.0)
+    */
+    val coefficientsR = Vectors.dense(0.0, 0.0, -0.1626191, 0.0)
+    val interceptR = 0.3544768
 
-    assert(model2.intercept ~== interceptR2 relTol 1E-2)
-    assert(model2.coefficients ~== coefficientsR2 absTol 1E-3)
+    assert(model2.intercept ~== interceptR relTol 1E-2)
+    assert(model2.coefficients ~== coefficientsR absTol 1E-3)
     // TODO: move this to a standalone test of compression after SPARK-17471
     assert(model2.coefficients.isInstanceOf[SparseVector])
   }
 
   test("binary logistic regression without intercept with L1 regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false)
-      .setElasticNetParam(1.0).setRegParam(0.12).setStandardization(true)
+      .setElasticNetParam(1.0).setRegParam(0.12).setStandardization(true).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(false)
-      .setElasticNetParam(1.0).setRegParam(0.12).setStandardization(false)
+      .setElasticNetParam(1.0).setRegParam(0.12).setStandardization(false).setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using glmnet package.
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
-           intercept=FALSE))
-       coefficients
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 1,
+      lambda = 0.12, intercept=F, standardize=T))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 1,
+      lambda = 0.12, intercept=F, standardize=F))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  .
+      data.V3      .
+      data.V4      .
+      data.V5     -0.04967635
+      data.V6     -0.04757757
 
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept)   .
-       data.V2       .
-       data.V3       .
-       data.V4     -0.05189203
-       data.V5     -0.03891782
-     */
-    val interceptR1 = 0.0
-    val coefficientsR1 = Vectors.dense(0.0, 0.0, -0.05189203, -0.03891782)
+      coefficients
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  .
+      data.V3      .
+      data.V4      .
+      data.V5     -0.08433195
+      data.V6      .
 
-    assert(model1.intercept ~== interceptR1 relTol 1E-3)
-    assert(model1.coefficients ~= coefficientsR1 absTol 1E-3)
+    */
+    val coefficientsRStd = Vectors.dense(0.0, 0.0, -0.04967635, -0.04757757)
 
-    /*
-       Using the following R code to load the data and train the model using glmnet package.
+    val coefficientsR = Vectors.dense(0.0, 0.0, -0.08433195, 0.0)
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
-           intercept=FALSE, standardize=FALSE))
-       coefficients
-
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept)   .
-       data.V2       .
-       data.V3       .
-       data.V4     -0.08420782
-       data.V5       .
-     */
-    val interceptR2 = 0.0
-    val coefficientsR2 = Vectors.dense(0.0, 0.0, -0.08420782, 0.0)
-
-    assert(model2.intercept ~== interceptR2 absTol 1E-3)
-    assert(model2.coefficients ~= coefficientsR2 absTol 1E-3)
+    assert(model1.intercept ~== 0.0 absTol 1E-3)
+    assert(model1.coefficients ~= coefficientsRStd absTol 1E-3)
+    assert(model2.intercept ~== 0.0 absTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR absTol 1E-3)
   }
 
   test("binary logistic regression with intercept with L2 regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
-      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(true)
+      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(true).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true)
-      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(false)
+      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(false).setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using glmnet package.
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37))
-       coefficients
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 1.37, standardize=T))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 1.37, standardize=F))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  0.12707703
+      data.V3     -0.06980967
+      data.V4      0.10803933
+      data.V5     -0.04800404
+      data.V6     -0.10165096
 
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept)  0.15021751
-       data.V2     -0.07251837
-       data.V3      0.10724191
-       data.V4     -0.04865309
-       data.V5     -0.10062872
-     */
-    val interceptR1 = 0.15021751
-    val coefficientsR1 = Vectors.dense(-0.07251837, 0.10724191, -0.04865309, -0.10062872)
+      coefficients
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  0.46613016
+      data.V3     -0.04944529
+      data.V4      0.02326772
+      data.V5     -0.11362772
+      data.V6     -0.06312848
 
-    assert(model1.intercept ~== interceptR1 relTol 1E-3)
-    assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+    */
+    val coefficientsRStd = Vectors.dense(-0.06980967, 0.10803933, -0.04800404, -0.10165096)
+    val interceptRStd = 0.12707703
+    val coefficientsR = Vectors.dense(-0.04944529, 0.02326772, -0.11362772, -0.06312848)
+    val interceptR = 0.46613016
 
-    /*
-       Using the following R code to load the data and train the model using glmnet package.
-
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
-           standardize=FALSE))
-       coefficients
-
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept)  0.48657516
-       data.V2     -0.05155371
-       data.V3      0.02301057
-       data.V4     -0.11482896
-       data.V5     -0.06266838
-     */
-    val interceptR2 = 0.48657516
-    val coefficientsR2 = Vectors.dense(-0.05155371, 0.02301057, -0.11482896, -0.06266838)
-
-    assert(model2.intercept ~== interceptR2 relTol 1E-3)
-    assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+    assert(model1.intercept ~== interceptRStd relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsRStd relTol 1E-3)
+    assert(model2.intercept ~== interceptR relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR relTol 1E-3)
   }
 
   test("binary logistic regression without intercept with L2 regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false)
-      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(true)
+      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(true).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(false)
-      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(false)
+      .setElasticNetParam(0.0).setRegParam(1.37).setStandardization(false).setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using glmnet package.
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
-           intercept=FALSE))
-       coefficients
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 1.37, intercept=F, standardize=T))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 1.37, intercept=F, standardize=F))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  .
+      data.V3     -0.06000152
+      data.V4      0.12598737
+      data.V5     -0.04669009
+      data.V6     -0.09941025
 
-       5 x 1 sparse Matrix of class "dgCMatrix"
+      coefficients
+      5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
-       (Intercept)   .
-       data.V2     -0.06099165
-       data.V3      0.12857058
-       data.V4     -0.04708770
-       data.V5     -0.09799775
-     */
-    val interceptR1 = 0.0
-    val coefficientsR1 = Vectors.dense(-0.06099165, 0.12857058, -0.04708770, -0.09799775)
+      (Intercept)  .
+      data.V3     -0.005482255
+      data.V4      0.048106338
+      data.V5     -0.093411640
+      data.V6     -0.054149798
 
-    assert(model1.intercept ~== interceptR1 absTol 1E-3)
-    assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
+    */
+    val coefficientsRStd = Vectors.dense(-0.06000152, 0.12598737, -0.04669009, -0.09941025)
+    val coefficientsR = Vectors.dense(-0.005482255, 0.048106338, -0.093411640, -0.054149798)
 
-    /*
-       Using the following R code to load the data and train the model using glmnet package.
-
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
-           intercept=FALSE, standardize=FALSE))
-       coefficients
-
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                             s0
-       (Intercept)   .
-       data.V2     -0.005679651
-       data.V3      0.048967094
-       data.V4     -0.093714016
-       data.V5     -0.053314311
-     */
-    val interceptR2 = 0.0
-    val coefficientsR2 = Vectors.dense(-0.005679651, 0.048967094, -0.093714016, -0.053314311)
-
-    assert(model2.intercept ~== interceptR2 absTol 1E-3)
-    assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
+    assert(model1.intercept ~== 0.0 absTol 1E-3)
+    assert(model1.coefficients ~= coefficientsRStd relTol 1E-2)
+    assert(model2.intercept ~== 0.0 absTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR relTol 1E-2)
   }
 
   test("binary logistic regression with intercept with ElasticNet regularization") {
-    val trainer1 = (new LogisticRegression).setFitIntercept(true)
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
+    val trainer1 = (new LogisticRegression).setFitIntercept(true).setMaxIter(200)
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true)
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false).setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using glmnet package.
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21))
-       coefficients
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0.38,
+      lambda = 0.21, standardize=T))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0.38,
+      lambda = 0.21, standardize=F))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  0.49991996
+      data.V3     -0.04131110
+      data.V4      .
+      data.V5     -0.08585233
+      data.V6     -0.15875400
 
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept)  0.57734851
-       data.V2     -0.05310287
-       data.V3       .
-       data.V4     -0.08849250
-       data.V5     -0.15458796
-     */
-    val interceptR1 = 0.57734851
-    val coefficientsR1 = Vectors.dense(-0.05310287, 0.0, -0.08849250, -0.15458796)
+      coefficients
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                          s0
+      (Intercept)  0.5024256
+      data.V3      .
+      data.V4      .
+      data.V5     -0.1846038
+      data.V6     -0.0559614
 
-    assert(model1.intercept ~== interceptR1 relTol 6E-3)
-    assert(model1.coefficients ~== coefficientsR1 absTol 5E-3)
+    */
+    val coefficientsRStd = Vectors.dense(-0.04131110, 0.0, -0.08585233, -0.15875400)
+    val interceptRStd = 0.49991996
+    val coefficientsR = Vectors.dense(0.0, 0.0, -0.1846038, -0.0559614)
+    val interceptR = 0.5024256
 
-    /*
-       Using the following R code to load the data and train the model using glmnet package.
-
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
-           standardize=FALSE))
-       coefficients
-
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept)  0.51555993
-       data.V2       .
-       data.V3       .
-       data.V4     -0.18807395
-       data.V5     -0.05350074
-     */
-    val interceptR2 = 0.51555993
-    val coefficientsR2 = Vectors.dense(0.0, 0.0, -0.18807395, -0.05350074)
-
-    assert(model2.intercept ~== interceptR2 relTol 6E-3)
-    assert(model2.coefficients ~= coefficientsR2 absTol 1E-3)
+    assert(model1.intercept ~== interceptRStd relTol 6E-3)
+    assert(model1.coefficients ~== coefficientsRStd absTol 5E-3)
+    assert(model2.intercept ~== interceptR relTol 6E-3)
+    assert(model2.coefficients ~= coefficientsR absTol 1E-3)
   }
 
   test("binary logistic regression without intercept with ElasticNet regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false)
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true)
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(true).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(false)
-      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false)
+      .setElasticNetParam(0.38).setRegParam(0.21).setStandardization(false).setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
+      Use the following R code to load the data and train the model using glmnet package.
 
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
-           intercept=FALSE))
-       coefficients
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = factor(data$V1)
+      w = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0.38,
+      lambda = 0.21, intercept=FALSE, standardize=T))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0.38,
+      lambda = 0.21, intercept=FALSE, standardize=F))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  .
+      data.V3      .
+      data.V4      0.06859390
+      data.V5     -0.07900058
+      data.V6     -0.14684320
 
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept)   .
-       data.V2     -0.001005743
-       data.V3      0.072577857
-       data.V4     -0.081203769
-       data.V5     -0.142534158
-     */
-    val interceptR1 = 0.0
-    val coefficientsR1 = Vectors.dense(-0.001005743, 0.072577857, -0.081203769, -0.142534158)
+      coefficients
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                           s0
+      (Intercept)  .
+      data.V3      .
+      data.V4      0.03060637
+      data.V5     -0.11126742
+      data.V6      .
 
-    assert(model1.intercept ~== interceptR1 relTol 1E-3)
-    assert(model1.coefficients ~= coefficientsR1 absTol 1E-2)
+    */
+    val coefficientsRStd = Vectors.dense(0.0, 0.06859390, -0.07900058, -0.14684320)
+    val coefficientsR = Vectors.dense(0.0, 0.03060637, -0.11126742, 0.0)
 
-    /*
-       Using the following R code to load the data and train the model using glmnet package.
-
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
-           intercept=FALSE, standardize=FALSE))
-       coefficients
-
-       5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept)   .
-       data.V2       .
-       data.V3      0.03345223
-       data.V4     -0.11304532
-       data.V5       .
-     */
-    val interceptR2 = 0.0
-    val coefficientsR2 = Vectors.dense(0.0, 0.03345223, -0.11304532, 0.0)
-
-    assert(model2.intercept ~== interceptR2 absTol 1E-3)
-    assert(model2.coefficients ~= coefficientsR2 absTol 1E-3)
+    assert(model1.intercept ~== 0.0 relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsRStd absTol 1E-2)
+    assert(model2.intercept ~== 0.0 absTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR absTol 1E-3)
   }
 
   test("binary logistic regression with intercept with strong L1 regularization") {
@@ -1069,51 +1033,58 @@ class LogisticRegressionSuite
 
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(true).setMaxIter(100)
+      .setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(false)
+      .setWeightCol("weight")
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
-       > library("glmnet")
-       > data <- read.csv("path", header=FALSE)
-       > label = as.factor(data$V1)
-       > features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       > coefficients = coef(glmnet(features, label, family="multinomial", alpha = 0, lambda = 0))
-       > coefficients
-        $`0`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                    s0
-           -2.24493379
-        V2  0.25096771
-        V3 -0.03915938
-        V4  0.14766639
-        V5  0.36810817
-        $`1`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                   s0
-            0.3778931
-        V2 -0.3327489
-        V3  0.8893666
-        V4 -0.2306948
-        V5 -0.4442330
-        $`2`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                    s0
-            1.86704066
-        V2  0.08178121
-        V3 -0.85020722
-        V4  0.08302840
-        V5  0.07612480
-     */
+      Use the following R code to load the data and train the model using glmnet package.
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = as.factor(data$V1)
+      weight = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficients = coef(glmnet(features, label, weights=weight, family="multinomial",
+       alpha = 0, lambda = 0))
+      coefficients
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+              -2.26407366
+      data.V3  0.24836587
+      data.V4 -0.01856738
+      data.V5  0.13855276
+      data.V6  0.37194277
 
+      $`1`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                      s0
+               0.5183209
+      data.V3 -0.3400321
+      data.V4  0.8523161
+      data.V5 -0.2258944
+      data.V6 -0.4525485
+
+      $`2`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+               1.74575273
+      data.V3  0.09166618
+      data.V4 -0.83374867
+      data.V5  0.08734163
+      data.V6  0.08060576
+
+
+    */
     val coefficientsR = new DenseMatrix(3, 4, Array(
-      0.2509677, -0.0391594, 0.1476664, 0.3681082,
-      -0.3327489, 0.8893666, -0.2306948, -0.4442330,
-      0.0817812, -0.8502072, 0.0830284, 0.0761248), isTransposed = true)
-    val interceptsR = Vectors.dense(-2.2449338, 0.3778931, 1.8670407)
+      0.24836587, -0.01856738, 0.13855276, 0.37194277,
+      -0.3400321, 0.8523161, -0.2258944, -0.4525485,
+      0.09166618, -0.83374867, 0.08734163, 0.08060576), isTransposed = true)
+    val interceptsR = Vectors.dense(-2.26407366, 0.5183209, 1.74575273)
 
     assert(model1.coefficientMatrix ~== coefficientsR relTol 0.05)
     assert(model1.coefficientMatrix.toArray.sum ~== 0.0 absTol eps)
@@ -1129,51 +1100,57 @@ class LogisticRegressionSuite
 
     val trainer1 = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(true)
+      .setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(false)
+      .setWeightCol("weight")
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
 
     /*
-       Using the following R code to load the data and train the model using glmnet package.
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = as.factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features, label, family="multinomial", alpha = 0, lambda = 0,
-        intercept=F))
-       > coefficients
-        $`0`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                    s0
-            .
-        V2  0.06992464
-        V3 -0.36562784
-        V4  0.12142680
-        V5  0.32052211
-        $`1`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                   s0
-            .
-        V2 -0.3036269
-        V3  0.9449630
-        V4 -0.2271038
-        V5 -0.4364839
-        $`2`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                   s0
-            .
-        V2  0.2337022
-        V3 -0.5793351
-        V4  0.1056770
-        V5  0.1159618
-     */
+      Use the following R code to load the data and train the model using glmnet package.
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = as.factor(data$V1)
+      weight = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficients = coef(glmnet(features, label, weights=weight, family="multinomial", alpha = 0,
+      lambda = 0, intercept=F))
+      coefficients
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+               .
+      data.V3  0.06594469
+      data.V4 -0.34953939
+      data.V5  0.11369818
+      data.V6  0.32271530
 
+      $`1`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                      s0
+               .
+      data.V3 -0.2998636
+      data.V4  0.9301540
+      data.V5 -0.2211341
+      data.V6 -0.4421293
+
+      $`2`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                      s0
+               .
+      data.V3  0.2339189
+      data.V4 -0.5806146
+      data.V5  0.1074359
+      data.V6  0.1194140
+
+
+    */
     val coefficientsR = new DenseMatrix(3, 4, Array(
-      0.0699246, -0.3656278, 0.1214268, 0.3205221,
-      -0.3036269, 0.9449630, -0.2271038, -0.4364839,
-      0.2337022, -0.5793351, 0.1056770, 0.1159618), isTransposed = true)
+      0.06594469, -0.34953939, 0.11369818, 0.32271530,
+      -0.2998636, 0.9301540, -0.2211341, -0.4421293,
+      0.2339189, -0.5806146, 0.1074359, 0.1194140), isTransposed = true)
 
     assert(model1.coefficientMatrix ~== coefficientsR relTol 0.05)
     assert(model1.coefficientMatrix.toArray.sum ~== 0.0 absTol eps)
@@ -1190,92 +1167,94 @@ class LogisticRegressionSuite
     // use tighter constraints because OWL-QN solver takes longer to converge
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(1.0).setRegParam(0.05).setStandardization(true)
-      .setMaxIter(300).setTol(1e-10)
+      .setMaxIter(300).setTol(1e-10).setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(1.0).setRegParam(0.05).setStandardization(false)
-      .setMaxIter(300).setTol(1e-10)
+      .setMaxIter(300).setTol(1e-10).setWeightCol("weight")
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
 
     /*
-       Use the following R code to load the data and train the model using glmnet package.
-       library("glmnet")
-       data <- read.csv("path", header=FALSE)
-       label = as.factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficientsStd = coef(glmnet(features, label, family="multinomial", alpha = 1,
-        lambda = 0.05, standardization=T))
-       coefficients = coef(glmnet(features, label, family="multinomial", alpha = 1, lambda = 0.05,
-        standardization=F))
-       > coefficientsStd
-        $`0`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                    s0
-           -0.68988825
-        V2  .
-        V3  .
-        V4  .
-        V5  0.09404023
+      Use the following R code to load the data and train the model using glmnet package.
+      library("glmnet")
+      data <- read.csv("path", header=FALSE)
+      label = as.factor(data$V1)
+      weight = data$V2
+      features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+      coefficientsStd = coef(glmnet(features, label, weights=weight, family="multinomial",
+      alpha = 1, lambda = 0.05, standardize=T))
+      coefficients = coef(glmnet(features, label, weights=weight, family="multinomial", alpha = 1,
+      lambda = 0.05, standardize=F))
+      coefficientsStd
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+              -0.76701029
+      data.V3  .
+      data.V4  .
+      data.V5  .
+      data.V6  0.09031454
 
-        $`1`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                   s0
-           -0.2303499
-        V2 -0.1232443
-        V3  0.3258380
-        V4 -0.1564688
-        V5 -0.2053965
+      $`1`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+              -0.09528871
+      data.V3 -0.13538344
+      data.V4  0.27385747
+      data.V5 -0.14871406
+      data.V6 -0.21843812
 
-        $`2`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                   s0
-            0.9202381
-        V2  .
-        V3 -0.4803856
-        V4  .
-        V5  .
+      $`2`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                      s0
+               0.8622990
+      data.V3  .
+      data.V4 -0.4840156
+      data.V5  .
+      data.V6  .
 
-       > coefficients
-        $`0`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                    s0
-           -0.44893320
-        V2  .
-        V3  .
-        V4  0.01933812
-        V5  0.03666044
 
-        $`1`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                   s0
-            0.7376760
-        V2 -0.0577182
-        V3  .
-        V4 -0.2081718
-        V5 -0.1304592
+      coefficients
+      $`0`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                        s0
+              -0.443583080
+      data.V3  .
+      data.V4  .
+      data.V5  0.008861293
+      data.V6  0.029530208
 
-        $`2`
-        5 x 1 sparse Matrix of class "dgCMatrix"
-                   s0
-           -0.2887428
-        V2  .
-        V3  .
-        V4  .
-        V5  .
-     */
+      $`1`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                       s0
+               0.76748285
+      data.V3 -0.07049581
+      data.V4  .
+      data.V5 -0.20418393
+      data.V6 -0.14256018
 
+      $`2`
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                      s0
+              -0.3238998
+      data.V3  .
+      data.V4  .
+      data.V5  .
+      data.V6  .
+
+
+    */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
-      0.0, 0.0, 0.0, 0.09404023,
-      -0.1232443, 0.3258380, -0.1564688, -0.2053965,
-      0.0, -0.4803856, 0.0, 0.0), isTransposed = true)
-    val interceptsRStd = Vectors.dense(-0.68988825, -0.2303499, 0.9202381)
-
+      0.0, 0.0, 0.0, 0.09031454,
+      -0.13538344, 0.27385747, -0.14871406, -0.21843812,
+      0.0, -0.4840156, 0.0, 0.0), isTransposed = true)
+    val interceptsRStd = Vectors.dense(-0.76701029, -0.09528871, 0.8622990)
     val coefficientsR = new DenseMatrix(3, 4, Array(
-      0.0, 0.0, 0.01933812, 0.03666044,
-      -0.0577182, 0.0, -0.2081718, -0.1304592,
+      0.0, 0.0, 0.008861293, 0.029530208,
+      -0.07049581, 0.0, -0.20418393, -0.14256018,
       0.0, 0.0, 0.0, 0.0), isTransposed = true)
-    val interceptsR = Vectors.dense(-0.44893320, 0.7376760, -0.2887428)
+    val interceptsR = Vectors.dense(-0.443583080, 0.76748285, -0.3238998)
 
     assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.02)
     assert(model1.interceptVector ~== interceptsRStd relTol 0.1)
@@ -1381,8 +1360,10 @@ class LogisticRegressionSuite
   test("multinomial logistic regression with intercept with L2 regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(0.1).setStandardization(true)
+      .setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(true)
       .setElasticNetParam(0.0).setRegParam(0.1).setStandardization(false)
+      .setWeightCol("weight")
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
@@ -1391,79 +1372,79 @@ class LogisticRegressionSuite
       library("glmnet")
       data <- read.csv("path", header=FALSE)
       label = as.factor(data$V1)
-      features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-      coefficientsStd = coef(glmnet(features, label, family="multinomial", alpha = 0,
-      lambda = 0.1, intercept=T, standardization=T))
-      coefficients = coef(glmnet(features, label, family="multinomial", alpha = 0,
-      lambda = 0.1, intercept=T, standardization=F))
-      > coefficientsStd
+      weight = data$V2
+      features = as.matrix(data.frame( data$V3, data$V4, data$V5, data$V6))
+      coefficientsStd = coef(glmnet(features, label, weights=weight, family="multinomial",
+       alpha = 0, lambda = 0.1, intercept=T, standardize=T))
+      coefficients = coef(glmnet(features, label, weights=weight, family="multinomial", alpha = 0,
+       lambda = 0.1, intercept=T, standardize=F))
+      coefficientsStd
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
-                  s0
-         -1.70040424
-      V2  0.17576070
-      V3  0.01527894
-      V4  0.10216108
-      V5  0.26099531
+                       s0
+              -1.69548033
+      data.V3  0.17484835
+      data.V4  0.01855720
+      data.V5  0.09809105
+      data.V6  0.26464443
 
       $`1`
       5 x 1 sparse Matrix of class "dgCMatrix"
-                 s0
-          0.2438590
-      V2 -0.2238875
-      V3  0.5967610
-      V4 -0.1555496
-      V5 -0.3010479
+                      s0
+               0.2151794
+      data.V3 -0.2214038
+      data.V4  0.6056317
+      data.V5 -0.1554254
+      data.V6 -0.3182281
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
-                  s0
-          1.45654525
-      V2  0.04812679
-      V3 -0.61203992
-      V4  0.05338850
-      V5  0.04005258
+                       s0
+               1.48030090
+      data.V3  0.04655541
+      data.V4 -0.62418893
+      data.V5  0.05733435
+      data.V6  0.05358365
 
-      > coefficients
+      coefficients
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
-                  s0
-         -1.65488543
-      V2  0.15715048
-      V3  0.01992903
-      V4  0.12428858
-      V5  0.22130317
+                       s0
+              -1.65194217
+      data.V3  0.15734371
+      data.V4  0.02242699
+      data.V5  0.11930970
+      data.V6  0.22592388
 
       $`1`
       5 x 1 sparse Matrix of class "dgCMatrix"
-                 s0
-          1.1297533
-      V2 -0.1974768
-      V3  0.2776373
-      V4 -0.1869445
-      V5 -0.2510320
+                      s0
+               1.1205455
+      data.V3 -0.1965043
+      data.V4  0.2825469
+      data.V5 -0.1865361
+      data.V6 -0.2682062
 
       $`2`
       5 x 1 sparse Matrix of class "dgCMatrix"
-                  s0
-          0.52513212
-      V2  0.04032627
-      V3 -0.29756637
-      V4  0.06265594
-      V5  0.02972883
+                       s0
+               0.53139667
+      data.V3  0.03916056
+      data.V4 -0.30497393
+      data.V5  0.06722636
+      data.V6  0.04228228
      */
 
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
-      0.17576070, 0.01527894, 0.10216108, 0.26099531,
-      -0.2238875, 0.5967610, -0.1555496, -0.3010479,
-      0.04812679, -0.61203992, 0.05338850, 0.04005258), isTransposed = true)
-    val interceptsRStd = Vectors.dense(-1.70040424, 0.2438590, 1.45654525)
-
+      0.17484835, 0.01855720, 0.09809105, 0.26464443,
+      -0.2214038, 0.6056317, -0.1554254, -0.3182281,
+      0.04655541, -0.62418893, 0.05733435, 0.05358365), isTransposed = true)
+    val interceptsRStd = Vectors.dense(-1.69548033, 0.2151794, 1.48030090)
     val coefficientsR = new DenseMatrix(3, 4, Array(
-      0.15715048, 0.01992903, 0.12428858, 0.22130317,
-      -0.1974768, 0.2776373, -0.1869445, -0.2510320,
-      0.04032627, -0.29756637, 0.06265594, 0.02972883), isTransposed = true)
-    val interceptsR = Vectors.dense(-1.65488543, 1.1297533, 0.52513212)
+      0.15734371, 0.02242699, 0.11930970, 0.22592388,
+      -0.1965043, 0.2825469, -0.1865361, -0.2682062,
+      0.03916056, -0.30497393, 0.06722636, 0.04228228), isTransposed = true)
+    val interceptsR = Vectors.dense(-1.65194217, 1.1205455, 0.53139667)
 
     assert(model1.coefficientMatrix ~== coefficientsRStd relTol 0.05)
     assert(model1.interceptVector ~== interceptsRStd relTol 0.05)
@@ -1476,8 +1457,10 @@ class LogisticRegressionSuite
   test("multinomial logistic regression without intercept with L2 regularization") {
     val trainer1 = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0).setRegParam(0.1).setStandardization(true)
+      .setWeightCol("weight")
     val trainer2 = (new LogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0).setRegParam(0.1).setStandardization(false)
+      .setWeightCol("weight")
 
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
