@@ -83,13 +83,11 @@ public final class NioBufferedFileInputStream extends InputStream {
 
   @Override
   public synchronized int read(byte[] b, int offset, int len) throws IOException {
-    if (!refill()) {
-      return -1;
-    }
     if ((offset | len | (offset + len) | (b.length - (offset + len))) < 0) {
       throw new IndexOutOfBoundsException();
-    } else if (len == 0) {
-      return 0;
+    }
+    if (!refill()) {
+      return -1;
     }
     len = Math.min(len, byteBuffer.remaining());
     byteBuffer.get(b, offset, len);
@@ -132,8 +130,13 @@ public final class NioBufferedFileInputStream extends InputStream {
   }
 
   @Override
-  public void close() throws IOException {
+  public synchronized void close() throws IOException {
     fileChannel.close();
     StorageUtils.dispose(byteBuffer);
+  }
+
+  @Override
+  protected void finalize() throws IOException {
+      close();
   }
 }
