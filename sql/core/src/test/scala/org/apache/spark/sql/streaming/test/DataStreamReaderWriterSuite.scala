@@ -125,6 +125,21 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("memory streams don't accept checkpoint location") {
+    val e = intercept[AnalysisException] {
+      spark.readStream
+        .format("org.apache.spark.sql.streaming.test")
+        .load()
+        .writeStream
+        .format("memory")
+        .option("checkpointLocation", "some/place")
+        .start("over/the/rainbow")
+    }
+    Seq("Memory", "do not recover", "checkpoints", "'checkpointLocation'").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
   test("resolve default source") {
     spark.readStream
       .format("org.apache.spark.sql.streaming.test")

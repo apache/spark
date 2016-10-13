@@ -222,9 +222,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
+      if (extraOptions.get("checkpointLocation").isDefined) {
+        throw new AnalysisException("Memory streams do not recover from checkpoints. Please " +
+          "remove the 'checkpointLocation' option.")
+      }
       val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
-        extraOptions.get("checkpointLocation"),
+        None,
         df,
         sink,
         outputMode,
