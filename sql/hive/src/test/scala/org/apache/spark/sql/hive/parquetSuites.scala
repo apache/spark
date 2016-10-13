@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
-case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
+case class ParquetDataWithKey(pQ: Int, intField: Int, stringField: String)
 
 case class StructContainer(intStructField: Int, stringStructField: String)
 
@@ -45,7 +45,7 @@ case class ParquetDataWithComplexTypes(
     arrayField: Seq[Int])
 
 case class ParquetDataWithKeyAndComplexTypes(
-    p: Int,
+    pQ: Int,
     intField: Int,
     stringField: String,
     structField: StructContainer,
@@ -650,7 +650,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       CREATE TEMPORARY VIEW normal_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
-        path '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
+        path '${new File(partitionedTableDir, "pQ=1").getCanonicalPath}'
       )
     """)
 
