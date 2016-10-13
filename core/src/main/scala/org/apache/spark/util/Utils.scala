@@ -1469,9 +1469,8 @@ private[spark] object Utils extends Logging {
   }
 
   /** Return a string containing part of a file from byte 'start' to 'end'. */
-  def offsetBytes(path: String, fileSize: Long, start: Long, end: Long): String = {
+  def offsetBytes(path: String, length: Long, start: Long, end: Long): String = {
     val file = new File(path)
-    val length = getFileLength(file)
     val effectiveEnd = math.min(length, end)
     val effectiveStart = math.max(0, start)
     val buff = new Array[Byte]((effectiveEnd-effectiveStart).toInt)

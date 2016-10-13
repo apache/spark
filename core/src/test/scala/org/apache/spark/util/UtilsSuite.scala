@@ -284,7 +284,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
   }
 
-  def writeLogFile(path: String, content: Array[Byte]): Long = {
+  def writeLogFile(path: String, content: Array[Byte]): Unit = {
     val outputStream = if (path.endsWith(".gz")) {
       new GZIPOutputStream(new FileOutputStream(path))
     } else {
