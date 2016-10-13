@@ -208,17 +208,17 @@ class SQLContext(object):
         """Register a java UDF so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it would infer the returnType via reflection.
+        When the return type is not specified we would infer it via reflection.
         :param name:  name of the UDF
         :param javaClassName: fully qualified name of java class
         :param returnType: a :class:`pyspark.sql.types.DataType` object
 
         >>> sqlContext.registerJavaFunction("javaStringLength",
-        ...   "org.apache.spark.sql.test.JavaStringLength", IntegerType())
+        ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
         >>> sqlContext.sql("SELECT javaStringLength('test')").collect()
         [Row(UDF(test)=4)]
         >>> sqlContext.registerJavaFunction("javaStringLength2",
-        ...   "org.apache.spark.sql.test.JavaStringLength")
+        ...   "test.org.apache.spark.sql.JavaStringLength")
         >>> sqlContext.sql("SELECT javaStringLength2('test')").collect()
         [Row(UDF(test)=4)]
 

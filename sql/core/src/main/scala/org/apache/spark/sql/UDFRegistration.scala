@@ -23,11 +23,13 @@ import java.lang.reflect.{ParameterizedType, Type}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
+import com.google.common.reflect.TypeToken
+
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
+import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
@@ -425,7 +427,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @param returnDataType  return type of udf. If it is null, spark would try to infer
    *                        via reflection.
    */
-  def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
+  private[sql] def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
 
     try {
       val clazz = Utils.classForName(className)
@@ -443,20 +445,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
           val udfReturnType = udfInterfaces(0).getActualTypeArguments.last
           var returnType = returnDataType
           if (returnType == null) {
-            if (udfReturnType.isInstanceOf[Class[_]]) {
-              returnType = udfReturnType.asInstanceOf[Class[_]].getCanonicalName match {
-                case "java.lang.String" => DataTypes.BooleanType
-                case "java.lang.Double" => DataTypes.DoubleType
-                case "java.lang.Float" => DataTypes.FloatType
-                case "java.lang.Byte" => DataTypes.ByteType
-                case "java.lang.Integer" => DataTypes.IntegerType
-                case "java.lang.Long" => DataTypes.LongType
-                case "java.lang.Short" => DataTypes.ShortType
-                case t => throw new RuntimeException("Can not infer the return type: ${udfReturnType}, please declare returnType explicitly.")
-              }
-            } else {
-              throw new RuntimeException("The return type of UDF is not valid, returnType:" + udfReturnType)
-            }
+            returnType = JavaTypeInference.inferDataType(TypeToken.of(udfReturnType))._1
           }
 
           udfInterfaces(0).getActualTypeArguments.length match {

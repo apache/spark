@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test;
+package test.org.apache.spark.sql;
 
 import org.apache.spark.sql.api.java.UDF1;
 
