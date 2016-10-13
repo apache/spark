@@ -589,14 +589,20 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
         // Check it with pruning predicates
         checkAnswer(
+          sql("SELECT * FROM test_added_partitions where b = 0"),
+          Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+        checkAnswer(
           sql("SELECT * FROM test_added_partitions where b = 1"),
           Seq(("baz", 1)).toDF("a", "b"))
         checkAnswer(
-          sql("SELECT * FROM test_added_partitions where b = 0"),
-          Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+          sql("SELECT * FROM test_added_partitions where b = 2"),
+          Seq[(String, Int)]().toDF("a", "b"))
 
         // Also verify the inputFiles implementation
         assert(sql("select * from test_added_partitions").inputFiles.length == 2)
+        assert(sql("select * from test_added_partitions where b = 0").inputFiles.length == 1)
+        assert(sql("select * from test_added_partitions where b = 1").inputFiles.length == 1)
+        assert(sql("select * from test_added_partitions where b = 2").inputFiles.length == 0)
       }
     }
   }

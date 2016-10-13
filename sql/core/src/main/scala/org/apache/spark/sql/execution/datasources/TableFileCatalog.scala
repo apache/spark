@@ -113,20 +113,6 @@ private class PrunedTableFileCatalog(
     override val partitionSpec: PartitionSpec)
   extends ListingFileCatalog(
     sparkSession,
-    PrunedTableFileCatalog.getPaths(tableBasePath, partitionSpec),
+    partitionSpec.partitions.map(_.path),
     Map.empty,
-    Some(partitionSpec.partitionColumns)) {
-}
-
-object PrunedTableFileCatalog {
-  /** Get the list of paths to list files in the for a metastore table */
-  def getPaths(tableBasePath: Path, partitionSpec: PartitionSpec): Seq[Path] = {
-    // If there are no partitions currently specified then use base path,
-    // otherwise use the paths corresponding to the partitions.
-    if (partitionSpec.partitions.isEmpty) {
-      Seq(tableBasePath)
-    } else {
-      partitionSpec.partitions.map(_.path)
-    }
-  }
-}
+    Some(partitionSpec.partitionColumns))
