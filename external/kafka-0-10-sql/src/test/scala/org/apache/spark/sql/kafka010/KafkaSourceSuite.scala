@@ -26,7 +26,6 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.streaming.StreamingQueryListenerSuite.QueryStatusCollector
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 
