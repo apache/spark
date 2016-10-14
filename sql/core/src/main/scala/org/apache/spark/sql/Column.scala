@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -1181,13 +1181,11 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
 
 /**
- * :: Experimental ::
  * A convenient class used for constructing schema.
  *
  * @since 1.3.0
  */
-@Experimental
-@InterfaceStability.Evolving
+@InterfaceStability.Stable
 class ColumnName(name: String) extends Column(name) {
 
   /**
