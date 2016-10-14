@@ -606,13 +606,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           // This testcase verifies that setting `hive.default.fileformat` has no impact on
           // the target table's fileformat in case of CTAS.
           assert(sessionState.conf.defaultDataSourceName === "parquet")
-          checkRelation(table, isDataSourceTable = true, "parquet")
+          checkRelation(tableName = table, isDataSourceTable = true, format = "parquet")
         }
       }
       withSQLConf("spark.sql.sources.default" -> "orc") {
         withTable(table) {
           sql(ctas)
-          checkRelation(table, isDataSourceTable = true, "orc")
+          checkRelation(tableName = table, isDataSourceTable = true, format = "orc")
          }
       }
     }
