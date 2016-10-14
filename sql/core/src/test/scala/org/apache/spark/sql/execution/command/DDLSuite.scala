@@ -1718,13 +1718,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     // When case sensitivity is true, the user supplied database name in table identifier
     // should match the supplied database name in case sensitive way.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val tabName = "showcolumn"
-      withTable(tabName) {
-        sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
-        val message = intercept[AnalysisException] {
-        sql(s"SHOW COLUMNS IN default.showcolumn FROM DEFAULT")
-      }.getMessage
-      assert(message.contains("SHOW COLUMNS with conflicting databases"))
+      withTempDatabase { db =>
+        val tabName = s"$db.showcolumn"
+        withTable(tabName) {
+          sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
+          val message = intercept[AnalysisException] {
+          sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase}")
+          }.getMessage
+          assert(message.contains("SHOW COLUMNS with conflicting databases"))
+        }
       }
     }
   }
