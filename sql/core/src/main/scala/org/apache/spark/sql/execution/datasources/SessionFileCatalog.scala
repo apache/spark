@@ -26,6 +26,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.SerializableConfiguration
 
@@ -56,6 +57,7 @@ abstract class SessionFileCatalog(sparkSession: SparkSession)
         SessionFileCatalog.listLeafFilesInSerial(paths, hadoopConf)
       }
 
+    HiveCatalogMetrics.incrementFilesDiscovered(files.size)
     mutable.LinkedHashSet(files: _*)
   }
 }

@@ -175,7 +175,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a")
       .createOrReplaceTempView("jt_array")
 
-    setConf(HiveUtils.CONVERT_METASTORE_PARQUET, true)
+    assert(spark.sqlContext.getConf(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
   }
 
   override def afterAll(): Unit = {
@@ -187,7 +187,6 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       "jt",
       "jt_array",
        "test_parquet")
-    setConf(HiveUtils.CONVERT_METASTORE_PARQUET, false)
   }
 
   test(s"conversion is working") {

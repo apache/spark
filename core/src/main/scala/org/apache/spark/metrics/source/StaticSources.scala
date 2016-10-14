@@ -60,3 +60,32 @@ object CodegenMetrics extends Source {
   val METRIC_GENERATED_METHOD_BYTECODE_SIZE =
     metricRegistry.histogram(MetricRegistry.name("generatedMethodSize"))
 }
+
+/**
+ * :: Experimental ::
+ * Metrics for access to the hive external catalog.
+ */
+@Experimental
+object HiveCatalogMetrics extends Source {
+  override val sourceName: String = "HiveExternalCatalog"
+  override val metricRegistry: MetricRegistry = new MetricRegistry()
+
+  /**
+   * Tracks the total number of partition metadata entries fetched via the client api.
+   */
+  val METRIC_PARTITIONS_FETCHED = metricRegistry.counter(MetricRegistry.name("partitionsFetched"))
+
+  /**
+   * Tracks the total number of files discovered off of the filesystem by ListingFileCatalog.
+   */
+  val METRIC_FILES_DISCOVERED = metricRegistry.counter(MetricRegistry.name("filesDiscovered"))
+
+  def reset(): Unit = {
+    METRIC_PARTITIONS_FETCHED.dec(METRIC_PARTITIONS_FETCHED.getCount())
+    METRIC_FILES_DISCOVERED.dec(METRIC_FILES_DISCOVERED.getCount())
+  }
+
+  // clients can use these to avoid classloader issues with the codahale classes
+  def incrementFetchedPartitions(n: Int): Unit = METRIC_PARTITIONS_FETCHED.inc(n)
+  def incrementFilesDiscovered(n: Int): Unit = METRIC_FILES_DISCOVERED.inc(n)
+}
