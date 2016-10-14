@@ -917,7 +917,7 @@ object StaticSQLConf {
     .createWithDefault(4000)
 
   // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
-  // Some related DDL commands (e.g., Analyze Table and CREATE TABLE LIKE) might not work properly.
+  // some related DDL commands (e.g., Analyze Table and CREATE TABLE LIKE) might not work properly.
   val DEBUG_MODE = buildConf("spark.sql.debug")
     .internal()
     .doc("Only used for internal debugging. Not all functions are supported when it is enabled.")
