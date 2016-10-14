@@ -131,7 +131,7 @@ execute_command() {
 
       echo "$newpid" > "$pid"
 
-      #Poll for up to 5 seconds for the java process to start
+      # Poll for up to 5 seconds for the java process to start
       for i in {1..10}
       do
         if [[ $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
@@ -176,11 +176,11 @@ run_command() {
 
   case "$mode" in
     (class)
-      execute_command nice -n $SPARK_NICENESS ${SPARK_HOME}/bin/spark-class $command $@
+      execute_command nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class $command $@
       ;;
 
     (submit)
-      execute_command nice -n $SPARK_NICENESS bash ${SPARK_HOME}/bin/spark-submit --class $command $@
+      execute_command nice -n "$SPARK_NICENESS" bash "${SPARK_HOME}"/bin/spark-submit --class $command $@
       ;;
 
     (*)
