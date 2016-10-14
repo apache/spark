@@ -838,6 +838,8 @@ class Analyzer(
           // attributes that its child might have or could have.
           val missing = missingAttrs -- g.child.outputSet
           g.copy(join = true, child = addMissingAttr(g.child, missing))
+        case d: Distinct =>
+          throw new AnalysisException(s"Can't add $missingAttrs to $d")
         case u: UnaryNode =>
           u.withNewChildren(addMissingAttr(u.child, missingAttrs) :: Nil)
         case other =>

@@ -1096,6 +1096,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-17863: SELECT distinct does not work correctly if order by missing attribute") {
+    checkAnswer(
+      sql("""select distinct struct.a, struct.b
+          |from (
+          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+          |  union all
+          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+          |order by a, b
+          |""".stripMargin),
+      Row(1, 2) :: Nil)
+
+    val error = intercept[AnalysisException] {
+      sql("""select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by struct.a, struct.b
+            |""".stripMargin)
+    }
+    assert(error.message contains "cannot resolve '`struct.a`' given input columns: [a, b]")
+
+  }
+
   test("cast boolean to string") {
     // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
     checkAnswer(
