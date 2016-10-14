@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 
 /**
@@ -195,6 +196,18 @@ abstract class ExternalCatalog {
       db: String,
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
+
+  /**
+   * List the metadata of selected partitions according to the given partition predicates.
+   *
+   * @param db database name
+   * @param table table name
+   * @param predicates partition predicated
+   */
+  def listPartitionsByFilter(
+      db: String,
+      table: String,
+      predicates: Seq[Expression]): Seq[CatalogTablePartition]
 
   // --------------------------------------------------------------------------
   // Functions
