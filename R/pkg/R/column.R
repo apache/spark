@@ -82,6 +82,7 @@ setMethod("head",
 
 #' @rdname column
 #' @name column
+#' @param df the parent SparkDataFrame. This is used to retrieve the contents of the column through method head.
 #' @aliases column,jobj-method
 setMethod("column",
           signature(x = "jobj"),
