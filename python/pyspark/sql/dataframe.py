@@ -75,6 +75,12 @@ class DataFrame(object):
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.unpersist()
+
     @property
     @since(1.3)
     def rdd(self):
@@ -408,6 +414,16 @@ class DataFrame(object):
     @since(1.3)
     def cache(self):
         """ Persists with the default storage level (C{MEMORY_ONLY}).
+
+        :py:meth:`cache` can be used in a 'with' statement. The DataFrame will be automatically
+        unpersisted once the 'with' block is exited. Note however that any actions on the DataFrame
+        that require the DataFrame to be cached, should be invoked inside the 'with' block;
+        otherwise, caching will have no effect.
+
+        >>> with df.cache() as cached:
+        ...     print(cached.count())
+        ...
+        2
         """
         self.is_cached = True
         self._jdf.cache()
@@ -419,6 +435,16 @@ class DataFrame(object):
         after the first time it is computed. This can only be used to assign
         a new storage level if the RDD does not have a storage level set yet.
         If no storage level is specified defaults to (C{MEMORY_ONLY}).
+
+        :py:meth:`persist` can be used in a 'with' statement. The DataFrame will be automatically
+        unpersisted once the 'with' block is exited. Note however that any actions on the DataFrame
+        that require the DataFrame to be cached, should be invoked inside the 'with' block;
+        otherwise, caching will have no effect.
+
+        >>> with df.persist() as persisted:
+        ...     print(persisted.count())
+        ...
+        2
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)

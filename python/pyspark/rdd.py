@@ -186,6 +186,12 @@ class RDD(object):
         self._id = jrdd.id()
         self.partitioner = None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.unpersist()
+
     def _pickled(self):
         return self._reserialize(AutoBatchedSerializer(PickleSerializer()))
 
@@ -219,6 +225,21 @@ class RDD(object):
     def cache(self):
         """
         Persist this RDD with the default storage level (C{MEMORY_ONLY}).
+
+        :py:meth:`cache` can be used in a 'with' statement. The RDD will be automatically
+        unpersisted once the 'with' block is exited. Note however that any actions on the RDD
+        that require the RDD to be cached, should be invoked inside the 'with' block; otherwise,
+        caching will have no effect.
+
+        >>> rdd = sc.parallelize(["b", "a", "c"])
+        >>> with rdd.cache() as cached:
+        ...     print(cached.getStorageLevel())
+        ...     print(cached.count())
+        ...
+        Memory Serialized 1x Replicated
+        3
+        >>> print(rdd.getStorageLevel())
+        Serialized 1x Replicated
         """
         self.is_cached = True
         self.persist(StorageLevel.MEMORY_ONLY)
@@ -231,9 +252,22 @@ class RDD(object):
         a new storage level if the RDD does not have a storage level set yet.
         If no storage level is specified defaults to (C{MEMORY_ONLY}).
 
+        :py:meth:`persist` can be used in a 'with' statement. The RDD will be automatically
+        unpersisted once the 'with' block is exited. Note however that any actions on the RDD
+        that require the RDD to be cached, should be invoked inside the 'with' block; otherwise,
+        caching will have no effect.
+
         >>> rdd = sc.parallelize(["b", "a", "c"])
-        >>> rdd.persist().is_cached
+        >>> with rdd.persist() as persisted:
+        ...     print(persisted.getStorageLevel())
+        ...     print(persisted.is_cached)
+        ...     print(persisted.count())
+        ...
+        Memory Serialized 1x Replicated
         True
+        3
+        >>> print(rdd.getStorageLevel())
+        Serialized 1x Replicated
         """
         self.is_cached = True
         javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
