@@ -638,7 +638,8 @@ class DataFrame(object):
         >>> df2.select("name", "height").collect()
         [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85)]
         >>> df.crossJoin(df2.select("height")).select("age", "name", "height").collect()
-        [Row(age=2, name=u'Alice', height=80), Row(age=2, name=u'Alice', height=85), Row(age=5, name=u'Bob', height=80), Row(age=5, name=u'Bob', height=85)]
+        [Row(age=2, name=u'Alice', height=80), Row(age=2, name=u'Alice', height=85),
+         Row(age=5, name=u'Bob', height=80), Row(age=5, name=u'Bob', height=85)]
         """
 
         jdf = self._jdf.crossJoin(other._jdf)
