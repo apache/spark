@@ -32,12 +32,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 
-@Since("2.1.0")
-private[spark] object ChiSqSelectorType extends Enumeration {
-  type SelectorType = Value
-  val KBest, Percentile, FPR = Value
-}
-
 /**
  * Chi Squared selector model.
  *
@@ -47,6 +41,19 @@ private[spark] object ChiSqSelectorType extends Enumeration {
 class ChiSqSelectorModel @Since("1.3.0") (
   @Since("1.3.0") val selectedFeatures: Array[Int]) extends VectorTransformer with Saveable {
 
+  private val filterIndices = selectedFeatures.sorted
+
+  @deprecated("not intended for subclasses to use", "2.1.0")
+  protected def isSorted(array: Array[Int]): Boolean = {
+    var i = 1
+    val len = array.length
+    while (i < len) {
+      if (array(i) < array(i-1)) return false
+      i += 1
+    }
+    true
+  }
+
   /**
    * Applies transformation on a vector.
    *
@@ -55,7 +62,7 @@ class ChiSqSelectorModel @Since("1.3.0") (
    */
   @Since("1.3.0")
   override def transform(vector: Vector): Vector = {
-    compress(vector, selectedFeatures)
+    compress(vector)
   }
 
   /**
@@ -63,22 +70,20 @@ class ChiSqSelectorModel @Since("1.3.0") (
    * Preserves the order of filtered features the same as their indices are stored.
    * Might be moved to Vector as .slice
    * @param features vector
-   * @param filterIndices indices of features to filter
    */
-  private def compress(features: Vector, filterIndices: Array[Int]): Vector = {
-    val orderedIndices = filterIndices.sorted
+  private def compress(features: Vector): Vector = {
     features match {
       case SparseVector(size, indices, values) =>
-        val newSize = orderedIndices.length
+        val newSize = filterIndices.length
         val newValues = new ArrayBuilder.ofDouble
         val newIndices = new ArrayBuilder.ofInt
         var i = 0
         var j = 0
         var indicesIdx = 0
         var filterIndicesIdx = 0
-        while (i < indices.length && j < orderedIndices.length) {
+        while (i < indices.length && j < filterIndices.length) {
           indicesIdx = indices(i)
-          filterIndicesIdx = orderedIndices(j)
+          filterIndicesIdx = filterIndices(j)
           if (indicesIdx == filterIndicesIdx) {
             newIndices += j
             newValues += values(i)
@@ -96,7 +101,7 @@ class ChiSqSelectorModel @Since("1.3.0") (
         Vectors.sparse(newSize, newIndices.result(), newValues.result())
       case DenseVector(values) =>
         val values = features.toArray
-        Vectors.dense(orderedIndices.map(i => values(i)))
+        Vectors.dense(filterIndices.map(i => values(i)))
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")
@@ -166,19 +171,18 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 
 /**
  * Creates a ChiSquared feature selector.
- * The selector supports three selection methods: `KBest`, `Percentile` and `FPR`.
- * `KBest` chooses the `k` top features according to a chi-squared test.
- * `Percentile` is similar but chooses a fraction of all features instead of a fixed number.
- * `FPR` chooses all features whose false positive rate meets some threshold.
- * By default, the selection method is `KBest`, the default number of top features is 50.
- * User can use setNumTopFeatures, setPercentile and setAlpha to set different selection methods.
+ * The selector supports three selection methods: `kbest`, `percentile` and `fpr`.
+ * `kbest` chooses the `k` top features according to a chi-squared test.
+ * `percentile` is similar but chooses a fraction of all features instead of a fixed number.
+ * `fpr` chooses all features whose false positive rate meets some threshold.
+ * By default, the selection method is `kbest`, the default number of top features is 50.
  */
 @Since("1.3.0")
 class ChiSqSelector @Since("2.1.0") () extends Serializable {
   var numTopFeatures: Int = 50
   var percentile: Double = 0.1
   var alpha: Double = 0.05
-  var selectorType = ChiSqSelectorType.KBest
+  var selectorType = ChiSqSelector.KBest
 
   /**
    * The is the same to call this() and setNumTopFeatures(numTopFeatures)
@@ -192,7 +196,6 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   @Since("1.6.0")
   def setNumTopFeatures(value: Int): this.type = {
     numTopFeatures = value
-    selectorType = ChiSqSelectorType.KBest
     this
   }
 
@@ -200,7 +203,6 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   def setPercentile(value: Double): this.type = {
     require(0.0 <= value && value <= 1.0, "Percentile must be in [0,1]")
     percentile = value
-    selectorType = ChiSqSelectorType.Percentile
     this
   }
 
@@ -208,12 +210,13 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   def setAlpha(value: Double): this.type = {
     require(0.0 <= value && value <= 1.0, "Alpha must be in [0,1]")
     alpha = value
-    selectorType = ChiSqSelectorType.FPR
     this
   }
 
   @Since("2.1.0")
-  def setChiSqSelectorType(value: ChiSqSelectorType.Value): this.type = {
+  def setSelectorType(value: String): this.type = {
+    require(ChiSqSelector.supportedSelectorTypes.toSeq.contains(value),
+      s"ChiSqSelector Type: $value was not supported.")
     selectorType = value
     this
   }
@@ -227,20 +230,43 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
    */
   @Since("1.3.0")
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
-    val chiSqTestResult = Statistics.chiSqTest(data)
-      .zipWithIndex.sortBy { case (res, _) => -res.statistic }
+    val chiSqTestResult = Statistics.chiSqTest(data).zipWithIndex
     val features = selectorType match {
-      case ChiSqSelectorType.KBest => chiSqTestResult
-        .take(numTopFeatures)
-      case ChiSqSelectorType.Percentile => chiSqTestResult
-        .take((chiSqTestResult.length * percentile).toInt)
-      case ChiSqSelectorType.FPR => chiSqTestResult
-        .filter{ case (res, _) => res.pValue < alpha }
+      case ChiSqSelector.KBest =>
+        chiSqTestResult
+          .sortBy { case (res, _) => -res.statistic }
+          .take(numTopFeatures)
+      case ChiSqSelector.Percentile =>
+        chiSqTestResult
+          .sortBy { case (res, _) => -res.statistic }
+          .take((chiSqTestResult.length * percentile).toInt)
+      case ChiSqSelector.FPR =>
+        chiSqTestResult
+          .filter { case (res, _) => res.pValue < alpha }
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
-    val indices = features.map { case (_, indices) => indices }
+    val indices = features.map { case (_, index) => index }
     new ChiSqSelectorModel(indices)
   }
 }
 
+@Since("2.1.0")
+object ChiSqSelector {
+
+  /** String name for `kbest` selector type. */
+  private[spark] val KBest: String = "kbest"
+
+  /** String name for `percentile` selector type. */
+  private[spark] val Percentile: String = "percentile"
+
+  /** String name for `fpr` selector type. */
+  private[spark] val FPR: String = "fpr"
+
+  /** Set of selector type and param pairs that ChiSqSelector supports. */
+  private[spark] val supportedTypeAndParamPairs = Set(KBest -> "numTopFeatures",
+    Percentile -> "percentile", FPR -> "alpha")
+
+  /** Set of selector types that ChiSqSelector supports. */
+  private[spark] val supportedSelectorTypes = supportedTypeAndParamPairs.map(_._1)
+}

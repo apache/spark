@@ -111,6 +111,7 @@
     <module>external/kafka-0-8-assembly</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
+    <module>external/kafka-0-10-sql</module>
   </modules>
 
   <properties>
@@ -743,7 +744,7 @@
       <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
-        <version>3.6.6</version>
+        <version>5.0.2</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -2617,8 +2618,9 @@
               <configuration>
                 <compilerArgs combine.children="append">
                   <arg>-bootclasspath</arg>
-                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
                 </compilerArgs>
+                <verbose>true</verbose>
               </configuration>
             </plugin>
             <plugin>
@@ -2633,7 +2635,7 @@
                   <configuration>
                     <args combine.children="append">
                       <arg>-javabootclasspath</arg>
-                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
                     </args>
                   </configuration>
                 </execution>
@@ -2642,7 +2644,7 @@
                   <configuration>
                     <args combine.children="append">
                       <arg>-javabootclasspath</arg>
-                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
                     </args>
                   </configuration>
                 </execution>

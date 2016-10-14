@@ -425,35 +425,37 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(!catalog.tableExists(TableIdentifier("tbl2", Some("db1"))))
     // If database is explicitly specified, do not check temporary tables
     val tempTable = Range(1, 10, 1, 10)
-    catalog.createTempView("tbl3", tempTable, overrideIfExists = false)
     assert(!catalog.tableExists(TableIdentifier("tbl3", Some("db2"))))
     // If database is not explicitly specified, check the current database
     catalog.setCurrentDatabase("db2")
     assert(catalog.tableExists(TableIdentifier("tbl1")))
     assert(catalog.tableExists(TableIdentifier("tbl2")))
-    assert(catalog.tableExists(TableIdentifier("tbl3")))
-  }
 
-  test("tableExists on temporary views") {
-    val catalog = new SessionCatalog(newBasicCatalog())
-    val tempTable = Range(1, 10, 2, 10)
-    assert(!catalog.tableExists(TableIdentifier("view1")))
-    assert(!catalog.tableExists(TableIdentifier("view1", Some("default"))))
-    catalog.createTempView("view1", tempTable, overrideIfExists = false)
-    assert(catalog.tableExists(TableIdentifier("view1")))
-    assert(!catalog.tableExists(TableIdentifier("view1", Some("default"))))
+    catalog.createTempView("tbl3", tempTable, overrideIfExists = false)
+    // tableExists should not check temp view.
+    assert(!catalog.tableExists(TableIdentifier("tbl3")))
   }
 
   test("getTempViewOrPermanentTableMetadata on temporary views") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val tempTable = Range(1, 10, 2, 10)
     intercept[NoSuchTableException] {
-      catalog.getTempViewOrPermanentTableMetadata("view1")
+      catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1"))
+    }.getMessage
+
+    intercept[NoSuchTableException] {
+      catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
     }.getMessage
 
     catalog.createTempView("view1", tempTable, overrideIfExists = false)
-    assert(catalog.getTempViewOrPermanentTableMetadata("view1").identifier ==
-      TableIdentifier("view1"), "the temporary view `view1` should exist")
+    assert(catalog.getTempViewOrPermanentTableMetadata(
+      TableIdentifier("view1")).identifier.table == "view1")
+    assert(catalog.getTempViewOrPermanentTableMetadata(
+      TableIdentifier("view1")).schema(0).name == "id")
+
+    intercept[NoSuchTableException] {
+      catalog.getTempViewOrPermanentTableMetadata(TableIdentifier("view1", Some("default")))
+    }.getMessage
   }
 
   test("list tables without pattern") {

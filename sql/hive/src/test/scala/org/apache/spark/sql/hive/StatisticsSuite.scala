@@ -21,16 +21,16 @@ import java.io.{File, PrintWriter}
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, StatisticsTest}
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.execution.command.{AnalyzeTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
@@ -171,7 +171,27 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
   }
 
-  private def checkStats(
+  test("analyzing views is not supported") {
+    def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
+      val err = intercept[AnalysisException] {
+        sql(analyzeCommand)
+      }
+      assert(err.message.contains("ANALYZE TABLE is not supported"))
+    }
+
+    val tableName = "tbl"
+    withTable(tableName) {
+      spark.range(10).write.saveAsTable(tableName)
+      val viewName = "view"
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
+        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+      }
+    }
+  }
+
+  private def checkTableStats(
       stats: Option[Statistics],
       hasSizeInBytes: Boolean,
       expectedRowCounts: Option[Int]): Unit = {
@@ -184,7 +204,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     }
   }
 
-  private def checkStats(
+  private def checkTableStats(
       tableName: String,
       isDataSourceTable: Boolean,
       hasSizeInBytes: Boolean,
@@ -192,12 +212,12 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     val df = sql(s"SELECT * FROM $tableName")
     val stats = df.queryExecution.analyzed.collect {
       case rel: MetastoreRelation =>
-        checkStats(rel.catalogTable.stats, hasSizeInBytes, expectedRowCounts)
-        assert(!isDataSourceTable, "Expected a data source table, but got a Hive serde table")
+        checkTableStats(rel.catalogTable.stats, hasSizeInBytes, expectedRowCounts)
+        assert(!isDataSourceTable, "Expected a Hive serde table, but got a data source table")
         rel.catalogTable.stats
       case rel: LogicalRelation =>
-        checkStats(rel.catalogTable.get.stats, hasSizeInBytes, expectedRowCounts)
-        assert(isDataSourceTable, "Expected a Hive serde table, but got a data source table")
+        checkTableStats(rel.catalogTable.get.stats, hasSizeInBytes, expectedRowCounts)
+        assert(isDataSourceTable, "Expected a data source table, but got a Hive serde table")
         rel.catalogTable.get.stats
     }
     assert(stats.size == 1)
@@ -210,13 +230,13 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       // Currently Spark's statistics are self-contained, we don't have statistics until we use
       // the `ANALYZE TABLE` command.
       sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
-      checkStats(
+      checkTableStats(
         textTable,
         isDataSourceTable = false,
         hasSizeInBytes = false,
         expectedRowCounts = None)
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
-      checkStats(
+      checkTableStats(
         textTable,
         isDataSourceTable = false,
         hasSizeInBytes = false,
@@ -224,12 +244,12 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
-      val fetchedStats1 = checkStats(
+      val fetchedStats1 = checkTableStats(
         textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = None)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
-      val fetchedStats2 = checkStats(
+      val fetchedStats2 = checkTableStats(
         textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
       assert(fetchedStats1.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
     }
@@ -241,19 +261,19 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       sql(s"CREATE TABLE $textTable (key STRING, value STRING) STORED AS TEXTFILE")
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS")
-      val fetchedStats1 = checkStats(
+      val fetchedStats1 = checkTableStats(
         textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
 
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
       // when the total size is not changed, the old row count is kept
-      val fetchedStats2 = checkStats(
+      val fetchedStats2 = checkTableStats(
         textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = Some(500))
       assert(fetchedStats1 == fetchedStats2)
 
       sql(s"INSERT INTO TABLE $textTable SELECT * FROM src")
       sql(s"ANALYZE TABLE $textTable COMPUTE STATISTICS noscan")
       // update total size and remove the old and invalid row count
-      val fetchedStats3 = checkStats(
+      val fetchedStats3 = checkTableStats(
         textTable, isDataSourceTable = false, hasSizeInBytes = true, expectedRowCounts = None)
       assert(fetchedStats3.get.sizeInBytes > fetchedStats2.get.sizeInBytes)
     }
@@ -271,20 +291,20 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       // the default value for `spark.sql.hive.convertMetastoreParquet` is true, here we just set it
       // for robustness
       withSQLConf("spark.sql.hive.convertMetastoreParquet" -> "true") {
-        checkStats(
+        checkTableStats(
           parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
         sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-        checkStats(
+        checkTableStats(
           parquetTable,
           isDataSourceTable = true,
           hasSizeInBytes = true,
           expectedRowCounts = Some(500))
       }
       withSQLConf("spark.sql.hive.convertMetastoreOrc" -> "true") {
-        checkStats(
+        checkTableStats(
           orcTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
         sql(s"ANALYZE TABLE $orcTable COMPUTE STATISTICS")
-        checkStats(
+        checkTableStats(
           orcTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = Some(500))
       }
     }
@@ -298,23 +318,23 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       assert(DDLUtils.isDatasourceTable(catalogTable))
 
       sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
-      checkStats(
+      checkTableStats(
         parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
 
       // noscan won't count the number of rows
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      val fetchedStats1 = checkStats(
+      val fetchedStats1 = checkTableStats(
         parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
 
       sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      val fetchedStats2 = checkStats(
+      val fetchedStats2 = checkTableStats(
         parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
       assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
 
       // without noscan, we count the number of rows
       sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-      val fetchedStats3 = checkStats(
+      val fetchedStats3 = checkTableStats(
         parquetTable,
         isDataSourceTable = true,
         hasSizeInBytes = true,
@@ -330,11 +350,58 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
       dfNoCols.write.format("json").saveAsTable(table_no_cols)
       sql(s"ANALYZE TABLE $table_no_cols COMPUTE STATISTICS")
-      checkStats(
+      checkTableStats(
         table_no_cols,
         isDataSourceTable = true,
         hasSizeInBytes = true,
         expectedRowCounts = Some(10))
+    }
+  }
+
+  test("generate column-level statistics and load them from hive metastore") {
+    import testImplicits._
+
+    val intSeq = Seq(1, 2)
+    val stringSeq = Seq("a", "bb")
+    val booleanSeq = Seq(true, false)
+
+    val data = intSeq.indices.map { i =>
+      (intSeq(i), stringSeq(i), booleanSeq(i))
+    }
+    val tableName = "table"
+    withTable(tableName) {
+      val df = data.toDF("c1", "c2", "c3")
+      df.write.format("parquet").saveAsTable(tableName)
+      val expectedColStatsSeq = df.schema.map { f =>
+        val colStat = f.dataType match {
+          case IntegerType =>
+            ColumnStat(InternalRow(0L, intSeq.max, intSeq.min, intSeq.distinct.length.toLong))
+          case StringType =>
+            ColumnStat(InternalRow(0L, stringSeq.map(_.length).sum / stringSeq.length.toDouble,
+              stringSeq.map(_.length).max.toInt, stringSeq.distinct.length.toLong))
+          case BooleanType =>
+            ColumnStat(InternalRow(0L, booleanSeq.count(_.equals(true)).toLong,
+              booleanSeq.count(_.equals(false)).toLong))
+        }
+        (f, colStat)
+      }
+
+      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1, c2, c3")
+      val readback = spark.table(tableName)
+      val relations = readback.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+        val columnStats = rel.catalogTable.get.stats.get.colStats
+        expectedColStatsSeq.foreach { case (field, expectedColStat) =>
+          assert(columnStats.contains(field.name))
+          val colStat = columnStats(field.name)
+          StatisticsTest.checkColStat(
+            dataType = field.dataType,
+            colStat = colStat,
+            expectedColStat = expectedColStat,
+            rsd = spark.sessionState.conf.ndvMaxError)
+        }
+        rel
+      }
+      assert(relations.size == 1)
     }
   }
 

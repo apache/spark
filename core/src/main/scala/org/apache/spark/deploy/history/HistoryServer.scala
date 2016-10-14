@@ -174,12 +174,16 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
+  def getApplicationList(): Iterator[ApplicationHistoryInfo] = {
     provider.getListing()
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+    getApplicationList().map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  }
+
+  def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
+    provider.getApplicationInfo(appId).map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
   override def writeEventLogs(

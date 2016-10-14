@@ -21,12 +21,12 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, CreateTable, DataSource, HadoopFsRelation}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -35,6 +35,7 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 1.4.0
  */
+@InterfaceStability.Stable
 final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
@@ -361,12 +362,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
     }
 
-    val sessionState = df.sparkSession.sessionState
-    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentWithDB = tableIdent.copy(database = Some(db))
-    // Pass a table identifier with database part, so that `tableExists` won't check temp views
-    // unexpectedly.
-    val tableExists = sessionState.catalog.tableExists(tableIdentWithDB)
+    val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -392,7 +388,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           bucketSpec = getBucketSpec
         )
         val cmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
-        sessionState.executePlan(cmd).toRdd
+        df.sparkSession.sessionState.executePlan(cmd).toRdd
     }
   }
 
@@ -430,62 +426,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
-
-    // to add required options like URL and dbtable
-    val params = extraOptions.toMap ++ Map("url" -> url, "dbtable" -> table)
-    val jdbcOptions = new JDBCOptions(params)
-    val jdbcUrl = jdbcOptions.url
-    val jdbcTable = jdbcOptions.table
-
-    val props = new Properties()
-    extraOptions.foreach { case (key, value) =>
-      props.put(key, value)
-    }
     // connectionProperties should override settings in extraOptions
-    props.putAll(connectionProperties)
-    val conn = JdbcUtils.createConnectionFactory(jdbcUrl, props)()
-
-    try {
-      var tableExists = JdbcUtils.tableExists(conn, jdbcUrl, jdbcTable)
-
-      if (mode == SaveMode.Ignore && tableExists) {
-        return
-      }
-
-      if (mode == SaveMode.ErrorIfExists && tableExists) {
-        sys.error(s"Table $jdbcTable already exists.")
-      }
-
-      if (mode == SaveMode.Overwrite && tableExists) {
-        if (jdbcOptions.isTruncate &&
-            JdbcUtils.isCascadingTruncateTable(jdbcUrl) == Some(false)) {
-          JdbcUtils.truncateTable(conn, jdbcTable)
-        } else {
-          JdbcUtils.dropTable(conn, jdbcTable)
-          tableExists = false
-        }
-      }
-
-      // Create the table if the table didn't exist.
-      if (!tableExists) {
-        val schema = JdbcUtils.schemaString(df, jdbcUrl)
-        // To allow certain options to append when create a new table, which can be
-        // table_options or partition_options.
-        // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-        val createtblOptions = jdbcOptions.createTableOptions
-        val sql = s"CREATE TABLE $jdbcTable ($schema) $createtblOptions"
-        val statement = conn.createStatement
-        try {
-          statement.executeUpdate(sql)
-        } finally {
-          statement.close()
-        }
-      }
-    } finally {
-      conn.close()
-    }
-
-    JdbcUtils.saveTable(df, jdbcUrl, jdbcTable, props)
+    this.extraOptions = this.extraOptions ++ (connectionProperties.asScala)
+    // explicit url and dbtable should override all
+    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    format("jdbc").save()
   }
 
   /**

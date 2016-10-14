@@ -86,7 +86,18 @@ object CatalogStorageFormat {
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
     storage: CatalogStorageFormat,
-    parameters: Map[String, String] = Map.empty)
+    parameters: Map[String, String] = Map.empty) {
+
+  override def toString: String = {
+    val output =
+      Seq(
+        s"Partition Values: [${spec.values.mkString(", ")}]",
+        s"$storage",
+        s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+
+    output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+  }
+}
 
 
 /**

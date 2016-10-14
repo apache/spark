@@ -37,6 +37,8 @@ import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   @transient var dataset: Dataset[_] = _
   @transient var rdd: RDD[LabeledPoint] = _
 
@@ -55,7 +57,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
     rdd = sc.parallelize(generateMultinomialLogisticInput(
       coefficients, xMean, xVariance, true, nPoints, 42), 2)
-    dataset = spark.createDataFrame(rdd)
+    dataset = rdd.toDF()
   }
 
   test("params") {
