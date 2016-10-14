@@ -20,10 +20,15 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import kafka.producer.OldProducer
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.{StringType, StructType}
-
+/**
+ * A ForeachWriter that outputs streaming query results to kafka clusters.
+ * The streaming query results must be one or two [[StringType]] columns. When the output
+ * is a single String column, this column will be considered as value and
+ * key will be null by default. If output has two [[StringType]] columns, the fieldsName
+ * of columns should be "key" and "value".
+ */
 class KafkaForeachWriter[T](
     kafkaParams: Properties,
     topics: Set[String],
@@ -39,7 +44,7 @@ class KafkaForeachWriter[T](
 
   override def process(value: T): Unit = {
     logDebug("Starting to send message")
-    val data = value.asInstanceOf[Row]
+    val data : Row = value.asInstanceOf[Row]
     verifySchema(data.schema)
     val keyIsNull = if (schema.size == 1) true else false
     if (keyIsNull) {
