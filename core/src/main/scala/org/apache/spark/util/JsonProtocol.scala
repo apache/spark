@@ -281,7 +281,7 @@ private[spark] object JsonProtocol {
     ("Finish Time" -> taskInfo.finishTime) ~
     ("Failed" -> taskInfo.failed) ~
     ("Killed" -> taskInfo.killed) ~
-    ("Accumulables" -> JArray(taskInfo.accumulables.map(accumulableInfoToJson).toList))
+    ("Accumulables" -> JArray(taskInfo.accumulables.toList.map(accumulableInfoToJson)))
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {

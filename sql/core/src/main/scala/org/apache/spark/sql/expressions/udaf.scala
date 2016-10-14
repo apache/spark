@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
@@ -26,8 +26,11 @@ import org.apache.spark.sql.types._
 /**
  * :: Experimental ::
  * The base class for implementing user-defined aggregate functions (UDAF).
+ *
+ * @since 1.5.0
  */
 @Experimental
+@InterfaceStability.Evolving
 abstract class UserDefinedAggregateFunction extends Serializable {
 
   /**
@@ -106,7 +109,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   /**
    * Creates a [[Column]] for this UDAF using given [[Column]]s as input arguments.
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
     val aggregateExpression =
       AggregateExpression(
@@ -120,7 +123,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    * Creates a [[Column]] for this UDAF using the distinct values of the given
    * [[Column]]s as input arguments.
    */
-  @_root_.scala.annotation.varargs
+  @scala.annotation.varargs
   def distinct(exprs: Column*): Column = {
     val aggregateExpression =
       AggregateExpression(
@@ -136,8 +139,11 @@ abstract class UserDefinedAggregateFunction extends Serializable {
  * A [[Row]] representing a mutable aggregation buffer.
  *
  * This is not meant to be extended outside of Spark.
+ *
+ * @since 1.5.0
  */
 @Experimental
+@InterfaceStability.Evolving
 abstract class MutableAggregationBuffer extends Row {
 
   /** Update the ith value of this buffer. */

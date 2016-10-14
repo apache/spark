@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -37,6 +37,7 @@ import org.apache.spark.sql.types.StructType
  * @since 1.5.0
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 trait DataSourceRegister {
 
   /**
@@ -68,6 +69,7 @@ trait DataSourceRegister {
  * @since 1.3.0
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 trait RelationProvider {
   /**
    * Returns a new base relation with the given parameters.
@@ -99,6 +101,7 @@ trait RelationProvider {
  * @since 1.3.0
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 trait SchemaRelationProvider {
   /**
    * Returns a new base relation with the given parameters and user defined schema.
@@ -114,17 +117,26 @@ trait SchemaRelationProvider {
 /**
  * ::Experimental::
  * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
+ *
+ * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Unstable
 trait StreamSourceProvider {
 
-  /** Returns the name and schema of the source that can be used to continually read data. */
+  /**
+   * Returns the name and schema of the source that can be used to continually read data.
+   * @since 2.0.0
+   */
   def sourceSchema(
       sqlContext: SQLContext,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): (String, StructType)
 
+  /**
+   * @since 2.0.0
+   */
   def createSource(
       sqlContext: SQLContext,
       metadataPath: String,
@@ -136,8 +148,11 @@ trait StreamSourceProvider {
 /**
  * ::Experimental::
  * Implemented by objects that can produce a streaming [[Sink]] for a specific format or system.
+ *
+ * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Unstable
 trait StreamSinkProvider {
   def createSink(
       sqlContext: SQLContext,
@@ -150,6 +165,7 @@ trait StreamSinkProvider {
  * @since 1.3.0
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 trait CreatableRelationProvider {
   /**
    * Save the DataFrame to the destination and return a relation with the given parameters based on
@@ -186,6 +202,7 @@ trait CreatableRelationProvider {
  * @since 1.3.0
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 abstract class BaseRelation {
   def sqlContext: SQLContext
   def schema: StructType
@@ -237,6 +254,7 @@ abstract class BaseRelation {
  * @since 1.3.0
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 trait TableScan {
   def buildScan(): RDD[Row]
 }
@@ -249,6 +267,7 @@ trait TableScan {
  * @since 1.3.0
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 trait PrunedScan {
   def buildScan(requiredColumns: Array[String]): RDD[Row]
 }
@@ -268,6 +287,7 @@ trait PrunedScan {
  * @since 1.3.0
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 trait PrunedFilteredScan {
   def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row]
 }
@@ -291,6 +311,7 @@ trait PrunedFilteredScan {
  * @since 1.3.0
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 trait InsertableRelation {
   def insert(data: DataFrame, overwrite: Boolean): Unit
 }
@@ -306,6 +327,7 @@ trait InsertableRelation {
  * @since 1.3.0
  */
 @Experimental
+@InterfaceStability.Unstable
 trait CatalystScan {
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
 }
