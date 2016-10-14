@@ -59,10 +59,12 @@ case class AnalyzeColumnCommand(
 
     def updateStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
       val (rowCount, columnStats) = computeColStats(sparkSession, relation)
+      // We also update table-level stats in order to keep them consistent with column-level stats.
       val statistics = Statistics(
         sizeInBytes = newTotalSize,
         rowCount = Some(rowCount),
-        colStats = columnStats ++ catalogTable.stats.map(_.colStats).getOrElse(Map()))
+        // Newly computed column stats should override the existing ones.
+        colStats = catalogTable.stats.map(_.colStats).getOrElse(Map()) ++ columnStats)
       sessionState.catalog.alterTable(catalogTable.copy(stats = Some(statistics)))
       // Refresh the cached data source table in the catalog.
       sessionState.catalog.refreshTable(tableIdentWithDB)
@@ -90,8 +92,9 @@ case class AnalyzeColumnCommand(
       }
     }
     if (duplicatedColumns.nonEmpty) {
-      logWarning(s"Duplicated columns ${duplicatedColumns.mkString("(", ", ", ")")} detected " +
-        s"when analyzing columns ${columnNames.mkString("(", ", ", ")")}, ignoring them.")
+      logWarning("Duplicate column names were deduplicated in `ANALYZE TABLE` statement. " +
+        s"Input columns: ${columnNames.mkString("(", ", ", ")")}. " +
+        s"Duplicate columns: ${duplicatedColumns.mkString("(", ", ", ")")}.")
     }
 
     // Collect statistics per column.
@@ -116,22 +119,24 @@ case class AnalyzeColumnCommand(
 }
 
 object ColumnStatStruct {
-  val zero = Literal(0, LongType)
-  val one = Literal(1, LongType)
+  private val zero = Literal(0, LongType)
+  private val one = Literal(1, LongType)
 
-  def numNulls(e: Expression): Expression = if (e.nullable) Sum(If(IsNull(e), one, zero)) else zero
-  def max(e: Expression): Expression = Max(e)
-  def min(e: Expression): Expression = Min(e)
-  def ndv(e: Expression, relativeSD: Double): Expression = {
+  private def numNulls(e: Expression): Expression = {
+    if (e.nullable) Sum(If(IsNull(e), one, zero)) else zero
+  }
+  private def max(e: Expression): Expression = Max(e)
+  private def min(e: Expression): Expression = Min(e)
+  private def ndv(e: Expression, relativeSD: Double): Expression = {
     // the approximate ndv should never be larger than the number of rows
     Least(Seq(HyperLogLogPlusPlus(e, relativeSD), Count(one)))
   }
-  def avgLength(e: Expression): Expression = Average(Length(e))
-  def maxLength(e: Expression): Expression = Max(Length(e))
-  def numTrues(e: Expression): Expression = Sum(If(e, one, zero))
-  def numFalses(e: Expression): Expression = Sum(If(Not(e), one, zero))
+  private def avgLength(e: Expression): Expression = Average(Length(e))
+  private def maxLength(e: Expression): Expression = Max(Length(e))
+  private def numTrues(e: Expression): Expression = Sum(If(e, one, zero))
+  private def numFalses(e: Expression): Expression = Sum(If(Not(e), one, zero))
 
-  def getStruct(exprs: Seq[Expression]): CreateStruct = {
+  private def getStruct(exprs: Seq[Expression]): CreateStruct = {
     CreateStruct(exprs.map { expr: Expression =>
       expr.transformUp {
         case af: AggregateFunction => af.toAggregateExpression()
@@ -139,19 +144,19 @@ object ColumnStatStruct {
     })
   }
 
-  def numericColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
+  private def numericColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
     Seq(numNulls(e), max(e), min(e), ndv(e, relativeSD))
   }
 
-  def stringColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
+  private def stringColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
     Seq(numNulls(e), avgLength(e), maxLength(e), ndv(e, relativeSD))
   }
 
-  def binaryColumnStat(e: Expression): Seq[Expression] = {
+  private def binaryColumnStat(e: Expression): Seq[Expression] = {
     Seq(numNulls(e), avgLength(e), maxLength(e))
   }
 
-  def booleanColumnStat(e: Expression): Seq[Expression] = {
+  private def booleanColumnStat(e: Expression): Seq[Expression] = {
     Seq(numNulls(e), numTrues(e), numFalses(e))
   }
 
@@ -162,14 +167,14 @@ object ColumnStatStruct {
     }
   }
 
-  def apply(e: Attribute, relativeSD: Double): CreateStruct = e.dataType match {
+  def apply(attr: Attribute, relativeSD: Double): CreateStruct = attr.dataType match {
     // Use aggregate functions to compute statistics we need.
-    case _: NumericType | TimestampType | DateType => getStruct(numericColumnStat(e, relativeSD))
-    case StringType => getStruct(stringColumnStat(e, relativeSD))
-    case BinaryType => getStruct(binaryColumnStat(e))
-    case BooleanType => getStruct(booleanColumnStat(e))
+    case _: NumericType | TimestampType | DateType => getStruct(numericColumnStat(attr, relativeSD))
+    case StringType => getStruct(stringColumnStat(attr, relativeSD))
+    case BinaryType => getStruct(binaryColumnStat(attr))
+    case BooleanType => getStruct(booleanColumnStat(attr))
     case otherType =>
       throw new AnalysisException("Analyzing columns is not supported for column " +
-        s"${e.name} of data type: ${e.dataType}.")
+        s"${attr.name} of data type: ${attr.dataType}.")
   }
 }
