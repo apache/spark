@@ -49,7 +49,6 @@ private[datasources] case class WriteRelation(
 
 object WriterContainer {
   val DATASOURCE_WRITEJOBUUID = "spark.sql.sources.writeJobUUID"
-  val DATASOURCE_OUTPUTPATH = "spark.sql.sources.output.path"
 }
 
 private[datasources] abstract class BaseWriterContainer(
@@ -72,9 +71,6 @@ private[datasources] abstract class BaseWriterContainer(
 
   // This is only used on driver side.
   @transient private val jobContext: JobContext = job
-
-  private val speculationEnabled: Boolean =
-    relation.sparkSession.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
 
   // The following fields are initialized and used on both driver and executor side.
   @transient protected var outputCommitter: OutputCommitter = _
@@ -247,8 +243,6 @@ private[datasources] class DefaultWriterContainer(
 
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     executorSideSetup(taskContext)
-    val configuration = taskAttemptContext.getConfiguration
-    configuration.set(WriterContainer.DATASOURCE_OUTPUTPATH, outputPath)
     var writer = newOutputWriter(getWorkPath)
     writer.initConverter(dataSchema)
 
@@ -353,15 +347,10 @@ private[datasources] class DynamicPartitionWriterContainer(
   private def newOutputWriter(
       key: InternalRow,
       getPartitionString: UnsafeProjection): OutputWriter = {
-    val configuration = taskAttemptContext.getConfiguration
     val path = if (partitionColumns.nonEmpty) {
       val partitionPath = getPartitionString(key).getString(0)
-      configuration.set(
-        WriterContainer.DATASOURCE_OUTPUTPATH,
-        new Path(outputPath, partitionPath).toString)
       new Path(getWorkPath, partitionPath).toString
     } else {
-      configuration.set(WriterContainer.DATASOURCE_OUTPUTPATH, outputPath)
       getWorkPath
     }
     val bucketId = getBucketIdFromKey(key)
