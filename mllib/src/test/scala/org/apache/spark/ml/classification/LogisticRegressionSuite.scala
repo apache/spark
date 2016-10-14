@@ -25,14 +25,14 @@ import scala.util.control.Breaks._
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, SparseMatrix, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit, udf, rand}
+import org.apache.spark.sql.functions.{col, lit, rand}
 import org.apache.spark.sql.types.LongType
 
 class LogisticRegressionSuite
@@ -914,25 +914,24 @@ class LogisticRegressionSuite
   }
 
   test("binary logistic regression with intercept with strong L1 regularization") {
-    // TODO: check this??
-    val trainer1 = (new LogisticRegression).setFitIntercept(true)
+    val trainer1 = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
       .setElasticNetParam(1.0).setRegParam(6.0).setStandardization(true)
-    val trainer2 = (new LogisticRegression).setFitIntercept(true)
+    val trainer2 = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
       .setElasticNetParam(1.0).setRegParam(6.0).setStandardization(false)
 
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    val histogram = binaryDataset.rdd.map {
-      case Row(label: Double, features: Vector, weight: Double) => label
-    }.treeAggregate(new MultiClassSummarizer)(
-      seqOp = (c, v) => (c, v) match {
-        case (classSummarizer: MultiClassSummarizer, label: Double) => classSummarizer.add(label)
-      },
-      combOp = (c1, c2) => (c1, c2) match {
-        case (classSummarizer1: MultiClassSummarizer, classSummarizer2: MultiClassSummarizer) =>
-          classSummarizer1.merge(classSummarizer2)
-      }).histogram
+    val histogram = binaryDataset.as[Instance].rdd.map { i => (i.label, i.weight)}
+      .treeAggregate(new MultiClassSummarizer)(
+        seqOp = (c, v) => (c, v) match {
+          case (classSummarizer: MultiClassSummarizer, (label: Double, weight: Double)) =>
+            classSummarizer.add(label, weight)
+        },
+        combOp = (c1, c2) => (c1, c2) match {
+          case (classSummarizer1: MultiClassSummarizer, classSummarizer2: MultiClassSummarizer) =>
+            classSummarizer1.merge(classSummarizer2)
+        }).histogram
 
     /*
        For binary logistic regression with strong L1 regularization, all the coefficients
@@ -955,25 +954,26 @@ class LogisticRegressionSuite
     assert(model2.coefficients ~= coefficientsTheory absTol 1E-6)
 
     /*
-       TODO: why is this needed? The correctness of L1 regularization is already checked elsewhere
        Using the following R code to load the data and train the model using glmnet package.
 
        library("glmnet")
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
-       features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1.0, lambda = 6.0))
+       w = data$V2
+       features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
+       coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 1.0,
+       lambda = 6.0))
        coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
-                            s0
-       (Intercept) -0.2480643
-       data.V2      0.0000000
-       data.V3       .
-       data.V4       .
-       data.V5       .
+                           s0
+       (Intercept) -0.2516986
+       data.V3      0.0000000
+       data.V4      .
+       data.V5      .
+       data.V6      .
      */
-    val interceptR = -0.248065
+    val interceptR = -0.2516986
     val coefficientsR = Vectors.dense(0.0, 0.0, 0.0, 0.0)
 
     assert(model1.intercept ~== interceptR relTol 1E-5)
@@ -981,9 +981,9 @@ class LogisticRegressionSuite
   }
 
   test("multinomial logistic regression with intercept with strong L1 regularization") {
-    val trainer1 = (new LogisticRegression).setFitIntercept(true)
+    val trainer1 = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
       .setElasticNetParam(1.0).setRegParam(6.0).setStandardization(true)
-    val trainer2 = (new LogisticRegression).setFitIntercept(true)
+    val trainer2 = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
       .setElasticNetParam(1.0).setRegParam(6.0).setStandardization(false)
 
     val sqlContext = multinomialDataset.sqlContext
@@ -991,16 +991,17 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(multinomialDataset)
     val model2 = trainer2.fit(multinomialDataset)
 
-    val histogram = multinomialDataset.as[LabeledPoint].rdd.map(_.label)
+    val histogram = multinomialDataset.as[Instance].rdd.map(i => (i.label, i.weight))
       .treeAggregate(new MultiClassSummarizer)(
         seqOp = (c, v) => (c, v) match {
-          case (classSummarizer: MultiClassSummarizer, label: Double) => classSummarizer.add(label)
+          case (classSummarizer: MultiClassSummarizer, (label: Double, weight: Double)) =>
+            classSummarizer.add(label, weight)
         },
         combOp = (c1, c2) => (c1, c2) match {
           case (classSummarizer1: MultiClassSummarizer, classSummarizer2: MultiClassSummarizer) =>
             classSummarizer1.merge(classSummarizer2)
         }).histogram
-    val numFeatures = multinomialDataset.as[LabeledPoint].first().features.size
+    val numFeatures = multinomialDataset.as[Instance].first().features.size
     val numClasses = histogram.length
 
     /*
