@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
@@ -475,6 +476,13 @@ class InMemoryCatalog(
         "listPartition with partial partition spec is not implemented")
     }
     catalog(db).tables(table).partitions.values.toSeq
+  }
+
+  override def listPartitionsByFilter(
+      db: String,
+      table: String,
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
+    throw new UnsupportedOperationException("listPartitionsByFilter is not implemented.")
   }
 
   // --------------------------------------------------------------------------

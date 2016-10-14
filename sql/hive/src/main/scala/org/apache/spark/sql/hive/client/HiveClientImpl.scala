@@ -525,9 +525,10 @@ private[hive] class HiveClientImpl(
    * If no partition spec is specified, all partitions are returned.
    */
   override def getPartitions(
-      table: CatalogTable,
+      db: String,
+      table: String,
       spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
-    val hiveTable = toHiveTable(table)
+    val hiveTable = toHiveTable(getTable(db, table))
     spec match {
       case None => shim.getAllPartitions(client, hiveTable).map(fromHivePartition)
       case Some(s) => client.getPartitions(hiveTable, s.asJava).asScala.map(fromHivePartition)
@@ -535,9 +536,10 @@ private[hive] class HiveClientImpl(
   }
 
   override def getPartitionsByFilter(
-      table: CatalogTable,
+      db: String,
+      table: String,
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
-    val hiveTable = toHiveTable(table)
+    val hiveTable = toHiveTable(getTable(db, table))
     shim.getPartitionsByFilter(client, hiveTable, predicates).map(fromHivePartition)
   }
 
