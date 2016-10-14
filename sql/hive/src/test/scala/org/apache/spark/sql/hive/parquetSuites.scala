@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
 // The data that also includes the partitioning key
-case class ParquetDataWithKey(pQ: Int, intField: Int, stringField: String)
+case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
 
 case class StructContainer(intStructField: Int, stringStructField: String)
 
@@ -45,7 +45,7 @@ case class ParquetDataWithComplexTypes(
     arrayField: Seq[Int])
 
 case class ParquetDataWithKeyAndComplexTypes(
-    pQ: Int,
+    p: Int,
     intField: Int,
     stringField: String,
     structField: StructContainer,
@@ -75,7 +75,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         intField INT,
         stringField STRING
       )
-      PARTITIONED BY (pQ int)
+      PARTITIONED BY (p int)
       ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
@@ -89,7 +89,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         intField INT,
         stringField STRING
       )
-      PARTITIONED BY (pQ int)
+      PARTITIONED BY (p int)
       ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
@@ -118,7 +118,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         structField STRUCT<intStructField: INT, stringStructField: STRING>,
         arrayField ARRAY<INT>
       )
-      PARTITIONED BY (pQ int)
+      PARTITIONED BY (p int)
       ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
@@ -134,7 +134,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         structField STRUCT<intStructField: INT, stringStructField: STRING>,
         arrayField ARRAY<INT>
       )
-      PARTITIONED BY (pQ int)
+      PARTITIONED BY (p int)
       ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
        STORED AS
        INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
@@ -156,19 +156,19 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       """.stripMargin)
 
     (1 to 10).foreach { p =>
-      sql(s"ALTER TABLE partitioned_parquet ADD PARTITION (pQ=$p)")
+      sql(s"ALTER TABLE partitioned_parquet ADD PARTITION (p=$p)")
     }
 
     (1 to 10).foreach { p =>
-      sql(s"ALTER TABLE partitioned_parquet_with_key ADD PARTITION (pQ=$p)")
+      sql(s"ALTER TABLE partitioned_parquet_with_key ADD PARTITION (p=$p)")
     }
 
     (1 to 10).foreach { p =>
-      sql(s"ALTER TABLE partitioned_parquet_with_key_and_complextypes ADD PARTITION (pQ=$p)")
+      sql(s"ALTER TABLE partitioned_parquet_with_key_and_complextypes ADD PARTITION (p=$p)")
     }
 
     (1 to 10).foreach { p =>
-      sql(s"ALTER TABLE partitioned_parquet_with_complextypes ADD PARTITION (pQ=$p)")
+      sql(s"ALTER TABLE partitioned_parquet_with_complextypes ADD PARTITION (p=$p)")
     }
 
     (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").createOrReplaceTempView("jt")
@@ -649,7 +649,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       CREATE TEMPORARY VIEW normal_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
-        path '${new File(partitionedTableDir, "pQ=1").getCanonicalPath}'
+        path '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
       )
     """)
 
@@ -827,7 +827,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     normalTableDir = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
-      val partDir = new File(partitionedTableDir, s"pQ=$p")
+      val partDir = new File(partitionedTableDir, s"p=$p")
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetData(i, s"part-$p"))
         .toDF()
@@ -843,7 +843,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     partitionedTableDirWithKey = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
-      val partDir = new File(partitionedTableDirWithKey, s"pQ=$p")
+      val partDir = new File(partitionedTableDirWithKey, s"p=$p")
       sparkContext.makeRDD(1 to 10)
         .map(i => ParquetDataWithKey(p, i, s"part-$p"))
         .toDF()
@@ -853,7 +853,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     partitionedTableDirWithKeyAndComplexTypes = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
-      val partDir = new File(partitionedTableDirWithKeyAndComplexTypes, s"pQ=$p")
+      val partDir = new File(partitionedTableDirWithKeyAndComplexTypes, s"p=$p")
       sparkContext.makeRDD(1 to 10).map { i =>
         ParquetDataWithKeyAndComplexTypes(
           p, i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i)
@@ -863,7 +863,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     partitionedTableDirWithComplexTypes = Utils.createTempDir()
 
     (1 to 10).foreach { p =>
-      val partDir = new File(partitionedTableDirWithComplexTypes, s"pQ=$p")
+      val partDir = new File(partitionedTableDirWithComplexTypes, s"p=$p")
       sparkContext.makeRDD(1 to 10).map { i =>
         ParquetDataWithComplexTypes(i, s"part-$p", StructContainer(i, f"${i}_string"), 1 to i)
       }.toDF().write.parquet(partDir.getCanonicalPath)
@@ -897,19 +897,19 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     test(s"ordering of the partitioning columns $table") {
       checkAnswer(
-        sql(s"SELECT pQ, stringField FROM $table WHERE pQ = 1"),
+        sql(s"SELECT p, stringField FROM $table WHERE p = 1"),
         Seq.fill(10)(Row(1, "part-1"))
       )
 
       checkAnswer(
-        sql(s"SELECT stringField, pQ FROM $table WHERE pQ = 1"),
+        sql(s"SELECT stringField, p FROM $table WHERE p = 1"),
         Seq.fill(10)(Row("part-1", 1))
       )
     }
 
     test(s"project the partitioning column $table") {
       checkAnswer(
-        sql(s"SELECT pQ, count(*) FROM $table group by pQ"),
+        sql(s"SELECT p, count(*) FROM $table group by p"),
         Row(1, 10) ::
           Row(2, 10) ::
           Row(3, 10) ::
@@ -925,7 +925,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     test(s"project partitioning and non-partitioning columns $table") {
       checkAnswer(
-        sql(s"SELECT stringField, pQ, count(intField) FROM $table GROUP BY pQ, stringField"),
+        sql(s"SELECT stringField, p, count(intField) FROM $table GROUP BY p, stringField"),
         Row("part-1", 1, 10) ::
           Row("part-2", 2, 10) ::
           Row("part-3", 3, 10) ::
@@ -947,19 +947,19 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     test(s"pruned count $table") {
       checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $table WHERE pQ = 1"),
+        sql(s"SELECT COUNT(*) FROM $table WHERE p = 1"),
         Row(10))
     }
 
     test(s"non-existent partition $table") {
       checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $table WHERE pQ = 1000"),
+        sql(s"SELECT COUNT(*) FROM $table WHERE p = 1000"),
         Row(0))
     }
 
     test(s"multi-partition pruned count $table") {
       checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $table WHERE pQ IN (1,2,3)"),
+        sql(s"SELECT COUNT(*) FROM $table WHERE p IN (1,2,3)"),
         Row(30))
     }
 
@@ -971,7 +971,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     test(s"sum $table") {
       checkAnswer(
-        sql(s"SELECT SUM(intField) FROM $table WHERE intField IN (1,2,3) AND pQ = 1"),
+        sql(s"SELECT SUM(intField) FROM $table WHERE intField IN (1,2,3) AND p = 1"),
         Row(1 + 2 + 3))
     }
 
@@ -992,15 +992,15 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
       checkAnswer(
         sql(
           s"""
-             |SELECT pQ, structField.intStructField, structField.stringStructField
-             |FROM $table WHERE pQ = 1
+             |SELECT p, structField.intStructField, structField.stringStructField
+             |FROM $table WHERE p = 1
            """.stripMargin),
         (1 to 10).map(i => Row(1, i, f"${i}_string")))
     }
 
     test(s"SPARK-5775 read array from $table") {
       checkAnswer(
-        sql(s"SELECT arrayField, pQ FROM $table WHERE pQ = 1"),
+        sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
         (1 to 10).map(i => Row(1 to i, 1)))
     }
   }
