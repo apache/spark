@@ -71,7 +71,7 @@ case class HadoopFsRelation(
 
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
-  location.allFiles().map(_.getPath.toUri.toString).toArray
+    location.allFiles().map(_.getPath.toUri.toString).toArray
 
   override def sizeInBytes: Long = location.allFiles().map(_.getLen).sum
 }
