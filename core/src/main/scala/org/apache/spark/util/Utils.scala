@@ -1495,6 +1495,7 @@ private[spark] object Utils extends Logging {
    * the given order. See figure below for more details.
    */
   def offsetBytes(files: Seq[File], fileLengths: Seq[Long], start: Long, end: Long): String = {
+    assert(files.length == fileLengths.length)
     val startIndex = math.max(start, 0)
     val endIndex = math.min(end, fileLengths.sum)
     val fileToLength = files.zip(fileLengths).toMap
