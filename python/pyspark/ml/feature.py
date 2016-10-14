@@ -2494,21 +2494,30 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     formula = Param(Params._dummy(), "formula", "R model formula",
                     typeConverter=TypeConverters.toString)
 
+    forceIndexLabel = Param(Params._dummy(), "forceIndexLabel",
+                            "Force to index label whether it is numeric or string",
+                            typeConverter=TypeConverters.toBoolean)
+
     @keyword_only
-    def __init__(self, formula=None, featuresCol="features", labelCol="label"):
+    def __init__(self, formula=None, featuresCol="features", labelCol="label",
+                 forceIndexLabel=False):
         """
-        __init__(self, formula=None, featuresCol="features", labelCol="label")
+        __init__(self, formula=None, featuresCol="features", labelCol="label", \
+                 forceIndexLabel=False)
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
+        self._setDefault(forceIndexLabel=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.5.0")
-    def setParams(self, formula=None, featuresCol="features", labelCol="label"):
+    def setParams(self, formula=None, featuresCol="features", labelCol="label",
+                  forceIndexLabel=False):
         """
-        setParams(self, formula=None, featuresCol="features", labelCol="label")
+        setParams(self, formula=None, featuresCol="features", labelCol="label", \
+                  forceIndexLabel=False)
         Sets params for RFormula.
         """
         kwargs = self.setParams._input_kwargs
@@ -2527,6 +2536,20 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         Gets the value of :py:attr:`formula`.
         """
         return self.getOrDefault(self.formula)
+
+    @since("2.1.0")
+    def setForceIndexLabel(self, value):
+        """
+        Sets the value of :py:attr:`forceIndexLabel`.
+        """
+        return self._set(forceIndexLabel=value)
+
+    @since("2.1.0")
+    def getForceIndexLabel(self):
+        """
+        Gets the value of :py:attr:`forceIndexLabel`.
+        """
+        return self.getOrDefault(self.forceIndexLabel)
 
     def _create_model(self, java_model):
         return RFormulaModel(java_model)

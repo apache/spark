@@ -477,6 +477,22 @@ class FeatureTests(SparkSessionTestCase):
             feature, expected = r
             self.assertEqual(feature, expected)
 
+    def test_rformula_force_index_label(self):
+        df = self.spark.createDataFrame([
+            (1.0, 1.0, "a"),
+            (0.0, 2.0, "b"),
+            (1.0, 0.0, "a")], ["y", "x", "s"])
+        # Does not index label by default since it's numeric type.
+        rf = RFormula(formula="y ~ x + s")
+        model = rf.fit(df)
+        transformedDF = model.transform(df)
+        self.assertEqual(transformedDF.head().label, 1.0)
+        # Force to index label.
+        rf2 = RFormula(formula="y ~ x + s").setForceIndexLabel(True)
+        model2 = rf2.fit(df)
+        transformedDF2 = model2.transform(df)
+        self.assertEqual(transformedDF2.head().label, 0.0)
+
 
 class HasInducedError(Params):
 
