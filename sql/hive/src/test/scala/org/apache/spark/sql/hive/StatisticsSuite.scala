@@ -394,17 +394,17 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     val (statsBeforeUpdate, statsAfterUpdate) = getStatsBeforeAfterUpdate(isAnalyzeColumns = false)
 
     assert(statsBeforeUpdate.sizeInBytes > 0)
-    assert(statsBeforeUpdate.rowCount.contains(1))
+    assert(statsBeforeUpdate.rowCount == Some(1))
 
     assert(statsAfterUpdate.sizeInBytes > statsBeforeUpdate.sizeInBytes)
-    assert(statsAfterUpdate.rowCount.contains(2))
+    assert(statsAfterUpdate.rowCount == Some(2))
   }
 
   test("test refreshing column stats of cached data source table by `ANALYZE TABLE` statement") {
     val (statsBeforeUpdate, statsAfterUpdate) = getStatsBeforeAfterUpdate(isAnalyzeColumns = true)
 
     assert(statsBeforeUpdate.sizeInBytes > 0)
-    assert(statsBeforeUpdate.rowCount.contains(1))
+    assert(statsBeforeUpdate.rowCount == Some(1))
     StatisticsTest.checkColStat(
       dataType = IntegerType,
       colStat = statsBeforeUpdate.colStats("key"),
@@ -412,7 +412,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       rsd = spark.sessionState.conf.ndvMaxError)
 
     assert(statsAfterUpdate.sizeInBytes > statsBeforeUpdate.sizeInBytes)
-    assert(statsAfterUpdate.rowCount.contains(2))
+    assert(statsAfterUpdate.rowCount == Some(2))
     StatisticsTest.checkColStat(
       dataType = IntegerType,
       colStat = statsAfterUpdate.colStats("key"),
@@ -420,7 +420,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       rsd = spark.sessionState.conf.ndvMaxError)
   }
 
-  private def dataAndColStats(): (DataFrame, Seq[(StructField, ColumnStat)]) = {
+  private lazy val (testDataFrame, expectedColStatsSeq) = {
     import testImplicits._
 
     val intSeq = Seq(1, 2)
@@ -430,8 +430,8 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     val data = intSeq.indices.map { i =>
       (intSeq(i), stringSeq(i), binarySeq(i), booleanSeq(i))
     }
-    val df = data.toDF("c1", "c2", "c3", "c4")
-    val expectedColStatsSeq = df.schema.map { f =>
+    val df: DataFrame = data.toDF("c1", "c2", "c3", "c4")
+    val expectedColStatsSeq: Seq[(StructField, ColumnStat)] = df.schema.map { f =>
       val colStat = f.dataType match {
         case IntegerType =>
           ColumnStat(InternalRow(0L, intSeq.max, intSeq.min, intSeq.distinct.length.toLong))
@@ -478,8 +478,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
   test("generate and load column-level stats for data source table") {
     val dsTable = "dsTable"
     withTable(dsTable) {
-      val (df, expectedColStatsSeq) = dataAndColStats()
-      df.write.format("parquet").saveAsTable(dsTable)
+      testDataFrame.write.format("parquet").saveAsTable(dsTable)
       sql(s"ANALYZE TABLE $dsTable COMPUTE STATISTICS FOR COLUMNS c1, c2, c3, c4")
       checkColStats(dsTable, isDataSourceTable = true, expectedColStatsSeq)
     }
@@ -489,8 +488,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     val hTable = "hTable"
     val tmp = "tmp"
     withTable(hTable, tmp) {
-      val (df, expectedColStatsSeq) = dataAndColStats()
-      df.write.format("parquet").saveAsTable(tmp)
+      testDataFrame.write.format("parquet").saveAsTable(tmp)
       sql(s"CREATE TABLE $hTable (c1 int, c2 string, c3 binary, c4 boolean) STORED AS TEXTFILE")
       sql(s"INSERT INTO $hTable SELECT * FROM $tmp")
       sql(s"ANALYZE TABLE $hTable COMPUTE STATISTICS FOR COLUMNS c1, c2, c3, c4")
