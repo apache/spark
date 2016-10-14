@@ -64,7 +64,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
     assert(CatalystTypeConverters.createToCatalystConverter(IntegerType)(Some(123)) === 123)
   }
 
-  test("primitive array handing") {
+  test("primitive array handling") {
     val intArray = Array(1, 100, 10000)
     val intUnsafeArray = UnsafeArrayData.fromPrimitiveArray(intArray)
     val intArrayType = ArrayType(IntegerType, false)
@@ -81,7 +81,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
       == doubleUnsafeArray)
   }
 
-  test("An array with null handing") {
+  test("An array with null handling") {
     val intArray = Array(1, null, 100, null, 10000)
     val intGenericArray = new GenericArrayData(intArray)
     val intArrayType = ArrayType(IntegerType, true)
