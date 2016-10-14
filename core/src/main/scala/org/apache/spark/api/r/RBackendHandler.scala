@@ -18,23 +18,23 @@
 package org.apache.spark.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.HashMap
 import scala.language.existentials
 
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
-import io.netty.channel.ChannelHandler.Sharable
 
 import org.apache.spark.api.r.SerDe._
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.SparkConf
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Handler for RBackend
  * TODO: This is marked as sharable to get a handle to RBackend. Is it safe to re-use
  * this across connections ?
  */
-@Sharable
 private[r] class RBackendHandler(server: RBackend)
   extends SimpleChannelInboundHandler[Array[Byte]] with Logging {
 
@@ -83,7 +83,29 @@ private[r] class RBackendHandler(server: RBackend)
           writeString(dos, s"Error: unknown method $methodName")
       }
     } else {
+      // To avoid timeouts when reading results in SparkR driver, we will be regularly sending
+      // heartbeat responses. We use special character -1 to signal the client that backend is
+      // alive and it should continue blocking for result.
+      val execService = ThreadUtils.newDaemonSingleThreadScheduledExecutor("SparkRKeepAliveThread")
+      val pingRunner = new Runnable {
+        override def run(): Unit = {
+          val pingBaos = new ByteArrayOutputStream()
+          val pingDaos = new DataOutputStream(pingBaos)
+          writeInt(pingDaos, -1)
+          ctx.write(pingBaos.toByteArray)
+        }
+      }
+      val conf = new SparkConf()
+      val heartBeatInterval = conf.getInt(
+        "spark.r.heartBeatInterval", SparkRDefaults.DEFAULT_HEARTBEAT_INTERVAL)
+      val backendConnectionTimeout = conf.getInt(
+        "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
+      val interval = Math.min(heartBeatInterval, backendConnectionTimeout - 1)
+
+      execService.scheduleAtFixedRate(pingRunner, interval, interval, TimeUnit.SECONDS)
       handleMethodCall(isStatic, objId, methodName, numArgs, dis, dos)
+      execService.shutdown()
+      execService.awaitTermination(1, TimeUnit.SECONDS)
     }
 
     val reply = bos.toByteArray
