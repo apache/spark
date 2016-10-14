@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
@@ -369,6 +370,40 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           assert(df.schema === singleRowDF.schema.asNullable)
           checkAnswer(df, singleRowDF)
         }
+      }
+    }
+  }
+
+  test("support empty orc table when converting hive serde table to data source table") {
+    withSQLConf((HiveUtils.CONVERT_METASTORE_ORC.key, "true")) {
+      withTable("empty_orc_partitioned") {
+        sql(
+          """
+            |CREATE TABLE empty_orc_partitioned(key INT, value STRING)
+            |PARTITIONED BY (p INT) STORED AS ORC
+          """.stripMargin)
+
+        val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+
+        // Query empty table
+        checkAnswer(
+          sql("SELECT key, value FROM empty_orc_partitioned"),
+          emptyDF)
+      }
+
+      withTable("empty_orc") {
+        sql(
+          """
+            |CREATE TABLE empty_orc(key INT, value STRING)
+            |STORED AS ORC
+          """.stripMargin)
+
+        val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+
+        // Query empty table
+        checkAnswer(
+          sql("SELECT key, value FROM empty_orc"),
+          emptyDF)
       }
     }
   }

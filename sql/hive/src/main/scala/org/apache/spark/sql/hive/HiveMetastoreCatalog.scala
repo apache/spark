@@ -191,7 +191,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       defaultSource: FileFormat,
       fileFormatClass: Class[_ <: FileFormat],
       fileType: String): LogicalRelation = {
-    val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
+    val metastoreSchema = metastoreRelation.schema
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
     val bucketSpec = None  // We don't support hive bucketed tables, only ones we write out.
@@ -237,20 +237,23 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           new Path(metastoreRelation.catalogTable.storage.locationUri.get),
           partitionSpec)
 
-        val inferredSchema = if (fileType.equals("parquet")) {
-          val inferredSchema =
-            defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
-          inferredSchema.map { inferred =>
-            ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, inferred)
-          }.getOrElse(metastoreSchema)
-        } else {
-          defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles()).get
+        val schema = fileType match {
+          case "parquet" =>
+            val inferredSchema =
+              defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
+            inferredSchema.map { inferred =>
+              ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, inferred)
+            }.getOrElse(metastoreSchema)
+          case "orc" =>
+            metastoreSchema
+          case _ =>
+            throw new RuntimeException(s"Cannot convert a $fileType to a data source table")
         }
 
         val relation = HadoopFsRelation(
           location = fileCatalog,
           partitionSchema = partitionSchema,
-          dataSchema = inferredSchema,
+          dataSchema = schema,
           bucketSpec = bucketSpec,
           fileFormat = defaultSource,
           options = options)(sparkSession = sparkSession)
@@ -277,7 +280,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             DataSource(
               sparkSession = sparkSession,
               paths = paths,
-              userSpecifiedSchema = Some(metastoreRelation.schema),
+              userSpecifiedSchema = Some(metastoreSchema),
               bucketSpec = bucketSpec,
               options = options,
               className = fileType).resolveRelation(),
