@@ -82,6 +82,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 
   /**
    * Param for KMeansModel to use for warm start.
+   * The setting of initialModel takes precedence of param K.
    * @group param
    */
   final val initialModel: Param[KMeansModel] =
@@ -317,8 +318,11 @@ class KMeans @Since("1.5.0") (
   def setInitialModel(value: KMeansModel): this.type = {
     val kOfInitialModel = value.parentModel.clusterCenters.length
     if (isSet(k)) {
-      require(kOfInitialModel == $(k),
-        s"mismatched cluster count, ${$(k)} cluster centers required but $kOfInitialModel found.")
+      if ($(k) != kOfInitialModel) {
+        set(k, kOfInitialModel)
+        logWarning(s"Param K is set to $kOfInitialModel by the initialModel." +
+          s" Previous value is ${$(k)}.")
+      }
     } else {
       set(k, kOfInitialModel)
       logWarning(s"Param K is set to $kOfInitialModel by the initialModel.")
@@ -354,7 +358,8 @@ class KMeans @Since("1.5.0") (
       // Check the equal of number of clusters
       val kOfInitialModel = $(initialModel).parentModel.clusterCenters.length
       require(kOfInitialModel == $(k),
-        s"mismatched cluster count, ${$(k)} cluster centers required but $kOfInitialModel found.")
+        s"mismatched cluster count, ${$(k)} cluster centers required but $kOfInitialModel found" +
+          s" in the initial model.")
 
       algo.setInitialModel($(initialModel).parentModel)
     }
@@ -398,7 +403,7 @@ object KMeans extends DefaultParamsReadable[KMeans] {
 
   private class KMeansReader extends MLReader[KMeans] {
 
-    /** Checked against metadata when loading model */
+    /** Checked against metadata when loading estimator */
     private val className = classOf[KMeans].getName
 
     override def load(path: String): KMeans = {
