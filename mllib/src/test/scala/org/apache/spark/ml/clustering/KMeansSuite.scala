@@ -174,6 +174,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     val testNewK = 10
     val randomModel = KMeansSuite.generateRandomKMeansModel(dim, testNewK)
     assert(kmeans.setInitialModel(randomModel).getK === testNewK)
+
+    val differentKRandomModel = KMeansSuite.generateRandomKMeansModel(dim, testNewK + 1)
+    assert(kmeans.setInitialModel(differentKRandomModel).getK === testNewK + 1)
   }
 
   test("Reset K after setting initial model") {
