@@ -117,13 +117,12 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
   }
 
-  private val fileUncompressedLengthCacheSize =
-    parent.worker.conf.getInt(
+  private val fileUncompressedLengthCacheSize = parent.worker.conf.getInt(
       RollingFileAppender.FILE_UNCOMPRESSED_LENGTH_CACHE_SIZE,
       RollingFileAppender.DEFAULT_FILE_UNCOMPRESSED_LENGTH_CACHE_SIZE)
   // Cache the file size, since it is expensive to compute the uncompressed file size.
   private val fileUncompressedLengthCache = CacheBuilder.newBuilder()
-    .maximumSize(fileUncompressedLengthCache)
+    .maximumSize(fileUncompressedLengthCacheSize)
     .build[String, java.lang.Long](new CacheLoader[String, java.lang.Long]() {
       override def load(path: String): java.lang.Long = {
         Utils.getFileLength(new File(path))
