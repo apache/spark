@@ -83,7 +83,7 @@ public final class NioBufferedFileInputStream extends InputStream {
 
   @Override
   public synchronized int read(byte[] b, int offset, int len) throws IOException {
-    if ((offset | len | (offset + len) | (b.length - (offset + len))) < 0) {
+    if (offset < 0 || len < 0 || (offset + len) < 0 || (b.length - (offset + len)) < 0) {
       throw new IndexOutOfBoundsException();
     }
     if (!refill()) {
