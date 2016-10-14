@@ -77,8 +77,7 @@ class KafkaForeachWriter[T](
           s"Producer sends messages Failed! KafkaForeachWriter supports only StringType value, " +
             s"and you have ${schema(0).dataType} and ${schema(1).dataType} value.")
       }
-      if (schema.fieldNames.contains("key") && schema.fieldNames.contains("value")) {
-      } else {
+      if (!schema.fieldNames.contains("key") || !schema.fieldNames.contains("value")) {
         throw new AnalysisException(
           s"""Producer sends messages Failed! If there are two columns in Row, fieldsNames
               should be "key" and "value" .
