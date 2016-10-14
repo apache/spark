@@ -629,9 +629,9 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(2.1)
     def crossJoin(self, other):
-        """Returns the cartesian product with another :class:`DataFrame`
+        """Returns the cartesian product with another :class:`DataFrame`.
 
-        :param other: Right side of the cartesian product
+        :param other: Right side of the cartesian product.
 
         >>> df.select("age", "name").collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
