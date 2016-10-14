@@ -627,6 +627,24 @@ class DataFrame(object):
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
 
     @ignore_unicode_prefix
+    @since(2.0)
+    def crossJoin(self, other):
+        """Returns the cartesian product with another :class:`DataFrame`
+
+        :param other: Right side of the cartesian product
+
+        >>> df.select("age", "name").collect()
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        >>> df2.select("name", "height").collect()
+        [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85)]
+        >>> df.crossJoin(df2.select("height")).select("age", "name", "height").collect()
+        [Row(age=2, name=u'Alice', height=80), Row(age=2, name=u'Alice', height=85), Row(age=5, name=u'Bob', height=80), Row(age=5, name=u'Bob', height=85)]
+        """
+
+        jdf = self._jdf.crossJoin(other._jdf)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @ignore_unicode_prefix
     @since(1.3)
     def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
@@ -666,14 +684,11 @@ class DataFrame(object):
                 on = self._jseq(on)
             else:
                 assert isinstance(on[0], Column), "on should be Column or list of Column"
-                if len(on) > 1:
-                    on = reduce(lambda x, y: x.__and__(y), on)
-                else:
-                    on = on[0]
+                on = reduce(lambda x, y: x.__and__(y), on)
                 on = on._jc
 
         if on is None and how is None:
-            jdf = self._jdf.crossJoin(other._jdf)
+            jdf = self._jdf.join(other._jdf)
         else:
             if how is None:
                 how = "inner"
