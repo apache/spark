@@ -147,15 +147,15 @@ private[hive] case class MetastoreRelation(
   // mimic the behavior of Spark < 1.5
   private lazy val allPartitions: Seq[CatalogTablePartition] = {
     sparkSession.sharedState.externalCatalog.listPartitions(
-      catalogTable.identifier.table,
-      catalogTable.database)
+      catalogTable.database,
+      catalogTable.identifier.table)
   }
 
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
     val rawPartitions = if (sparkSession.sessionState.conf.metastorePartitionPruning) {
       sparkSession.sharedState.externalCatalog.listPartitionsByFilter(
-        catalogTable.identifier.table,
         catalogTable.database,
+        catalogTable.identifier.table,
         predicates)
     } else {
       allPartitions
