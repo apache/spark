@@ -267,7 +267,7 @@ object SQLConf {
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
            "unmatching partitions can be eliminated earlier.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
