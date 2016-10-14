@@ -578,7 +578,7 @@ object Expand {
         } else {
           attr
         }
-        // groupingId is the last output, here we use the bit mask as the concrete value for it.
+      // groupingId is the last output, here we use the bit mask as the concrete value for it.
       } :+ Literal.create(buildBitmask(groupingSetAttrs, attrMap), IntegerType)
     }
 

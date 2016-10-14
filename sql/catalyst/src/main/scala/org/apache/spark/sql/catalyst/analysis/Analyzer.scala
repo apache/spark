@@ -367,12 +367,14 @@ class Analyzer(
 
         Aggregate(groupingAttrs, aggregations, expand)
 
+      // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
         val groupingExprs = findGroupingExprs(child)
         // The unresolved grouping id will be resolved by ResolveMissingReferences
         val newCond = replaceGroupingFunc(cond, groupingExprs, VirtualColumn.groupingIdAttribute)
         f.copy(condition = newCond)
 
+      // We should make sure all [[SortOrder]]s have been resolved.
       case s @ Sort(order, _, child)
         if order.exists(hasGroupingFunction) && order.forall(_.resolved) =>
         val groupingExprs = findGroupingExprs(child)
