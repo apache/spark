@@ -545,7 +545,7 @@ class LogisticRegressionSuite
       data.V5     -0.3878645
       data.V6     -0.8060570
 
-    */
+     */
     val coefficientsR = Vectors.dense(-0.5734389, 0.8911736, -0.3878645, -0.8060570)
     val interceptR = 2.7355261
 
@@ -586,7 +586,7 @@ class LogisticRegressionSuite
       data.V5     -0.3539178
       data.V6     -0.7469384
 
-    */
+     */
     val coefficientsR = Vectors.dense(-0.3448461, 1.2776453, -0.3539178, -0.7469384)
 
     assert(model1.intercept ~== 0.0 relTol 1E-3)
@@ -626,7 +626,7 @@ class LogisticRegressionSuite
       data.V5     -0.03933146
       data.V6     -0.03047580
 
-    */
+     */
     val coefficientsRStd = Vectors.dense(0.0, 0.0, -0.03933146, -0.03047580)
     val interceptRStd = -0.06775980
 
@@ -653,7 +653,7 @@ class LogisticRegressionSuite
       data.V5     -0.1626191
       data.V6      .
 
-    */
+     */
     val coefficientsR = Vectors.dense(0.0, 0.0, -0.1626191, 0.0)
     val interceptR = 0.3544768
 
@@ -702,7 +702,7 @@ class LogisticRegressionSuite
       data.V5     -0.08433195
       data.V6      .
 
-    */
+     */
     val coefficientsRStd = Vectors.dense(0.0, 0.0, -0.04967635, -0.04757757)
 
     val coefficientsR = Vectors.dense(0.0, 0.0, -0.08433195, 0.0)
@@ -752,7 +752,7 @@ class LogisticRegressionSuite
       data.V5     -0.11362772
       data.V6     -0.06312848
 
-    */
+     */
     val coefficientsRStd = Vectors.dense(-0.06980967, 0.10803933, -0.04800404, -0.10165096)
     val interceptRStd = 0.12707703
     val coefficientsR = Vectors.dense(-0.04944529, 0.02326772, -0.11362772, -0.06312848)
@@ -803,7 +803,7 @@ class LogisticRegressionSuite
       data.V5     -0.093411640
       data.V6     -0.054149798
 
-    */
+     */
     val coefficientsRStd = Vectors.dense(-0.06000152, 0.12598737, -0.04669009, -0.09941025)
     val coefficientsR = Vectors.dense(-0.005482255, 0.048106338, -0.093411640, -0.054149798)
 
@@ -852,7 +852,7 @@ class LogisticRegressionSuite
       data.V5     -0.1846038
       data.V6     -0.0559614
 
-    */
+     */
     val coefficientsRStd = Vectors.dense(-0.04131110, 0.0, -0.08585233, -0.15875400)
     val interceptRStd = 0.49991996
     val coefficientsR = Vectors.dense(0.0, 0.0, -0.1846038, -0.0559614)
@@ -903,7 +903,7 @@ class LogisticRegressionSuite
       data.V5     -0.11126742
       data.V6      .
 
-    */
+     */
     val coefficientsRStd = Vectors.dense(0.0, 0.06859390, -0.07900058, -0.14684320)
     val coefficientsR = Vectors.dense(0.0, 0.03060637, -0.11126742, 0.0)
 
@@ -1081,7 +1081,7 @@ class LogisticRegressionSuite
       data.V6  0.07904499
 
 
-    */
+     */
     val coefficientsR = new DenseMatrix(3, 4, Array(
       0.24337896, -0.05916156, 0.14446790, 0.35976165,
       -0.3443375, 0.9181331, -0.2283959, -0.4388066,
@@ -1147,7 +1147,7 @@ class LogisticRegressionSuite
       data.V6  0.1180180
 
 
-    */
+     */
     val coefficientsR = new DenseMatrix(3, 4, Array(
       0.07276291, -0.36325496, 0.12015088, 0.31397340,
       -0.3180040, 0.9679074, -0.2252219, -0.4319914,
@@ -1246,7 +1246,7 @@ class LogisticRegressionSuite
       data.V6  .
 
 
-    */
+     */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
       0.0, 0.0, 0.0, 0.08419825,
       -0.1336960, 0.3717091, -0.1530363, -0.2035286,
@@ -1344,7 +1344,7 @@ class LogisticRegressionSuite
       data.V6  .
 
 
-    */
+     */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
       0.0, 0.0, 0.0, 0.01144225,
       -0.1678787, 0.5385351, -0.1573039, -0.2471624,
@@ -1441,7 +1441,7 @@ class LogisticRegressionSuite
       data.V6  0.03183676
 
 
-    */
+     */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
       0.1691226336, 0.0002983651, 0.1001732896, 0.2554575585,
       -0.2304586, 0.6153492, -0.1537017, -0.2975443,
@@ -1539,7 +1539,7 @@ class LogisticRegressionSuite
       data.V6  0.04277435
 
 
-    */
+     */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
       0.04048126, -0.23075758, 0.08228864, 0.22277648,
       -0.2149745, 0.6478666, -0.1515158, -0.2930498,
@@ -1638,7 +1638,7 @@ class LogisticRegressionSuite
       data.V6  .
 
 
-    */
+     */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
       0.0, 0.0, 0.0, 0.08351653,
       -0.1058702, 0.3183251, -0.1212969, -0.1629778,
@@ -1738,7 +1738,7 @@ class LogisticRegressionSuite
       data.V6  .
 
 
-    */
+     */
     val coefficientsRStd = new DenseMatrix(3, 4, Array(
       0.0, 0.0, 0.0, 0.03238285,
       -0.1328284, 0.4219321, -0.1247544, -0.1893318,
