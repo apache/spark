@@ -2252,7 +2252,7 @@ test_that("Method str()", {
   expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
 })
 
-test_that("collect/show/head on Columns", {
+test_that("show/head on Columns", {
 
   # collect
   x <- irisDF$Sepal_Length + 100
