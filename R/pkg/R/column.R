@@ -70,11 +70,11 @@ setMethod("show", signature = "Column", function(object) {
 })
 
 #' @rdname head
-setMethod("head", signature = "Column", definition = function(x, n=6) {
+setMethod("head", signature = "Column", definition = function(x, num = 6) {
   if (is.null(x@df)) {
     collect(x)
   } else {
-    head(select(x@df, x), n)[, 1]
+    head(select(x@df, x), num)[, 1]
   }
 })
 

@@ -1172,7 +1172,7 @@ setMethod("take",
 #' rows will be returned as a data.frame. If the dataset is a \code{Column}, its first 
 #' elements will be returned as a vector. The number of elements to be returned
 #' is given by parameter \code{num}. Default value for \code{num} is 6.
-#'
+#' @param x a SparkDataFrame or Column
 #' @param num the number of rows to return. Default is 6.
 #' @return A data.frame.
 #'
