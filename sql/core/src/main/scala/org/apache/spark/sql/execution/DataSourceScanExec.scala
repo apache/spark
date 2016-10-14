@@ -231,7 +231,7 @@ case class FileSourceScanExec(
     "Batched" -> supportsBatch.toString,
     "PartitionFilters" -> partitionFilters.mkString("[", ", ", "]"),
     "PushedFilters" -> dataFilters.mkString("[", ", ", "]"),
-    "InputPaths" -> relation.location.paths.mkString(", "))
+    "RootPaths" -> relation.location.rootPaths.mkString(", "))
 
   private lazy val inputRDD: RDD[InternalRow] = {
     val readFile: (PartitionedFile) => Iterator[InternalRow] =

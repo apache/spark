@@ -29,17 +29,17 @@ import org.apache.thrift.TException
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.execution.command.{ColumnStatStruct, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 
 /**
@@ -650,8 +650,39 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def listPartitionsByFilter(
       db: String,
       table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
-    client.getPartitionsByFilter(db, table, predicates)
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = withClient {
+    val catalogTable = client.getTable(db, table)
+    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+    val nonPartitionPruningPredicates = predicates.filterNot {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+
+    if (nonPartitionPruningPredicates.nonEmpty) {
+        sys.error("Expected only partition pruning predicates: " +
+          predicates.reduceLeft(And))
+    }
+
+    val partitionSchema = catalogTable.partitionSchema
+
+    if (predicates.nonEmpty) {
+      val clientPrunedPartitions =
+        client.getPartitionsByFilter(catalogTable, predicates)
+      val boundPredicate =
+        InterpretedPredicate.create(predicates.reduce(And).transform {
+          case att: AttributeReference =>
+            val index = partitionSchema.indexWhere(_.name == att.name)
+            BoundReference(index, partitionSchema(index).dataType, nullable = true)
+        })
+      clientPrunedPartitions.filter { case CatalogTablePartition(spec, _, _) =>
+        val row =
+          InternalRow.fromSeq(partitionSchema.map { case StructField(name, dataType, _, _) =>
+            Cast(Literal(spec(name)), dataType).eval()
+          })
+        boundPredicate(row)
+      }
+    } else {
+      client.getPartitions(catalogTable)
+    }
   }
 
   // --------------------------------------------------------------------------
