@@ -29,7 +29,7 @@ class MetastoreRelationSuite extends SparkFunSuite {
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = StructType(StructField("a", IntegerType, true) :: Nil))
-    val relation = MetastoreRelation("db", "test")(table, null, null)
+    val relation = MetastoreRelation("db", "test")(table, null)
 
     // No exception should be thrown
     relation.makeCopy(Array("db", "test"))
