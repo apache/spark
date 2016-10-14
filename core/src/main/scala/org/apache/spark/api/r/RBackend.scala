@@ -22,7 +22,7 @@ import java.net.{InetAddress, InetSocketAddress, ServerSocket}
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
-import io.netty.channel.{ChannelFuture, ChannelInitializer, EventLoopGroup}
+import io.netty.channel.{ChannelFuture, ChannelInitializer, EventLoopGroup, ChannelOption}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
@@ -43,13 +43,17 @@ private[spark] class RBackend {
 
   def init(): Int = {
     val conf = new SparkConf()
-    bossGroup = new NioEventLoopGroup(conf.getInt("spark.r.numRBackendThreads", 2))
+    val backendConnectionTimeout = conf.getInt(
+      "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
+    bossGroup = new NioEventLoopGroup(
+      conf.getInt("spark.r.numRBackendThreads", SparkRDefaults.DEFAULT_NUM_RBACKEND_THREADS))
     val workerGroup = bossGroup
     val handler = new RBackendHandler(this)
 
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(classOf[NioServerSocketChannel])
+      .childOption[java.lang.Integer](ChannelOption.SO_TIMEOUT, backendConnectionTimeout * 1000)
 
     bootstrap.childHandler(new ChannelInitializer[SocketChannel]() {
       def initChannel(ch: SocketChannel): Unit = {
@@ -113,7 +117,8 @@ private[spark] object RBackend extends Logging {
       // Connection timeout is set by socket client. To make it configurable we will pass the
       // timeout value to client inside the temp file
       val conf = new SparkConf()
-      val backendConnectionTimeout = conf.getInt("spark.r.backendConnectionTimeout", 6000)
+      val backendConnectionTimeout = conf.getInt(
+        "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
 
       // tell the R process via temporary file
       val path = args(0)
