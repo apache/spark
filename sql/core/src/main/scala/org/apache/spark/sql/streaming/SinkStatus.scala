@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
+import org.json4s._
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.streaming.StreamingQueryStatus.indent
 
@@ -34,8 +39,19 @@ class SinkStatus private(
     val description: String,
     val offsetDesc: String) {
 
-  override def toString: String =
-    "SinkStatus:" + indent(prettyString)
+  /** The compact JSON representation of this status. */
+  lazy val json: String = compact(render(jsonValue))
+
+  /** The pretty (i.e. indented) JSON representation of this status. */
+  lazy val prettyJson: String = pretty(render(jsonValue))
+
+  override lazy val toString: String =
+    "Status of sink " + indent(prettyString).trim
+
+  private[sql] lazy val jsonValue: JValue = {
+    ("description" -> JString(description)) ~
+    ("offsetDesc" -> JString(offsetDesc))
+  }
 
   private[sql] def prettyString: String = {
     s"""$description

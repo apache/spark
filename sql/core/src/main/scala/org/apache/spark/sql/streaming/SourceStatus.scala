@@ -21,8 +21,14 @@ import java.{util => ju}
 
 import scala.collection.JavaConverters._
 
+import org.json4s._
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.streaming.StreamingQueryStatus.indent
+import org.apache.spark.util.JsonProtocol
 
 /**
  * :: Experimental ::
@@ -47,10 +53,24 @@ class SourceStatus private(
     val processingRate: Double,
     val triggerDetails: ju.Map[String, String]) {
 
-  override def toString: String =
-    "SourceStatus:" + indent(prettyString)
+  /** The compact JSON representation of this status. */
+  lazy val json: String = compact(render(jsonValue))
 
-  private[sql] def prettyString: String = {
+  /** The pretty (i.e. indented) JSON representation of this status. */
+  lazy val prettyJson: String = pretty(render(jsonValue))
+
+  override lazy val toString: String =
+    "Status of source " + indent(prettyString).trim
+
+  private[sql] lazy val jsonValue: JValue = {
+    ("description" -> JString(description)) ~
+    ("offsetDesc" -> JString(offsetDesc)) ~
+    ("inputRate" -> JDouble(inputRate)) ~
+    ("processingRate" -> JDouble(processingRate)) ~
+    ("triggerDetails" -> JsonProtocol.mapToJson(triggerDetails.asScala))
+  }
+
+  private[sql] lazy val prettyString: String = {
     val triggerDetailsLines =
       triggerDetails.asScala.map { case (k, v) => s"$k: $v" }
     s"""$description
@@ -59,7 +79,6 @@ class SourceStatus private(
        |Processing rate: $processingRate rows/sec
        |Trigger details:
        |""".stripMargin + indent(triggerDetailsLines)
-
   }
 }
 

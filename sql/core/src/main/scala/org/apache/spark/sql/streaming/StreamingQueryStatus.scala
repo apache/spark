@@ -21,8 +21,14 @@ import java.{util => ju}
 
 import scala.collection.JavaConverters._
 
+import org.json4s._
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset}
+import org.apache.spark.util.JsonProtocol
 
 /**
  * :: Experimental ::
@@ -59,29 +65,46 @@ class StreamingQueryStatus private(
 
   import StreamingQueryStatus._
 
-  override def toString: String = {
+  /** The compact JSON representation of this status. */
+  lazy val json: String = compact(render(jsonValue))
+
+  /** The pretty (i.e. indented) JSON representation of this status. */
+  lazy val prettyJson: String = pretty(render(jsonValue))
+
+  override lazy val toString: String = {
     val sourceStatusLines = sourceStatuses.zipWithIndex.map { case (s, i) =>
-      s"Source ${i + 1}:" + indent(s.prettyString)
+      s"Source ${i + 1} - " + indent(s.prettyString).trim
     }
-    val sinkStatusLines = sinkStatus.prettyString
+    val sinkStatusLines = sinkStatus.prettyString.trim
     val triggerDetailsLines = triggerDetails.asScala.map { case (k, v) => s"$k: $v" }.toSeq.sorted
     val numSources = sourceStatuses.length
     val numSourcesString = s"$numSources source" + { if (numSources > 1) "s" else "" }
 
-    val allLines = s"""
-        |Query name: $name
-        |Query id: $id
-        |Status timestamp: $timestamp
-        |Input rate: $inputRate rows/sec
-        |Processing rate $processingRate rows/sec
-        |Latency: ${latency.getOrElse("-")} ms
-        |Trigger details:
-        |${indent(triggerDetailsLines)}
-        |Source statuses [$numSourcesString]:
-        |${indent(sourceStatusLines)}
-        |Sink status: ${indent(sinkStatusLines)}""".stripMargin
+    val allLines =
+      s"""|Query id: $id
+          |Status timestamp: $timestamp
+          |Input rate: $inputRate rows/sec
+          |Processing rate $processingRate rows/sec
+          |Latency: ${latency.getOrElse("-")} ms
+          |Trigger details:
+          |${indent(triggerDetailsLines)}
+          |Source statuses [$numSourcesString]:
+          |${indent(sourceStatusLines)}
+          |Sink status - ${indent(sinkStatusLines).trim}""".stripMargin
 
-    s"StreamingQueryStatus:${indent(allLines)}"
+    s"Status of query '$name'\n${indent(allLines)}"
+  }
+
+  private[sql] lazy val jsonValue: JValue = {
+    ("name" -> JString(name)) ~
+    ("id" -> JInt(id)) ~
+    ("timestamp" -> JInt(timestamp)) ~
+    ("inputRate" -> JDouble(inputRate)) ~
+    ("processingRate" -> JDouble(processingRate)) ~
+    ("latency" -> latency.map(JDouble).getOrElse(JNothing)) ~
+    ("triggerDetails" -> JsonProtocol.mapToJson(triggerDetails.asScala))
+    ("sourceStatuses" -> JArray(sourceStatuses.map(_.jsonValue).toList)) ~
+    ("sinkStatus" -> sinkStatus.jsonValue)
   }
 }
 
