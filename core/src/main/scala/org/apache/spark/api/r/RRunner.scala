@@ -333,7 +333,8 @@ private[r] object RRunner {
     var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
     rCommand = sparkConf.get("spark.r.command", rCommand)
 
-    val rConnectionTimeout = SparkEnv.get.conf.get("spark.r.backendConnectionTimeout", "6000")
+    val rConnectionTimeout = SparkEnv.get.conf.getInt(
+      "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
     val rExecScript = rLibDir(0) + "/SparkR/worker/" + script

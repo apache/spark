@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkUserAppException}
-import org.apache.spark.api.r.{RBackend, RUtils}
+import org.apache.spark.api.r.{RBackend, RUtils, SparkRDefaults}
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -52,7 +52,8 @@ object RRunner {
     }
 
     //  Connection timeout set by R process on its connection to RBackend in seconds.
-    val backendConnectionTimeout = sys.props.getOrElse("spark.r.backendConnectionTimeout", "6000")
+    val backendConnectionTimeout = sys.props.getOrElse(
+      "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT.toString)
 
     // Check if the file path exists.
     // If not, change directory to current working directory for YARN cluster mode
