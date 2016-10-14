@@ -39,8 +39,10 @@ class ListingFileCatalog(
     sparkSession: SparkSession,
     override val rootPaths: Seq[Path],
     parameters: Map[String, String],
-    partitionSchema: Option[StructType])
-  extends PartitioningAwareFileCatalog(sparkSession, parameters, partitionSchema) with Logging {
+    partitionSchema: Option[StructType],
+    fileStatusCache: Option[FileStatusCache] = None)
+  extends PartitioningAwareFileCatalog(sparkSession, parameters, partitionSchema, fileStatusCache)
+  with Logging {
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _

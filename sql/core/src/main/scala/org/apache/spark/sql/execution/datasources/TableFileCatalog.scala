@@ -32,13 +32,21 @@ import org.apache.spark.sql.types.StructType
  * @param table the table's (unqualified) name
  * @param partitionSchema the schema of a partitioned table's partition columns
  * @param sizeInBytes the table's data size in bytes
+ * @param enableFileStatusCache whether to enable file status caching
  */
 class TableFileCatalog(
     sparkSession: SparkSession,
     db: String,
     table: String,
     partitionSchema: Option[StructType],
-    override val sizeInBytes: Long) extends BasicFileCatalog {
+    override val sizeInBytes: Long,
+    enableFileStatusCache: Boolean) extends BasicFileCatalog {
+
+  private val fileStatusCache = if (enableFileStatusCache)  {
+    Some(new FileStatusCache)
+  } else {
+    None
+  }
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf
 
@@ -84,7 +92,7 @@ class TableFileCatalog(
         new PrunedTableFileCatalog(
           sparkSession, new Path(baseLocation.get), partitionSpec)
       case None =>
-        new ListingFileCatalog(sparkSession, rootPaths, parameters, None)
+        new ListingFileCatalog(sparkSession, rootPaths, parameters, None, fileStatusCache)
     }
   }
 
