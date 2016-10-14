@@ -490,7 +490,6 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
             |stored as orc
             |location "${dir.getAbsolutePath}"""".stripMargin)
           spark.sql(s"msck repair table dummy_orc")
-          println(spark.sql("select * from dummy_orc"))
           checkAnswer(spark.sql("select * from dummy_orc"), df)
         }
       }
