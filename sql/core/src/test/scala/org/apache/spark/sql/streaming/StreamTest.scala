@@ -341,11 +341,19 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             verify(currentStream.triggerClock.isInstanceOf[ManualClock],
                    s"can not advance clock of type ${currentStream.triggerClock.getClass}")
             val clock = currentStream.triggerClock.asInstanceOf[ManualClock]
+            // scalastyle:off println
+
             // Make sure we don't advance ManualClock too early. See SPARK-16002.
+            println("Going to advance clock by " + timeToAdd)
             eventually("ManualClock has not yet entered the waiting state") {
+              println(
+                s"\tWaiting for other thread to wait on clock before advancing time by $timeToAdd")
               assert(clock.isWaiting)
             }
-            currentStream.triggerClock.asInstanceOf[ManualClock].advance(timeToAdd)
+            clock.advance(timeToAdd)
+            println("Manual clock advanced to " + clock.getTimeMillis())
+
+          // scalastyle:on println
 
           case StopStream =>
             verify(currentStream != null, "can not stop a stream that is not running")

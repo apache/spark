@@ -119,7 +119,7 @@ sql = Module(
         "sql/core/",
     ],
     sbt_test_goals=[
-        "sql/test",
+        "sql/test-only *.StreamingQueryListener*",
     ],
 )
 

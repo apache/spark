@@ -43,9 +43,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     // Make sure we don't leak any events to the next test
   }
 
-  ignore("single listener, check trigger statuses") {
+  test("single listener, check trigger statuses") {
     import StreamingQueryListenerSuite._
     clock = new ManualClock()
+    // scalastyle:off println
 
     /** Custom MemoryStream that waits for manual clock to reach a time */
     val inputData = new MemoryStream[Int](0, sqlContext) {
@@ -53,24 +54,30 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       override def getOffset: Option[Offset] = {
         val offset = super.getOffset
         if (offset.nonEmpty) {
+          println("In getOffset waiting for 100")
           clock.waitTillTime(100)
+          println("Time after getOffset: " + clock.getTimeMillis())
         }
         offset
       }
 
       // Wait for manual clock to be 300 first time there is data
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        println("In getBatch waiting for 300")
         clock.waitTillTime(300)
+        println("Time after getBatch: " + clock.getTimeMillis())
         super.getBatch(start, end)
       }
     }
 
     // This is to make sure thatquery waits for manual clock to be 600 first time there is data
     val mapped = inputData.toDS().agg(count("*")).as[Long].coalesce(1).map { x =>
+      println("In map waiting for 600")
       clock.waitTillTime(600)
+      println("Time after map: " + clock.getTimeMillis())
       x
     }
-
+    println("=" * 40)
     testStream(mapped, OutputMode.Complete)(
       StartStream(triggerClock = clock),
       AddData(inputData, 1, 2),
@@ -81,6 +88,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       AssertOnLastQueryStatus { status: StreamingQueryStatus =>
         // Check the correctness of the trigger info of the last completed batch reported by
         // onQueryProgress
+        println("Status: " + status)
         assert(status.triggerDetails.get("triggerId") == "0")
         assert(status.triggerDetails.get("isTriggerActive") === "false")
         assert(status.triggerDetails.get("isDataPresentInTrigger") === "true")
@@ -108,6 +116,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       },
       CheckAnswer(2)
     )
+    // scalastyle:on println
   }
 
   test("adding and removing listener") {
