@@ -115,10 +115,12 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       startPartition: Int,
       endPartition: Int,
       context: TaskContext,
-      mapid: Int = -1): ShuffleReader[K, C] = {
+      startMapId: Option[Int] = None,
+      endMapId: Option[Int] = None): ShuffleReader[K, C] = {
     new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
-      startPartition, endPartition, context, mapid = mapid)
+      startPartition, endPartition, context,
+      startMapId = startMapId, endMapId = endMapId)
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */

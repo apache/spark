@@ -38,7 +38,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def adaptiveExecutionEnabled: Boolean = conf.adaptiveExecutionEnabled
 
-  private def adaptiveSkewSizethreshold: Long = conf.adaptiveSkewJoinThresholdSize
+  private def adaptiveSkewSizeThreshold: Long = conf.adaptiveSkewJoinThresholdSize
 
   private def minNumPostShufflePartitions: Option[Int] = {
     val minNumPostShufflePartitions = conf.minNumPostShufflePartitions
@@ -97,7 +97,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
             children.length,
             targetPostShuffleInputSize,
             minNumPostShufflePartitions,
-            adaptiveSkewSizethreshold,
+            adaptiveSkewSizeThreshold,
             isJoin)
         children.zip(requiredChildDistributions).map {
           case (e: ShuffleExchange, _) =>

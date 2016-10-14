@@ -61,7 +61,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       coordinator: ExchangeCoordinator,
       bytesByPartitionIdArray: Array[Array[Long]],
       preStageNum: Array[Int],
-      expectedSkewPartitionIndices: Array[(Int, Array[(Int, Int, Int)])]): Unit = {
+      expectedSkewPartitionIndices: Array[(Int, Array[(Int, Long, Int, Int)])]): Unit = {
     val mapOutputStatistics = bytesByPartitionIdArray.zipWithIndex.map {
       case (bytesByPartitionId, index) =>
         new MapOutputStatistics(index, bytesByPartitionId)
@@ -72,6 +72,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       coordinator.skewPartitionIdx(mapOutputStatistics,
         preStageNum,
         Some(estimatedPartitionStartIndices))
+    // scalastyle:off println println(...)
+   println("-------estimatedPartitionStartIndices---------")
+   estimatedPartitionStartIndices.foreach(println)
+   println(estimatedPartitionStartIndices)
+   println("----------------------")
+   skewPartitionIndices.foreach(m => {println(m._1);m._2.foreach(println)})
+
     assert(skewPartitionIndices.length === 2)
     assert(skewPartitionIndices(0)._1 === expectedSkewPartitionIndices(0)._1)
     assert(skewPartitionIndices(1)._1 === expectedSkewPartitionIndices(1)._1)
@@ -87,7 +94,9 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       val bytesByPartitionId1 = Array[Long](0, 0, 0, 0, 0)
       val bytesByPartitionId2 = Array[Long](0, 0, 0, 0, 0)
       val expectedPartitionStartIndices =
-        Array[(Int, Array[(Int, Int, Int)])]((0, Array((-1, 0, 0))), (0, Array((-1, 0, 0))))
+        Array[(Int, Array[(Int, Long, Int, Int)])](
+          (0, Array((-1, 0L, 0, 0))),
+          (0, Array((-1, 0L, 0, 0))))
       checkSkewPartition(
         coordinator,
         Array(bytesByPartitionId1, bytesByPartitionId2),
@@ -100,16 +109,16 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       val bytesByPartitionId1 = Array[Long](10, 5009, 10, 1, 1)
       val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5)
       val expectedPartitionStartIndices =
-        Array[(Int, Array[(Int, Int, Int)])](
+        Array[(Int, Array[(Int, Long, Int, Int)])](
           (4, Array(
-            (-1, 0, 1),
-            (1, 1, 2),
-            (-1, 2, 1)
+            (-1, 0L, 0, 1),
+            (1, 5009L, 1, 2),
+            (-1, 0L, 2, 1)
           )),
           (4, Array(
-            (-1, 0, 1),
-            (2, 1, 2),
-            (-1, 2, 1)
+            (-1, 0L, 0, 1),
+            (2, 5009L, 1, 2),
+            (-1, 0L, 2, 1)
           )))
       checkSkewPartition(
         coordinator,
@@ -122,18 +131,18 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       val bytesByPartitionId1 = Array[Long](10, 5009, 600, 1, 1)
       val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5)
       val expectedPartitionStartIndices =
-        Array[(Int, Array[(Int, Int, Int)])](
+        Array[(Int, Array[(Int, Long, Int, Int)])](
           (6, Array(
-            (-1, 0, 1),
-            (1, 1, 2),
-            (1, 2, 2),
-            (-1, 3, 1)
+            (-1, 0L, 0, 1),
+            (1, 5009L, 1, 2),
+            (1, 600L, 2, 2),
+            (-1, 0L, 3, 1)
           )),
           (6, Array(
-            (-1, 0, 1),
-            (2, 1, 2),
-            (2, 2, 2),
-            (-1, 3, 1)
+            (-1, 0L, 0, 1),
+            (2, 5009L, 1, 2),
+            (2, 600L, 2, 2),
+            (-1, 0L, 3, 1)
           )))
       checkSkewPartition(
         coordinator,
@@ -147,16 +156,16 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       val bytesByPartitionId1 = Array[Long](10, 5009, 2, 1, 1)
       val bytesByPartitionId2 = Array[Long](1, 4000, 3, 4, 5)
       val expectedPartitionStartIndices =
-        Array[(Int, Array[(Int, Int, Int)])](
+        Array[(Int, Array[(Int, Long, Int, Int)])](
           (4, Array(
-            (-1, 0, 1),
-            (1, 1, 2),
-            (-1, 2, 1)
+            (-1, 0L, 0, 1),
+            (1, 5009L, 1, 2),
+            (-1, 0L, 2, 1)
           )),
           (4, Array(
-            (-1, 0, 1),
-            (2, 1, 2),
-            (-1, 2, 1)
+            (-1, 0L, 0, 1),
+            (2, 5009L, 1, 2),
+            (-1, 0L, 2, 1)
           )))
       checkSkewPartition(
         coordinator,
@@ -169,20 +178,20 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       val bytesByPartitionId1 = Array[Long](10, 5009, 2, 1, 1)
       val bytesByPartitionId2 = Array[Long](1, 2, 3, 5009, 5)
       val expectedPartitionStartIndices =
-        Array[(Int, Array[(Int, Int, Int)])](
+        Array[(Int, Array[(Int, Long, Int, Int)])](
           (8, Array(
-            (-1, 0, 1),
-            (1, 1, 2),
-            (-1, 2, 1),
-            (2, 3, 3),
-            (-1, 4, 1)
+            (-1, 0L, 0, 1),
+            (1, 5009L, 1, 2),
+            (-1, 0L, 2, 1),
+            (2, 5009L, 3, 3),
+            (-1, 0L, 4, 1)
           )),
           (8, Array(
-            (-1, 0, 1),
-            (2, 1, 2),
-            (-1, 2, 1),
-            (1, 3, 3),
-            (-1, 4, 1)
+            (-1, 0L, 0, 1),
+            (2, 5009L, 1, 2),
+            (-1, 0L, 2, 1),
+            (1, 5009L, 3, 3),
+            (-1, 0L, 4, 1)
           )))
       checkSkewPartition(
         coordinator,
@@ -191,18 +200,18 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         expectedPartitionStartIndices)
     }
     {
-      // 2 side partition have skew partition
+      // first partition have skew partition
       val bytesByPartitionId1 = Array[Long](5009, 1, 2, 1, 1)
       val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5)
       val expectedPartitionStartIndices =
-        Array[(Int, Array[(Int, Int, Int)])](
+        Array[(Int, Array[(Int, Long, Int, Int)])](
           (3, Array(
-            (1, 0, 2),
-            (-1, 1, 1)
+            (1, 5009L, 0, 2),
+            (-1, 0L, 1, 1)
           )),
           (3, Array(
-            (2, 0, 2),
-            (-1, 1, 1)
+            (2, 5009L, 0, 2),
+            (-1, 0L, 1, 1)
           )))
       checkSkewPartition(
         coordinator,
@@ -211,22 +220,21 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         expectedPartitionStartIndices)
     }
     {
-      // 2 side partition have skew partition
       val bytesByPartitionId1 = Array[Long](5009, 1, 5009, 1, 1)
       val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5)
       val expectedPartitionStartIndices =
-        Array[(Int, Array[(Int, Int, Int)])](
+        Array[(Int, Array[(Int, Long, Int, Int)])](
           (6, Array(
-            (1, 0, 2),
-            (-1, 1, 1),
-            (1, 2, 2),
-            (-1, 3, 1)
+            (1, 5009L, 0, 2),
+            (-1, 0L, 1, 1),
+            (1, 5009L, 2, 2),
+            (-1, 0L, 3, 1)
           )),
           (6, Array(
-            (2, 0, 2),
-            (-1, 1, 1),
-            (2, 2, 2),
-            (-1, 3, 1)
+            (2, 5009L, 0, 2),
+            (-1, 0L, 1, 1),
+            (2, 5009L, 2, 2),
+            (-1, 0L, 3, 1)
           )))
       checkSkewPartition(
         coordinator,
@@ -235,20 +243,19 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         expectedPartitionStartIndices)
     }
     {
-      // 2 side partition have skew partition
       val bytesByPartitionId1 = Array[Long](5009, 1, 2, 1, 1)
       val bytesByPartitionId2 = Array[Long](1, 2, 3, 4, 5009)
       val expectedPartitionStartIndices =
-        Array[(Int, Array[(Int, Int, Int)])](
+        Array[(Int, Array[(Int, Long, Int, Int)])](
           (6, Array(
-            (1, 0, 2),
-            (-1, 1, 1),
-            (2, 4, 3)
+            (1, 5009L, 0, 2),
+            (-1, 0L, 1, 1),
+            (2, 5009L, 4, 3)
           )),
           (6, Array(
-            (2, 0, 2),
-            (-1, 1, 1),
-            (1, 4, 3)
+            (2, 5009L, 0, 2),
+            (-1, 0L, 1, 1),
+            (1, 5009L, 4, 3)
           )))
       checkSkewPartition(
         coordinator,

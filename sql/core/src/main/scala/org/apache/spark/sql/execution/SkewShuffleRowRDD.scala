@@ -25,9 +25,15 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 
+case class SkewPartitionDecs(
+    isSkew: Int,
+    partitionSize: Long,
+    partitionIdx: Int,
+    perPartitionNum: Int)
+
 class SkewCoalescedPartitioner(
-        val parent: Partitioner,
-        val partitionStartIndices: Array[(Int, Int)])
+    val parent: Partitioner,
+    val partitionStartIndices: Array[(Int, Int)])
   extends Partitioner {
 
   @transient private lazy val parentPartitionMapping: Array[Int] = {
@@ -69,7 +75,8 @@ class SkewCoalescedPartitioner(
   */
 private final class SkewShuffledRowRDDPartition(
     val postShufflePartitionIndex: Int,
-    val mapIndex: Int,
+    val startMapIndex: Option[Int],
+    val endMapIndex: Option[Int],
     val startPreShufflePartitionIndex: Int,
     val endPreShufflePartitionIndex: Int) extends Partition {
   override val index: Int = postShufflePartitionIndex
@@ -93,7 +100,8 @@ private final class SkewShuffledRowRDDPartition(
   */
 class SkewShuffleRowRDD(
     var dependency1: ShuffleDependency[Int, InternalRow, InternalRow],
-    partitionStartIndices: Array[(Int, Int, Int)])
+    partitionStartIndices: Array[SkewPartitionDecs],
+    skewThreshold: Long)
   extends ShuffledRowRDD ( dependency1, None) {
 
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
@@ -102,33 +110,40 @@ class SkewShuffleRowRDD(
     val partitions = ArrayBuffer[Partition]()
     var partitionIndex = -1
     for(i <- 0 until partitionStartIndices.length ) {
-      partitionStartIndices(i) match {
-        case (isSkew, partition, prePartitionNum) =>
-          if (isSkew > 0) {
-            (0 until prePartitionNum).
-              foreach(x => {
-                partitionIndex += 1
-                val part: Partition = if (isSkew == 1) {
-                  new SkewShuffledRowRDDPartition(partitionIndex, x, partition, partition + 1)
-                } else {
-                  new SkewShuffledRowRDDPartition(partitionIndex, -1, partition, partition + 1)
-                }
-                partitions += part
-              })
+      if (partitionStartIndices(i).isSkew > 0) {
+        val num = (partitionStartIndices(i).partitionSize / skewThreshold + 1).asInstanceOf[Int]
+        val genPartNum = if (num >=  partitionStartIndices(i).perPartitionNum) {
+          partitionStartIndices(i).perPartitionNum
+        } else {
+          num
+        }
+        val step = partitionStartIndices(i).perPartitionNum / genPartNum
+        for (x <- 0 until genPartNum) {
+          partitionIndex += 1
+          val part: Partition = if (partitionStartIndices(i).isSkew == 1) {
+            new SkewShuffledRowRDDPartition(partitionIndex, Some(x * step), Some((x + 1) * step),
+              partitionStartIndices(i).partitionIdx, partitionStartIndices(i).partitionIdx + 1)
           } else {
-            partitionIndex += 1
-            val endIdx = if (i < partitionStartIndices.length - 1) {
-              partitionStartIndices(i + 1)._2
-            } else {
-              numPreShufflePartitions
-            }
-            partitions +=
-              new SkewShuffledRowRDDPartition(partitionIndex, -1, partition, endIdx)
+            new SkewShuffledRowRDDPartition(partitionIndex, None, None,
+              partitionStartIndices(i).partitionIdx, partitionStartIndices(i).partitionIdx + 1)
           }
+          partitions += part
+        }
+      } else {
+        partitionIndex += 1
+        val endIdx = if (i < partitionStartIndices.length - 1) {
+          partitionStartIndices(i + 1).partitionIdx
+        } else {
+          numPreShufflePartitions
+        }
+        partitions +=
+          new SkewShuffledRowRDDPartition(partitionIndex, None, None,
+            partitionStartIndices(i).partitionIdx, endIdx)
       }
     }
     partitions.toArray
   }
+
   // Todo: get mapidx location
   override def getPreferredLocations(partition: Partition): Seq[String] = Nil
 
@@ -140,7 +155,8 @@ class SkewShuffleRowRDD(
         skewShuffledRowRDDPartition.startPreShufflePartitionIndex,
         skewShuffledRowRDDPartition.endPreShufflePartitionIndex,
         context,
-        skewShuffledRowRDDPartition.mapIndex)
+        skewShuffledRowRDDPartition.startMapIndex,
+        skewShuffledRowRDDPartition.endMapIndex)
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
   }
 
