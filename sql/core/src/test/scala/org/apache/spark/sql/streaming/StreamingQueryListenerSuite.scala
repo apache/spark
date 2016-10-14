@@ -43,7 +43,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     // Make sure we don't leak any events to the next test
   }
 
-  test("single listener, check trigger statuses") {
+  ignore("single listener, check trigger statuses") {
     import StreamingQueryListenerSuite._
     clock = new ManualClock()
 
