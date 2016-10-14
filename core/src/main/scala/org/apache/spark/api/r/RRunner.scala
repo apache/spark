@@ -333,6 +333,7 @@ private[r] object RRunner {
     var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
     rCommand = sparkConf.get("spark.r.command", rCommand)
 
+    val rConnectionTimeout = SparkEnv.get.conf.get("spark.r.backendConnectionTimeout", "6000")
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
     val rExecScript = rLibDir(0) + "/SparkR/worker/" + script
@@ -344,6 +345,7 @@ private[r] object RRunner {
     pb.environment().put("R_TESTS", "")
     pb.environment().put("SPARKR_RLIBDIR", rLibDir.mkString(","))
     pb.environment().put("SPARKR_WORKER_PORT", port.toString)
+    pb.environment().put("SPARKR_BACKEND_CONNECTION_TIMEOUT", rConnectionTimeout.toString)
     pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()
     val errThread = startStdoutThread(proc)

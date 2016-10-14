@@ -196,7 +196,9 @@ sparkR.sparkContext <- function(
         length(rLibPath) != 1) {
       stop("JVM failed to launch")
     }
-    assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
+    assign(".monitorConn",
+           socketConnection(port = monitorPort, timeout = connectionTimeout),
+           envir = .sparkREnv)
     assign(".backendLaunched", 1, envir = .sparkREnv)
     if (rLibPath != "") {
       assign(".libPath", rLibPath, envir = .sparkREnv)
