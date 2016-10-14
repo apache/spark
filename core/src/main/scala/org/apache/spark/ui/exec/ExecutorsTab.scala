@@ -53,7 +53,8 @@ private[ui] case class ExecutorTaskSummary(
     var shuffleRead: Long = 0L,
     var shuffleWrite: Long = 0L,
     var executorLogs: Map[String, String] = Map.empty,
-    var isAlive: Boolean = true
+    var isAlive: Boolean = true,
+    var isBlacklisted: Boolean = false
 )
 
 /**
@@ -157,4 +158,44 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     }
   }
 
+  private def updateExecutorBlacklist(eid: String, isBlacklisted: Boolean): Unit = {
+    val execTaskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
+    execTaskSummary.isBlacklisted = isBlacklisted
+  }
+
+  override def onExecutorBlacklisted(executorBlacklisted: SparkListenerExecutorBlacklisted)
+  : Unit = synchronized {
+    updateExecutorBlacklist(executorBlacklisted.executorId, true)
+  }
+
+  override def onExecutorUnblacklisted(executorUnblacklisted: SparkListenerExecutorUnblacklisted)
+  : Unit = synchronized {
+    updateExecutorBlacklist(executorUnblacklisted.executorId, false)
+  }
+
+  override def onNodeBlacklisted(nodeBlacklisted: SparkListenerNodeBlacklisted)
+  : Unit = synchronized {
+    /*
+    Implicitly blacklist every executor associated with this node, and show this in the UI.
+    */
+    activeStorageStatusList.foreach{status =>
+      if (status.blockManagerId.host == nodeBlacklisted.nodeId) {
+        updateExecutorBlacklist(status.blockManagerId.executorId, true)
+      }
+    }
+  }
+
+  override def onNodeUnblacklisted(nodeUnblacklisted: SparkListenerNodeUnblacklisted)
+  : Unit = synchronized {
+    /*
+    Implicitly unblacklist every executor associated with this node, regardless of how
+    they may have been blacklisted initially (either explicitly through executor blacklisting
+    or implicitly through node blacklisting). Show this in the UI.
+    */
+    activeStorageStatusList.foreach{status =>
+      if (status.blockManagerId.host == nodeUnblacklisted.nodeId) {
+        updateExecutorBlacklist(status.blockManagerId.executorId, false)
+      }
+    }
+  }
 }
