@@ -627,7 +627,7 @@ class DataFrame(object):
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
 
     @ignore_unicode_prefix
-    @since(2.0)
+    @since(2.1)
     def crossJoin(self, other):
         """Returns the cartesian product with another :class:`DataFrame`
 
