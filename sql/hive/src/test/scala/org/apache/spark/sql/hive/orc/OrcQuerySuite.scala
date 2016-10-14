@@ -474,6 +474,29 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("converted ORC table supports resolving mixed case field") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+      withTable("dummy_orc") {
+        withTempPath { dir =>
+          val df = spark.range(5).selectExpr("id", "id as valueField", "id as partitionValue")
+          df.write
+            .partitionBy("partitionValue")
+            .mode("overwrite")
+            .orc(dir.getAbsolutePath)
+
+          spark.sql(s"""
+            |create external table dummy_orc (id long, valueField long)
+            |partitioned by (partitionValue int)
+            |stored as orc
+            |location "${dir.getAbsolutePath}"""".stripMargin)
+          spark.sql(s"msck repair table dummy_orc")
+          println(spark.sql("select * from dummy_orc"))
+          checkAnswer(spark.sql("select * from dummy_orc"), df)
+        }
+      }
+    }
+  }
+
   test("SPARK-14962 Produce correct results on array type with isnotnull") {
     withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val data = (0 until 10).map(i => Tuple1(Array(i)))
