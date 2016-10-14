@@ -196,18 +196,28 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
           Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))))
     checkAnalysis(originalPlan, expected)
 
+    val originalPlan2 = Filter(Grouping(unresolved_a) === 0,
+      Aggregate(Seq(unresolved_a), Seq(UnresolvedAlias(count(unresolved_b))), r1))
+    assertAnalysisError(originalPlan2,
+      Seq("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"))
+
     // Filter with GroupingID
-    val originalPlan2 = Filter(GroupingID(Seq(unresolved_a, unresolved_b)) === 1,
+    val originalPlan3 = Filter(GroupingID(Seq(unresolved_a, unresolved_b)) === 1,
       GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b), r1, Seq(unresolved_a, unresolved_b)))
-    val expected2 = Project(Seq(a, b), Filter(gid === 1,
+    val expected3 = Project(Seq(a, b), Filter(gid === 1,
       Aggregate(Seq(a, b, gid),
         Seq(a, b, gid),
         Expand(
           Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
           Seq(a, b, c, a, b, gid),
           Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))))
-    checkAnalysis(originalPlan2, expected2)
+    checkAnalysis(originalPlan3, expected3)
+
+    val originalPlan4 = Filter(GroupingID(Seq(unresolved_a)) === 1,
+      Aggregate(Seq(unresolved_a), Seq(UnresolvedAlias(count(unresolved_b))), r1))
+    assertAnalysisError(originalPlan4,
+      Seq("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"))
   }
 
   test("sort with grouping function") {
@@ -226,12 +236,17 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
           Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))))
     checkAnalysis(originalPlan, expected)
 
+    val originalPlan2 = Sort(Seq(SortOrder(Grouping(unresolved_a), Ascending)), true,
+      Aggregate(Seq(unresolved_a), Seq(unresolved_a, UnresolvedAlias(count(unresolved_b))), r1))
+    assertAnalysisError(originalPlan2,
+      Seq("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"))
+
     // Sort with GroupingID
-    val originalPlan2 = Sort(
+    val originalPlan3 = Sort(
       Seq(SortOrder(GroupingID(Seq(unresolved_a, unresolved_b)), Ascending)), true,
       GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b), r1, Seq(unresolved_a, unresolved_b)))
-    val expected2 = Project(Seq(a, b), Sort(
+    val expected3 = Project(Seq(a, b), Sort(
       Seq(SortOrder('aggOrder.int.withNullability(false), Ascending)), true,
       Aggregate(Seq(a, b, gid),
         Seq(a, b, gid.as("aggOrder")),
@@ -239,6 +254,12 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
           Seq(Seq(a, b, c, nulInt, nulStr, 3), Seq(a, b, c, a, nulStr, 1), Seq(a, b, c, a, b, 0)),
           Seq(a, b, c, a, b, gid),
           Project(Seq(a, b, c, a.as("a"), b.as("b")), r1)))))
-    checkAnalysis(originalPlan2, expected2)
+    checkAnalysis(originalPlan3, expected3)
+
+    val originalPlan4 = Sort(
+      Seq(SortOrder(GroupingID(Seq(unresolved_a)), Ascending)), true,
+      Aggregate(Seq(unresolved_a), Seq(unresolved_a, UnresolvedAlias(count(unresolved_b))), r1))
+    assertAnalysisError(originalPlan4,
+      Seq("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup"))
   }
 }
