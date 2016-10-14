@@ -656,7 +656,12 @@ case class Cast(child: Expression, dataType: DataType)
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"$evPrim = CalendarInterval.fromString($c.toString());"
+        s"""$evPrim = CalendarInterval.fromString($c.toString());
+           if(${evPrim} == null) {
+             ${evNull} = true;
+           }
+         """.stripMargin
+
   }
 
   private[this] def decimalToTimestampCode(d: String): String =
