@@ -350,19 +350,19 @@ pyspark_sql = Module(
         "python/pyspark/sql"
     ],
     python_test_goals=[
-        #"pyspark.sql.types",
-        #"pyspark.sql.context",
-        #"pyspark.sql.session",
-        #"pyspark.sql.conf",
-        #"pyspark.sql.catalog",
-        #"pyspark.sql.column",
-        #"pyspark.sql.dataframe",
-        #"pyspark.sql.group",
-        #"pyspark.sql.functions",
-        #"pyspark.sql.readwriter",
+        "pyspark.sql.types",
+        "pyspark.sql.context",
+        "pyspark.sql.session",
+        "pyspark.sql.conf",
+        "pyspark.sql.catalog",
+        "pyspark.sql.column",
+        "pyspark.sql.dataframe",
+        "pyspark.sql.group",
+        "pyspark.sql.functions",
+        "pyspark.sql.readwriter",
         "pyspark.sql.streaming",
-        #"pyspark.sql.window",
-        #"pyspark.sql.tests",
+        "pyspark.sql.window",
+        "pyspark.sql.tests",
     ]
 )
 
