@@ -77,14 +77,12 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
     // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
 
-    val startFromEarliestOffset =
-      caseInsensitiveParams.get(STARTING_OFFSET_OPTION_KEY).map(_.trim.toLowerCase) match {
-        case Some("latest") => false
-        case Some("earliest") => true
-        case Some(pos) =>
-          // This should not happen since we have already checked the options.
-          throw new IllegalStateException(s"Invalid $STARTING_OFFSET_OPTION_KEY: $pos")
-        case None => false
+    val startingOffsets =
+      caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim.toLowerCase) match {
+        case Some("latest") => LatestOffsets
+        case Some("earliest") => EarliestOffsets
+        case Some(json) => SpecificOffsets(JsonUtils.partitionOffsets(json))
+        case None => LatestOffsets
       }
 
     val kafkaParamsForStrategy =
@@ -95,9 +93,9 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         // So that consumers in Kafka source do not mess with any existing group id
         .set(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-driver")
 
-        // Set to "latest" to avoid exceptions. However, KafkaSource will fetch the initial offsets
-        // by itself instead of counting on KafkaConsumer.
-        .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
+        // Set to "earliest" to avoid exceptions. However, KafkaSource will fetch the initial
+        // offsets by itself instead of counting on KafkaConsumer.
+        .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
         // So that consumers in the driver does not commit offsets unnecessarily
         .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
@@ -130,6 +128,10 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         .build()
 
     val strategy = caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+      case ("assign", value) =>
+        AssignStrategy(
+          JsonUtils.partitions(value),
+          kafkaParamsForStrategy)
       case ("subscribe", value) =>
         SubscribeStrategy(
           value.split(",").map(_.trim()).filter(_.nonEmpty),
@@ -153,7 +155,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
       kafkaParamsForExecutors,
       parameters,
       metadataPath,
-      startFromEarliestOffset,
+      startingOffsets,
       failOnDataLoss)
   }
 
@@ -195,14 +197,6 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         throw new IllegalArgumentException("Unknown option")
     }
 
-    caseInsensitiveParams.get(STARTING_OFFSET_OPTION_KEY) match {
-      case Some(pos) if !STARTING_OFFSET_OPTION_VALUES.contains(pos.trim.toLowerCase) =>
-        throw new IllegalArgumentException(
-          s"Illegal value '$pos' for option '$STARTING_OFFSET_OPTION_KEY', " +
-            s"acceptable values are: ${STARTING_OFFSET_OPTION_VALUES.mkString(", ")}")
-      case _ =>
-    }
-
     // Validate user-specified Kafka options
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
@@ -215,11 +209,11 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
       throw new IllegalArgumentException(
         s"""
            |Kafka option '${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}' is not supported.
-           |Instead set the source option '$STARTING_OFFSET_OPTION_KEY' to 'earliest' or 'latest' to
-           |specify where to start. Structured Streaming manages which offsets are consumed
+           |Instead set the source option '$STARTING_OFFSETS_OPTION_KEY' to 'earliest' or 'latest'
+           |to specify where to start. Structured Streaming manages which offsets are consumed
            |internally, rather than relying on the kafkaConsumer to do it. This will ensure that no
            |data is missed when when new topics/partitions are dynamically subscribed. Note that
-           |'$STARTING_OFFSET_OPTION_KEY' only applies when a new Streaming query is started, and
+           |'$STARTING_OFFSETS_OPTION_KEY' only applies when a new Streaming query is started, and
            |that resuming will always pick up from where the query left off. See the docs for more
            |details.
          """.stripMargin)
@@ -282,8 +276,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
 }
 
 private[kafka010] object KafkaSourceProvider {
-  private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern")
-  private val STARTING_OFFSET_OPTION_KEY = "startingoffset"
-  private val STARTING_OFFSET_OPTION_VALUES = Set("earliest", "latest")
+  private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern", "assign")
+  private val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
 }
