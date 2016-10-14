@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.util.{Failure, Success}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -250,7 +252,12 @@ object KMeansModel extends MLReadable[KMeansModel] {
       }
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
       DefaultParamsReader.getAndSetParams(model, metadata)
-      DefaultParamsReader.loadAndSetInitialModel[KMeansModel](model, metadata, path, sc)
+      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc) match {
+        case Success(v) =>
+          model.set(model.initialModel, v)
+        case Failure(e) =>  // Unable to load initial model
+      }
+
       model
     }
   }
@@ -411,7 +418,11 @@ object KMeans extends DefaultParamsReadable[KMeans] {
       val instance = new KMeans(metadata.uid)
 
       DefaultParamsReader.getAndSetParams(instance, metadata)
-      DefaultParamsReader.loadAndSetInitialModel[KMeansModel](instance, metadata, path, sc)
+      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc) match {
+        case Success(v) =>
+          instance.setInitialModel(v)
+        case Failure(e) =>  // Fail to load initial model
+      }
       instance
     }
   }

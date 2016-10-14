@@ -19,6 +19,8 @@ package org.apache.spark.ml.util
 
 import java.io.IOException
 
+import scala.util.Try
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.{DefaultFormats, JObject}
@@ -306,17 +308,11 @@ private[ml] object DefaultParamsWriter {
     val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
     }.toList))
-    // If the instance has an "initialModel" param and the param is defined, then the initial model
-    // will be saved along with the instance.
-    val initialModelFlag =
-      instance.hasParam("initialModel") && instance.isDefined(instance.getParam("initialModel"))
     val basicMetadata = ("class" -> cls) ~
       ("timestamp" -> System.currentTimeMillis()) ~
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
-      ("paramMap" -> jsonParams) ~
-      // TODO: [SPARK-17785] Figure out a more robust way to detect the existing of the initialModel
-      ("initialModel" -> initialModelFlag)
+      ("paramMap" -> jsonParams)
 
     val metadata = extraMetadata match {
       case Some(jObject) =>
@@ -464,18 +460,9 @@ private[ml] object DefaultParamsReader {
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
   }
 
-  def loadAndSetInitialModel[M <: Model[M]](
-      instance: HasInitialModel[M], metadata: Metadata, path: String, sc: SparkContext): Unit = {
-    implicit val format = DefaultFormats
-    // Try to load the initial model
-    if (metadata.metadata \ "initialModel" != JNothing) {
-      val hasInitialModel = (metadata.metadata \ "initialModel").extract[Boolean]
-      if (hasInitialModel) {
-        val initialModelPath = new Path(path, "initialModel").toString
-        val initialModel = loadParamsInstance[M](initialModelPath, sc)
-        instance.set(instance.initialModel, initialModel)
-      }
-    }
+  def loadInitialModel[M <: Model[M]](path: String, sc: SparkContext): Try[M] = {
+    val initialModelPath = new Path(path, "initialModel").toString
+    Try(loadParamsInstance[M](initialModelPath, sc))
   }
 }
 
