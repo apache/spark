@@ -534,7 +534,8 @@ class LogisticRegressionSuite
       label = factor(data$V1)
       w = data$V2
       features = as.matrix(data.frame(data$V3, data$V4, data$V5, data$V6))
-      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0, lambda = 0))
+      coefficients = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0,
+      lambda = 0))
       coefficients
       $`0`
       5 x 1 sparse Matrix of class "dgCMatrix"
