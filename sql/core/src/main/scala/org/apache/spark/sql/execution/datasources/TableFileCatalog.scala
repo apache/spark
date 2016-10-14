@@ -38,10 +38,9 @@ class TableFileCatalog(
     db: String,
     table: String,
     partitionSchema: Option[StructType],
-    override val sizeInBytes: Long)
-  extends SessionFileCatalog(sparkSession) {
+    override val sizeInBytes: Long) extends BasicFileCatalog {
 
-  override protected val hadoopConf = sparkSession.sessionState.newHadoopConf
+  protected val hadoopConf = sparkSession.sessionState.newHadoopConf
 
   private val externalCatalog = sparkSession.sharedState.externalCatalog
 

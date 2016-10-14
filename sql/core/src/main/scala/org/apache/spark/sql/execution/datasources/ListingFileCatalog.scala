@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -39,7 +40,7 @@ class ListingFileCatalog(
     override val rootPaths: Seq[Path],
     parameters: Map[String, String],
     partitionSchema: Option[StructType])
-  extends PartitioningAwareFileCatalog(sparkSession, parameters, partitionSchema) {
+  extends PartitioningAwareFileCatalog(sparkSession, parameters, partitionSchema) with Logging {
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
