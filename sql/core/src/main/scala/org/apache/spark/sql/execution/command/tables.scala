@@ -34,7 +34,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
@@ -43,10 +44,10 @@ import org.apache.spark.util.Utils
 
 case class CreateHiveTableAsSelectLogicalPlan(
     tableDesc: CatalogTable,
-    child: LogicalPlan,
-    allowExisting: Boolean) extends UnaryNode with Command {
+    query: LogicalPlan,
+    allowExisting: Boolean) extends Command {
 
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override lazy val resolved: Boolean =
     tableDesc.identifier.database.isDefined &&

@@ -69,7 +69,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         DataSourceAnalysis(conf) ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck(sparkSession, conf, catalog))
     }
   }
 

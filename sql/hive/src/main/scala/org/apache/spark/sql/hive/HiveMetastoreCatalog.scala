@@ -510,7 +510,7 @@ private[hive] case class InsertIntoHiveTable(
     child: LogicalPlan,
     overwrite: Boolean,
     ifNotExists: Boolean)
-  extends LogicalPlan with Command {
+  extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty

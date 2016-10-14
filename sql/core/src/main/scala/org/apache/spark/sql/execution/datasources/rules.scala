@@ -216,7 +216,7 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation, _, _) =>
               // Get all input data source relations of the query.
-              val srcRelations = c.child.collect {
+              val srcRelations = c.query.collect {
                 case LogicalRelation(src: BaseRelation, _, _) => src
               }
               if (srcRelations.contains(dest)) {
@@ -233,12 +233,12 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         }
 
         PartitioningUtils.validatePartitionColumn(
-          c.child.schema, c.partitionColumns, conf.caseSensitiveAnalysis)
+          c.query.schema, c.partitionColumns, conf.caseSensitiveAnalysis)
 
         for {
           spec <- c.bucketSpec
           sortColumnName <- spec.sortColumnNames
-          sortColumn <- c.child.schema.find(_.name == sortColumnName)
+          sortColumn <- c.query.schema.find(_.name == sortColumnName)
         } {
           if (!RowOrdering.isOrderable(sortColumn.dataType)) {
             failAnalysis(s"Cannot use ${sortColumn.dataType.simpleString} for sorting column.")

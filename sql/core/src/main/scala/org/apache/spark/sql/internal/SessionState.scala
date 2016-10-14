@@ -116,7 +116,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
         DataSourceAnalysis(conf) ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
+      override val extendedCheckRules = Seq(datasources.PreWriteCheck(sparkSession, conf, catalog))
     }
   }
 
