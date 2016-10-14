@@ -70,7 +70,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
-  test("fit, transform, and summary") {
+  test("fit, transform and summary") {
     val predictionColName = "gm_prediction"
     val probabilityColName = "gm_probability"
     val gm = new GaussianMixture().setK(k).setMaxIter(2).setPredictionCol(predictionColName)

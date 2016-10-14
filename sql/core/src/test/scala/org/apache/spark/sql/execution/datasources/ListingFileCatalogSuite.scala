@@ -15,23 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.SparkFunSuite
 
-/**
- * :: Experimental ::
- * A class used to report information about the progress of a [[StreamingQuery]].
- *
- * @param name The [[StreamingQuery]] name. This name is unique across all active queries.
- * @param id The [[StreamingQuery]] id. This id is unique across
-  *          all queries that have been started in the current process.
- * @param sourceStatuses The current statuses of the [[StreamingQuery]]'s sources.
- * @param sinkStatus The current status of the [[StreamingQuery]]'s sink.
- */
-@Experimental
-class StreamingQueryInfo private[sql](
-  val name: String,
-  val id: Long,
-  val sourceStatuses: Seq[SourceStatus],
-  val sinkStatus: SinkStatus)
+class ListingFileCatalogSuite extends SparkFunSuite {
+
+  test("file filtering") {
+    assert(!ListingFileCatalog.shouldFilterOut("abcd"))
+    assert(ListingFileCatalog.shouldFilterOut(".ab"))
+    assert(ListingFileCatalog.shouldFilterOut("_cd"))
+
+    assert(!ListingFileCatalog.shouldFilterOut("_metadata"))
+    assert(!ListingFileCatalog.shouldFilterOut("_common_metadata"))
+    assert(ListingFileCatalog.shouldFilterOut("_ab_metadata"))
+    assert(ListingFileCatalog.shouldFilterOut("_cd_common_metadata"))
+  }
+}
