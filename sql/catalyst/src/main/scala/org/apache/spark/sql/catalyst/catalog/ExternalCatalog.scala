@@ -203,7 +203,11 @@ abstract class ExternalCatalog {
    *
    * @param db database name
    * @param table table name
+<<<<<<< HEAD
    * @param predicates  partition-pruning predicate expressions
+=======
+   * @param predicates  partition-pruning predicates
+>>>>>>> 014c9989cb132041bce45215450a85661c3202e2
    */
   def listPartitionsByFilter(
       db: String,

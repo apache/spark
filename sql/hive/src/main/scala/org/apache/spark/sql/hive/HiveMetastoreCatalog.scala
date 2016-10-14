@@ -44,8 +44,6 @@ import org.apache.spark.sql.types._
  */
 private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
   private val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
-  private val client =
-    sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
 
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
@@ -104,7 +102,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   def hiveDefaultTableFilePath(tableIdent: TableIdentifier): String = {
     // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
     val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)
-    new Path(new Path(client.getDatabase(dbName).locationUri), tblName).toString
+    val dbLocation = sparkSession.sharedState.externalCatalog.getDatabase(dbName).locationUri
+    new Path(new Path(dbLocation), tblName).toString
   }
 
   def lookupRelation(
@@ -129,7 +128,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     } else {
       val qualifiedTable =
         MetastoreRelation(
-          qualifiedTableName.database, qualifiedTableName.name)(table, client, sparkSession)
+          qualifiedTableName.database, qualifiedTableName.name)(table, sparkSession)
       alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
     }
   }
@@ -232,7 +231,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val sizeInBytes = metastoreRelation.statistics.sizeInBytes.toLong
         val fileCatalog = {
           val catalog = new TableFileCatalog(
-            sparkSession, db, table, Some(partitionSchema), sizeInBytes, sharedCache,
+            sparkSession, db, table, Some(partitionSchema), sizeInBytes,
             enableFileStatusCache = lazyPruningEnabled)
           if (lazyPruningEnabled) {
             catalog

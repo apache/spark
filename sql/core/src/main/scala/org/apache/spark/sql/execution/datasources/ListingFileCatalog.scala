@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs._
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.StructType
 

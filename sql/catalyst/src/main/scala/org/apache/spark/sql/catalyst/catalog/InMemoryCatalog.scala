@@ -484,7 +484,7 @@ class InMemoryCatalog(
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
     // TODO: Provide an implementation
     throw new UnsupportedOperationException(
-      "listPartitionsByFilter is not implemented")
+      "listPartitionsByFilter is not implemented for InMemoryCatalog")
   }
 
   // --------------------------------------------------------------------------

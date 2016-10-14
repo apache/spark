@@ -48,7 +48,7 @@ abstract class PartitioningAwareFileCatalog(
     partitionSchema: Option[StructType]) extends FileCatalog with Logging {
   import PartitioningAwareFileCatalog.BASE_PATH_PARAM
 
-  protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+  override protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
   protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]
 
