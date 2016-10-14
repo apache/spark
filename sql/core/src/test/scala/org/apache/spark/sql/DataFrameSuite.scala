@@ -1616,7 +1616,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-17409: Do Not Optimize Query in CTAS More Than Once") {
+  test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
     withTable("bar") {
       withTempView("foo") {
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
