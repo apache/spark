@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.ScalaUDF
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions
@@ -39,13 +39,17 @@ import org.apache.spark.sql.types.DataType
  *
  * @since 1.3.0
  */
-@Experimental
-@InterfaceStability.Evolving
+@InterfaceStability.Stable
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
     inputTypes: Option[Seq[DataType]]) {
 
+  /**
+   * Returns an expression that invokes the UDF, using the given arguments.
+   *
+   * @since 1.3.0
+   */
   def apply(exprs: Column*): Column = {
     Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil)))
   }
