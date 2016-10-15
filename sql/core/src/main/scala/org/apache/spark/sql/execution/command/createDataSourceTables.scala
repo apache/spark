@@ -67,7 +67,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     dataSource match {
       case fs: HadoopFsRelation =>
-        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.paths.isEmpty) {
+        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.rootPaths.isEmpty) {
           throw new AnalysisException(
             "Cannot create a file-based external data source table without path")
         }

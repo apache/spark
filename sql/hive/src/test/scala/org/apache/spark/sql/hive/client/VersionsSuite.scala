@@ -295,12 +295,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: getPartitions(catalogTable)") {
-      assert(2 == client.getPartitions("default", "src_part").size)
+      assert(2 == client.getPartitions(client.getTable("default", "src_part")).size)
     }
 
     test(s"$version: getPartitionsByFilter") {
       // Only one partition [1, 1] for key2 == 1
-      val result = client.getPartitionsByFilter("default", "src_part",
+      val result = client.getPartitionsByFilter(client.getTable("default", "src_part"),
         Seq(EqualTo(AttributeReference("key2", IntegerType)(), Literal(1))))
 
       // Hive 0.12 doesn't support getPartitionsByFilter, it ignores the filter condition.
