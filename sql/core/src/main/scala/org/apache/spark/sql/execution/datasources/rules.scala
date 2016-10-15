@@ -66,7 +66,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
  * Analyze the query in CREATE TABLE AS SELECT (CTAS). After analysis, [[PreWriteCheck]] also
  * can detect the cases that are not allowed.
  */
-case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+case class AnalyzeCreateTableAsSelect(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case c: CreateTableUsingAsSelect if !c.query.resolved =>
       c.copy(query = analyzeQuery(c.query))
