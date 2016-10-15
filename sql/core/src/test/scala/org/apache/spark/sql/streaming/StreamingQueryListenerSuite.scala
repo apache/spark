@@ -89,7 +89,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         // Check the correctness of the trigger info of the last completed batch reported by
         // onQueryProgress
         println("Status: " + status)
-        assert(status.triggerDetails.get("triggerId") == "0")
+        assert(status.triggerDetails.containsKey("triggerId"))
         assert(status.triggerDetails.get("isTriggerActive") === "false")
         assert(status.triggerDetails.get("isDataPresentInTrigger") === "true")
 
