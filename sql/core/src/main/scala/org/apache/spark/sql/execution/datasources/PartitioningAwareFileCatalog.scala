@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 
@@ -34,6 +35,46 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 
+abstract class FileStatusCache {
+  def getLeafFiles(path: Path): Option[Seq[FileStatus]] = None
+  def putLeafFiles(path: Path, leafFiles: Seq[FileStatus]): Unit
+  def invalidateAll(): Unit
+}
+
+class InMemoryCache extends FileStatusCache {
+  private val cache = new ConcurrentHashMap[Path, Seq[FileStatus]]()
+
+  override def getLeafFiles(path: Path): Option[Seq[FileStatus]] = {
+    val res = Option(cache.get(path))
+    res.foreach { r =>
+      HiveCatalogMetrics.incrementFileCacheHits(r.length)
+    }
+    res
+  }
+
+  override def putLeafFiles(path: Path, leafFiles: Seq[FileStatus]): Unit = {
+    println("discovered files: " + leafFiles)
+    HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
+    cache.put(path, leafFiles)
+  }
+
+  override def invalidateAll(): Unit = {
+    println("invalidating all")
+    cache.clear()
+  }
+}
+
+class NoopCache extends FileStatusCache {
+  override def getLeafFiles(path: Path): Option[Seq[FileStatus]] = None
+  override def putLeafFiles(path: Path, leafFiles: Seq[FileStatus]): Unit = {
+    println("[uncached] discovered files: " + leafFiles)
+    HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
+  }
+  override def invalidateAll(): Unit = {
+    println("invalidating all")
+  }
+}
+
 /**
  * An abstract class that represents [[FileCatalog]]s that are aware of partitioned tables.
  * It provides the necessary methods to parse partition data based on a set of files.
@@ -45,10 +86,11 @@ import org.apache.spark.util.SerializableConfiguration
 abstract class PartitioningAwareFileCatalog(
     sparkSession: SparkSession,
     parameters: Map[String, String],
-    partitionSchema: Option[StructType]) extends FileCatalog with Logging {
+    partitionSchema: Option[StructType],
+    fileStatusCache: FileStatusCache = new NoopCache) extends FileCatalog with Logging {
   import PartitioningAwareFileCatalog.BASE_PATH_PARAM
 
-  override protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+  protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
   protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]
 
@@ -229,15 +271,29 @@ abstract class PartitioningAwareFileCatalog(
    * This is publicly visible for testing.
    */
   def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    val files =
-      if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-        PartitioningAwareFileCatalog.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
-      } else {
-        PartitioningAwareFileCatalog.listLeafFilesInSerial(paths, hadoopConf)
+    val output = mutable.LinkedHashSet[FileStatus]()
+    val pathsToFetch = mutable.ArrayBuffer[Path]()
+    for (path <- paths) {
+      fileStatusCache.getLeafFiles(path) match {
+        case Some(files) =>
+          println("cache hit: " + path)
+          output ++= files
+        case None =>
+          println("cache miss: " + path)
+          pathsToFetch += path
       }
-
-    HiveCatalogMetrics.incrementFilesDiscovered(files.size)
-    mutable.LinkedHashSet(files: _*)
+    }
+    val discovered = if (pathsToFetch.length >=
+        sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+      PartitioningAwareFileCatalog.listLeafFilesInParallel(pathsToFetch, hadoopConf, sparkSession)
+    } else {
+      PartitioningAwareFileCatalog.listLeafFilesInSerial(pathsToFetch, hadoopConf)
+    }
+    discovered.foreach { case (path, leafFiles) =>
+      fileStatusCache.putLeafFiles(path, leafFiles)
+      output ++= leafFiles
+    }
+    output
   }
 }
 
@@ -267,15 +323,15 @@ object PartitioningAwareFileCatalog extends Logging {
    */
   private def listLeafFilesInSerial(
       paths: Seq[Path],
-      hadoopConf: Configuration): Seq[FileStatus] = {
+      hadoopConf: Configuration): Map[Path, Seq[FileStatus]] = {
     // Dummy jobconf to get to the pathFilter defined in configuration
     val jobConf = new JobConf(hadoopConf, this.getClass)
     val filter = FileInputFormat.getInputPathFilter(jobConf)
 
-    paths.flatMap { path =>
+    paths.map { path =>
       val fs = path.getFileSystem(hadoopConf)
-      listLeafFiles0(fs, path, filter)
-    }
+      (path, listLeafFiles0(fs, path, filter))
+    }.toMap
   }
 
   /**
@@ -285,7 +341,7 @@ object PartitioningAwareFileCatalog extends Logging {
   private def listLeafFilesInParallel(
       paths: Seq[Path],
       hadoopConf: Configuration,
-      sparkSession: SparkSession): Seq[FileStatus] = {
+      sparkSession: SparkSession): Map[Path, Seq[FileStatus]] = {
     assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
@@ -297,48 +353,55 @@ object PartitioningAwareFileCatalog extends Logging {
     // in case of large #defaultParallelism.
     val numParallelism = Math.min(paths.size, 10000)
 
-    val statuses = sparkContext
+    val statusMap = sparkContext
       .parallelize(serializedPaths, numParallelism)
       .mapPartitions { paths =>
         val hadoopConf = serializableConfiguration.value
         listLeafFilesInSerial(paths.map(new Path(_)).toSeq, hadoopConf).iterator
-      }.map { status =>
-        // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
-        val blockLocations = status match {
-          case f: LocatedFileStatus =>
-            f.getBlockLocations.map { loc =>
-              SerializableBlockLocation(
-                loc.getNames,
-                loc.getHosts,
-                loc.getOffset,
-                loc.getLength)
-            }
+      }.map { case (path, statuses) =>
+        val serializableStatuses = statuses.map { status =>
+          // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
+          val blockLocations = status match {
+            case f: LocatedFileStatus =>
+              f.getBlockLocations.map { loc =>
+                SerializableBlockLocation(
+                  loc.getNames,
+                  loc.getHosts,
+                  loc.getOffset,
+                  loc.getLength)
+              }
 
-          case _ =>
-            Array.empty[SerializableBlockLocation]
+            case _ =>
+              Array.empty[SerializableBlockLocation]
+          }
+
+          SerializableFileStatus(
+            status.getPath.toString,
+            status.getLen,
+            status.isDirectory,
+            status.getReplication,
+            status.getBlockSize,
+            status.getModificationTime,
+            status.getAccessTime,
+            blockLocations)
         }
-
-        SerializableFileStatus(
-          status.getPath.toString,
-          status.getLen,
-          status.isDirectory,
-          status.getReplication,
-          status.getBlockSize,
-          status.getModificationTime,
-          status.getAccessTime,
-          blockLocations)
+        (path.toString, serializableStatuses)
       }.collect()
 
     // Turn SerializableFileStatus back to Status
-    statuses.map { f =>
-      val blockLocations = f.blockLocations.map { loc =>
-        new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
+    statusMap.map { case (path, serializableStatuses) =>
+      val statuses = serializableStatuses.map { f =>
+        val blockLocations = f.blockLocations.map { loc =>
+          new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
+        }
+        new LocatedFileStatus(
+          new FileStatus(
+            f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime,
+            new Path(f.path)),
+          blockLocations)
       }
-      new LocatedFileStatus(
-        new FileStatus(
-          f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path)),
-        blockLocations)
-    }
+      (new Path(path), statuses)
+    }.toMap
   }
 
   /**

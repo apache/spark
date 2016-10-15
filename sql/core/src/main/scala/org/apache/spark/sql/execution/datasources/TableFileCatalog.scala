@@ -43,9 +43,11 @@ class TableFileCatalog(
     enableFileStatusCache: Boolean) extends BasicFileCatalog {
 
   private val fileStatusCache = if (enableFileStatusCache)  {
-    Some(new FileStatusCache)
+    println("in mem cache")
+    new InMemoryCache
   } else {
-    None
+    println("using noop cache")
+    new NoopCache
   }
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf
@@ -62,7 +64,7 @@ class TableFileCatalog(
     filterPartitions(filters).listFiles(Nil)
   }
 
-  override def refresh(): Unit = {}
+  override def refresh(): Unit = fileStatusCache.invalidateAll()
 
   /**
    * Returns a [[ListingFileCatalog]] for this table restricted to the subset of partitions
@@ -71,14 +73,6 @@ class TableFileCatalog(
    * @param filters partition-pruning filters
    */
   def filterPartitions(filters: Seq[Expression]): ListingFileCatalog = {
-    if (filters.isEmpty) {
-      cachedAllPartitions
-    } else {
-      filterPartitions0(filters)
-    }
-  }
-
-  private def filterPartitions0(filters: Seq[Expression]): ListingFileCatalog = {
     val parameters = baseLocation
       .map(loc => Map(PartitioningAwareFileCatalog.BASE_PATH_PARAM -> loc))
       .getOrElse(Map.empty)
@@ -90,16 +84,13 @@ class TableFileCatalog(
         }
         val partitionSpec = PartitionSpec(schema, partitions)
         new PrunedTableFileCatalog(
-          sparkSession, new Path(baseLocation.get), partitionSpec)
+          sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
       case None =>
         new ListingFileCatalog(sparkSession, rootPaths, parameters, None, fileStatusCache)
     }
   }
 
-  // Not used in the hot path of queries when metastore partition pruning is enabled
-  lazy val cachedAllPartitions: ListingFileCatalog = filterPartitions0(Nil)
-
-  override def inputFiles: Array[String] = cachedAllPartitions.inputFiles
+  override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
 }
 
 /**
@@ -112,9 +103,11 @@ class TableFileCatalog(
 private class PrunedTableFileCatalog(
     sparkSession: SparkSession,
     tableBasePath: Path,
+    fileStatusCache: FileStatusCache,
     override val partitionSpec: PartitionSpec)
   extends ListingFileCatalog(
     sparkSession,
     partitionSpec.partitions.map(_.path),
     Map.empty,
-    Some(partitionSpec.partitionColumns))
+    Some(partitionSpec.partitionColumns),
+    fileStatusCache)

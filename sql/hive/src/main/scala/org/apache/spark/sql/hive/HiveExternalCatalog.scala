@@ -627,40 +627,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.getPartition(db, table, spec)
   }
 
-  override def listPartitionsByFilter(
-      db: String,
-      table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition] = withClient {
-    val catalogTable = client.getTable(db, table)
-    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
-    val nonPartitionPruningPredicates = predicates.filterNot {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-    }
-
-    if (nonPartitionPruningPredicates.nonEmpty) {
-        sys.error("Expected only partition pruning predicates: " +
-          predicates.reduceLeft(And))
-    }
-
-    val partitionSchema = catalogTable.partitionSchema
-
-    if (predicates.nonEmpty) {
-      val clientPrunedPartitions =
-        client.getPartitionsByFilter(catalogTable, predicates)
-      val boundPredicate =
-        InterpretedPredicate.create(predicates.reduce(And).transform {
-          case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
-            BoundReference(index, partitionSchema(index).dataType, nullable = true)
-        })
-      clientPrunedPartitions.filter { case p: CatalogTablePartition =>
-        boundPredicate(p.toRow(partitionSchema))
-      }
-    } else {
-      client.getPartitions(catalogTable)
-    }
-  }
-
   /**
    * Returns the specified partition or None if it does not exist.
    */
