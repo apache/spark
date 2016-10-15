@@ -47,7 +47,7 @@ class MetadataLogFileCatalog(sparkSession: SparkSession, path: Path)
     allFilesFromLog.toArray.groupBy(_.getPath.getParent)
   }
 
-  override def paths: Seq[Path] = path :: Nil
+  override def rootPaths: Seq[Path] = path :: Nil
 
   override def refresh(): Unit = { }
 

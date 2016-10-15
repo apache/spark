@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
+
 /**
  * Used to read and write data stored in files to/from the [[InternalRow]] format.
  */
@@ -182,16 +183,17 @@ abstract class TextBasedFileFormat extends FileFormat {
 case class Partition(values: InternalRow, files: Seq[FileStatus])
 
 /**
- * An interface for objects capable of enumerating the files that comprise a relation as well
- * as the partitioning characteristics of those files.
+ * An interface for objects capable of enumerating the root paths of a relation as well as the
+ * partitions of a relation subject to some pruning expressions.
  */
-trait FileCatalog {
+trait BasicFileCatalog {
 
-  /** Returns the list of input paths from which the catalog will get files. */
-  def paths: Seq[Path]
-
-  /** Returns the specification of the partitions inferred from the data. */
-  def partitionSpec(): PartitionSpec
+  /**
+   * Returns the list of root input paths from which the catalog will get files. There may be a
+   * single root path from which partitions are discovered, or individual partitions may be
+   * specified by each path.
+   */
+  def rootPaths: Seq[Path]
 
   /**
    * Returns all valid files grouped into partitions when the data is partitioned. If the data is
@@ -204,9 +206,33 @@ trait FileCatalog {
    */
   def listFiles(filters: Seq[Expression]): Seq[Partition]
 
+  /** Returns the list of files that will be read when scanning this relation. */
+  def inputFiles: Array[String]
+
+  /** Refresh any cached file listings */
+  def refresh(): Unit
+
+  /** Sum of table file sizes, in bytes */
+  def sizeInBytes: Long
+}
+
+/**
+ * A [[BasicFileCatalog]] which can enumerate all of the files comprising a relation and, from
+ * those, infer the relation's partition specification.
+ */
+// TODO: Consider a more descriptive, appropriate name which suggests this is a file catalog for
+// which it is safe to list all of its files?
+trait FileCatalog extends BasicFileCatalog {
+
+  /** Returns the specification of the partitions inferred from the data. */
+  def partitionSpec(): PartitionSpec
+
   /** Returns all the valid files. */
   def allFiles(): Seq[FileStatus]
 
-  /** Refresh the file listing */
-  def refresh(): Unit
+  /** Returns the list of files that will be read when scanning this relation. */
+  override def inputFiles: Array[String] =
+    allFiles().map(_.getPath.toUri.toString).toArray
+
+  override def sizeInBytes: Long = allFiles().map(_.getLen).sum
 }

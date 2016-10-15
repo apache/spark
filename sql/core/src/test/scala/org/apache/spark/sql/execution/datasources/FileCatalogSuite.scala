@@ -77,13 +77,14 @@ class FileCatalogSuite extends SharedSQLContext {
       val catalog1 = new ListingFileCatalog(
         spark, Seq(new Path(deletedFolder.getCanonicalPath)), Map.empty, None)
       // doesn't throw an exception
-      assert(catalog1.listLeafFiles(catalog1.paths).isEmpty)
+      assert(catalog1.listLeafFiles(catalog1.rootPaths).isEmpty)
     }
   }
 
   test("SPARK-17613 - PartitioningAwareFileCatalog: base path w/o '/' at end") {
     class MockCatalog(
-      override val paths: Seq[Path]) extends PartitioningAwareFileCatalog(spark, Map.empty, None) {
+      override val rootPaths: Seq[Path])
+      extends PartitioningAwareFileCatalog(spark, Map.empty, None) {
 
       override def refresh(): Unit = {}
 

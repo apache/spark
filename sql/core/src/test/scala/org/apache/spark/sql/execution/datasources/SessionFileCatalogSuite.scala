@@ -19,16 +19,16 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.SparkFunSuite
 
-class ListingFileCatalogSuite extends SparkFunSuite {
+class SessionFileCatalogSuite extends SparkFunSuite {
 
   test("file filtering") {
-    assert(!ListingFileCatalog.shouldFilterOut("abcd"))
-    assert(ListingFileCatalog.shouldFilterOut(".ab"))
-    assert(ListingFileCatalog.shouldFilterOut("_cd"))
+    assert(!SessionFileCatalog.shouldFilterOut("abcd"))
+    assert(SessionFileCatalog.shouldFilterOut(".ab"))
+    assert(SessionFileCatalog.shouldFilterOut("_cd"))
 
-    assert(!ListingFileCatalog.shouldFilterOut("_metadata"))
-    assert(!ListingFileCatalog.shouldFilterOut("_common_metadata"))
-    assert(ListingFileCatalog.shouldFilterOut("_ab_metadata"))
-    assert(ListingFileCatalog.shouldFilterOut("_cd_common_metadata"))
+    assert(!SessionFileCatalog.shouldFilterOut("_metadata"))
+    assert(!SessionFileCatalog.shouldFilterOut("_common_metadata"))
+    assert(SessionFileCatalog.shouldFilterOut("_ab_metadata"))
+    assert(SessionFileCatalog.shouldFilterOut("_cd_common_metadata"))
   }
 }

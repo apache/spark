@@ -471,9 +471,7 @@ case class DataSource(
           val existingPartitionColumns = Try {
             resolveRelation()
               .asInstanceOf[HadoopFsRelation]
-              .location
-              .partitionSpec()
-              .partitionColumns
+              .partitionSchema
               .fieldNames
               .toSeq
           }.getOrElse(Seq.empty[String])

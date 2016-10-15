@@ -198,11 +198,12 @@ abstract class ExternalCatalog {
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /**
-   * List the metadata of selected partitions according to the given partition predicates.
+   * List the metadata of partitions that belong to the specified table, assuming it exists, that
+   * satisfy the given partition-pruning predicate expressions.
    *
    * @param db database name
    * @param table table name
-   * @param predicates partition predicated
+   * @param predicates  partition-pruning predicates
    */
   def listPartitionsByFilter(
       db: String,
