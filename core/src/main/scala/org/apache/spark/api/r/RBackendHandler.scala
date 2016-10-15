@@ -24,6 +24,7 @@ import scala.collection.mutable.HashMap
 import scala.language.existentials
 
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
+import io.netty.channel.ChannelHandler.Sharable
 
 import org.apache.spark.api.r.SerDe._
 import org.apache.spark.internal.Logging
@@ -35,6 +36,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * TODO: This is marked as sharable to get a handle to RBackend. Is it safe to re-use
  * this across connections ?
  */
+@Sharable
 private[r] class RBackendHandler(server: RBackend)
   extends SimpleChannelInboundHandler[Array[Byte]] with Logging {
 
