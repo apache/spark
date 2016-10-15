@@ -25,6 +25,7 @@ import scala.language.existentials
 
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 import io.netty.channel.ChannelHandler.Sharable
+import io.netty.handler.timeout.ReadTimeoutException
 
 import org.apache.spark.api.r.SerDe._
 import org.apache.spark.internal.Logging
@@ -119,9 +120,15 @@ private[r] class RBackendHandler(server: RBackend)
   }
 
   override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
-    // Close the connection when an exception is raised.
-    cause.printStackTrace()
-    ctx.close()
+    cause match {
+      case timeout: ReadTimeoutException =>
+        // Do nothing. We don't want to timeout on read
+        logInfo("Ignoring read timeout in RBackendHandler")
+      case _ =>
+        // Close the connection when an exception is raised.
+        cause.printStackTrace()
+        ctx.close()
+    }
   }
 
   def handleMethodCall(

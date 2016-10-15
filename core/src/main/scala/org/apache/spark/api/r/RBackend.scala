@@ -28,6 +28,7 @@ import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.bytes.{ByteArrayDecoder, ByteArrayEncoder}
+import io.netty.handler.timeout.ReadTimeoutHandler
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -67,6 +68,7 @@ private[spark] class RBackend {
             // initialBytesToStrip = 4, i.e. strip out the length field itself
             new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4))
           .addLast("decoder", new ByteArrayDecoder())
+          .addLast("readTimeoutHandler", new ReadTimeoutHandler(backendConnectionTimeout))
           .addLast("handler", handler)
       }
     })
