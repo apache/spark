@@ -137,8 +137,6 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
     import sqlContext.implicits._
     val rawBatch = sqlContext.createDataset(rawList)
 
-
-
     // Underlying MemoryStream has schema (String, Timestamp); strip out the timestamp
     // if requested.
     if (includeTimestamp) {

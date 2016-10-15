@@ -31,13 +31,6 @@ trait Source  {
   def schema: StructType
 
   /**
-   * Returns the highest offset that this source has <b>removed</b> from its internal buffer
-   * in response to a call to `commit`.
-   * Returns `None` if this source has not removed any data.
-   */
-  def lastCommittedOffset: Option[Offset] = (None)
-
-  /**
    * Returns the maximum available offset for this source.
    * Returns `None` if this source has never received any data.
    */
@@ -48,7 +41,7 @@ trait Source  {
    * then the batch should begin with the first record. This method must always return the
    * same data for a particular `start` and `end` pair; even after the Source has been restarted
    * on a different node.
-   * <p>
+   *
    * Higher layers will always call this method with a value of `start` greater than or equal
    * to the last value passed to `commit` and a value of `end` less than or equal to the
    * last value returned by `getMaxOffset`

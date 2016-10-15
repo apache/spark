@@ -21,9 +21,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.Map
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -75,8 +73,9 @@ class StreamExecution(
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
    * input source.
-   * Only the scheduler thread should modify this field, and only in atomic steps. Other threads
-   * must create a local copy before iterating over this data structure.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
    */
   @volatile
   var committedOffsets = new StreamProgress
@@ -84,8 +83,9 @@ class StreamExecution(
   /**
    * Tracks the offsets that are available to be processed, but have not yet be committed to the
    * sink.
-   * Only the scheduler thread should modify this field, and only in atomic steps. Other threads
-   * must create a local copy before iterating over this data structure.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
    */
   @volatile
   private var availableOffsets = new StreamProgress
@@ -345,7 +345,7 @@ class StreamExecution(
         assert(offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
         logInfo(s"Committed offsets for batch $currentBatchId.")
-  
+
         // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
         // sources to discard data from *before* the previous batch.
         // The scheduler might still request the previous batch from a source in some cases
@@ -356,7 +356,7 @@ class StreamExecution(
             case (src, off) => src.commit(off)
           }
         }
-  
+
         // Now that we have logged the new batch, no further processing will happen for
         // the batch before the previous batch, and it is safe to discard the old metadata.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
