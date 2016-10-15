@@ -281,7 +281,7 @@ private[orc] object OrcRelation extends HiveInspectors {
       maybeStructOI: Option[StructObjectInspector],
       iterator: Iterator[Writable]): Iterator[InternalRow] = {
     val deserializer = new OrcSerde
-    val mutableRow = new SpecificMutableRow(dataSchema.map(_.dataType))
+    val mutableRow = new SpecificInternalRow(dataSchema.map(_.dataType))
     val unsafeProjection = UnsafeProjection.create(dataSchema)
 
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
@@ -313,7 +313,17 @@ private[orc] object OrcRelation extends HiveInspectors {
 
   def setRequiredColumns(
       conf: Configuration, physicalSchema: StructType, requestedSchema: StructType): Unit = {
-    val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
+    val caseInsensitiveFieldMap: Map[String, Int] = physicalSchema.fieldNames
+      .zipWithIndex
+      .map(f => (f._1.toLowerCase, f._2))
+      .toMap
+    val ids = requestedSchema.map { a =>
+      val exactMatch: Option[Int] = physicalSchema.getFieldIndex(a.name)
+      val res = exactMatch.getOrElse(
+        caseInsensitiveFieldMap.getOrElse(a.name,
+          throw new IllegalArgumentException(s"""Field "$a.name" does not exist.""")))
+      res: Integer
+    }
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
   }

@@ -94,7 +94,7 @@ case class LogicalRelation(
   }
 
   override def refresh(): Unit = relation match {
-    case fs: HadoopFsRelation => fs.refresh()
+    case fs: HadoopFsRelation => fs.location.refresh()
     case _ =>  // Do nothing.
   }
 

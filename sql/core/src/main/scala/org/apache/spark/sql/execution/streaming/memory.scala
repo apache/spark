@@ -152,6 +152,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def stop() {}
+
+  def reset(): Unit = synchronized {
+    batches.clear()
+    currentOffset = new LongOffset(-1)
+  }
 }
 
 /**
@@ -205,6 +210,8 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
       logDebug(s"Skipping already committed batch: $batchId")
     }
   }
+
+  override def toString(): String = "MemorySink"
 }
 
 /**
