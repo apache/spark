@@ -22,7 +22,7 @@ import java.net.{InetAddress, InetSocketAddress, ServerSocket}
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
-import io.netty.channel.{ChannelFuture, ChannelInitializer, EventLoopGroup, ChannelOption}
+import io.netty.channel.{ChannelFuture, ChannelInitializer, ChannelOption, EventLoopGroup}
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
