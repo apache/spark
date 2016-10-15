@@ -95,14 +95,6 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
-  override def lastCommittedOffset: Option[Offset] = synchronized {
-    if (lastOffsetCommitted.offset == -1) {
-      None
-    } else {
-      Some(lastOffsetCommitted)
-    }
-  }
-
   override def getOffset: Option[Offset] = synchronized {
     if (currentOffset.offset == -1) {
       None

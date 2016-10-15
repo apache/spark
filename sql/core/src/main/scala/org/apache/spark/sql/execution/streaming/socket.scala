@@ -105,14 +105,6 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   override def schema: StructType = if (includeTimestamp) TextSocketSource.SCHEMA_TIMESTAMP
   else TextSocketSource.SCHEMA_REGULAR
 
-  override def lastCommittedOffset: Option[Offset] = synchronized {
-    if (lastOffsetCommitted.offset == -1) {
-      None
-    } else {
-      Some(lastOffsetCommitted)
-    }
-  }
-
   override def getOffset: Option[Offset] = synchronized {
     if (currentOffset.offset == -1) {
       None
