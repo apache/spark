@@ -30,14 +30,10 @@ import java.nio.file.StandardOpenOption;
  * Unfortunately, this is not something already available in JDK,
  * {@link sun.nio.ch.ChannelInputStream} supports reading a file using nio,
  * but does not support buffering.
- *
- * TODO: support {@link #mark(int)}/{@link #reset()}
- *
  */
-@ThreadSafe
 public final class NioBufferedFileInputStream extends InputStream {
 
-  private static int DEFAULT_BUFFER_SIZE_BYTES = 8192;
+  private static final int DEFAULT_BUFFER_SIZE_BYTES = 8192;
 
   private final ByteBuffer byteBuffer;
 
@@ -83,7 +79,7 @@ public final class NioBufferedFileInputStream extends InputStream {
 
   @Override
   public synchronized int read(byte[] b, int offset, int len) throws IOException {
-    if (offset < 0 || len < 0 || (offset + len) < 0 || (b.length - (offset + len)) < 0) {
+    if (offset < 0 || len < 0 || (b.length - (offset + len)) < 0) {
       throw new IndexOutOfBoundsException();
     }
     if (!refill()) {
@@ -137,6 +133,6 @@ public final class NioBufferedFileInputStream extends InputStream {
 
   @Override
   protected void finalize() throws IOException {
-      close();
+    close();
   }
 }
