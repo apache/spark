@@ -158,7 +158,8 @@ case class TakeOrderedAndProjectExec(
     }
   }
 
-  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override def outputOrdering: Seq[SortOrder] =
+    ProjectHelper.outputOrdering(projectList, sortOrder, child)
 
   override def simpleString: String = {
     val orderByString = Utils.truncatedString(sortOrder, "[", ",", "]")

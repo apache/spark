@@ -77,9 +77,40 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
   }
 
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputOrdering: Seq[SortOrder] =
+    ProjectHelper.outputOrdering(projectList, child.outputOrdering, child)
 }
 
+object ProjectHelper {
+  /**
+   * Determins the outputOrdering property for [[ProjectExec]] and [[TakeOrderedAndProjectExec]]
+   * in a conservative way. We assume any different expresssion to child's sort order expression
+   * will change the sort order. In this case, we drop the sort order. E.g., if the child has the
+   * sort order of 'a.asc and a project expression is UnaryMinus('a), we drop the sort order after
+   * this projection.
+   */
+  def outputOrdering(
+      projectList: Seq[NamedExpression],
+      sortOrder: Seq[SortOrder],
+      child: SparkPlan): Seq[SortOrder] = {
+    if (projectList == child.output) {
+      sortOrder
+    } else {
+      val projectExprs = projectList.map {
+        case Alias(c, _) => c
+        case o => o
+      }
+      sortOrder.takeWhile { order =>
+        val referredAttrs = order.child.references.toSeq
+        // If allthe referred attributes in this sort order can be found in project list,
+        // we can keep this sort order.
+        // E.g., if the sort order is 'a + 'b + 1, the projection list is ['a, 'b], then
+        // this sort order is valid.
+        referredAttrs.forall(a => projectExprs.exists(_.semanticEquals(a)))
+      }
+    }
+  }
+}
 
 /** Physical plan for Filter. */
 case class FilterExec(condition: Expression, child: SparkPlan)
