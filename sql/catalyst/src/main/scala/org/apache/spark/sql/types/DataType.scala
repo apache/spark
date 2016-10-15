@@ -79,17 +79,6 @@ abstract class DataType extends AbstractDataType {
     DataType.equalsIgnoreNullability(this, other)
 
   /**
-   * Check if two integers are compatible. Returns true if `right` can be converted to `left`.
-   */
-  private[spark] def isCompatibleIntegralType(left: DataType, right: DataType): Boolean = {
-    (left, right) match {
-      case (l, r) => l.isInstanceOf[IntegralType] && r.isInstanceOf[IntegralType] &&
-        l.defaultSize >= r.defaultSize
-      case _ => false
-    }
-  }
-
-  /**
    * Returns the same data type but set all nullability fields are true
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
@@ -102,8 +91,7 @@ abstract class DataType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = this
 
-  override private[sql] def acceptsType(other: DataType): Boolean = sameType(other) ||
-    isCompatibleIntegralType(this, other)
+  override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 }
 
 

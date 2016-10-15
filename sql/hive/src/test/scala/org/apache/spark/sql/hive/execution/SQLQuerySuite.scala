@@ -1886,6 +1886,17 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-17108: Fix BIGINT and INT comparison failure in spark sql") {
+    sql("create table t1(a map<bigint, array<string>>)")
+    sql("select * from t1 where a[1] is not null")
+
+    sql("create table t2(a map<int, array<string>>)")
+    sql("select * from t2 where a[1] is not null")
+
+    sql("create table t3(a map<bigint, array<string>>)")
+    sql("select * from t3 where a[1L] is not null")
+  }
+
   def testCommandAvailable(command: String): Boolean = {
     val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0
