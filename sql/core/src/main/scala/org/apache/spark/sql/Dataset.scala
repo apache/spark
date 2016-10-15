@@ -774,7 +774,7 @@ class Dataset[T] private[sql](
    * @param right Right side of the join operation.
    *
    * @group untypedrel
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def crossJoin(right: Dataset[_]): DataFrame = withPlan {
     Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
