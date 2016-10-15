@@ -28,8 +28,8 @@ import org.apache.spark.sql.types.StructType
  * Acts as a container for all of the metadata required to read from a datasource. All discovery,
  * resolution and merging logic for schemas and partitions has been removed.
  *
- * @param location A [[FileCatalog]] that can enumerate the locations of all the files that comprise
- *                 this relation.
+ * @param location A [[BasicFileCatalog]] that can enumerate the locations of all the files that
+ *                 comprise this relation.
  * @param partitionSchema The schema of the columns (if any) that are used to partition the relation
  * @param dataSchema The schema of any remaining columns.  Note that if any partition columns are
  *                   present in the actual data files as well, they are preserved.
@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.StructType
  * @param options Configuration used when reading / writing data.
  */
 case class HadoopFsRelation(
-    location: FileCatalog,
+    location: BasicFileCatalog,
     partitionSchema: StructType,
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
@@ -58,10 +58,6 @@ case class HadoopFsRelation(
   def partitionSchemaOption: Option[StructType] =
     if (partitionSchema.isEmpty) None else Some(partitionSchema)
 
-  def partitionSpec: PartitionSpec = location.partitionSpec()
-
-  def refresh(): Unit = location.refresh()
-
   override def toString: String = {
     fileFormat match {
       case source: DataSourceRegister => source.shortName()
@@ -69,9 +65,7 @@ case class HadoopFsRelation(
     }
   }
 
-  /** Returns the list of files that will be read when scanning this relation. */
-  override def inputFiles: Array[String] =
-    location.allFiles().map(_.getPath.toUri.toString).toArray
+  override def sizeInBytes: Long = location.sizeInBytes
 
-  override def sizeInBytes: Long = location.allFiles().map(_.getLen).sum
+  override def inputFiles: Array[String] = location.inputFiles
 }
