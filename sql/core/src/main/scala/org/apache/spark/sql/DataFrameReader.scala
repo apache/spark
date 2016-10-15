@@ -231,11 +231,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    // connectionProperties should override settings in extraOptions.
-    val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
-    val options = new JDBCOptions(url, table, params)
-    val relation = JDBCRelation(parts, options)(sparkSession)
-    sparkSession.baseRelationToDataFrame(relation)
+    // connectionProperties should override settings in extraOptions
+    this.extraOptions = this.extraOptions ++ (connectionProperties.asScala)
+    // explicit url and dbtable should override all
+    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    format("jdbc").load()
   }
 
   /**
