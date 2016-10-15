@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrd
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.CreateHiveTableAsSelectLogicalPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 
@@ -58,6 +59,24 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(e.getMessage)
       }
+  }
+}
+
+/**
+ * Analyze the query in CREATE TABLE AS SELECT
+ */
+case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case c: CreateTableUsingAsSelect if !c.query.resolved =>
+      c.copy(query = analyzeQuery(c.query))
+    case c: CreateHiveTableAsSelectLogicalPlan if !c.query.resolved =>
+      c.copy(query = analyzeQuery(c.query))
+  }
+
+  private def analyzeQuery(query: LogicalPlan): LogicalPlan = {
+    val qe = sparkSession.sessionState.executePlan(query)
+    qe.assertAnalyzed()
+    qe.analyzed
   }
 }
 

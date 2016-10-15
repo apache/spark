@@ -449,7 +449,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case p @ CreateHiveTableAsSelectLogicalPlan(table, child, allowExisting) =>
+      case p @ CreateHiveTableAsSelectLogicalPlan(table, query, allowExisting) =>
         val desc = if (table.storage.serde.isEmpty) {
           // add default serde
           table.withNewStorage(
@@ -462,7 +462,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
         execution.CreateHiveTableAsSelectCommand(
           desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
-          child,
+          query,
           allowExisting)
     }
   }

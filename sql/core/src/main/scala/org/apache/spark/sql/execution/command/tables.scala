@@ -55,7 +55,7 @@ case class CreateHiveTableAsSelectLogicalPlan(
       tableDesc.storage.serde.isDefined &&
       tableDesc.storage.inputFormat.isDefined &&
       tableDesc.storage.outputFormat.isDefined &&
-      childrenResolved
+      query.resolved
 }
 
 /**

@@ -54,7 +54,9 @@ case class CreateTableUsingAsSelect(
     mode: SaveMode,
     options: Map[String, String],
     query: LogicalPlan) extends logical.Command {
+
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override lazy val resolved: Boolean = query.resolved
 }
 
 case class CreateTempViewUsing(
