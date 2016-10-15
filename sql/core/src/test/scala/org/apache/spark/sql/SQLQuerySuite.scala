@@ -19,12 +19,13 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.math.MathContext
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
+
+import scala.concurrent.duration._
+
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -2684,7 +2685,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       spark.range(10).toDF("a").createTempView("tmpv")
 
       // Just ensure the following query will successfully execute complete.
-      assert(sql(
+      val query =
         """
           |SELECT
           |  *
@@ -2698,8 +2699,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |) t1
           |INNER JOIN tmpv t2
           |ON (((t2.a) = (t1.a)) AND ((t2.a) = (t1.int_col))) AND ((t2.a) = (t1.b))
-        """.stripMargin).count() > 0
-      )
+        """.stripMargin
+
+      eventually(timeout(60 seconds)) {
+        assert(sql(query).count() > 0)
+      }
     }
   }
 }
