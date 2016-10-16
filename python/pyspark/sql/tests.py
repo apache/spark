@@ -810,6 +810,11 @@ class SQLTests(ReusedPySparkTestCase):
         corr = df.stat.corr(u"a", "b")
         self.assertTrue(abs(corr - 0.95734012) < 1e-6)
 
+    def test_sampleby(self):
+        df = self.sc.parallelize([Row(a=i, b=(i % 3)) for i in range(10)]).toDF()
+        corr = df.stat.sampleBy(u"b", fractions={0: 0.5, 1: 0.5}, seed=0)
+        self.assertTrue(corr.count() == 3)
+
     def test_cov(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
         cov = df.stat.cov(u"a", "b")
