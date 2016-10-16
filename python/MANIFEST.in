@@ -1,1 +1,2 @@
-include ../assembly/target/scala-2.11/jars/*.jar
+recursive-include deps/assembly/target/scala-2.11/jars *.jar
+recursive-include deps/bin *
