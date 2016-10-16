@@ -96,6 +96,11 @@ public class ByteBufInputStream extends InputStream {
     }
   }
 
+  @Override
+  protected void finalize() throws Throwable {
+    if (!isClosed) close();
+  }
+
   private void pullChunk() throws IOException {
     if (curChunk == null && buffers.size() > 0) {
       curChunk = buffers.removeFirst();
@@ -112,4 +117,5 @@ public class ByteBufInputStream extends InputStream {
       curChunk = null;
     }
   }
+
 }
