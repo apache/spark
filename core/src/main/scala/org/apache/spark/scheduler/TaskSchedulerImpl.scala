@@ -22,7 +22,9 @@ import java.util.{Timer, TimerTask}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.Set
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -59,21 +61,6 @@ private[spark] class TaskSchedulerImpl(
 
   val conf = sc.conf
 
-  val DEFAULT_TASK_ASSIGNER = classOf[RoundRobinAssigner].getName
-  lazy val taskAssigner: TaskAssigner = {
-    val className = conf.get("spark.task.assigner", DEFAULT_TASK_ASSIGNER)
-    try {
-      logInfo(s"""constructing assigner as $className""")
-      val ctor = Utils.classForName(className).getConstructor(classOf[SparkConf])
-      ctor.newInstance(conf).asInstanceOf[TaskAssigner]
-    } catch {
-      case _: Throwable =>
-        logWarning(
-          s"""$className cannot be constructed fallback to default
-             | $DEFAULT_TASK_ASSIGNER""".stripMargin)
-        new RoundRobinAssigner(conf)
-    }
-  }
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
 
@@ -263,26 +250,24 @@ private[spark] class TaskSchedulerImpl(
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
-      taskAssigner: TaskAssigner) : Boolean = {
+      shuffledOffers: Seq[WorkerOffer],
+      availableCpus: Array[Int],
+      tasks: IndexedSeq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
-    taskAssigner.init()
-    while(taskAssigner.hasNext()) {
-      var assigned = false
-      val current = taskAssigner.getNext()
-      val execId = current.workOffer.executorId
-      val host = current.workOffer.host
-      if (current.cores >= CPUS_PER_TASK) {
+    for (i <- 0 until shuffledOffers.size) {
+      val execId = shuffledOffers(i).executorId
+      val host = shuffledOffers(i).host
+      if (availableCpus(i) >= CPUS_PER_TASK) {
         try {
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
-            current.tasks += task
+            tasks(i) += task
             val tid = task.taskId
             taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
             executorIdToTaskCount(execId) += 1
-            current.cores = current.cores - CPUS_PER_TASK
-            assert(current.cores >= 0)
+            availableCpus(i) -= CPUS_PER_TASK
+            assert(availableCpus(i) >= 0)
             launchedTask = true
-            assigned = true
           }
         } catch {
           case e: TaskNotSerializableException =>
@@ -292,10 +277,8 @@ private[spark] class TaskSchedulerImpl(
             return launchedTask
         }
       }
-      taskAssigner.taskAssigned(assigned)
     }
     return launchedTask
-
   }
 
   /**
@@ -322,8 +305,12 @@ private[spark] class TaskSchedulerImpl(
         hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
     }
-    taskAssigner.construct(offers)
 
+    // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
+    val shuffledOffers = Random.shuffle(offers)
+    // Build a list of tasks to assign to each worker.
+    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
+    val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -342,7 +329,7 @@ private[spark] class TaskSchedulerImpl(
       for (currentMaxLocality <- taskSet.myLocalityLevels) {
         do {
           launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(
-            taskSet, currentMaxLocality, taskAssigner)
+            taskSet, currentMaxLocality, shuffledOffers, availableCpus, tasks)
           launchedAnyTask |= launchedTaskAtCurrentMaxLocality
         } while (launchedTaskAtCurrentMaxLocality)
       }
@@ -350,12 +337,10 @@ private[spark] class TaskSchedulerImpl(
         taskSet.abortIfCompletelyBlacklisted(hostToExecutors)
       }
     }
-    val tasks = taskAssigner.tasks
-    taskAssigner.reset
+
     if (tasks.size > 0) {
       hasLaunchedTask = true
     }
-
     return tasks
   }
 
