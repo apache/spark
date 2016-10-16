@@ -269,6 +269,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HIVE_FILESOURCE_PARTITION_PRUNING =
+    SQLConfigBuilder("spark.sql.hive.filesourcePartitionPruning")
+      .doc("When true, enable metastore partition pruning for file source tables as well. " +
+           "This is currently implemented for converted Hive tables only.")
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
@@ -569,10 +576,17 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
 
+  val STREAMING_METRICS_ENABLED =
+    SQLConfigBuilder("spark.sql.streaming.metricsEnabled")
+      .doc("Whether Dropwizard/Codahale metrics will be reported for active streaming queries.")
+      .booleanConf
+      .createWithDefault(false)
+
   val NDV_MAX_ERROR =
     SQLConfigBuilder("spark.sql.statistics.ndv.maxError")
       .internal()
-      .doc("The maximum estimation error allowed in HyperLogLog++ algorithm.")
+      .doc("The maximum estimation error allowed in HyperLogLog++ algorithm when generating " +
+        "column level statistics.")
       .doubleConf
       .createWithDefault(0.05)
 
@@ -635,6 +649,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
 
+  def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
+
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
@@ -666,6 +682,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+
+  def filesourcePartitionPruning: Boolean = getConf(HIVE_FILESOURCE_PARTITION_PRUNING)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 

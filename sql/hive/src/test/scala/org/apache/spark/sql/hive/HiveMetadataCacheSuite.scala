@@ -59,4 +59,45 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
       }
     }
   }
+
+  def testCaching(pruningEnabled: Boolean): Unit = {
+    test(s"partitioned table is cached when partition pruning is $pruningEnabled") {
+      withSQLConf("spark.sql.hive.filesourcePartitionPruning" -> pruningEnabled.toString) {
+        withTable("test") {
+          withTempDir { dir =>
+            spark.range(5).selectExpr("id", "id as f1", "id as f2").write
+              .partitionBy("f1", "f2")
+              .mode("overwrite")
+              .parquet(dir.getAbsolutePath)
+
+            spark.sql(s"""
+              |create external table test (id long)
+              |partitioned by (f1 int, f2 int)
+              |stored as parquet
+              |location "${dir.getAbsolutePath}"""".stripMargin)
+            spark.sql("msck repair table test")
+
+            val df = spark.sql("select * from test")
+            assert(sql("select * from test").count() == 5)
+
+            // Delete a file, then assert that we tried to read it. This means the table was cached.
+            val p = new Path(spark.table("test").inputFiles.head)
+            assert(p.getFileSystem(hiveContext.sessionState.newHadoopConf()).delete(p, true))
+            val e = intercept[SparkException] {
+              sql("select * from test").count()
+            }
+            assert(e.getMessage.contains("FileNotFoundException"))
+
+            // Test refreshing the cache.
+            spark.catalog.refreshTable("test")
+            assert(sql("select * from test").count() == 4)
+          }
+        }
+      }
+    }
+  }
+
+  for (pruningEnabled <- Seq(true, false)) {
+    testCaching(pruningEnabled)
+  }
 }

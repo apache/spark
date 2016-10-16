@@ -1466,7 +1466,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1, plan1.toString().count("BroadcastHashJoin"))
 
         # no join key -- should not be a broadcast join
-        plan2 = df1.join(broadcast(df2))._jdf.queryExecution().executedPlan()
+        plan2 = df1.crossJoin(broadcast(df2))._jdf.queryExecution().executedPlan()
         self.assertEqual(0, plan2.toString().count("BroadcastHashJoin"))
 
         # planner should not crash without a join
@@ -1513,6 +1513,19 @@ class SQLTests(ReusedPySparkTestCase):
         df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
         df2 = self.spark.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
         self.assertRaises(IllegalArgumentException, lambda: df1.join(df2, how="invalid-join-type"))
+
+    # Cartesian products require cross join syntax
+    def test_require_cross(self):
+        from pyspark.sql.functions import broadcast
+
+        df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
+        df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
+
+        # joins without conditions require cross join syntax
+        self.assertRaises(AnalysisException, lambda: df1.join(df2).collect())
+
+        # works with crossJoin
+        self.assertEqual(1, df1.crossJoin(df2).count())
 
     def test_conf(self):
         spark = self.spark
