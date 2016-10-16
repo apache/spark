@@ -177,6 +177,13 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
     }
 
     val strategy = caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+      case ("assign", value) =>
+        if (!value.trim.startsWith("{")) {
+          throw new IllegalArgumentException(
+            "No topicpartitions to assign as specified value for option " +
+              s"'assign' is '$value'")
+        }
+
       case ("subscribe", value) =>
         val topics = value.split(",").map(_.trim).filter(_.nonEmpty)
         if (topics.isEmpty) {

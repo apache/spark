@@ -255,7 +255,9 @@ private[kafka010] case class KafkaSource(
         case (tp, -2) => consumer.seekToBeginning(ju.Arrays.asList(tp))
         case (tp, off) => consumer.seek(tp, off)
       }
-      partitionOffsets
+      partitionOffsets.map {
+        case (tp, _) => tp -> consumer.position(tp)
+      }
     }
 
   /**

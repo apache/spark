@@ -201,11 +201,23 @@ class KafkaTestUtils extends Logging {
 
   /** Send the array of messages to the Kafka broker */
   def sendMessages(topic: String, messages: Array[String]): Seq[(String, RecordMetadata)] = {
+    sendMessages(topic, messages, None)
+  }
+
+  /** Send the array of messages to the Kafka broker using specified partition */
+  def sendMessages(
+      topic: String,
+      messages: Array[String],
+      partition: Option[Int]): Seq[(String, RecordMetadata)] = {
     producer = new KafkaProducer[String, String](producerConfiguration)
     val offsets = try {
       messages.map { m =>
+        val record = partition match {
+          case Some(p) => new ProducerRecord[String, String](topic, p, null,  m)
+          case None => new ProducerRecord[String, String](topic, m)
+        }
         val metadata =
-          producer.send(new ProducerRecord[String, String](topic, m)).get(10, TimeUnit.SECONDS)
+          producer.send(record).get(10, TimeUnit.SECONDS)
           logInfo(s"\tSent $m to partition ${metadata.partition}, offset ${metadata.offset}")
         (m, metadata)
       }
