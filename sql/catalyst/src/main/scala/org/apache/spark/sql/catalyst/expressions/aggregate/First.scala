@@ -31,7 +31,8 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = """_FUNC_(expr) - Returns the first value of `child` for a group of rows.
     _FUNC_(expr,isIgnoreNull=false) - Returns the first value of `child` for a group of rows.
-      If isIgnoreNull is true, returns only non-null values.
+      If isIgnoreNull is true, returns only non-null values. Note that in most cases the
+      result is nondeterministic.
     """)
 case class First(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
 
