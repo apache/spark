@@ -32,11 +32,12 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
+import org.apache.spark.sql.execution.command.{ColumnStatStruct, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{DataType, StructType}
 
 
@@ -110,6 +111,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
         s"as table property keys may not start with '$DATASOURCE_PREFIX' or '$STATISTICS_PREFIX':" +
         s" ${invalidKeys.mkString("[", ", ", "]")}")
+    }
+    // External users are not allowed to set/switch the table type. In Hive metastore, the table
+    // type can be switched by changing the value of a case-sensitive table property `EXTERNAL`.
+    if (table.properties.contains("EXTERNAL")) {
+      throw new AnalysisException("Cannot set or change the preserved property key: 'EXTERNAL'")
     }
   }
 
@@ -201,11 +207,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Serialized JSON schema string may be too long to be stored into a single metastore table
       // property. In this case, we split the JSON string and store each part as a separate table
       // property.
-      // TODO: the threshold should be set by `spark.sql.sources.schemaStringLengthThreshold`,
-      // however the current SQLConf is session isolated, which is not applicable to external
-      // catalog. We should re-enable this conf instead of hard code the value here, after we have
-      // global SQLConf.
-      val threshold = 4000
+      val threshold = conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
       val schemaJsonString = tableDefinition.schema.json
       // Split the JSON string.
       val parts = schemaJsonString.grouped(threshold).toSeq
@@ -401,7 +403,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       var statsProperties: Map[String, String] =
         Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
       if (stats.rowCount.isDefined) {
-        statsProperties += (STATISTICS_NUM_ROWS -> stats.rowCount.get.toString())
+        statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
+      }
+      stats.colStats.foreach { case (colName, colStat) =>
+        statsProperties += (STATISTICS_COL_STATS_PREFIX + colName) -> colStat.toString
       }
       tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
     } else {
@@ -461,27 +466,38 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         } else {
           table.storage
         }
+        val tableProps = if (conf.get(DEBUG_MODE)) {
+          table.properties
+        } else {
+          getOriginalTableProperties(table)
+        }
         table.copy(
           storage = storage,
           schema = getSchemaFromTableProperties(table),
           provider = Some(provider),
           partitionColumnNames = getPartitionColumnsFromTableProperties(table),
           bucketSpec = getBucketSpecFromTableProperties(table),
-          properties = getOriginalTableProperties(table))
+          properties = tableProps)
       } getOrElse {
         table.copy(provider = Some("hive"))
       }
     }
     // construct Spark's statistics from information in Hive metastore
-    if (catalogTable.properties.contains(STATISTICS_TOTAL_SIZE)) {
-      val totalSize = BigInt(catalogTable.properties.get(STATISTICS_TOTAL_SIZE).get)
-      // TODO: we will compute "estimatedSize" when we have column stats:
-      // average size of row * number of rows
+    val statsProps = catalogTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
+    if (statsProps.nonEmpty) {
+      val colStatsProps = statsProps.filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX))
+        .map { case (k, v) => (k.drop(STATISTICS_COL_STATS_PREFIX.length), v) }
+      val colStats: Map[String, ColumnStat] = catalogTable.schema.collect {
+        case f if colStatsProps.contains(f.name) =>
+          val numFields = ColumnStatStruct.numStatFields(f.dataType)
+          (f.name, ColumnStat(numFields, colStatsProps(f.name)))
+      }.toMap
       catalogTable.copy(
         properties = removeStatsProperties(catalogTable),
         stats = Some(Statistics(
-          sizeInBytes = totalSize,
-          rowCount = catalogTable.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)))))
+          sizeInBytes = BigInt(catalogTable.properties(STATISTICS_TOTAL_SIZE)),
+          rowCount = catalogTable.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
+          colStats = colStats)))
     } else {
       catalogTable
     }
@@ -693,6 +709,7 @@ object HiveExternalCatalog {
   val STATISTICS_PREFIX = "spark.sql.statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
   val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
+  val STATISTICS_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
 
   def removeStatsProperties(metadata: CatalogTable): Map[String, String] = {
     metadata.properties.filterNot { case (key, _) => key.startsWith(STATISTICS_PREFIX) }

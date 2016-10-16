@@ -41,7 +41,7 @@ object SQLConf {
   private val sqlConfEntries = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, ConfigEntry[_]]())
 
-  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
+  private[sql] def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
     require(!sqlConfEntries.containsKey(entry.key),
       s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
     sqlConfEntries.put(entry.key, entry)
@@ -326,18 +326,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  // This is used to control the when we will split a schema's JSON string to multiple pieces
-  // in order to fit the JSON string in metastore's table property (by default, the value has
-  // a length restriction of 4000 characters). We will split the JSON string of a schema
-  // to its length exceeds the threshold.
-  val SCHEMA_STRING_LENGTH_THRESHOLD =
-    SQLConfigBuilder("spark.sql.sources.schemaStringLengthThreshold")
-      .doc("The maximum length allowed in a single cell when " +
-        "storing additional schema information in Hive's metastore.")
-      .internal()
-      .intConf
-      .createWithDefault(4000)
-
   val PARTITION_COLUMN_TYPE_INFERENCE =
     SQLConfigBuilder("spark.sql.sources.partitionColumnTypeInference.enabled")
       .doc("When true, automatically infer the data types for partitioned columns.")
@@ -544,7 +532,28 @@ object SQLConf {
       .internal()
       .doc("How long that a file is guaranteed to be visible for all readers.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefault(60 * 1000L) // 10 minutes
+      .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
+
+  val FILE_SOURCE_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSource.log.deletion")
+    .internal()
+    .doc("Whether to delete the expired log files in file stream source.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val FILE_SOURCE_LOG_COMPACT_INTERVAL =
+    SQLConfigBuilder("spark.sql.streaming.fileSource.log.compactInterval")
+      .internal()
+      .doc("Number of log files after which all the previous files " +
+        "are compacted into the next log file.")
+      .intConf
+      .createWithDefault(10)
+
+  val FILE_SOURCE_LOG_CLEANUP_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.fileSource.log.cleanupDelay")
+      .internal()
+      .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
 
   val STREAMING_SCHEMA_INFERENCE =
     SQLConfigBuilder("spark.sql.streaming.schemaInference")
@@ -559,6 +568,19 @@ object SQLConf {
       .doc("How long to delay polling new data when no data is available")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10L)
+
+  val NDV_MAX_ERROR =
+    SQLConfigBuilder("spark.sql.statistics.ndv.maxError")
+      .internal()
+      .doc("The maximum estimation error allowed in HyperLogLog++ algorithm.")
+      .doubleConf
+      .createWithDefault(0.05)
+
+  val IGNORE_CORRUPT_FILES = SQLConfigBuilder("spark.sql.files.ignoreCorruptFiles")
+    .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
+      "encountering corrupt files and contents that have been read will still be returned.")
+    .booleanConf
+    .createWithDefault(false)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -599,9 +621,15 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def fileSinkLogDeletion: Boolean = getConf(FILE_SINK_LOG_DELETION)
 
-  def fileSinkLogCompatInterval: Int = getConf(FILE_SINK_LOG_COMPACT_INTERVAL)
+  def fileSinkLogCompactInterval: Int = getConf(FILE_SINK_LOG_COMPACT_INTERVAL)
 
   def fileSinkLogCleanupDelay: Long = getConf(FILE_SINK_LOG_CLEANUP_DELAY)
+
+  def fileSourceLogDeletion: Boolean = getConf(FILE_SOURCE_LOG_DELETION)
+
+  def fileSourceLogCompactInterval: Int = getConf(FILE_SOURCE_LOG_COMPACT_INTERVAL)
+
+  def fileSourceLogCleanupDelay: Long = getConf(FILE_SOURCE_LOG_CLEANUP_DELAY)
 
   def streamingSchemaInference: Boolean = getConf(STREAMING_SCHEMA_INFERENCE)
 
@@ -702,10 +730,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
-  // Do not use a value larger than 4000 as the default value of this property.
-  // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
-  def schemaStringLengthThreshold: Int = getConf(SCHEMA_STRING_LENGTH_THRESHOLD)
-
   def dataFrameEagerAnalysis: Boolean = getConf(DATAFRAME_EAGER_ANALYSIS)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
@@ -725,11 +749,15 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def warehousePath: String = new Path(getConf(WAREHOUSE_PATH)).toString
 
+  def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
+
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
   override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -850,3 +878,46 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   }
 }
 
+/**
+ * Static SQL configuration is a cross-session, immutable Spark configuration. External users can
+ * see the static sql configs via `SparkSession.conf`, but can NOT set/unset them.
+ */
+object StaticSQLConf {
+  val globalConfKeys = java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
+
+  private def buildConf(key: String): ConfigBuilder = {
+    ConfigBuilder(key).onCreate { entry =>
+      globalConfKeys.add(entry.key)
+      SQLConf.register(entry)
+    }
+  }
+
+  val CATALOG_IMPLEMENTATION = buildConf("spark.sql.catalogImplementation")
+    .internal()
+    .stringConf
+    .checkValues(Set("hive", "in-memory"))
+    .createWithDefault("in-memory")
+
+  val GLOBAL_TEMP_DATABASE = buildConf("spark.sql.globalTempDatabase")
+    .internal()
+    .stringConf
+    .createWithDefault("global_temp")
+
+  // This is used to control when we will split a schema's JSON string to multiple pieces
+  // in order to fit the JSON string in metastore's table property (by default, the value has
+  // a length restriction of 4000 characters, so do not use a value larger than 4000 as the default
+  // value of this property). We will split the JSON string of a schema to its length exceeds the
+  // threshold. Note that, this conf is only read in HiveExternalCatalog which is cross-session,
+  // that's why this conf has to be a static SQL conf.
+  val SCHEMA_STRING_LENGTH_THRESHOLD = buildConf("spark.sql.sources.schemaStringLengthThreshold")
+    .doc("The maximum length allowed in a single cell when " +
+      "storing additional schema information in Hive's metastore.")
+    .internal()
+    .intConf
+    .createWithDefault(4000)
+
+  val DEBUG_MODE = buildConf("spark.sql.debug")
+    .internal()
+    .booleanConf
+    .createWithDefault(false)
+}

@@ -141,7 +141,7 @@ object ObjectOperator {
   def serializeObjectToRow(serializer: Seq[Expression]): Any => UnsafeRow = {
     val proj = GenerateUnsafeProjection.generate(serializer)
     val objType = serializer.head.collect { case b: BoundReference => b.dataType }.head
-    val objRow = new SpecificMutableRow(objType :: Nil)
+    val objRow = new SpecificInternalRow(objType :: Nil)
     (o: Any) => {
       objRow(0) = o
       proj(objRow)
@@ -149,7 +149,7 @@ object ObjectOperator {
   }
 
   def wrapObjectToRow(objType: DataType): Any => InternalRow = {
-    val outputRow = new SpecificMutableRow(objType :: Nil)
+    val outputRow = new SpecificInternalRow(objType :: Nil)
     (o: Any) => {
       outputRow(0) = o
       outputRow

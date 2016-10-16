@@ -39,8 +39,8 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, sqlKafka010) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver", "sql-kafka-0-10"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
@@ -280,7 +280,7 @@ object SparkBuild extends PomBuild {
       "-target", javacJVMVersion.value
     ) ++ sys.env.get("JAVA_7_HOME").toSeq.flatMap { jdk7 =>
       if (javacJVMVersion.value == "1.7") {
-        Seq("-bootclasspath", s"$jdk7/jre/lib/rt.jar")
+        Seq("-bootclasspath", s"$jdk7/jre/lib/rt.jar${File.pathSeparator}$jdk7/jre/lib/jce.jar")
       } else {
         Nil
       }
@@ -291,7 +291,7 @@ object SparkBuild extends PomBuild {
       "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
     ) ++ sys.env.get("JAVA_7_HOME").toSeq.flatMap { jdk7 =>
       if (javacJVMVersion.value == "1.7") {
-        Seq("-javabootclasspath", s"$jdk7/jre/lib/rt.jar")
+        Seq("-javabootclasspath", s"$jdk7/jre/lib/rt.jar${File.pathSeparator}$jdk7/jre/lib/jce.jar")
       } else {
         Nil
       }
@@ -353,7 +353,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags
+      unsafe, tags, sqlKafka010
     ).contains(x)
   }
 

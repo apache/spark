@@ -25,6 +25,7 @@ import org.apache.avro.reflect.Nullable;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
@@ -56,11 +57,14 @@ public final class UnsafeInMemorySorter {
     @Override
     public int compare(RecordPointerAndKeyPrefix r1, RecordPointerAndKeyPrefix r2) {
       final int prefixComparisonResult = prefixComparator.compare(r1.keyPrefix, r2.keyPrefix);
+      int uaoSize = UnsafeAlignedOffset.getUaoSize();
       if (prefixComparisonResult == 0) {
         final Object baseObject1 = memoryManager.getPage(r1.recordPointer);
-        final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer) + 4; // skip length
+        // skip length
+        final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer) + uaoSize;
         final Object baseObject2 = memoryManager.getPage(r2.recordPointer);
-        final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer) + 4; // skip length
+        // skip length
+        final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer) + uaoSize;
         return recordComparator.compare(baseObject1, baseOffset1, baseObject2, baseOffset2);
       } else {
         return prefixComparisonResult;
@@ -281,10 +285,12 @@ public final class UnsafeInMemorySorter {
     public void loadNext() {
       // This pointer points to a 4-byte record length, followed by the record's bytes
       final long recordPointer = array.get(offset + position);
-      currentPageNumber = memoryManager.decodePageNumber(recordPointer);
+      currentPageNumber = TaskMemoryManager.decodePageNumber(recordPointer);
+      int uaoSize = UnsafeAlignedOffset.getUaoSize();
       baseObject = memoryManager.getPage(recordPointer);
-      baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
-      recordLength = Platform.getInt(baseObject, baseOffset - 4);
+      // Skip over record length
+      baseOffset = memoryManager.getOffsetInPage(recordPointer) + uaoSize;
+      recordLength = UnsafeAlignedOffset.getSize(baseObject, baseOffset - uaoSize);
       keyPrefix = array.get(offset + position + 1);
       position += 2;
     }

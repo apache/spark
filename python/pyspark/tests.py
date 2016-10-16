@@ -409,12 +409,22 @@ class AddFileTests(PySparkTestCase):
         self.assertEqual("Hello World!", res)
 
     def test_add_file_locally(self):
-        path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         self.sc.addFile(path)
         download_path = SparkFiles.get("hello.txt")
         self.assertNotEqual(path, download_path)
         with open(download_path) as test_file:
             self.assertEqual("Hello World!\n", test_file.readline())
+
+    def test_add_file_recursively_locally(self):
+        path = os.path.join(SPARK_HOME, "python/test_support/hello")
+        self.sc.addFile(path, True)
+        download_path = SparkFiles.get("hello")
+        self.assertNotEqual(path, download_path)
+        with open(download_path + "/hello.txt") as test_file:
+            self.assertEqual("Hello World!\n", test_file.readline())
+        with open(download_path + "/sub_hello/sub_hello.txt") as test_file:
+            self.assertEqual("Sub Hello World!\n", test_file.readline())
 
     def test_add_py_file_locally(self):
         # To ensure that we're actually testing addPyFile's effects, check that
@@ -514,7 +524,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_cartesian_on_textfile(self):
         # Regression test for
-        path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         a = self.sc.textFile(path)
         result = a.cartesian(a).collect()
         (x, y) = result[0]
@@ -751,7 +761,7 @@ class RDDTests(ReusedPySparkTestCase):
         b = b._reserialize(MarshalSerializer())
         self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
         # regression test for SPARK-4841
-        path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         t = self.sc.textFile(path)
         cnt = t.count()
         self.assertEqual(cnt, t.zip(t).count())
@@ -903,6 +913,16 @@ class RDDTests(ReusedPySparkTestCase):
         partitions = repartitioned.glom().collect()
         self.assertEqual(partitions[0], [(0, 5), (0, 8), (2, 6)])
         self.assertEqual(partitions[1], [(1, 3), (3, 8), (3, 8)])
+
+    def test_repartition_no_skewed(self):
+        num_partitions = 20
+        a = self.sc.parallelize(range(int(1000)), 2)
+        l = a.repartition(num_partitions).glom().map(len).collect()
+        zeros = len([x for x in l if x == 0])
+        self.assertTrue(zeros == 0)
+        l = a.coalesce(num_partitions, True).glom().map(len).collect()
+        zeros = len([x for x in l if x == 0])
+        self.assertTrue(zeros == 0)
 
     def test_distinct(self):
         rdd = self.sc.parallelize((1, 2, 3)*10, 10)
@@ -1214,7 +1234,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
-        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         oldconf = {"mapred.input.dir": hellopath}
         hello = self.sc.hadoopRDD("org.apache.hadoop.mapred.TextInputFormat",
                                   "org.apache.hadoop.io.LongWritable",
@@ -1233,7 +1253,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
-        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        hellopath = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
         newconf = {"mapred.input.dir": hellopath}
         hello = self.sc.newAPIHadoopRDD("org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
                                         "org.apache.hadoop.io.LongWritable",

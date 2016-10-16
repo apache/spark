@@ -26,7 +26,8 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, Union}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
@@ -323,6 +324,24 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData2.select(sumDistinct('a)),
       Row(6))
+  }
+
+  test("sorting with null ordering") {
+    val data = Seq[java.lang.Integer](2, 1, null).toDF("key")
+
+    checkAnswer(data.orderBy('key.asc), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy(asc("key")), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy('key.asc_nulls_first), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy(asc_nulls_first("key")), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy('key.asc_nulls_last), Row(1) :: Row(2) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy(asc_nulls_last("key")), Row(1) :: Row(2) :: Row(null) :: Nil)
+
+    checkAnswer(data.orderBy('key.desc), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy(desc("key")), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy('key.desc_nulls_first), Row(null) :: Row(2) :: Row(1) :: Nil)
+    checkAnswer(data.orderBy(desc_nulls_first("key")), Row(null) :: Row(2) :: Row(1) :: Nil)
+    checkAnswer(data.orderBy('key.desc_nulls_last), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy(desc_nulls_last("key")), Row(2) :: Row(1) :: Row(null) :: Nil)
   }
 
   test("global sorting") {
@@ -1584,5 +1603,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val sampleDf = df.sample(true, 2.00)
     val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
     assert(d.size == d.distinct.size)
+  }
+
+  test("SPARK-17625: data source table in InMemoryCatalog should guarantee output consistency") {
+    val tableName = "tbl"
+    withTable(tableName) {
+      spark.range(10).select('id as 'i, 'id as 'j).write.saveAsTable(tableName)
+      val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName))
+      val expr = relation.resolve("i")
+      val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
+      qe.assertAnalyzed()
+    }
   }
 }

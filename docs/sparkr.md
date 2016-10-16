@@ -63,6 +63,21 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
 <table class="table">
   <tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr>
   <tr>
+    <td><code>spark.master</code></td>
+    <td>Application Properties</td>
+    <td><code>--master</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.yarn.keytab</code></td>
+    <td>Application Properties</td>
+    <td><code>--keytab</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.yarn.principal</code></td>
+    <td>Application Properties</td>
+    <td><code>--principal</code></td>
+  </tr>
+  <tr>
     <td><code>spark.driver.memory</code></td>
     <td>Application Properties</td>
     <td><code>--driver-memory</code></td>

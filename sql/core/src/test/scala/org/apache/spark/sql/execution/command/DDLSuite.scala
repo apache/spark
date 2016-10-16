@@ -22,7 +22,6 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -642,7 +642,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val csvFile =
       Thread.currentThread().getContextClassLoader.getResource("test-data/cars.csv").toString
     withView("testview") {
-      sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1: String, c2: String)  USING " +
+      sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
         "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
         s"OPTIONS (PATH '$csvFile')")
 
@@ -969,17 +969,17 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         """.stripMargin)
       checkAnswer(
         sql("SHOW TABLES IN default 'show1*'"),
-        Row("show1a", true) :: Nil)
+        Row("", "show1a", true) :: Nil)
 
       checkAnswer(
         sql("SHOW TABLES IN default 'show1*|show2*'"),
-        Row("show1a", true) ::
-          Row("show2b", true) :: Nil)
+        Row("", "show1a", true) ::
+          Row("", "show2b", true) :: Nil)
 
       checkAnswer(
         sql("SHOW TABLES 'show1*|show2*'"),
-        Row("show1a", true) ::
-          Row("show2b", true) :: Nil)
+        Row("", "show1a", true) ::
+          Row("", "show2b", true) :: Nil)
 
       assert(
         sql("SHOW TABLES").count() >= 2)
@@ -1646,7 +1646,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
     sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '$path'")
     sql(s"CREATE VIEW my_view AS SELECT 1")
-    assertUnsupported("TRUNCATE TABLE my_temp_tab")
+    intercept[NoSuchTableException] {
+      sql("TRUNCATE TABLE my_temp_tab")
+    }
     assertUnsupported("TRUNCATE TABLE my_ext_tab")
     assertUnsupported("TRUNCATE TABLE my_view")
   }

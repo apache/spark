@@ -275,7 +275,7 @@ case class SortMergeJoinExec(
         case j: ExistenceJoin =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
-            private[this] val result: MutableRow = new GenericMutableRow(Array[Any](null))
+            private[this] val result: InternalRow = new GenericInternalRow(Array[Any](null))
             private[this] val smjScanner = new SortMergeJoinScanner(
               createLeftKeyGenerator(),
               createRightKeyGenerator(),
@@ -954,12 +954,12 @@ private class SortMergeFullOuterJoinScanner(
     }
 
     if (leftMatches.size <= leftMatched.capacity) {
-      leftMatched.clear()
+      leftMatched.clearUntil(leftMatches.size)
     } else {
       leftMatched = new BitSet(leftMatches.size)
     }
     if (rightMatches.size <= rightMatched.capacity) {
-      rightMatched.clear()
+      rightMatched.clearUntil(rightMatches.size)
     } else {
       rightMatched = new BitSet(rightMatches.size)
     }

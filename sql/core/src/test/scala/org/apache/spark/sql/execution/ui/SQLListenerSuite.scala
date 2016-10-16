@@ -23,6 +23,7 @@ import org.mockito.Mockito.mock
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -447,7 +448,7 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
       val conf = new SparkConf()
         .setMaster("local")
         .setAppName("test")
-        .set("spark.task.maxFailures", "1") // Don't retry the tasks to run this test quickly
+        .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
         .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
       val sc = new SparkContext(conf)
       try {

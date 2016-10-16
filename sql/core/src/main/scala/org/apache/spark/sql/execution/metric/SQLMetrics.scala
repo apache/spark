@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.metric
 
 import java.text.NumberFormat
+import java.util.Locale
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
@@ -101,8 +102,7 @@ object SQLMetrics {
    */
   def stringValue(metricsType: String, values: Seq[Long]): String = {
     if (metricsType == SUM_METRIC) {
-      val numberFormat = NumberFormat.getInstance()
-      numberFormat.setGroupingUsed(false)
+      val numberFormat = NumberFormat.getIntegerInstance(Locale.ENGLISH)
       numberFormat.format(values.sum)
     } else {
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
