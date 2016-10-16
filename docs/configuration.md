@@ -1334,17 +1334,6 @@ Apart from these, the following properties are also available, and may be useful
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
-<tr>
-  <td><code>spark.task.assigner</code></td>
-  <td>org.apache.spark.scheduler.RoundRobinAssigner</td>
-  <td>
-    The strategy of how to allocate tasks among workers with free cores.
-    By default, round robin with randomness is used.
-    org.apache.spark.scheduler.BalancedAssigner tries to balance the task across all workers (allocating tasks to
-    workers with most free cores). org.apache.spark.scheduler.PackedAssigner tries to allocate tasks to workers
-    with the least free cores, which may help releasing the resources when dynamic allocation is enabled.
-  </td>
-</tr>
 </table>
 
 #### Dynamic Allocation
