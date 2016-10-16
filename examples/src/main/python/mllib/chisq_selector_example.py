@@ -24,7 +24,6 @@ import numpy as np
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.feature import ChiSqSelector
 from pyspark.mllib.util import MLUtils
-from pyspark.mllib.linalg import Vectors
 # $example off$
 
 if __name__ == "__main__":
@@ -38,7 +37,6 @@ if __name__ == "__main__":
     def distributeOverBins(lp):
         return np.floor(lp.features.toArray() / 16)
 
-
     # Even though features are doubles, the ChiSqSelector treats each unique value as a category
     discretizedData = data.map(lambda lp: LabeledPoint(lp.label, distributeOverBins(lp)))
 
@@ -49,11 +47,7 @@ if __name__ == "__main__":
     transformer = selector.fit(discretizedData)
 
     # Filter the top 50 features from each feature vector
-
-    #filteredData = transformer.transform(discretizedData.map(lambda lp: lp.features))
-    filteredData = discretizedData.map(lambda lp: LabeledPoint(lp.label, transformer.transform(np.array([1]))))
-
-
+    filteredData = transformer.transform(discretizedData.map(lambda lp: lp.features))
     # $example off$
 
     print('filtered data:')
