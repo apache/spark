@@ -654,6 +654,32 @@ setMethod("unpersist",
             x
           })
 
+#' StorageLevel
+#'
+#' Get storagelevel of this SparkDataFrame.
+#'
+#' @param x the SparkDataFrame to get the storageLevel.
+#'
+#' @family SparkDataFrame functions
+#' @rdname storageLevel-methods
+#' @aliases storageLevel,SparkDataFrame-method
+#' @name storageLevel
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' persist(df, "MEMORY_AND_DISK")
+#' storageLevel(df)
+#'}
+#' @note storageLevel since 2.1.0
+setMethod("storageLevel",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            storageLevelToString(callJMethod(x@sdf, "storageLevel"))
+          })
+
 #' Repartition
 #'
 #' The following options for repartition are possible:

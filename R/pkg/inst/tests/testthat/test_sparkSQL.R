@@ -783,7 +783,7 @@ test_that("multiple pipeline transformations result in an RDD with the correct v
   expect_false(collectRDD(second)[[3]]$testCol)
 })
 
-test_that("cache(), persist(), and unpersist() on a DataFrame", {
+test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", {
   df <- read.json(jsonPath)
   expect_false(df@env$isCached)
   cache(df)
@@ -794,6 +794,8 @@ test_that("cache(), persist(), and unpersist() on a DataFrame", {
 
   persist(df, "MEMORY_AND_DISK")
   expect_true(df@env$isCached)
+
+  expect_equal(storageLevel(df), "StorageLevel(disk, memory, deserialized, 1 replicas)")
 
   unpersist(df)
   expect_false(df@env$isCached)

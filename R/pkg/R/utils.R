@@ -385,6 +385,41 @@ getStorageLevel <- function(newLevel = c("DISK_ONLY",
                          "OFF_HEAP" = callJStatic(storageLevelClass, "OFF_HEAP"))
 }
 
+storageLevelToString <- function(levelObj) {
+  useDisk <- callJMethod(levelObj, "useDisk")
+  useMemory <- callJMethod(levelObj, "useMemory")
+  useOffHeap <- callJMethod(levelObj, "useOffHeap")
+  deserialized <- callJMethod(levelObj, "deserialized")
+  replication <- callJMethod(levelObj, "replication")
+  if (!useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "NONE"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "DISK_ONLY"
+  } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "DISK_ONLY_2"
+  } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
+    "MEMORY_ONLY"
+  } else if (!useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
+    "MEMORY_ONLY_2"
+  } else if (!useDisk && useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "MEMORY_ONLY_SER"
+  } else if (!useDisk && useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "MEMORY_ONLY_SER_2"
+  } else if (useDisk && useMemory && !useOffHeap && deserialized && replication == 1) {
+    "MEMORY_AND_DISK"
+  } else if (useDisk && useMemory && !useOffHeap && deserialized && replication == 2) {
+    "MEMORY_AND_DISK_2"
+  } else if (useDisk && useMemory && !useOffHeap && !deserialized && replication == 1) {
+    "MEMORY_AND_DISK_SER"
+  } else if (useDisk && useMemory && !useOffHeap && !deserialized && replication == 2) {
+    "MEMORY_AND_DISK_SER_2"
+  } else if (useDisk && useMemory && useOffHeap && !deserialized && replication == 1) {
+    "OFF_HEAP"
+  } else {
+    callJMethod(levelObj, "toString")
+  }
+}
+
 # Utility function for functions where an argument needs to be integer but we want to allow
 # the user to type (for example) `5` instead of `5L` to avoid a confusing error message.
 numToInt <- function(num) {
