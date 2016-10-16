@@ -1735,5 +1735,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(testData.selectExpr("rand(0L)"), testData.selectExpr("rand(0)"))
     checkAnswer(testData.selectExpr("randn(NULL)"), testData.selectExpr("randn(0)"))
     checkAnswer(testData.selectExpr("randn(0L)"), testData.selectExpr("randn(0)"))
+    checkAnswer(testData.selectExpr("rand(cast(NULL AS INT))"), testData.selectExpr("rand(0)"))
+    checkAnswer(testData.selectExpr("rand(cast(3 / 7 AS INT))"), testData.selectExpr("rand(0)"))
+    checkAnswer(
+      testData.selectExpr("randn(cast(NULL AS LONG))"), testData.selectExpr("randn(0L)"))
+    checkAnswer(
+      testData.selectExpr("randn(cast(3L / 12L AS LONG))"), testData.selectExpr("randn(0L)"))
   }
 }
