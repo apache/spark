@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.util.concurrent.atomic.AtomicInteger
 import java.io.StringWriter
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.util.Random
 
@@ -376,7 +376,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       StopStream,
       StartStream(),
       CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22), // Should get the data back on recovery
-      AddKafkaData(Set(topic), 30, 31, 32, 33, 34)(ensureDataInMultiplePartition=true),
+      AddKafkaData(Set(topic), 30, 31, 32, 33, 34)(ensureDataInMultiplePartition = true),
       CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22, 30, 31, 32, 33, 34),
       StopStream
     )

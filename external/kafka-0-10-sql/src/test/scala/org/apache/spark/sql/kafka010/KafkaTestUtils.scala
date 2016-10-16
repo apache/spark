@@ -213,7 +213,7 @@ class KafkaTestUtils extends Logging {
     val offsets = try {
       messages.map { m =>
         val record = partition match {
-          case Some(p) => new ProducerRecord[String, String](topic, p, null,  m)
+          case Some(p) => new ProducerRecord[String, String](topic, p, null, m)
           case None => new ProducerRecord[String, String](topic, m)
         }
         val metadata =

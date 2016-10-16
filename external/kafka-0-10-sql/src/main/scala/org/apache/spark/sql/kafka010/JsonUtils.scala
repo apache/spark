@@ -26,13 +26,15 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node._
 import org.apache.kafka.common.TopicPartition
 
-/*
+/**
  * Utilities for converting Kafka related objects to and from json.
  */
 private object JsonUtils {
   private val mapper = new ObjectMapper()
 
-  /* Read TopicPartitions from json string */
+  /**
+   * Read TopicPartitions from json string
+   */
   def partitions(str: String): Array[TopicPartition] = {
     try {
       val res = new ArrayBuffer[TopicPartition]()
@@ -53,7 +55,9 @@ private object JsonUtils {
     }
   }
 
-  /* Write TopicPartitions as json */
+  /**
+   * Write TopicPartitions as json
+   */
   def partitions(partitions: Iterable[TopicPartition], writer: Writer): Unit = {
     val root = mapper.createObjectNode()
     partitions.foreach { tp =>
@@ -67,7 +71,9 @@ private object JsonUtils {
     mapper.writeValue(writer, root)
   }
 
-  /* Read per-TopicPartition offsets from json string */
+  /**
+   * Read per-TopicPartition offsets from json string
+   */
   def partitionOffsets(str: String): Map[TopicPartition, Long] = {
     try {
       val res = new HashMap[TopicPartition, Long]
@@ -91,7 +97,9 @@ private object JsonUtils {
     }
   }
 
-  /* Write per-TopicPartition offsets as json */
+  /**
+   * Write per-TopicPartition offsets as json
+   */
   def partitionOffsets(partitionOffsets: Map[TopicPartition, Long], writer: Writer): Unit = {
     val root = mapper.createObjectNode()
     partitionOffsets.foreach { case (tp, off) =>

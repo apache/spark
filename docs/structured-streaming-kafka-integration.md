@@ -190,7 +190,7 @@ The following configurations are optional:
   <td>latest</td>
   <td>The start point when a query is started, either "earliest" which is from the earliest offsets,
   "latest" which is just from the latest offsets, or a json string specifying a starting offset for
-  each TopicPartition.  In the json, -2 as an offset can be used refer to earliest, -1 to latest.
+  each TopicPartition.  In the json, -2 as an offset can be used to refer to earliest, -1 to latest.
   Note: This only applies when a new Streaming query is started, and that resuming will always pick
   up from where the query left off. Newly discovered partitions during a query will start at
   earliest.</td>
