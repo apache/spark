@@ -1741,5 +1741,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.selectExpr("randn(cast(NULL AS LONG))"), testData.selectExpr("randn(0L)"))
     checkAnswer(
       testData.selectExpr("randn(cast(3L / 12L AS LONG))"), testData.selectExpr("randn(0L)"))
+
+    val eOne = intercept[AnalysisException] {
+      testData.selectExpr("rand(key)").collect()
+    }
+    assert(eOne.message.contains("Input argument to rand must be an integer/long literal."))
+
+    val eTwo = intercept[AnalysisException] {
+      testData.selectExpr("randn(key)").collect()
+    }
+    assert(eTwo.message.contains("Input argument to randn must be an integer/long literal."))
   }
 }
