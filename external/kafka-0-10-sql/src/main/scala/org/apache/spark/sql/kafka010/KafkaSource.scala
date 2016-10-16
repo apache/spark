@@ -247,17 +247,24 @@ private[kafka010] case class KafkaSource(
           s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions.asScala}")
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
 
-      // These offsets may be out of range, but there isn't a good way of determining that here,
-      // even poll(0) afterwards may not throw immediately.
-      // The executor should throw if it is assigned out of range offsets.
       partitionOffsets.foreach {
         case (tp, -1) => consumer.seekToEnd(ju.Arrays.asList(tp))
         case (tp, -2) => consumer.seekToBeginning(ju.Arrays.asList(tp))
         case (tp, off) => consumer.seek(tp, off)
       }
-      partitionOffsets.map {
+      val result = partitionOffsets.map {
         case (tp, _) => tp -> consumer.position(tp)
       }
+      partitionOffsets.foreach {
+        case (tp, off) if off != -1 && off != -2 =>
+          if (result(tp) != off) {
+            reportDataLoss(
+              s"startingOffsets for $tp was $off but consumer reset to earliest ${result(tp)}")
+          }
+        case _ =>
+          // no real way to check that beginning or end is reasonable
+      }
+      result
     }
 
   /**
