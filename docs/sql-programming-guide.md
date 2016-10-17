@@ -422,7 +422,7 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 You can also manually specify the data source that will be used along with any extra options
 that you would like to pass to the data source. Data sources are specified by their fully qualified
 name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can also use their short
-names (`json`, `parquet`, `jdbc`). DataFrames loaded from any data source type can be converted into other types
+names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`). DataFrames loaded from any data source type can be converted into other types
 using this syntax.
 
 <div class="codetabs">
