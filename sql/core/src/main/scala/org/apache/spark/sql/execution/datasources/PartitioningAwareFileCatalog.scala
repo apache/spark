@@ -17,14 +17,21 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.FileNotFoundException
+
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs._
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.util.SerializableConfiguration
 
 
 /**
@@ -38,11 +45,13 @@ import org.apache.spark.sql.types.{StringType, StructType}
 abstract class PartitioningAwareFileCatalog(
     sparkSession: SparkSession,
     parameters: Map[String, String],
-    partitionSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = new NoopCache) extends FileCatalog with Logging {
+    partitionSchema: Option[StructType]) extends FileCatalog with Logging {
   import PartitioningAwareFileCatalog.BASE_PATH_PARAM
 
-  override protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+  /** Returns the specification of the partitions inferred from the data. */
+  def partitionSpec(): PartitionSpec
+
+  protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
   protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]
 
@@ -70,7 +79,13 @@ abstract class PartitioningAwareFileCatalog(
     selectedPartitions
   }
 
-  override def allFiles(): Seq[FileStatus] = {
+  /** Returns the list of files that will be read when scanning this relation. */
+  override def inputFiles: Array[String] =
+    allFiles().map(_.getPath.toUri.toString).toArray
+
+  override def sizeInBytes: Long = allFiles().map(_.getLen).sum
+
+  def allFiles(): Seq[FileStatus] = {
     if (partitionSpec().partitionColumns.isEmpty) {
       // For each of the root input paths, get the list of files inside them
       rootPaths.flatMap { path =>
@@ -223,29 +238,15 @@ abstract class PartitioningAwareFileCatalog(
    * This is publicly visible for testing.
    */
   def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    val output = mutable.LinkedHashSet[FileStatus]()
-    val pathsToFetch = mutable.ArrayBuffer[Path]()
-    for (path <- paths) {
-      fileStatusCache.getLeafFiles(path) match {
-        case Some(files) =>
-          println("cache hit: " + path)
-          output ++= files
-        case None =>
-          println("cache miss: " + path)
-          pathsToFetch += path
+    val files =
+      if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+        PartitioningAwareFileCatalog.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
+      } else {
+        PartitioningAwareFileCatalog.listLeafFilesInSerial(paths, hadoopConf)
       }
-    }
-    val discovered = if (pathsToFetch.length >=
-        sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      PartitioningAwareFileCatalog.listLeafFilesInParallel(pathsToFetch, hadoopConf, sparkSession)
-    } else {
-      PartitioningAwareFileCatalog.listLeafFilesInSerial(pathsToFetch, hadoopConf)
-    }
-    discovered.foreach { case (path, leafFiles) =>
-      fileStatusCache.putLeafFiles(path, leafFiles)
-      output ++= leafFiles
-    }
-    output
+
+    HiveCatalogMetrics.incrementFilesDiscovered(files.size)
+    mutable.LinkedHashSet(files: _*)
   }
 }
 
@@ -275,15 +276,15 @@ object PartitioningAwareFileCatalog extends Logging {
    */
   private def listLeafFilesInSerial(
       paths: Seq[Path],
-      hadoopConf: Configuration): Map[Path, Seq[FileStatus]] = {
+      hadoopConf: Configuration): Seq[FileStatus] = {
     // Dummy jobconf to get to the pathFilter defined in configuration
     val jobConf = new JobConf(hadoopConf, this.getClass)
     val filter = FileInputFormat.getInputPathFilter(jobConf)
 
-    paths.map { path =>
+    paths.flatMap { path =>
       val fs = path.getFileSystem(hadoopConf)
-      (path, listLeafFiles0(fs, path, filter))
-    }.toMap
+      listLeafFiles0(fs, path, filter)
+    }
   }
 
   /**
@@ -293,7 +294,7 @@ object PartitioningAwareFileCatalog extends Logging {
   private def listLeafFilesInParallel(
       paths: Seq[Path],
       hadoopConf: Configuration,
-      sparkSession: SparkSession): Map[Path, Seq[FileStatus]] = {
+      sparkSession: SparkSession): Seq[FileStatus] = {
     assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
@@ -305,55 +306,48 @@ object PartitioningAwareFileCatalog extends Logging {
     // in case of large #defaultParallelism.
     val numParallelism = Math.min(paths.size, 10000)
 
-    val statusMap = sparkContext
+    val statuses = sparkContext
       .parallelize(serializedPaths, numParallelism)
       .mapPartitions { paths =>
         val hadoopConf = serializableConfiguration.value
         listLeafFilesInSerial(paths.map(new Path(_)).toSeq, hadoopConf).iterator
-      }.map { case (path, statuses) =>
-        val serializableStatuses = statuses.map { status =>
-          // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
-          val blockLocations = status match {
-            case f: LocatedFileStatus =>
-              f.getBlockLocations.map { loc =>
-                SerializableBlockLocation(
-                  loc.getNames,
-                  loc.getHosts,
-                  loc.getOffset,
-                  loc.getLength)
-              }
+      }.map { status =>
+        // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
+        val blockLocations = status match {
+          case f: LocatedFileStatus =>
+            f.getBlockLocations.map { loc =>
+              SerializableBlockLocation(
+                loc.getNames,
+                loc.getHosts,
+                loc.getOffset,
+                loc.getLength)
+            }
 
-            case _ =>
-              Array.empty[SerializableBlockLocation]
-          }
-
-          SerializableFileStatus(
-            status.getPath.toString,
-            status.getLen,
-            status.isDirectory,
-            status.getReplication,
-            status.getBlockSize,
-            status.getModificationTime,
-            status.getAccessTime,
-            blockLocations)
+          case _ =>
+            Array.empty[SerializableBlockLocation]
         }
-        (path.toString, serializableStatuses)
+
+        SerializableFileStatus(
+          status.getPath.toString,
+          status.getLen,
+          status.isDirectory,
+          status.getReplication,
+          status.getBlockSize,
+          status.getModificationTime,
+          status.getAccessTime,
+          blockLocations)
       }.collect()
 
     // Turn SerializableFileStatus back to Status
-    statusMap.map { case (path, serializableStatuses) =>
-      val statuses = serializableStatuses.map { f =>
-        val blockLocations = f.blockLocations.map { loc =>
-          new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
-        }
-        new LocatedFileStatus(
-          new FileStatus(
-            f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime,
-            new Path(f.path)),
-          blockLocations)
+    statuses.map { f =>
+      val blockLocations = f.blockLocations.map { loc =>
+        new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
       }
-      (new Path(path), statuses)
-    }.toMap
+      new LocatedFileStatus(
+        new FileStatus(
+          f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path)),
+        blockLocations)
+    }
   }
 
   /**
@@ -417,8 +411,4 @@ object PartitioningAwareFileCatalog extends Logging {
     ((pathName.startsWith("_") && !pathName.contains("=")) || pathName.startsWith(".")) &&
       !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
   }
-}
-
-object PartitioningAwareFileCatalog {
-  val BASE_PATH_PARAM = "basePath"
 }

@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.StructType
 
 
 /**
- * A [[BasicFileCatalog]] for a metastore catalog table.
+ * A [[FileCatalog]] for a metastore catalog table.
  *
  * @param sparkSession a [[SparkSession]]
  * @param db the table's database name
@@ -38,10 +38,9 @@ class TableFileCatalog(
     db: String,
     table: String,
     partitionSchema: Option[StructType],
-    override val sizeInBytes: Long)
-  extends SessionFileCatalog(sparkSession) {
+    override val sizeInBytes: Long) extends FileCatalog {
 
-  override protected val hadoopConf = sparkSession.sessionState.newHadoopConf
+  protected val hadoopConf = sparkSession.sessionState.newHadoopConf
 
   private val externalCatalog = sparkSession.sharedState.externalCatalog
 
