@@ -351,3 +351,5 @@ private[scheduler] object BlacklistTracker extends Logging {
     }
   }
 }
+
+private final case class BlacklistedExecutor(node: String, expiryTime: Long)
