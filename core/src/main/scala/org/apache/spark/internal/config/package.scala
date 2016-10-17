@@ -93,6 +93,11 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val MAX_TASK_FAILURES =
+    ConfigBuilder("spark.task.maxFailures")
+      .intConf
+      .createWithDefault(4)
+
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =
     ConfigBuilder("spark.blacklist.enabled")
@@ -140,13 +145,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
   // End blacklist confs
-
-  // Note: This is a SQL config but needs to be in core because the REPL depends on it
-  private[spark] val CATALOG_IMPLEMENTATION = ConfigBuilder("spark.sql.catalogImplementation")
-    .internal()
-    .stringConf
-    .checkValues(Set("hive", "in-memory"))
-    .createWithDefault("in-memory")
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")
@@ -213,4 +211,9 @@ package object config {
     .doc("Port to use for the block managed on the driver.")
     .fallbackConf(BLOCK_MANAGER_PORT)
 
+  private[spark] val IGNORE_CORRUPT_FILES = ConfigBuilder("spark.files.ignoreCorruptFiles")
+    .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
+      "encountering corrupt files and contents that have been read will still be returned.")
+    .booleanConf
+    .createWithDefault(false)
 }

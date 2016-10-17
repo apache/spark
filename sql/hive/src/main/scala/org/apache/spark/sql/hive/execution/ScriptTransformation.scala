@@ -124,7 +124,7 @@ case class ScriptTransformation(
         } else {
           null
         }
-        val mutableRow = new SpecificMutableRow(output.map(_.dataType))
+        val mutableRow = new SpecificInternalRow(output.map(_.dataType))
 
         @transient
         lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)

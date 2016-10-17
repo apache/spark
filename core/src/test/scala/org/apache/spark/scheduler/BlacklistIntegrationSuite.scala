@@ -54,49 +54,20 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     assertDataStructuresEmpty(noFailure = false)
   }
 
-  // even with the blacklist turned on, bad configs can lead to job failure.  To survive one
-  // bad node, you need to make sure that
-  // maxTaskFailures > min(spark.blacklist.task.maxTaskAttemptsPerNode, nExecutorsPerHost)
-  testScheduler(
-    "With blacklist on, job will still fail if there are too many bad executors on bad host",
-    extraConfs = Seq(
-      config.BLACKLIST_ENABLED.key -> "true",
-      config.MAX_TASK_ATTEMPTS_PER_NODE.key -> "5",
-      "spark.task.maxFailures" -> "4",
-      "spark.testing.nHosts" -> "2",
-      "spark.testing.nExecutorsPerHost" -> "5",
-      "spark.testing.nCoresPerExecutor" -> "10",
-      // Blacklisting will normally immediately complain that this config is invalid -- the point
-      // of this test is to expose that the configuration is unsafe, so skip the validation.
-      "spark.blacklist.testing.skipValidation" -> "true"
-    )
-  ) {
-    // to reliably reproduce the failure, we have to use 1 task.  That way, we ensure this
-    // 1 task gets rotated through enough bad executors on the host to fail the taskSet,
-    // before we have a bunch of different tasks fail in the executors so we blacklist them.
-    // But the point here is -- we never try scheduling tasks on the good host-1, since we
-    // hit too many failures trying our preferred host-0.
-    val rdd = new MockRDDWithLocalityPrefs(sc, 1, Nil, badHost)
-    withBackend(badHostBackend _) {
-      val jobFuture = submit(rdd, (0 until 1).toArray)
-      awaitJobTermination(jobFuture, duration)
-    }
-    assertDataStructuresEmpty(noFailure = false)
-  }
-
   testScheduler(
     "With default settings, job can succeed despite multiple bad executors on node",
     extraConfs = Seq(
       config.BLACKLIST_ENABLED.key -> "true",
-      "spark.task.maxFailures" -> "4",
+      config.MAX_TASK_FAILURES.key -> "4",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "5",
       "spark.testing.nCoresPerExecutor" -> "10"
     )
   ) {
-    // to reliably reproduce the failure, we have to use 1 task.  That way, we ensure this
-    // 1 task gets rotated through enough bad executors on the host to fail the taskSet,
-    // before we have a bunch of different tasks fail in the executors so we blacklist them.
+    // To reliably reproduce the failure that would occur without blacklisting, we have to use 1
+    // task.  That way, we ensure this 1 task gets rotated through enough bad executors on the host
+    // to fail the taskSet, before we have a bunch of different tasks fail in the executors so we
+    // blacklist them.
     // But the point here is -- without blacklisting, we would never schedule anything on the good
     // host-1 before we hit too many failures trying our preferred host-0.
     val rdd = new MockRDDWithLocalityPrefs(sc, 1, Nil, badHost)

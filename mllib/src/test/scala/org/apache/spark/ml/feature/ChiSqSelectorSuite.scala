@@ -29,8 +29,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
 
   test("Test Chi-Square selector") {
-    val spark = this.spark
-    import spark.implicits._
+    import testImplicits._
     val data = Seq(
       LabeledPoint(0.0, Vectors.sparse(3, Array((0, 8.0), (1, 7.0)))),
       LabeledPoint(1.0, Vectors.sparse(3, Array((1, 9.0), (2, 6.0)))),
@@ -39,10 +38,10 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
     )
 
     val preFilteredData = Seq(
-      Vectors.dense(0.0),
-      Vectors.dense(6.0),
       Vectors.dense(8.0),
-      Vectors.dense(5.0)
+      Vectors.dense(0.0),
+      Vectors.dense(0.0),
+      Vectors.dense(8.0)
     )
 
     val df = sc.parallelize(data.zip(preFilteredData))
@@ -50,6 +49,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
       .toDF("label", "data", "preFilteredData")
 
     val selector = new ChiSqSelector()
+      .setSelectorType("kbest")
       .setNumTopFeatures(1)
       .setFeaturesCol("data")
       .setLabelCol("label")
@@ -60,12 +60,28 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
         assert(vec1 ~== vec2 absTol 1e-1)
     }
 
-    selector.setPercentile(0.34).fit(df).transform(df)
-    .select("filtered", "preFilteredData").collect().foreach {
-      case Row(vec1: Vector, vec2: Vector) =>
-        assert(vec1 ~== vec2 absTol 1e-1)
-    }
+    selector.setSelectorType("percentile").setPercentile(0.34).fit(df).transform(df)
+      .select("filtered", "preFilteredData").collect().foreach {
+        case Row(vec1: Vector, vec2: Vector) =>
+          assert(vec1 ~== vec2 absTol 1e-1)
+      }
 
+    val preFilteredData2 = Seq(
+      Vectors.dense(8.0, 7.0),
+      Vectors.dense(0.0, 9.0),
+      Vectors.dense(0.0, 9.0),
+      Vectors.dense(8.0, 9.0)
+    )
+
+    val df2 = sc.parallelize(data.zip(preFilteredData2))
+      .map(x => (x._1.label, x._1.features, x._2))
+      .toDF("label", "data", "preFilteredData")
+
+    selector.setSelectorType("fpr").setAlpha(0.2).fit(df2).transform(df2)
+      .select("filtered", "preFilteredData").collect().foreach {
+        case Row(vec1: Vector, vec2: Vector) =>
+          assert(vec1 ~== vec2 absTol 1e-1)
+      }
   }
 
   test("ChiSqSelector read/write") {

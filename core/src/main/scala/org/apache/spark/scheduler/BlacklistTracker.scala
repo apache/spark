@@ -259,7 +259,6 @@ private[scheduler] class BlacklistTracker (
 
 }
 
-
 private[scheduler] object BlacklistTracker extends Logging {
 
   private val DEFAULT_TIMEOUT = "1h"
@@ -269,35 +268,24 @@ private[scheduler] object BlacklistTracker extends Logging {
    * order:
    * 1. Is it specifically enabled or disabled?
    * 2. Is it enabled via the legacy timeout conf?
-   * 3. Use the default for the spark-master:
-   *   - off for local mode
-   *   - on for distributed modes (including local-cluster)
+   * 3. Default is off
    */
   def isBlacklistEnabled(conf: SparkConf): Boolean = {
     conf.get(config.BLACKLIST_ENABLED) match {
-      case Some(isEnabled) =>
-        isEnabled
+      case Some(enabled) =>
+        enabled
       case None =>
         // if they've got a non-zero setting for the legacy conf, always enable the blacklist,
-        // otherwise, use the default based on the cluster-mode (off for local-mode, on otherwise).
+        // otherwise, use the default.
         val legacyKey = config.BLACKLIST_LEGACY_TIMEOUT_CONF.key
-        conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF) match {
-          case Some(legacyTimeout) =>
-            if (legacyTimeout == 0) {
-              logWarning(s"Turning off blacklisting due to legacy configuaration:" +
-                s" $legacyKey == 0")
-              false
-            } else {
-              // mostly this is necessary just for tests, since real users that want the blacklist
-              // will get it anyway by default
-              logWarning(s"Turning on blacklisting due to legacy configuration:" +
-                s" $legacyKey > 0")
-              true
-            }
-          case None =>
-            // local-cluster is *not* considered local for these purposes, we still want the
-            // blacklist enabled by default
-            !Utils.isLocalMaster(conf)
+        conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF).exists { legacyTimeout =>
+          if (legacyTimeout == 0) {
+            logWarning(s"Turning off blacklisting due to legacy configuration: $legacyKey == 0")
+            false
+          } else {
+            logWarning(s"Turning on blacklisting due to legacy configuration: $legacyKey > 0")
+            true
+          }
         }
     }
   }
@@ -325,48 +313,41 @@ private[scheduler] object BlacklistTracker extends Logging {
       throw new IllegalArgumentException(s"$k was $v, but must be > 0.")
     }
 
-    // undocumented escape hatch for validation -- just for tests that want to run in an "unsafe"
-    // configuration.
-    if (!conf.get("spark.blacklist.testing.skipValidation", "false").toBoolean) {
-
-      Seq(
-        config.MAX_TASK_ATTEMPTS_PER_EXECUTOR,
-        config.MAX_TASK_ATTEMPTS_PER_NODE,
-        config.MAX_FAILURES_PER_EXEC_STAGE,
-        config.MAX_FAILED_EXEC_PER_NODE_STAGE,
-        config.MAX_FAILURES_PER_EXEC,
-        config.MAX_FAILED_EXEC_PER_NODE
-      ).foreach { config =>
-        val v = conf.get(config)
-        if (v <= 0) {
-          mustBePos(config.key, v.toString)
-        }
+    Seq(
+      config.MAX_TASK_ATTEMPTS_PER_EXECUTOR,
+      config.MAX_TASK_ATTEMPTS_PER_NODE,
+      config.MAX_FAILURES_PER_EXEC_STAGE,
+      config.MAX_FAILED_EXEC_PER_NODE_STAGE,
+      config.MAX_FAILURES_PER_EXEC,
+      config.MAX_FAILED_EXEC_PER_NODE
+    ).foreach { config =>
+      val v = conf.get(config)
+      if (v <= 0) {
+        mustBePos(config.key, v.toString)
       }
+    }
 
-      val timeout = getBlacklistTimeout(conf)
-      if (timeout <= 0) {
-        // first, figure out where the timeout came from, to include the right conf in the message.
-        conf.get(config.BLACKLIST_TIMEOUT_CONF) match {
-          case Some(t) =>
-            mustBePos(config.BLACKLIST_TIMEOUT_CONF.key, timeout.toString)
-          case None =>
-            mustBePos(config.BLACKLIST_LEGACY_TIMEOUT_CONF.key, timeout.toString)
-        }
+    val timeout = getBlacklistTimeout(conf)
+    if (timeout <= 0) {
+      // first, figure out where the timeout came from, to include the right conf in the message.
+      conf.get(config.BLACKLIST_TIMEOUT_CONF) match {
+        case Some(t) =>
+          mustBePos(config.BLACKLIST_TIMEOUT_CONF.key, timeout.toString)
+        case None =>
+          mustBePos(config.BLACKLIST_LEGACY_TIMEOUT_CONF.key, timeout.toString)
       }
+    }
 
-      val maxTaskFailures = conf.getInt("spark.task.maxFailures", 4)
-      val maxNodeAttempts = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
+    val maxTaskFailures = conf.get(config.MAX_TASK_FAILURES)
+    val maxNodeAttempts = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
 
-      if (maxNodeAttempts >= maxTaskFailures) {
-        throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
-          s"( = ${maxNodeAttempts}) was >= spark.task.maxFailures " +
-          s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
-          s"Spark will not be robust to one bad node.  Decrease " +
-          s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase spark.task.maxFailures, or " +
-          s"disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
-      }
+    if (maxNodeAttempts >= maxTaskFailures) {
+      throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
+        s"( = ${maxNodeAttempts}) was >= ${config.MAX_TASK_FAILURES.key} " +
+        s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
+        s"Spark will not be robust to one bad node.  Decrease " +
+        s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
+        s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
     }
   }
 }
-
-private final case class BlacklistedExecutor(node: String, expiryTime: Long)

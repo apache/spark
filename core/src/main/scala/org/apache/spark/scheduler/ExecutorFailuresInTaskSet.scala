@@ -19,21 +19,23 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashMap
 
 /**
- * Small helper for tracking failed tasks for blacklisting purposes.  Info on all failures for one
- * task set, within one task set.
+ * Small helper for tracking failed tasks for blacklisting purposes.  Info on all failures on one
+ * executor, within one task set.
  */
 class ExecutorFailuresInTaskSet(val node: String) {
   /**
    * Mapping from index of the tasks in the taskset, to the number of times it has failed on this
-   * executor and the last time it failed.
+   * executor and the expiry time.
    */
   val taskToFailureCountAndExpiryTime = HashMap[Int, (Int, Long)]()
 
   def updateWithFailure(taskIndex: Int, failureExpiryTime: Long): Unit = {
     val (prevFailureCount, prevFailureExpiryTime) =
       taskToFailureCountAndExpiryTime.getOrElse(taskIndex, (0, -1L))
-    assert(failureExpiryTime >= prevFailureExpiryTime)
-    taskToFailureCountAndExpiryTime(taskIndex) = (prevFailureCount + 1, failureExpiryTime)
+    // these times always come from the driver, so we don't need to worry about skew, but might
+    // as well still be defensive in case there is non-monotonicity in the clock
+    val newExpiryTime = math.max(prevFailureExpiryTime, failureExpiryTime)
+    taskToFailureCountAndExpiryTime(taskIndex) = (prevFailureCount + 1, newExpiryTime)
   }
 
   def numUniqueTasksWithFailures: Int = taskToFailureCountAndExpiryTime.size

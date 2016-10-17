@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -40,9 +39,10 @@ abstract class PartitioningAwareFileCatalog(
     sparkSession: SparkSession,
     parameters: Map[String, String],
     partitionSchema: Option[StructType])
-  extends FileCatalog with Logging {
+  extends SessionFileCatalog(sparkSession) with FileCatalog {
+  import PartitioningAwareFileCatalog.BASE_PATH_PARAM
 
-  protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+  override protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
   protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]
 
@@ -72,11 +72,19 @@ abstract class PartitioningAwareFileCatalog(
 
   override def allFiles(): Seq[FileStatus] = {
     if (partitionSpec().partitionColumns.isEmpty) {
-      // For each of the input paths, get the list of files inside them
-      paths.flatMap { path =>
+      // For each of the root input paths, get the list of files inside them
+      rootPaths.flatMap { path =>
         // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
         val fs = path.getFileSystem(hadoopConf)
-        val qualifiedPath = fs.makeQualified(path)
+        val qualifiedPathPre = fs.makeQualified(path)
+        val qualifiedPath: Path = if (qualifiedPathPre.isRoot && !qualifiedPathPre.isAbsolute) {
+          // SPARK-17613: Always append `Path.SEPARATOR` to the end of parent directories,
+          // because the `leafFile.getParent` would have returned an absolute path with the
+          // separator at the end.
+          new Path(qualifiedPathPre, Path.SEPARATOR)
+        } else {
+          qualifiedPathPre
+        }
 
         // There are three cases possible with each path
         // 1. The path is a directory and has children files in it. Then it must be present in
@@ -97,8 +105,6 @@ abstract class PartitioningAwareFileCatalog(
   protected def inferPartitioning(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
-      // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
-      // counted as data files, so that they shouldn't participate partition discovery.
       files.exists(f => isDataPath(f.getPath))
     }.keys.toSeq
     partitionSchema match {
@@ -186,24 +192,30 @@ abstract class PartitioningAwareFileCatalog(
    * and the returned DataFrame will have the column of `something`.
    */
   private def basePaths: Set[Path] = {
-    parameters.get("basePath").map(new Path(_)) match {
+    parameters.get(BASE_PATH_PARAM).map(new Path(_)) match {
       case Some(userDefinedBasePath) =>
         val fs = userDefinedBasePath.getFileSystem(hadoopConf)
         if (!fs.isDirectory(userDefinedBasePath)) {
-          throw new IllegalArgumentException("Option 'basePath' must be a directory")
+          throw new IllegalArgumentException(s"Option '$BASE_PATH_PARAM' must be a directory")
         }
         Set(fs.makeQualified(userDefinedBasePath))
 
       case None =>
-        paths.map { path =>
+        rootPaths.map { path =>
           // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
           val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
           if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
     }
   }
 
+  // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
+  // counted as data files, so that they shouldn't participate partition discovery.
   private def isDataPath(path: Path): Boolean = {
     val name = path.getName
     !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
   }
+}
+
+object PartitioningAwareFileCatalog {
+  val BASE_PATH_PARAM = "basePath"
 }

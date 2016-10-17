@@ -269,11 +269,15 @@ private[parquet] object ParquetReadSupport {
    */
   private def clipParquetGroupFields(
       parquetRecord: GroupType, structType: StructType): Seq[Type] = {
-    val parquetFieldMap = parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
+    val parquetFieldMap = parquetRecord.getFields.asScala
+      .map(f => f.getName -> f).toMap
+    val caseInsensitiveParquetFieldMap = parquetRecord.getFields.asScala
+      .map(f => f.getName.toLowerCase -> f).toMap
     val toParquet = new ParquetSchemaConverter(writeLegacyParquetFormat = false)
     structType.map { f =>
       parquetFieldMap
         .get(f.name)
+        .orElse(caseInsensitiveParquetFieldMap.get(f.name.toLowerCase))
         .map(clipParquetType(_, f.dataType))
         .getOrElse(toParquet.convertField(f))
     }

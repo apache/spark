@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions.scalalang
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate._
 
@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.aggregate._
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 // scalastyle:off
 object typed {
   // scalastyle:on
