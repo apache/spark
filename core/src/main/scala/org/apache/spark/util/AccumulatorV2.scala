@@ -27,7 +27,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
+import org.apache.spark._
 import org.apache.spark.scheduler.AccumulableInfo
 
 /**
@@ -76,14 +76,16 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
   // For data property accumulators pending and processed updates.
   // Pending and processed are keyed by (rdd id, shuffle id, partition id)
   private[spark] lazy val pending =
-    new mutable.HashMap[(Int, Int, Int), AccumulatorV2[IN, OUT]]()
+    new mutable.HashMap[TaskOutputId, AccumulatorV2[IN, OUT]]()
   // Completed contains the set of (rdd id, shuffle id, partition id) that have been
   // fully processed on the worker side. This is used to determine if the updates should
   // be merged on the driver for a particular rdd/shuffle/partition combination.
-  private[spark] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
-  // Processed is keyed by (rdd id, shuffle id) and the value is a bitset containing all partitions
+  private[spark] lazy val completed = new mutable.HashSet[TaskOutputId]()
+  // rddProcessed is keyed by rdd id and the value is a bitset containing all partitions
   // for the given key which have been merged into the value. This is used on the driver.
-  @transient private[spark] lazy val processed = new mutable.HashMap[(Int, Int), mutable.BitSet]()
+  @transient private[spark] lazy val rddProcessed = new mutable.HashMap[Int, mutable.BitSet]()
+  // shuffleProcessed is the same as rddProcessed except keyed by shuffle id.
+  @transient private[spark] lazy val shuffleProcessed = new mutable.HashMap[Int, mutable.BitSet]()
 
   private[spark] def dataProperty: Boolean = metadata.dataProperty
 
@@ -208,9 +210,9 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
    * Mark a specific rdd/shuffle/partition as completely processed. This is a noop for
    * non-data property accumuables.
    */
-  private[spark] def markFullyProcessed(rddId: Int, shuffleWriteId: Int, partitionId: Int): Unit = {
+  private[spark] def markFullyProcessed(taskOutputId: TaskOutputId): Unit = {
     if (metadata.dataProperty) {
-      completed += ((rddId, shuffleWriteId, partitionId))
+      completed += taskOutputId
     }
   }
 
@@ -237,8 +239,14 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
 
   final private[spark] def dataPropertyMerge(other: AccumulatorV2[IN, OUT]) = {
     val term = other.pending.filter{case (k, v) => other.completed.contains(k)}
-    term.foreach { case ((rddId, shuffleWriteId, splitId), v) =>
-      val splits = processed.getOrElseUpdate((rddId, shuffleWriteId), new mutable.BitSet())
+    term.map {
+      case (RDDOutputId(rddId, splitId), v) =>
+        (rddProcessed, rddId, splitId, v)
+      case (ShuffleMapOutputId(shuffleWriteId, splitId), v) =>
+        (shuffleProcessed, shuffleWriteId, splitId, v)
+    }.foreach {
+      case (processed, id, splitId, v) =>
+      val splits = processed.getOrElseUpdate(id, new mutable.BitSet())
       if (!splits.contains(splitId)) {
         splits += splitId
         mergeImpl(v)

@@ -99,12 +99,13 @@ private[spark] class ShuffleMapTask(
       // the rdd/shuffle/and partition being processed and signal when/if fully processed.
       val data = if (context.taskMetrics.hasDataPropertyAccumulators()) {
         val shuffleWriteId = dep.shuffleHandle.shuffleId
+        val shuffleMapOutputId = ShuffleMapOutputId(shuffleWriteId, partition.index)
         val data = input.map { x =>
-          context.setRDDPartitionInfo(rdd.id, shuffleWriteId, partition.index)
+          context.setRDDPartitionInfo(shuffleMapOutputId)
           x
         }
         Utils.signalWhenEmpty(data,
-          () => context.taskMetrics.markFullyProcessed(rdd.id, shuffleWriteId, partition.index))
+          () => context.taskMetrics.markFullyProcessed(shuffleMapOutputId))
       } else {
         input
       }

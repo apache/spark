@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.{Partition, RDDOutputId, TaskContext}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -40,19 +40,18 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     // If our task has data property accumulators we need to keep track of which partitions
     // are fully processed and what we are currently processing.
     if (context.taskMetrics.hasDataPropertyAccumulators()) {
-      // Use -1 for shuffle id since we are not in a shuffle.
-      val shuffleWriteId = -1
+      val rddOutputId = RDDOutputId(id, split.index)
       // Set the ID of the RDD and partition being processed. We need to do this per
       // element since we chain the iterator transformations together
       val data = input.map{x =>
-        context.setRDDPartitionInfo(id, shuffleWriteId, split.index)
+        context.setRDDPartitionInfo(rddOutputId)
         x
       }
       val wrappedData = Utils.signalWhenEmpty(data,
-        () => context.taskMetrics.markFullyProcessed(id, shuffleWriteId, split.index))
+        () => context.taskMetrics.markFullyProcessed(rddOutputId))
       // We also set it before the first call to the user function in case the user provides a
       // function which access a data property accumulator before accessing any elements.
-      context.setRDDPartitionInfo(id, shuffleWriteId, split.index)
+      context.setRDDPartitionInfo(rddOutputId)
       f(context, split.index, wrappedData)
     } else {
       // There are no data property accumulators so we avoid the overhead of keeping track of the

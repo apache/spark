@@ -105,15 +105,15 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[(K, C)] = {
-    // Use -1 for our Shuffle ID since we are on the read side of the shuffle.
-    val shuffleWriteId = -1
     // If our task has data property accumulators we need to keep track of which partitions
     // we are processing.
+    val rddOutputId = RDDOutputId(id, split.index)
     if (context.taskMetrics.hasDataPropertyAccumulators()) {
       // Note: we only set this once rather than resetting per element like in `MapPartitionsRDD`
       // since the user's aggregator code will be evaluated on the entire input before it returns
-      // the iterator to its results.
-      context.setRDDPartitionInfo(id, shuffleWriteId, split.index)
+      // the iterator to its results. Additionally since we are on the read side of the shuffle
+      // there is no shuffleWriteId to keep track of.
+      context.setRDDPartitionInfo(rddOutputId)
     }
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
     val itr = SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1,
@@ -124,7 +124,7 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     // are fully processed.
     if (context.taskMetrics.hasDataPropertyAccumulators()) {
       Utils.signalWhenEmpty(itr,
-        () => context.taskMetrics.markFullyProcessed(id, shuffleWriteId, split.index))
+        () => context.taskMetrics.markFullyProcessed(rddOutputId))
     } else {
       itr
     }
