@@ -35,7 +35,7 @@ class PlanParserSuite extends PlanTest {
   import org.apache.spark.sql.catalyst.dsl.plans._
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
-    comparePlans(parsePlan(sqlCommand), plan)
+    comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit = {
