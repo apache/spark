@@ -73,14 +73,6 @@ class TableFileCatalog(
    * @param filters partition-pruning filters
    */
   def filterPartitions(filters: Seq[Expression]): ListingFileCatalog = {
-    if (filters.isEmpty) {
-      cachedAllPartitions
-    } else {
-      filterPartitions0(filters)
-    }
-  }
-
-  private def filterPartitions0(filters: Seq[Expression]): ListingFileCatalog = {
     val parameters = baseLocation
       .map(loc => Map(PartitioningAwareFileCatalog.BASE_PATH_PARAM -> loc))
       .getOrElse(Map.empty)

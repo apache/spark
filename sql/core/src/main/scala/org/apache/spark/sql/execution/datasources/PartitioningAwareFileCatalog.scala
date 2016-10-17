@@ -26,11 +26,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-<<<<<<< HEAD
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-=======
->>>>>>> c7ac027d5fd7a80d3122a9269b2bb9c28c6a57db
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -468,8 +465,4 @@ object PartitioningAwareFileCatalog extends Logging {
     ((pathName.startsWith("_") && !pathName.contains("=")) || pathName.startsWith(".")) &&
       !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
   }
-}
-
-object PartitioningAwareFileCatalog {
-  val BASE_PATH_PARAM = "basePath"
 }
