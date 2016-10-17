@@ -28,6 +28,8 @@ import scala.util.control.NonFatal
 
 import org.scalatest.Assertions
 import org.scalatest.concurrent.{Eventually, Timeouts}
+import org.scalatest.concurrent.AsyncAssertions.Waiter
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
@@ -38,6 +40,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ro
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
@@ -193,6 +196,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     }
   }
 
+  case class AssertOnLastQueryStatus(condition: StreamingQueryStatus => Unit)
+    extends StreamAction
+
+
   /**
    * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
@@ -294,9 +301,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
     val testThread = Thread.currentThread()
     val metadataRoot = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+    val statusCollector = new QueryStatusCollector
 
     try {
+      spark.streams.addListener(statusCollector)
       startedTest.foreach { action =>
+        logInfo(s"Processing test stream action: $action")
         action match {
           case StartStream(trigger, triggerClock) =>
             verify(currentStream == null, "stream already running")
@@ -394,6 +404,13 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             val streamToAssert = Option(currentStream).getOrElse(lastStream)
             verify({ a.run(); true }, s"Assert failed: ${a.message}")
 
+          case a: AssertOnLastQueryStatus =>
+            Eventually.eventually(timeout(streamingTimeout)) {
+              require(statusCollector.lastTriggerStatus.nonEmpty)
+            }
+            val status = statusCollector.lastTriggerStatus.get
+            verify({ a.condition(status); true }, "Assert on last query status failed")
+
           case a: AddData =>
             try {
               // Add data and get the source where it was added, and the expected offset of the
@@ -465,6 +482,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       if (currentStream != null && currentStream.microBatchThread.isAlive) {
         currentStream.stop()
       }
+      spark.streams.removeListener(statusCollector)
     }
   }
 
@@ -596,6 +614,60 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
           assert(thrownException.cause.getClass === e.t.runtimeClass,
             "exception of incorrect type was throw")
       }
+    }
+  }
+
+
+  class QueryStatusCollector extends StreamingQueryListener {
+    // to catch errors in the async listener events
+    @volatile private var asyncTestWaiter = new Waiter
+
+    @volatile var startStatus: StreamingQueryStatus = null
+    @volatile var terminationStatus: StreamingQueryStatus = null
+    @volatile var terminationException: Option[String] = null
+
+    private val progressStatuses = new mutable.ArrayBuffer[StreamingQueryStatus]
+
+    /** Get the info of the last trigger that processed data */
+    def lastTriggerStatus: Option[StreamingQueryStatus] = synchronized {
+      progressStatuses.filter { i =>
+        i.triggerDetails.get("isTriggerActive").toBoolean == false &&
+          i.triggerDetails.get("isDataPresentInTrigger").toBoolean == true
+      }.lastOption
+    }
+
+    def reset(): Unit = {
+      startStatus = null
+      terminationStatus = null
+      progressStatuses.clear()
+      asyncTestWaiter = new Waiter
+    }
+
+    def checkAsyncErrors(): Unit = {
+      asyncTestWaiter.await(timeout(10 seconds))
+    }
+
+
+    override def onQueryStarted(queryStarted: QueryStarted): Unit = {
+      asyncTestWaiter {
+        startStatus = queryStarted.queryStatus
+      }
+    }
+
+    override def onQueryProgress(queryProgress: QueryProgress): Unit = {
+      asyncTestWaiter {
+        assert(startStatus != null, "onQueryProgress called before onQueryStarted")
+        synchronized { progressStatuses += queryProgress.queryStatus }
+      }
+    }
+
+    override def onQueryTerminated(queryTerminated: QueryTerminated): Unit = {
+      asyncTestWaiter {
+        assert(startStatus != null, "onQueryTerminated called before onQueryStarted")
+        terminationStatus = queryTerminated.queryStatus
+        terminationException = queryTerminated.exception
+      }
+      asyncTestWaiter.dismiss()
     }
   }
 }
