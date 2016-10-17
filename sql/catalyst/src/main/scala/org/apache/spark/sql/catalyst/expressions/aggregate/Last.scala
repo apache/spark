@@ -29,7 +29,10 @@ import org.apache.spark.sql.types._
  * a single partition, and we use a single reducer to do the aggregation.).
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr,isIgnoreNull) - Returns the last value of `child` for a group of rows.")
+  usage = """
+    _FUNC_(expr[, isIgnoreNull]) - Returns the last value of `expr` for a group of rows.
+      If `isIgnoreNull` is true, returns only non-null values.
+  """)
 case class Last(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
 
   def this(child: Expression) = this(child, Literal.create(false, BooleanType))
