@@ -261,7 +261,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-    *  To  keep compatible with spark-1.6 we provide this method  see SPARK-16009
+    *  To  keep compatible with spark-1.6 see SPARK-16009.
+    *  Because the json(path: String, isStandard: Boolean = false) method will compile failed
+    *  when we call Option(path).map(spark.read.json), we provide this method.
     */
   def json(path: String): DataFrame = format("json").load(path)
 
