@@ -23,6 +23,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
@@ -89,7 +90,7 @@ private[spark] class IndexShuffleBlockResolver(
     val lengths = new Array[Long](blocks)
     // Read the lengths of blocks
     val in = try {
-      new DataInputStream(new BufferedInputStream(new FileInputStream(index)))
+      new DataInputStream(new NioBufferedFileInputStream(index))
     } catch {
       case e: IOException =>
         return null
