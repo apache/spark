@@ -252,7 +252,7 @@ case class LoadDataCommand(
           val fileSystem = FileSystems.getDefault
           val pathPattern = fileSystem.getPath(filePath)
           val dir = pathPattern.getParent.toString
-          val filePattern = pathPattern.getName(pathPattern.getNameCount - 1).toString
+          val filePattern = pathPattern.getFileName.toString
           if (dir.contains("*")) {
             throw new AnalysisException(
               s"LOAD DATA input path allows only filename wildcard: $path")

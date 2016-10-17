@@ -18,11 +18,13 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{File, PrintWriter}
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
 
+import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
@@ -1890,14 +1892,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-17796 Support wildcard character in filename for LOAD DATA LOCAL INPATH") {
     withTempDir { dir =>
       for (i <- 1 to 3) {
-        val writer = new PrintWriter(new File(s"$dir/part-r-0000$i"))
-        writer.write(s"$i")
-        writer.close()
+        Files.write(s"$i", new File(s"$dir/part-r-0000$i"), StandardCharsets.UTF_8)
       }
       for (i <- 5 to 7) {
-        val writer = new PrintWriter(new File(s"$dir/part-s-0000$i"))
-        writer.write(s"$i")
-        writer.close()
+        Files.write(s"$i", new File(s"$dir/part-s-0000$i"), StandardCharsets.UTF_8)
       }
 
       withTable("load_t") {
