@@ -50,7 +50,7 @@ class TableFileCatalog(
 
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
-  override def listFiles(filters: Seq[Expression]): Seq[PartitionFiles] = {
+  override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
     filterPartitions(filters).listFiles(Nil)
   }
 
@@ -78,7 +78,7 @@ class TableFileCatalog(
       case Some(schema) =>
         val selectedPartitions = externalCatalog.listPartitionsByFilter(db, table, filters)
         val partitions = selectedPartitions.map { p =>
-          PartitionDirectory(p.toRow(schema), p.storage.locationUri.get)
+          PartitionPath(p.toRow(schema), p.storage.locationUri.get)
         }
         val partitionSpec = PartitionSpec(schema, partitions)
         new PrunedTableFileCatalog(

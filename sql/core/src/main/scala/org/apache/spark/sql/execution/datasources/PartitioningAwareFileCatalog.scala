@@ -57,12 +57,12 @@ abstract class PartitioningAwareFileCatalog(
 
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
-  override def listFiles(filters: Seq[Expression]): Seq[PartitionFiles] = {
+  override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      PartitionFiles(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
+      PartitionDirectory(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
-        case PartitionDirectory(values, path) =>
+        case PartitionPath(values, path) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
@@ -72,7 +72,7 @@ abstract class PartitioningAwareFileCatalog(
               // Directory does not exist, or has no children files
               Nil
           }
-          PartitionFiles(values, files)
+          PartitionDirectory(values, files)
       }
     }
     logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))
@@ -154,7 +154,7 @@ abstract class PartitioningAwareFileCatalog(
 
   private def prunePartitions(
       predicates: Seq[Expression],
-      partitionSpec: PartitionSpec): Seq[PartitionDirectory] = {
+      partitionSpec: PartitionSpec): Seq[PartitionPath] = {
     val PartitionSpec(partitionColumns, partitions) = partitionSpec
     val partitionColumnNames = partitionColumns.map(_.name).toSet
     val partitionPruningPredicates = predicates.filter {
@@ -171,7 +171,7 @@ abstract class PartitioningAwareFileCatalog(
       })
 
       val selected = partitions.filter {
-        case PartitionDirectory(values, _) => boundPredicate(values)
+        case PartitionPath(values, _) => boundPredicate(values)
       }
       logInfo {
         val total = partitions.length
