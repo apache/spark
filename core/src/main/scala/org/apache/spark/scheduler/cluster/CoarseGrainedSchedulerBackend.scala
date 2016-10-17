@@ -92,18 +92,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
+  // Executors that have been lost, but for which we don't yet know the real exit reason.
+  protected val executorsPendingLossReason = new HashSet[String]
+
+  protected val addressToExecutorId = new HashMap[RpcAddress, String]
+
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
-
-    // Executors that have been lost, but for which we don't yet know the real exit reason.
-    protected val executorsPendingLossReason = new HashSet[String]
 
     // If this DriverEndpoint is changed to support multiple threads,
     // then this may need to be changed so that we don't share the serializer
     // instance across threads
     private val ser = SparkEnv.get.closureSerializer.newInstance()
-
-    protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
     private val reviveThread =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
@@ -392,9 +392,23 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Remove all the lingering executors that should be removed but not yet. The reason might be
     // because (1) disconnected event is not yet received; (2) executors die silently.
-    executorDataMap.toMap.foreach { case (eid, _) =>
-      driverEndpoint.send(
-        RemoveExecutor(eid, SlaveLost("Stale executor after cluster manager re-registered.")))
+    // Note: here copy the code of remove executor from DriverEndpoint to avoid deadlock(reset
+    // and removeExecutor both to get the lock of schedulerbackend.)
+    val reason = SlaveLost("Stale executor after cluster manager re-registered.")
+    executorDataMap.toMap.foreach { case (executorId, executorInfo) =>
+      executorInfo.executorEndpoint.send(StopExecutor)
+      logDebug(s"Asked to remove executor $executorId with reason $reason")
+      val killed = {
+        addressToExecutorId -= executorInfo.executorAddress
+        executorDataMap -= executorId
+        executorsPendingLossReason -= executorId
+        executorsPendingToRemove.remove(executorId).getOrElse(false)
+      }
+      totalCoreCount.addAndGet(-executorInfo.totalCores)
+      totalRegisteredExecutors.addAndGet(-1)
+      scheduler.executorLost(executorId, if (killed) ExecutorKilled else reason)
+      listenerBus.post(
+        SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
     }
   }
 
