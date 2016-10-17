@@ -220,4 +220,16 @@ class CreateTableAsSelectSuite
         Some(BucketSpec(5, Seq("a"), Seq("b"))))
     }
   }
+
+  test("SPARK-17409: CTAS of decimal calculation") {
+    withTable("tab2") {
+      withTempView("tab1") {
+        spark.range(99, 101).createOrReplaceTempView("tab1")
+        val sqlStmt =
+          "SELECT id, cast(id as long) * cast('1.0' as decimal(38, 18)) as num FROM tab1"
+        sql(s"CREATE TABLE tab2 USING PARQUET AS $sqlStmt")
+        checkAnswer(spark.table("tab2"), sql(sqlStmt))
+      }
+    }
+  }
 }

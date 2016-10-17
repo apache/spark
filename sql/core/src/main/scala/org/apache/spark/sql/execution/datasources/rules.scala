@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrd
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.CreateHiveTableAsSelectLogicalPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 
@@ -58,6 +59,25 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           // the provider is valid, but failed to create a logical plan
           u.failAnalysis(e.getMessage)
       }
+  }
+}
+
+/**
+ * Analyze the query in CREATE TABLE AS SELECT (CTAS). After analysis, [[PreWriteCheck]] also
+ * can detect the cases that are not allowed.
+ */
+case class AnalyzeCreateTableAsSelect(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case c: CreateTableUsingAsSelect if !c.query.resolved =>
+      c.copy(query = analyzeQuery(c.query))
+    case c: CreateHiveTableAsSelectLogicalPlan if !c.query.resolved =>
+      c.copy(query = analyzeQuery(c.query))
+  }
+
+  private def analyzeQuery(query: LogicalPlan): LogicalPlan = {
+    val qe = sparkSession.sessionState.executePlan(query)
+    qe.assertAnalyzed()
+    qe.analyzed
   }
 }
 
@@ -216,7 +236,7 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation, _, _) =>
               // Get all input data source relations of the query.
-              val srcRelations = c.child.collect {
+              val srcRelations = c.query.collect {
                 case LogicalRelation(src: BaseRelation, _, _) => src
               }
               if (srcRelations.contains(dest)) {
@@ -233,12 +253,12 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         }
 
         PartitioningUtils.validatePartitionColumn(
-          c.child.schema, c.partitionColumns, conf.caseSensitiveAnalysis)
+          c.query.schema, c.partitionColumns, conf.caseSensitiveAnalysis)
 
         for {
           spec <- c.bucketSpec
           sortColumnName <- spec.sortColumnNames
-          sortColumn <- c.child.schema.find(_.name == sortColumnName)
+          sortColumn <- c.query.schema.find(_.name == sortColumnName)
         } {
           if (!RowOrdering.isOrderable(sortColumn.dataType)) {
             failAnalysis(s"Cannot use ${sortColumn.dataType.simpleString} for sorting column.")
