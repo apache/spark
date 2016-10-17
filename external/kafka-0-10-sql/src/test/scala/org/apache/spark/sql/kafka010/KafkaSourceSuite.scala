@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
-import org.scalatest.BeforeAndAfter
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
@@ -265,6 +264,33 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUnsupportedConfig("kafka.auto.offset.reset", "latest")
   }
 
+  test("input row metrics") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+    testUtils.sendMessages(topic, Array("-1"))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("subscribe", topic)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      AddKafkaData(Set(topic), 1, 2, 3),
+      CheckAnswer(2, 3, 4),
+      AssertOnLastQueryStatus { status =>
+        assert(status.triggerDetails.get("numRows.input.total").toInt > 0)
+        assert(status.sourceStatuses(0).processingRate > 0.0)
+      }
+    )
+  }
+
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
   private def testFromLatestOffsets(topic: String, options: (String, String)*): Unit = {
@@ -344,7 +370,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
 }
 
 
-class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
+class KafkaSourceStressSuite extends KafkaSourceTest {
 
   import testImplicits._
 
@@ -356,12 +382,6 @@ class KafkaSourceStressSuite extends KafkaSourceTest with BeforeAndAfter {
 
   private def nextInt(start: Int, end: Int): Int = {
     start + Random.nextInt(start + end - 1)
-  }
-
-  after {
-    for (topic <- testUtils.getAllTopicsAndPartitionSize().toMap.keys) {
-      testUtils.deleteTopic(topic)
-    }
   }
 
   test("stress test with multiple topics and partitions")  {

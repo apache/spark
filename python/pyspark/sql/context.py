@@ -28,7 +28,7 @@ from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
-from pyspark.sql.types import Row, StringType
+from pyspark.sql.types import IntegerType, Row, StringType
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
@@ -201,6 +201,32 @@ class SQLContext(object):
         [Row(stringLengthInt(test)=4)]
         """
         self.sparkSession.catalog.registerFunction(name, f, returnType)
+
+    @ignore_unicode_prefix
+    @since(2.1)
+    def registerJavaFunction(self, name, javaClassName, returnType=None):
+        """Register a java UDF so it can be used in SQL statements.
+
+        In addition to a name and the function itself, the return type can be optionally specified.
+        When the return type is not specified we would infer it via reflection.
+        :param name:  name of the UDF
+        :param javaClassName: fully qualified name of java class
+        :param returnType: a :class:`pyspark.sql.types.DataType` object
+
+        >>> sqlContext.registerJavaFunction("javaStringLength",
+        ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
+        >>> sqlContext.sql("SELECT javaStringLength('test')").collect()
+        [Row(UDF(test)=4)]
+        >>> sqlContext.registerJavaFunction("javaStringLength2",
+        ...   "test.org.apache.spark.sql.JavaStringLength")
+        >>> sqlContext.sql("SELECT javaStringLength2('test')").collect()
+        [Row(UDF(test)=4)]
+
+        """
+        jdt = None
+        if returnType is not None:
+            jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
+        self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
@@ -386,7 +412,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlContext.tables()
         >>> df2.filter("tableName = 'table1'").first()
-        Row(tableName=u'table1', isTemporary=True)
+        Row(database=u'', tableName=u'table1', isTemporary=True)
         """
         if dbName is None:
             return DataFrame(self._ssql_ctx.tables(), self)

@@ -236,11 +236,11 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
     val features = selectorType match {
       case ChiSqSelector.KBest =>
         chiSqTestResult
-          .sortBy { case (res, _) => -res.statistic }
+          .sortBy { case (res, _) => res.pValue }
           .take(numTopFeatures)
       case ChiSqSelector.Percentile =>
         chiSqTestResult
-          .sortBy { case (res, _) => -res.statistic }
+          .sortBy { case (res, _) => res.pValue }
           .take((chiSqTestResult.length * percentile).toInt)
       case ChiSqSelector.FPR =>
         chiSqTestResult
