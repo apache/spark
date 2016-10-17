@@ -236,6 +236,8 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
    * @param datasetB Another dataset to join
    * @param threshold The threshold for the distance of record pairs
    * @param distCol Output column for storing the distance between each result record and the key
+   * @param leftColName The alias of all columns of datasetA in the output Dataset
+   * @param rightColName The alias of all columns of datasetB in the output Dataset
    * @return A joined dataset containing pairs of records. A distCol is added to show the distance
    *         between each pair of records.
    */
@@ -244,19 +246,20 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
       datasetA: Dataset[_],
       datasetB: Dataset[_],
       threshold: Double,
-      distCol: String): Dataset[_] = {
+      distCol: String,
+      leftColName: String,
+      rightColName: String): Dataset[_] = {
 
     val explodeCols = Seq("entry", "hashValue")
-    val inputName = "input"
-    val explodedA = processDataset(datasetA, inputName, explodeCols)
+    val explodedA = processDataset(datasetA, leftColName, explodeCols)
 
     // If this is a self join, we need to recreate the inputCol of datasetB to avoid ambiguity.
     // TODO: Remove recreateCol logic once SPARK-17154 is resolved.
     val explodedB = if (datasetA != datasetB) {
-      processDataset(datasetB, inputName, explodeCols)
+      processDataset(datasetB, rightColName, explodeCols)
     } else {
       val recreatedB = recreateCol(datasetB, $(inputCol), s"${$(inputCol)}#${Random.nextString(5)}")
-      processDataset(recreatedB, inputName, explodeCols)
+      processDataset(recreatedB, rightColName, explodeCols)
     }
 
     // Do a hash join on where the exploded hash values are equal.
@@ -266,8 +269,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
     // Add a new column to store the distance of the two records.
     val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y), DataTypes.DoubleType)
     val joinedDatasetWithDist = joinedDataset.select(col("*"),
-      distUDF(explodedA(s"$inputName.${$(inputCol)}"),
-        explodedB(s"$inputName.${$(inputCol)}")).as(distCol)
+      distUDF(col(s"$leftColName.${$(inputCol)}"), col(s"$rightColName.${$(inputCol)}")).as(distCol)
     )
 
     // Filter the joined datasets where the distance are smaller than the threshold.
@@ -275,14 +277,15 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
   }
 
   /**
-   * Overloaded method for approxSimilarityJoin. Use "distCol" as default distCol.
+   * Overloaded method for approxSimilarityJoin. Use "distCol" as default distCol, "leftCol" as
+   * default leftCol, rightCol as default rightCol
    */
   @Since("2.1.0")
   def approxSimilarityJoin(
       datasetA: Dataset[_],
       datasetB: Dataset[_],
       threshold: Double): Dataset[_] = {
-    approxSimilarityJoin(datasetA, datasetB, threshold, "distCol")
+    approxSimilarityJoin(datasetA, datasetB, threshold, "distCol", "leftCol", "rightCol")
   }
 }
 
