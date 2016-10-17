@@ -932,16 +932,9 @@ _type_mappings = {
 # Mapping Python array types to Spark SQL DataType
 _array_type_mappings = {
     'b': ByteType,
-    'B': ShortType,
-    'u': StringType,
     'h': ShortType,
-    'H': IntegerType,
     'i': IntegerType,
-    'I': LongType,
     'l': LongType,
-    'L': LongType,
-    'q': LongType,
-    'Q': LongType,
     'f': FloatType,
     'd': DoubleType
 }
@@ -982,7 +975,10 @@ def _infer_type(obj):
         else:
             return ArrayType(NullType(), True)
     elif isinstance(obj, array):
-        return ArrayType(_array_type_mappings[obj.typecode](), True)
+        if obj.typecode in _array_type_mappings:
+            return ArrayType(_array_type_mappings[obj.typecode](), True)
+        else:
+            raise TypeError("not supported type: array(%s)" % obj.typecode)
     else:
         try:
             return _infer_schema(obj)

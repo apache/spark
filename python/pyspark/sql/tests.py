@@ -1738,8 +1738,8 @@ class SQLTests(ReusedPySparkTestCase):
         df.collect()
 
     # test for SPARK-16542
-    def test_array_types():
-        int_types = set([ 'b', 'B', 'h', 'H', 'i', 'I', 'l', 'L', 'q', 'Q' ])
+    def test_array_types(self):
+        int_types = set([ 'b', 'h', 'i', 'l' ])
         float_types = set([ 'f', 'd' ])
         unsupported_types = set(array.typecodes) - int_types - float_types
         def collected(a):
