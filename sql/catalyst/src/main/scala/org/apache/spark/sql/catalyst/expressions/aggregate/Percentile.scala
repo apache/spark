@@ -76,7 +76,7 @@ case class Percentile(
 
   override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
-  override def initialize(buffer: MutableRow): Unit = {
+  override def initialize(buffer: InternalRow): Unit = {
     // The counts OpenHashMap will contain values of other groups if we don't initialize it here.
     // Since OpenHashMap doesn't support deletions, we have to create a new instance.
     counts = new OpenHashMap[Number, Long]
@@ -104,7 +104,7 @@ case class Percentile(
     percentiles
   }
 
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+  override def update(buffer: InternalRow, input: InternalRow): Unit = {
     // Eval percentiles and check whether its value is valid.
     val percentiles = evalPercentiles(input)
 
@@ -116,7 +116,7 @@ case class Percentile(
     }
   }
 
-  override def merge(buffer: MutableRow, inputBuffer: InternalRow): Unit = {
+  override def merge(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
     sys.error("Percentile cannot be used in partial aggregations.")
   }
 
