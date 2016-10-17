@@ -109,13 +109,55 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
         val writeField = dt match {
           case t: StructType =>
-            s"""
+            val isHomogenousStruct = {
+              var i = 1
+              val ref =  ctx.javaType(t.fields(0).dataType)
+              var broken = false || !ctx.isPrimitiveType(ref) || t.length <=1 || input.isNull != "false"
+              while( !broken && i < t.length) {
+                if(ctx.javaType(t.fields(i).dataType) != ref) {
+                  broken = true
+                }
+                i +=1
+              }
+              !broken
+            }
+            if(isHomogenousStruct) {
+              val counter = ctx.freshName("counter")
+
+              s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
+
+              final int $tmpCursor = $bufferHolder.cursor;
+             """ +
+              s"""
+                 if (${input.value} instanceof UnsafeRow) {
+                   ${writeUnsafeData(ctx, s"((UnsafeRow) ${input.value})", bufferHolder)};
+                 } else {
+                      for(int $counter = 0; $counter < ${t.length}; ++$counter) {
+                           if (${input.value}.isNullAt($index)) {
+                             $rowWriter.setNullAt($index);
+                           }else {
+                             $rowWriter.write($counter, ${ctx.getValue(input.value, t.fields(0).dataType, counter)});
+                           }
+                       }
+                 }
+               """ +
+              s"""
+              $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+            """
+
+
+            }else {
+              s"""
+              // Remember the current cursor so that we can calculate how many bytes are
+              // written later.
+
               final int $tmpCursor = $bufferHolder.cursor;
               ${writeStructToBuffer(ctx, input.value, t.map(_.dataType), bufferHolder)}
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
             """
+            }
 
           case a @ ArrayType(et, _) =>
             s"""
