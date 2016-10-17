@@ -1739,56 +1739,58 @@ class SQLTests(ReusedPySparkTestCase):
 
     # test for SPARK-16542
     def test_array_types(self):
-        int_types = set([ 'b', 'h', 'i', 'l' ])
-        float_types = set([ 'f', 'd' ])
+        int_types = set(['b', 'h', 'i', 'l'])
+        float_types = set(['f', 'd'])
         unsupported_types = set(array.typecodes) - int_types - float_types
+
         def collected(a):
             row = Row(myarray=a)
-            rdd = self.sc.parallelize([ row ])
+            rdd = self.sc.parallelize([row])
             df = self.spark.createDataFrame(rdd)
             return df.collect()[0]["myarray"][0]
         # test whether pyspark can correctly handle int types
         for t in int_types:
             is_unsigned = t.isupper()
             # test positive numbers
-            a = array.array(t,[1])
+            a = array.array(t, [1])
             while True:
                 try:
-                    self.assertEqual(collected(a),a[0])
+                    self.assertEqual(collected(a), a[0])
                     a[0] *= 2
                 except OverflowError:
                     break
             # test negative numbers
             if not is_unsigned:
-                a = array.array(t,[-1])
+                a = array.array(t, [-1])
                 while True:
                     try:
-                        self.assertEqual(collected(a),a[0])
+                        self.assertEqual(collected(a), a[0])
                         a[0] *= 2
                     except OverflowError:
                         break
         # test whether pyspark can correctly handle float types
         for t in float_types:
             # test upper bound and precision
-            a = array.array(t,[1.0])
+            a = array.array(t, [1.0])
             while not math.isinf(a[0]):
-                self.assertEqual(collected(a),a[0])
+                self.assertEqual(collected(a), a[0])
                 a[0] *= 2
                 a[0] += 1
             # test lower bound
-            a = array.array(t,[1.0])
-            while a[0]!=0:
-                self.assertEqual(collected(a),a[0])
+            a = array.array(t, [1.0])
+            while a[0] != 0:
+                self.assertEqual(collected(a), a[0])
                 a[0] /= 2
         # test whether pyspark can correctly handle unsupported types
         for t in unsupported_types:
             try:
                 c = collected(a)
-                self.assertTrue(False) # if no exception thrown, fail the test
+                self.assertTrue(False)  # if no exception thrown, fail the test
             except TypeError:
-                pass # catch the expected exception and do nothing
+                pass  # catch the expected exception and do nothing
             except:
-                self.assertTrue(False) # if incorrect exception thrown, fail the test
+                # if incorrect exception thrown, fail the test
+                self.assertTrue(False)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
