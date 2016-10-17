@@ -49,13 +49,18 @@ class TableFileCatalog(
 
   private val baseLocation = catalogTable.storage.locationUri
 
+  // Populated on-demand by calls to cachedAllPartitions
+  private var allPartitions: ListingFileCatalog = null
+
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
     filterPartitions(filters).listFiles(Nil)
   }
 
-  override def refresh(): Unit = {}
+  override def refresh(): Unit = synchronized {
+    allPartitions = null
+  }
 
   /**
    * Returns a [[ListingFileCatalog]] for this table restricted to the subset of partitions
@@ -90,7 +95,12 @@ class TableFileCatalog(
   }
 
   // Not used in the hot path of queries when metastore partition pruning is enabled
-  lazy val cachedAllPartitions: ListingFileCatalog = filterPartitions0(Nil)
+  def cachedAllPartitions: ListingFileCatalog = synchronized {
+    if (allPartitions == null) {
+      allPartitions = filterPartitions0(Nil)
+    }
+    allPartitions
+  }
 
   override def inputFiles: Array[String] = cachedAllPartitions.inputFiles
 }

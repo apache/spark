@@ -343,7 +343,8 @@ abstract class Catalog {
 
   /**
    * Invalidate and refresh all the cached data (and the associated metadata) for any dataframe that
-   * contains the given data source path.
+   * contains the given data source path. Path matching is by prefix, i.e. "/" would invalidate
+   * everything that is cached.
    *
    * @since 2.0.0
    */
