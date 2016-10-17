@@ -179,9 +179,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   test("Ignore k if initialModel is set") {
     val kmeans = new KMeans()
 
-    val m1 = KMeansSuite.generateRandomKMeansModel(dim, k)
+    val randomModel = KMeansSuite.generateRandomKMeansModel(dim, k)
     // ignore k if initialModel is set
-    assert(kmeans.setInitialModel(m1).setK(k - 1).getK === k)
+    assert(kmeans.setInitialModel(randomModel).setK(k - 1).getK === k)
     kmeans.clear(kmeans.initialModel)
     // k is not ignored after initialModel is cleared
     assert(kmeans.setK(k - 1).getK === k - 1)

@@ -252,11 +252,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
       }
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
       DefaultParamsReader.getAndSetParams(model, metadata)
-      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc) match {
-        case Success(v) =>
-          model.set(model.initialModel, v)
-        case Failure(e) =>  // Unable to load initial model
-      }
+      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc)
+        .foreach(v => model.set(model.initialModel, v))
 
       model
     }
@@ -364,13 +361,13 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
 
     if (isDefined(initialModel)) {
-      // Check the equal of dimension
+      // Check that the feature dimensions are equal
       val dimOfData = rdd.first().size
       val dimOfInitialModel = $(initialModel).clusterCenters.head.size
       require(dimOfData == dimOfInitialModel,
         s"mismatched dimension, $dimOfData in data while $dimOfInitialModel in the initial model.")
 
-      // Check the equal of number of clusters
+      // Check that the number of clusters are equal
       val kOfInitialModel = $(initialModel).parentModel.clusterCenters.length
       require(kOfInitialModel == $(k),
         s"mismatched cluster count, ${$(k)} cluster centers required but $kOfInitialModel found" +
