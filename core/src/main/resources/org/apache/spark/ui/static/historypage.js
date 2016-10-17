@@ -175,4 +175,10 @@ $(document).ready(function() {
         $('#hisotry-summary [data-toggle="tooltip"]').tooltip();
       });
     });
+
+    if ($('#last-updated').length) {
+      var lastUpdatedMillis = Number($('#last-updated').text());
+      var updatedDate = new Date(lastUpdatedMillis);
+      $('#last-updated').text(updatedDate.toLocaleDateString()+", "+updatedDate.toLocaleTimeString())
+    }
 });

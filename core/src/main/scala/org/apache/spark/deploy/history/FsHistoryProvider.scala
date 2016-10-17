@@ -111,7 +111,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // The modification time of the newest log detected during the last scan.   Currently only
   // used for logging msgs (logs are re-scanned based on file size, rather than modtime)
-  private var lastScanTime = -1L
+  private val lastScanTime = new java.util.concurrent.atomic.AtomicLong (-1)
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
@@ -232,6 +232,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   override def getEventLogsUnderProcess(): Int = pendingReplayTasksCount.get()
+
+  override def getLastUpdatedTime(): Long = lastScanTime.get()
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     try {
@@ -368,7 +370,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       }
 
-      lastScanTime = newLastScanTime
+      lastScanTime.set(newLastScanTime)
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
     }
@@ -385,7 +387,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case e: Exception =>
         logError("Exception encountered when attempting to update last scan time", e)
-        lastScanTime
+        lastScanTime.get()
     } finally {
       if (!fs.delete(path, true)) {
         logWarning(s"Error deleting ${path}")

@@ -31,6 +31,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
     val allAppsSize = parent.getApplicationList().count(_.completed != requestedIncomplete)
     val eventLogsUnderProcessCount = parent.getEventLogsUnderProcess()
+    val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()
     val content =
       <div>
@@ -43,6 +44,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
               <p>There are {eventLogsUnderProcessCount} event log(s) currently being
                 processed which may result in additional applications getting listed on this page.
                 Refresh the page to view updates. </p>
+            } else if (lastUpdatedTime > 0) {
+              <p>Last updated: <span id="last-updated">{lastUpdatedTime}</span></p>
             }
             }
             {

@@ -90,6 +90,15 @@ private[history] abstract class ApplicationHistoryProvider {
   }
 
   /**
+   * Returns the time the history provider last updated the application history information
+   *
+   * @return 0 if this is undefined or unsupported, otherwise the last updated time in millis
+   */
+  def getLastUpdatedTime(): Long = {
+    return 0;
+  }
+
+  /**
    * Returns a list of applications available for the history server to show.
    *
    * @return List of all know applications.

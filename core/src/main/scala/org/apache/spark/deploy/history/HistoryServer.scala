@@ -183,6 +183,10 @@ class HistoryServer(
     provider.getEventLogsUnderProcess()
   }
 
+  def getLastUpdatedTime(): Long = {
+    provider.getLastUpdatedTime()
+  }
+
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     getApplicationList().map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
