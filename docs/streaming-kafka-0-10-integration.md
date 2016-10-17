@@ -27,7 +27,7 @@ For Scala/Java applications using SBT/Maven project definitions, link your strea
 	  "bootstrap.servers" -> "localhost:9092,anotherhost:9092",
 	  "key.deserializer" -> classOf[StringDeserializer],
 	  "value.deserializer" -> classOf[StringDeserializer],
-	  "group.id" -> "example",
+	  "group.id" -> "use_a_separate_group_id_for_each_stream",
 	  "auto.offset.reset" -> "latest",
 	  "enable.auto.commit" -> (false: java.lang.Boolean)
 	)
@@ -48,7 +48,7 @@ Each item in the stream is a [ConsumerRecord](http://kafka.apache.org/0100/javad
 </div>
 
 For possible kafkaParams, see [Kafka consumer config docs](http://kafka.apache.org/documentation.html#newconsumerconfigs).
-Note that enable.auto.commit is disabled, for discussion see [Storing Offsets](streaming-kafka-0-10-integration.html#storing-offsets) below.
+Note that the example sets enable.auto.commit to false, for discussion see [Storing Offsets](streaming-kafka-0-10-integration.html#storing-offsets) below.
 
 ### LocationStrategies
 The new Kafka consumer API will pre-fetch messages into buffers.  Therefore it is important for performance reasons that the Spark integration keep cached consumers on executors (rather than recreating them for each batch), and prefer to schedule partitions on the host locations that have the appropriate consumers.
@@ -56,6 +56,9 @@ The new Kafka consumer API will pre-fetch messages into buffers.  Therefore it i
 In most cases, you should use `LocationStrategies.PreferConsistent` as shown above.  This will distribute partitions evenly across available executors.  If your executors are on the same hosts as your Kafka brokers, use `PreferBrokers`, which will prefer to schedule partitions on the Kafka leader for that partition.  Finally, if you have a significant skew in load among partitions, use `PreferFixed`. This allows you to specify an explicit mapping of partitions to hosts (any unspecified partitions will use a consistent location).
 
 The cache for consumers has a default maximum size of 64.  If you expect to be handling more than (64 * number of executors) Kafka partitions, you can change this setting via `spark.streaming.kafka.consumer.cache.maxCapacity`
+
+The cache is keyed by topicpartition and group.id, so use a **separate** `group.id` for each call to `createDirectStream`.
+
 
 ### ConsumerStrategies
 The new Kafka consumer API has a number of different ways to specify topics, some of which require considerable post-object-instantiation setup.  `ConsumerStrategies` provides an abstraction that allows Spark to obtain properly configured consumers even after restart from checkpoint.

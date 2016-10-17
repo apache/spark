@@ -163,14 +163,14 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         if query.resolved && t.schema.asNullable == query.schema.asNullable =>
 
       // Sanity checks
-      if (t.location.paths.size != 1) {
+      if (t.location.rootPaths.size != 1) {
         throw new AnalysisException(
           "Can only write data to relations with a single path.")
       }
 
-      val outputPath = t.location.paths.head
+      val outputPath = t.location.rootPaths.head
       val inputPaths = query.collect {
-        case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.paths
+        case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.rootPaths
       }.flatten
 
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
@@ -184,7 +184,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         query.resolve(t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver),
         t.bucketSpec,
         t.fileFormat,
-        () => t.refresh(),
+        () => t.location.refresh(),
         t.options,
         query,
         mode)
@@ -273,7 +273,7 @@ object DataSourceStrategy extends Strategy with Logging {
   // Get the bucket ID based on the bucketing values.
   // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
   def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
+    val mutableRow = new SpecificInternalRow(Seq(bucketColumn.dataType))
     mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
     val bucketIdGeneration = UnsafeProjection.create(
       HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,

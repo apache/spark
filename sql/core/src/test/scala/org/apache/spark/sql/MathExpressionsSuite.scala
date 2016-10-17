@@ -148,19 +148,19 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
     testOneToOneMathFunction(tanh, math.tanh)
   }
 
-  test("toDegrees") {
-    testOneToOneMathFunction(toDegrees, math.toDegrees)
+  test("degrees") {
+    testOneToOneMathFunction(degrees, math.toDegrees)
     checkAnswer(
       sql("SELECT degrees(0), degrees(1), degrees(1.5)"),
-      Seq((1, 2)).toDF().select(toDegrees(lit(0)), toDegrees(lit(1)), toDegrees(lit(1.5)))
+      Seq((1, 2)).toDF().select(degrees(lit(0)), degrees(lit(1)), degrees(lit(1.5)))
     )
   }
 
-  test("toRadians") {
-    testOneToOneMathFunction(toRadians, math.toRadians)
+  test("radians") {
+    testOneToOneMathFunction(radians, math.toRadians)
     checkAnswer(
       sql("SELECT radians(0), radians(1), radians(1.5)"),
-      Seq((1, 2)).toDF().select(toRadians(lit(0)), toRadians(lit(1)), toRadians(lit(1.5)))
+      Seq((1, 2)).toDF().select(radians(lit(0)), radians(lit(1)), radians(lit(1.5)))
     )
   }
 

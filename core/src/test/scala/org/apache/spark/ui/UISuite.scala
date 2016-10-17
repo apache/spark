@@ -53,9 +53,10 @@ class UISuite extends SparkFunSuite {
   }
 
   private def sslEnabledConf(): (SparkConf, SSLOptions) = {
+    val keyStoreFilePath = getTestResourcePath("spark.keystore")
     val conf = new SparkConf()
       .set("spark.ssl.ui.enabled", "true")
-      .set("spark.ssl.ui.keyStore", "./src/test/resources/spark.keystore")
+      .set("spark.ssl.ui.keyStore", keyStoreFilePath)
       .set("spark.ssl.ui.keyStorePassword", "123456")
       .set("spark.ssl.ui.keyPassword", "123456")
     (conf, new SecurityManager(conf).getSSLOptions("ui"))

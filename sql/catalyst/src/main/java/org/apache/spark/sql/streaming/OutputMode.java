@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.InternalOutputModes;
 
 /**
@@ -29,6 +30,7 @@ import org.apache.spark.sql.InternalOutputModes;
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 public class OutputMode {
 
   /**

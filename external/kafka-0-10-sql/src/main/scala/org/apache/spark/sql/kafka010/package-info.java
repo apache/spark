@@ -15,23 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
-
-import org.apache.spark.annotation.Experimental
-
 /**
- * :: Experimental ::
- * A class used to report information about the progress of a [[StreamingQuery]].
- *
- * @param name The [[StreamingQuery]] name. This name is unique across all active queries.
- * @param id The [[StreamingQuery]] id. This id is unique across
-  *          all queries that have been started in the current process.
- * @param sourceStatuses The current statuses of the [[StreamingQuery]]'s sources.
- * @param sinkStatus The current status of the [[StreamingQuery]]'s sink.
+ * Structured Streaming Data Source for Kafka 0.10
  */
-@Experimental
-class StreamingQueryInfo private[sql](
-  val name: String,
-  val id: Long,
-  val sourceStatuses: Seq[SourceStatus],
-  val sinkStatus: SinkStatus)
+package org.apache.spark.sql.kafka010;
