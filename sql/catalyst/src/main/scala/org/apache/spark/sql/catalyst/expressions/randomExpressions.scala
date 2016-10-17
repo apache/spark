@@ -59,7 +59,6 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-<<<<<<< 245346032a721c2c8b46e54e83c3620c7196b46b
   usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) uniformly distributed values in [0, 1).",
   extended = """
     Examples:
@@ -68,10 +67,6 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
       > SELECT _FUNC_(0);
        0.8446490682263027
   """)
-=======
-  usage = "_FUNC_(a) - Returns a random column with i.i.d. uniformly distributed values in [0, 1].",
-  extended = "> SELECT _FUNC_();\n 0.9629742951434543\n> SELECT _FUNC_(0);\n 0.8446490682263027\n> SELECT _FUNC_(NULL);\n 0.8446490682263027")
->>>>>>> Add test cases for constant folding and improve documentation
 // scalastyle:on line.size.limit
 case class Rand(child: Expression) extends RDG {
 
