@@ -25,7 +25,6 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming_2.11</artifactId>
   <properties>
     <sbt.project.name>streaming</sbt.project.name>

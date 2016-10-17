@@ -59,8 +59,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
   with ResetSystemProperties {
 
-  private val logDir = new File("src/test/resources/spark-events")
-  private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
+  private val logDir = getTestResourcePath("spark-events")
+  private val expRoot = getTestResourceFile("HistoryServerExpectations")
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
@@ -68,7 +68,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   def init(): Unit = {
     val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
+      .set("spark.history.fs.logDirectory", logDir)
       .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
     provider = new FsHistoryProvider(conf)
@@ -100,6 +100,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
     "maxDate2 app list json" -> "applications?maxDate=2015-02-03T16:42:40.000GMT",
+    "limit app list json" -> "applications?limit=3",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
     "job list json" -> "applications/local-1422981780767/jobs",
@@ -446,7 +447,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
     val jobcount = getNumJobs("/jobs")
-    assert(!provider.getListing().head.completed)
+    assert(!provider.getListing().next.completed)
 
     listApplications(false) should contain(appId)
 
@@ -454,7 +455,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     resetSparkContext()
     // check the app is now found as completed
     eventually(stdTimeout, stdInterval) {
-      assert(provider.getListing().head.completed,
+      assert(provider.getListing().next.completed,
         s"application never completed, server=$server\n")
     }
 

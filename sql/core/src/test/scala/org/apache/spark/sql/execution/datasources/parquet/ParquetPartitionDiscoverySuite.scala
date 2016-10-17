@@ -30,7 +30,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitionDirectory => Partition, PartitioningUtils, PartitionSpec}
+import org.apache.spark.sql.execution.datasources.{FileCatalog, HadoopFsRelation, LogicalRelation, PartitionDirectory => Partition, PartitioningUtils, PartitionSpec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -404,7 +404,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
       spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           for {
@@ -488,7 +488,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
       spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           for {
@@ -537,7 +537,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
       parquetRelation.createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           for {
@@ -577,7 +577,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
       parquetRelation.createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           for {
@@ -613,7 +613,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         .load(base.getCanonicalPath)
         .createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           (1 to 10).map(i => Row(i, null, 1)) ++ (1 to 10).map(i => Row(i, i.toString, 2)))
@@ -626,8 +626,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: HadoopFsRelation, _, _) =>
-          assert(relation.partitionSpec === PartitionSpec.emptySpec)
+        case LogicalRelation(HadoopFsRelation(location: FileCatalog, _, _, _, _, _), _, _) =>
+          assert(location.partitionSpec === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a ParquetRelation2, but got:\n$queryExecution")
       }

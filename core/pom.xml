@@ -25,7 +25,6 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-core_2.11</artifactId>
   <properties>
     <sbt.project.name>core</sbt.project.name>
@@ -127,6 +126,16 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-proxy</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-client</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlets</artifactId>
       <scope>compile</scope>
     </dependency>
@@ -215,11 +224,6 @@
     <dependency>
       <groupId>org.glassfish.jersey.containers</groupId>
       <artifactId>jersey-container-servlet-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.mesos</groupId>
-      <artifactId>mesos</artifactId>
-      <classifier>${mesos.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
@@ -316,7 +320,7 @@
     <dependency>
       <groupId>net.razorvine</groupId>
       <artifactId>pyrolite</artifactId>
-      <version>4.9</version>
+      <version>4.13</version>
       <exclusions>
         <exclusion>
           <groupId>net.razorvine</groupId>
@@ -327,11 +331,15 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.1</version>
+      <version>0.10.3</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-crypto</artifactId>
     </dependency>
   </dependencies>
   <build>
@@ -390,7 +398,7 @@
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
               <includeArtifactIds>
-                guava,jetty-io,jetty-servlet,jetty-servlets,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security
+                guava,jetty-io,jetty-servlet,jetty-servlets,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client
               </includeArtifactIds>
               <silent>true</silent>
             </configuration>
@@ -409,7 +417,6 @@
         </os>
       </activation>
       <properties>
-        <path.separator>\</path.separator>
         <script.extension>.bat</script.extension>
       </properties>
     </profile>
@@ -421,7 +428,6 @@
         </os>
       </activation>
       <properties>
-        <path.separator>/</path.separator>
         <script.extension>.sh</script.extension>
       </properties>
     </profile>
@@ -442,7 +448,7 @@
               </execution>
             </executions>
             <configuration>
-              <executable>..${path.separator}R${path.separator}install-dev${script.extension}</executable>
+              <executable>..${file.separator}R${file.separator}install-dev${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>

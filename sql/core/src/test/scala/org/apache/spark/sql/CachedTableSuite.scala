@@ -73,7 +73,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("cache temp table") {
-    withTempTable("tempTable") {
+    withTempView("tempTable") {
       testData.select('key).createOrReplaceTempView("tempTable")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"), 0)
       spark.catalog.cacheTable("tempTable")
@@ -97,7 +97,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("cache table as select") {
-    withTempTable("tempTable") {
+    withTempView("tempTable") {
       sql("CACHE TABLE tempTable AS SELECT key FROM testData")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"))
       spark.catalog.uncacheTable("tempTable")
@@ -227,7 +227,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
-    withTempTable("testCacheTable") {
+    withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT * FROM testData")
       assertCached(spark.table("testCacheTable"))
 
@@ -244,7 +244,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   }
 
   test("CACHE TABLE tableName AS SELECT ...") {
-    withTempTable("testCacheTable") {
+    withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT key FROM testData LIMIT 10")
       assertCached(spark.table("testCacheTable"))
 
@@ -413,7 +413,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     // Set up two tables distributed in the same way. Try this with the data distributed into
     // different number of partitions.
     for (numPartitions <- 1 until 10 by 4) {
-      withTempTable("t1", "t2") {
+      withTempView("t1", "t2") {
         testData.repartition(numPartitions, $"key").createOrReplaceTempView("t1")
         testData2.repartition(numPartitions, $"a").createOrReplaceTempView("t2")
         spark.catalog.cacheTable("t1")
@@ -435,7 +435,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
 
     // Distribute the tables into non-matching number of partitions. Need to shuffle one side.
-    withTempTable("t1", "t2") {
+    withTempView("t1", "t2") {
       testData.repartition(6, $"key").createOrReplaceTempView("t1")
       testData2.repartition(3, $"a").createOrReplaceTempView("t2")
       spark.catalog.cacheTable("t1")
@@ -452,7 +452,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
 
     // One side of join is not partitioned in the desired way. Need to shuffle one side.
-    withTempTable("t1", "t2") {
+    withTempView("t1", "t2") {
       testData.repartition(6, $"value").createOrReplaceTempView("t1")
       testData2.repartition(6, $"a").createOrReplaceTempView("t2")
       spark.catalog.cacheTable("t1")
@@ -468,7 +468,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       spark.catalog.uncacheTable("t2")
     }
 
-    withTempTable("t1", "t2") {
+    withTempView("t1", "t2") {
       testData.repartition(6, $"value").createOrReplaceTempView("t1")
       testData2.repartition(12, $"a").createOrReplaceTempView("t2")
       spark.catalog.cacheTable("t1")
@@ -487,7 +487,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     // One side of join is not partitioned in the desired way. Since the number of partitions of
     // the side that has already partitioned is smaller than the side that is not partitioned,
     // we shuffle both side.
-    withTempTable("t1", "t2") {
+    withTempView("t1", "t2") {
       testData.repartition(6, $"value").createOrReplaceTempView("t1")
       testData2.repartition(3, $"a").createOrReplaceTempView("t2")
       spark.catalog.cacheTable("t1")
@@ -504,7 +504,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
     // repartition's column ordering is different from group by column ordering.
     // But they use the same set of columns.
-    withTempTable("t1") {
+    withTempView("t1") {
       testData.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
       spark.catalog.cacheTable("t1")
 
@@ -520,7 +520,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     // We will still shuffle because hashcodes of a row depend on the column ordering.
     // If we do not shuffle, we may actually partition two tables in totally two different way.
     // See PartitioningSuite for more details.
-    withTempTable("t1", "t2") {
+    withTempView("t1", "t2") {
       val df1 = testData
       df1.repartition(6, $"value", $"key").createOrReplaceTempView("t1")
       val df2 = testData2.select($"a", $"b".cast("string"))

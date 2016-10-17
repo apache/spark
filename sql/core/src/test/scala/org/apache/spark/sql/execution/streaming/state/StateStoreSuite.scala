@@ -74,6 +74,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
     // Verify state after updating
     put(store, "a", 1)
+    assert(store.numKeys() === 1)
     intercept[IllegalStateException] {
       store.iterator()
     }
@@ -85,7 +86,9 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     // Make updates, commit and then verify state
     put(store, "b", 2)
     put(store, "aa", 3)
+    assert(store.numKeys() === 3)
     remove(store, _.startsWith("a"))
+    assert(store.numKeys() === 1)
     assert(store.commit() === 1)
 
     assert(store.hasCommitted)
@@ -107,7 +110,9 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val reloadedProvider = new HDFSBackedStateStoreProvider(
       store.id, keySchema, valueSchema, StateStoreConf.empty, new Configuration)
     val reloadedStore = reloadedProvider.getStore(1)
+    assert(reloadedStore.numKeys() === 1)
     put(reloadedStore, "c", 4)
+    assert(reloadedStore.numKeys() === 2)
     assert(reloadedStore.commit() === 2)
     assert(rowsToSet(reloadedStore.iterator()) === Set("b" -> 2, "c" -> 4))
     assert(getDataFromFiles(provider) === Set("b" -> 2, "c" -> 4))

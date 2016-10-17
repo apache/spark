@@ -28,11 +28,11 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -40,14 +40,18 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 
 /** A container for all the details required when writing to a table. */
-case class WriteRelation(
+private[datasources] case class WriteRelation(
     sparkSession: SparkSession,
     dataSchema: StructType,
     path: String,
     prepareJobForWrite: Job => OutputWriterFactory,
     bucketSpec: Option[BucketSpec])
 
-private[sql] abstract class BaseWriterContainer(
+object WriterContainer {
+  val DATASOURCE_WRITEJOBUUID = "spark.sql.sources.writeJobUUID"
+}
+
+private[datasources] abstract class BaseWriterContainer(
     @transient val relation: WriteRelation,
     @transient private val job: Job,
     isAppend: Boolean)
@@ -67,9 +71,6 @@ private[sql] abstract class BaseWriterContainer(
 
   // This is only used on driver side.
   @transient private val jobContext: JobContext = job
-
-  private val speculationEnabled: Boolean =
-    relation.sparkSession.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
 
   // The following fields are initialized and used on both driver and executor side.
   @transient protected var outputCommitter: OutputCommitter = _
@@ -93,7 +94,7 @@ private[sql] abstract class BaseWriterContainer(
     // This UUID is sent to executor side together with the serialized `Configuration` object within
     // the `Job` instance.  `OutputWriters` on the executor side should use this UUID to generate
     // unique task output files.
-    job.getConfiguration.set(DATASOURCE_WRITEJOBUUID, uniqueWriteJobId.toString)
+    job.getConfiguration.set(WriterContainer.DATASOURCE_WRITEJOBUUID, uniqueWriteJobId.toString)
 
     // Order of the following two lines is important.  For Hadoop 1, TaskAttemptContext constructor
     // clones the Configuration object passed in.  If we initialize the TaskAttemptContext first,
@@ -234,7 +235,7 @@ private[sql] abstract class BaseWriterContainer(
 /**
  * A writer that writes all of the rows in a partition to a single file.
  */
-private[sql] class DefaultWriterContainer(
+private[datasources] class DefaultWriterContainer(
     relation: WriteRelation,
     job: Job,
     isAppend: Boolean)
@@ -242,8 +243,6 @@ private[sql] class DefaultWriterContainer(
 
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     executorSideSetup(taskContext)
-    val configuration = taskAttemptContext.getConfiguration
-    configuration.set(DATASOURCE_OUTPUTPATH, outputPath)
     var writer = newOutputWriter(getWorkPath)
     writer.initConverter(dataSchema)
 
@@ -293,7 +292,7 @@ private[sql] class DefaultWriterContainer(
  * done by maintaining a HashMap of open files until `maxFiles` is reached.  If this occurs, the
  * writer externally sorts the remaining rows and then writes out them out one file at a time.
  */
-private[sql] class DynamicPartitionWriterContainer(
+private[datasources] class DynamicPartitionWriterContainer(
     relation: WriteRelation,
     job: Job,
     partitionColumns: Seq[Attribute],
@@ -348,13 +347,10 @@ private[sql] class DynamicPartitionWriterContainer(
   private def newOutputWriter(
       key: InternalRow,
       getPartitionString: UnsafeProjection): OutputWriter = {
-    val configuration = taskAttemptContext.getConfiguration
     val path = if (partitionColumns.nonEmpty) {
       val partitionPath = getPartitionString(key).getString(0)
-      configuration.set(DATASOURCE_OUTPUTPATH, new Path(outputPath, partitionPath).toString)
       new Path(getWorkPath, partitionPath).toString
     } else {
-      configuration.set(DATASOURCE_OUTPUTPATH, outputPath)
       getWorkPath
     }
     val bucketId = getBucketIdFromKey(key)

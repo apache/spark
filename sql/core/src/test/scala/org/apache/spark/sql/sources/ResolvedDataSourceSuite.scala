@@ -74,16 +74,16 @@ class ResolvedDataSourceSuite extends SparkFunSuite {
     val error1 = intercept[AnalysisException] {
       getProvidingClass("avro")
     }
-    assert(error1.getMessage.contains("spark-packages"))
+    assert(error1.getMessage.contains("Failed to find data source: avro."))
 
     val error2 = intercept[AnalysisException] {
       getProvidingClass("com.databricks.spark.avro")
     }
-    assert(error2.getMessage.contains("spark-packages"))
+    assert(error2.getMessage.contains("Failed to find data source: com.databricks.spark.avro."))
 
     val error3 = intercept[ClassNotFoundException] {
       getProvidingClass("asfdwefasdfasdf")
     }
-    assert(error3.getMessage.contains("spark-packages"))
+    assert(error3.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
   }
 }

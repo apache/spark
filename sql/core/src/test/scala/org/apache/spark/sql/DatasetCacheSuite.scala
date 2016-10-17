@@ -17,14 +17,33 @@
 
 package org.apache.spark.sql
 
-import scala.language.postfixOps
-
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.storage.StorageLevel
 
 
 class DatasetCacheSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  test("get storage level") {
+    val ds1 = Seq("1", "2").toDS().as("a")
+    val ds2 = Seq(2, 3).toDS().as("b")
+
+    // default storage level
+    ds1.persist()
+    ds2.cache()
+    assert(ds1.storageLevel == StorageLevel.MEMORY_AND_DISK)
+    assert(ds2.storageLevel == StorageLevel.MEMORY_AND_DISK)
+    // unpersist
+    ds1.unpersist()
+    assert(ds1.storageLevel == StorageLevel.NONE)
+    // non-default storage level
+    ds1.persist(StorageLevel.MEMORY_ONLY_2)
+    assert(ds1.storageLevel == StorageLevel.MEMORY_ONLY_2)
+    // joined Dataset should not be persisted
+    val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
+    assert(joined.storageLevel == StorageLevel.NONE)
+  }
 
   test("persist and unpersist") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS().select(expr("_2 + 1").as[Int])
@@ -39,8 +58,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
       2, 3, 4)
     // Drop the cache.
     cached.unpersist()
-    assert(spark.sharedState.cacheManager.lookupCachedData(cached).isEmpty,
-      "The Dataset should not be cached.")
+    assert(cached.storageLevel == StorageLevel.NONE, "The Dataset should not be cached.")
   }
 
   test("persist and then rebind right encoder when join 2 datasets") {
@@ -57,11 +75,9 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assertCached(joined, 2)
 
     ds1.unpersist()
-    assert(spark.sharedState.cacheManager.lookupCachedData(ds1).isEmpty,
-      "The Dataset ds1 should not be cached.")
+    assert(ds1.storageLevel == StorageLevel.NONE, "The Dataset ds1 should not be cached.")
     ds2.unpersist()
-    assert(spark.sharedState.cacheManager.lookupCachedData(ds2).isEmpty,
-      "The Dataset ds2 should not be cached.")
+    assert(ds2.storageLevel == StorageLevel.NONE, "The Dataset ds2 should not be cached.")
   }
 
   test("persist and then groupBy columns asKey, map") {
@@ -76,10 +92,8 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assertCached(agged.filter(_._1 == "b"))
 
     ds.unpersist()
-    assert(spark.sharedState.cacheManager.lookupCachedData(ds).isEmpty,
-      "The Dataset ds should not be cached.")
+    assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
     agged.unpersist()
-    assert(spark.sharedState.cacheManager.lookupCachedData(agged).isEmpty,
-      "The Dataset agged should not be cached.")
+    assert(agged.storageLevel == StorageLevel.NONE, "The Dataset agged should not be cached.")
   }
 }

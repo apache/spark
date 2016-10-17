@@ -295,7 +295,7 @@ trait Nondeterministic extends Expression {
  */
 abstract class LeafExpression extends Expression {
 
-  def children: Seq[Expression] = Nil
+  override final def children: Seq[Expression] = Nil
 }
 
 
@@ -307,7 +307,7 @@ abstract class UnaryExpression extends Expression {
 
   def child: Expression
 
-  override def children: Seq[Expression] = child :: Nil
+  override final def children: Seq[Expression] = child :: Nil
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -377,6 +377,7 @@ abstract class UnaryExpression extends Expression {
       """)
     } else {
       ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${childGen.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         $resultCode""", isNull = "false")
@@ -393,7 +394,7 @@ abstract class BinaryExpression extends Expression {
   def left: Expression
   def right: Expression
 
-  override def children: Seq[Expression] = Seq(left, right)
+  override final def children: Seq[Expression] = Seq(left, right)
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -475,6 +476,7 @@ abstract class BinaryExpression extends Expression {
       """)
     } else {
       ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${rightGen.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -524,7 +526,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 }
 
 
-private[sql] object BinaryOperator {
+object BinaryOperator {
   def unapply(e: BinaryOperator): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
@@ -617,6 +619,7 @@ abstract class TernaryExpression extends Expression {
         $nullSafeEval""")
     } else {
       ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}

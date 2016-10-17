@@ -61,7 +61,7 @@ class DataFrame(object):
         people = sqlContext.read.parquet("...")
         department = sqlContext.read.parquet("...")
 
-        people.filter(people.age > 30).join(department, people.deptId == department.id)\
+        people.filter(people.age > 30).join(department, people.deptId == department.id) \\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
     .. versionadded:: 1.3
@@ -131,7 +131,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createTempView(self, name):
-        """Creates a temporary view with this DataFrame.
+        """Creates a local temporary view with this DataFrame.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -153,7 +153,7 @@ class DataFrame(object):
 
     @since(2.0)
     def createOrReplaceTempView(self, name):
-        """Creates or replaces a temporary view with this DataFrame.
+        """Creates or replaces a local temporary view with this DataFrame.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -168,6 +168,27 @@ class DataFrame(object):
 
         """
         self._jdf.createOrReplaceTempView(name)
+
+    @since(2.1)
+    def createGlobalTempView(self, name):
+        """Creates a global temporary view with this DataFrame.
+
+        The lifetime of this temporary view is tied to this Spark application.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
+
+        >>> df.createGlobalTempView("people")
+        >>> df2 = spark.sql("select * from global_temp.people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
+        True
+        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        ...
+        AnalysisException: u"Temporary table 'people' already exists;"
+        >>> spark.catalog.dropGlobalTempView("people")
+
+        """
+        self._jdf.createGlobalTempView(name)
 
     @property
     @since(1.4)
@@ -196,7 +217,7 @@ class DataFrame(object):
     @property
     @since(1.3)
     def schema(self):
-        """Returns the schema of this :class:`DataFrame` as a :class:`types.StructType`.
+        """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 
         >>> df.schema
         StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
@@ -357,10 +378,7 @@ class DataFrame(object):
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
-            port = self._sc._jvm.org.apache.spark.sql.execution.python.EvaluatePython.takeAndServe(
-                self._jdf, num)
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+        return self.limit(num).collect()
 
     @since(1.3)
     def foreach(self, f):
@@ -389,23 +407,47 @@ class DataFrame(object):
 
     @since(1.3)
     def cache(self):
-        """ Persists with the default storage level (C{MEMORY_ONLY}).
+        """Persists the :class:`DataFrame` with the default storage level (C{MEMORY_AND_DISK}).
+
+        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         self._jdf.cache()
         return self
 
     @since(1.3)
-    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY):
-        """Sets the storage level to persist its values across operations
-        after the first time it is computed. This can only be used to assign
-        a new storage level if the RDD does not have a storage level set yet.
-        If no storage level is specified defaults to (C{MEMORY_ONLY}).
+    def persist(self, storageLevel=StorageLevel.MEMORY_AND_DISK):
+        """Sets the storage level to persist the contents of the :class:`DataFrame` across
+        operations after the first time it is computed. This can only be used to assign
+        a new storage level if the :class:`DataFrame` does not have a storage level set yet.
+        If no storage level is specified defaults to (C{MEMORY_AND_DISK}).
+
+        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
         self._jdf.persist(javaStorageLevel)
         return self
+
+    @property
+    @since(2.1)
+    def storageLevel(self):
+        """Get the :class:`DataFrame`'s current storage level.
+
+        >>> df.storageLevel
+        StorageLevel(False, False, False, False, 1)
+        >>> df.cache().storageLevel
+        StorageLevel(True, True, False, True, 1)
+        >>> df2.persist(StorageLevel.DISK_ONLY_2).storageLevel
+        StorageLevel(True, False, False, False, 2)
+        """
+        java_storage_level = self._jdf.storageLevel()
+        storage_level = StorageLevel(java_storage_level.useDisk(),
+                                     java_storage_level.useMemory(),
+                                     java_storage_level.useOffHeap(),
+                                     java_storage_level.deserialized(),
+                                     java_storage_level.replication())
+        return storage_level
 
     @since(1.3)
     def unpersist(self, blocking=False):
@@ -609,19 +651,38 @@ class DataFrame(object):
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
 
     @ignore_unicode_prefix
+    @since(2.1)
+    def crossJoin(self, other):
+        """Returns the cartesian product with another :class:`DataFrame`.
+
+        :param other: Right side of the cartesian product.
+
+        >>> df.select("age", "name").collect()
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        >>> df2.select("name", "height").collect()
+        [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85)]
+        >>> df.crossJoin(df2.select("height")).select("age", "name", "height").collect()
+        [Row(age=2, name=u'Alice', height=80), Row(age=2, name=u'Alice', height=85),
+         Row(age=5, name=u'Bob', height=80), Row(age=5, name=u'Bob', height=85)]
+        """
+
+        jdf = self._jdf.crossJoin(other._jdf)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @ignore_unicode_prefix
     @since(1.3)
     def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
-        The following performs a full outer join between ``df1`` and ``df2``.
-
         :param other: Right side of the join
-        :param on: a string for join column name, a list of column names,
-            , a join expression (Column) or a list of Columns.
-            If `on` is a string or a list of string indicating the name of the join column(s),
+        :param on: a string for the join column name, a list of column names,
+            a join expression (Column), or a list of Columns.
+            If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+
+        The following performs a full outer join between ``df1`` and ``df2``.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
@@ -643,25 +704,21 @@ class DataFrame(object):
         if on is not None and not isinstance(on, list):
             on = [on]
 
-        if on is None or len(on) == 0:
-            jdf = self._jdf.join(other._jdf)
-        elif isinstance(on[0], basestring):
-            if how is None:
-                jdf = self._jdf.join(other._jdf, self._jseq(on), "inner")
+        if on is not None:
+            if isinstance(on[0], basestring):
+                on = self._jseq(on)
             else:
-                assert isinstance(how, basestring), "how should be basestring"
-                jdf = self._jdf.join(other._jdf, self._jseq(on), how)
-        else:
-            assert isinstance(on[0], Column), "on should be Column or list of Column"
-            if len(on) > 1:
+                assert isinstance(on[0], Column), "on should be Column or list of Column"
                 on = reduce(lambda x, y: x.__and__(y), on)
-            else:
-                on = on[0]
+                on = on._jc
+
+        if on is None and how is None:
+            jdf = self._jdf.join(other._jdf)
+        else:
             if how is None:
-                jdf = self._jdf.join(other._jdf, on._jc, "inner")
-            else:
-                assert isinstance(how, basestring), "how should be basestring"
-                jdf = self._jdf.join(other._jdf, on._jc, how)
+                how = "inner"
+            assert isinstance(how, basestring), "how should be basestring"
+            jdf = self._jdf.join(other._jdf, on, how)
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.6)
@@ -1388,6 +1445,7 @@ class DataFrame(object):
     @since(1.3)
     def withColumnRenamed(self, existing, new):
         """Returns a new :class:`DataFrame` by renaming an existing column.
+        This is a no-op if schema doesn't contain the given column name.
 
         :param existing: string, name of the existing column to rename.
         :param col: string, new name of the column.
@@ -1399,11 +1457,12 @@ class DataFrame(object):
 
     @since(1.4)
     @ignore_unicode_prefix
-    def drop(self, col):
+    def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.
+        This is a no-op if schema doesn't contain the given column name(s).
 
-        :param col: a string name of the column to drop, or a
-            :class:`Column` to drop.
+        :param cols: a string name of the column to drop, or a
+            :class:`Column` to drop, or a list of string name of the columns to drop.
 
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
@@ -1416,13 +1475,24 @@ class DataFrame(object):
 
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
         [Row(age=5, name=u'Bob', height=85)]
+
+        >>> df.join(df2, 'name', 'inner').drop('age', 'height').collect()
+        [Row(name=u'Bob')]
         """
-        if isinstance(col, basestring):
-            jdf = self._jdf.drop(col)
-        elif isinstance(col, Column):
-            jdf = self._jdf.drop(col._jc)
+        if len(cols) == 1:
+            col = cols[0]
+            if isinstance(col, basestring):
+                jdf = self._jdf.drop(col)
+            elif isinstance(col, Column):
+                jdf = self._jdf.drop(col._jc)
+            else:
+                raise TypeError("col should be a string or a Column")
         else:
-            raise TypeError("col should be a string or a Column")
+            for col in cols:
+                if not isinstance(col, basestring):
+                    raise TypeError("each col in the param list should be a string")
+            jdf = self._jdf.drop(self._jseq(cols))
+
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix

@@ -83,18 +83,7 @@ In Mesos coarse-grained mode, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.
 slave nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
 through Marathon.
 
-In YARN mode, start the shuffle service on each `NodeManager` as follows:
-
-1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
-pre-packaged distribution.
-2. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
-`$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under
-`lib` if you are using a distribution.
-2. Add this jar to the classpath of all `NodeManager`s in your cluster.
-3. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
-then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
-`org.apache.spark.network.yarn.YarnShuffleService`.
-4. Restart all `NodeManager`s in your cluster.
+In YARN mode, follow the instructions [here](running-on-yarn.html#configuring-the-external-shuffle-service).
 
 All other relevant configurations are optional and under the `spark.dynamicAllocation.*` and
 `spark.shuffle.service.*` namespaces. For more detail, see the

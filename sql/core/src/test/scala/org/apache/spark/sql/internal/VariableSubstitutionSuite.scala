@@ -57,22 +57,4 @@ class VariableSubstitutionSuite extends SparkFunSuite {
     assert(sub.substitute(q) == "select 1 1 this is great")
   }
 
-  test("depth limit") {
-    val q = "select ${bar} ${foo} ${doo}"
-    conf.setConfString(SQLConf.VARIABLE_SUBSTITUTE_DEPTH.key, "2")
-
-    // This should be OK since it is not nested.
-    conf.setConfString("bar", "1")
-    conf.setConfString("foo", "2")
-    conf.setConfString("doo", "3")
-    assert(sub.substitute(q) == "select 1 2 3")
-
-    // This should not be OK since it is nested in 3 levels.
-    conf.setConfString("bar", "1")
-    conf.setConfString("foo", "${bar}")
-    conf.setConfString("doo", "${foo}")
-    intercept[AnalysisException] {
-      sub.substitute(q)
-    }
-  }
 }

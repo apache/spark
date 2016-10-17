@@ -151,8 +151,8 @@ class CategoricalSplit private[ml] (
 /**
  * Split which tests a continuous feature.
  * @param featureIndex  Index of the feature to test
- * @param threshold  If the feature value is <= this threshold, then the split goes left.
- *                    Otherwise, it goes right.
+ * @param threshold  If the feature value is less than or equal to this threshold, then the
+ *                   split goes left. Otherwise, it goes right.
  */
 class ContinuousSplit private[ml] (override val featureIndex: Int, val threshold: Double)
   extends Split {

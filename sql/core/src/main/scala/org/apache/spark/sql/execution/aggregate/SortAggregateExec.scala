@@ -49,7 +49,7 @@ case class SortAggregateExec(
       AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
       AttributeSet(aggregateBufferAttributes)
 
-  override private[sql] lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
@@ -111,9 +111,9 @@ case class SortAggregateExec(
   private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions
 
-    val keyString = Utils.truncatedString(groupingExpressions, "[", ",", "]")
-    val functionString = Utils.truncatedString(allAggregateExpressions, "[", ",", "]")
-    val outputString = Utils.truncatedString(output, "[", ",", "]")
+    val keyString = Utils.truncatedString(groupingExpressions, "[", ", ", "]")
+    val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
+    val outputString = Utils.truncatedString(output, "[", ", ", "]")
     if (verbose) {
       s"SortAggregate(key=$keyString, functions=$functionString, output=$outputString)"
     } else {

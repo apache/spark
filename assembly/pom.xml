@@ -25,7 +25,6 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-assembly_2.11</artifactId>
   <name>Spark Project Assembly</name>
   <url>http://spark.apache.org/</url>
@@ -135,6 +134,16 @@
         <dependency>
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-yarn_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>mesos</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-mesos_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

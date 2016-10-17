@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.streaming.StreamingQuery
 
 /**
@@ -68,7 +68,10 @@ import org.apache.spark.sql.streaming.StreamingQuery
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 abstract class ForeachWriter[T] extends Serializable {
+
+  // TODO: Move this to org.apache.spark.sql.util or consolidate this with batch API.
 
   /**
    * Called when starting to process one partition of new data in the executor. The `version` is

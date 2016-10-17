@@ -35,9 +35,7 @@ import org.apache.spark.sql.types._
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
  * wrapped in `ExecutedCommand` during execution.
  */
-private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
-  override def output: Seq[Attribute] = Seq.empty
-  override def children: Seq[LogicalPlan] = Seq.empty
+trait RunnableCommand extends logical.Command {
   def run(sparkSession: SparkSession): Seq[Row]
 }
 
@@ -45,7 +43,7 @@ private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
  * A physical operator that executes the run method of a `RunnableCommand` and
  * saves the result to prevent multiple executions.
  */
-private[sql] case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkPlan {
+case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkPlan {
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
    * command or any other computation that should be evaluated exactly once. The value of this field

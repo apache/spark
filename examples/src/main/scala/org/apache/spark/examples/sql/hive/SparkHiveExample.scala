@@ -87,7 +87,7 @@ object SparkHiveExample {
     // |Key: 0, Value: val_0|
     // ...
 
-    // You can also use DataFrames to create temporary views within a HiveContext.
+    // You can also use DataFrames to create temporary views within a SparkSession.
     val recordsDF = spark.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
     recordsDF.createOrReplaceTempView("records")
 
@@ -97,8 +97,8 @@ object SparkHiveExample {
     // |key| value|key| value|
     // +---+------+---+------+
     // |  2| val_2|  2| val_2|
-    // |  2| val_2|  2| val_2|
     // |  4| val_4|  4| val_4|
+    // |  5| val_5|  5| val_5|
     // ...
     // $example off:spark_hive$
 

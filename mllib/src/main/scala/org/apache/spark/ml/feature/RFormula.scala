@@ -26,7 +26,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.VectorUDT
-import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -104,6 +104,27 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  /**
+   * Force to index label whether it is numeric or string type.
+   * Usually we index label only when it is string type.
+   * If the formula was used by classification algorithms,
+   * we can force to index label even it is numeric type by setting this param with true.
+   * Default: false.
+   * @group param
+   */
+  @Since("2.1.0")
+  val forceIndexLabel: BooleanParam = new BooleanParam(this, "forceIndexLabel",
+    "Force to index label whether it is numeric or string")
+  setDefault(forceIndexLabel -> false)
+
+  /** @group getParam */
+  @Since("2.1.0")
+  def getForceIndexLabel: Boolean = $(forceIndexLabel)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setForceIndexLabel(value: Boolean): this.type = set(forceIndexLabel, value)
+
   /** Whether the formula specifies fitting an intercept. */
   private[ml] def hasIntercept: Boolean = {
     require(isDefined(formula), "Formula must be defined first.")
@@ -112,6 +133,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): RFormulaModel = {
+    transformSchema(dataset.schema, logging = true)
     require(isDefined(formula), "Formula must be defined first.")
     val parsedFormula = RFormulaParser.parse($(formula))
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
@@ -166,8 +188,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     encoderStages += new VectorAttributeRewriter($(featuresCol), prefixesToRewrite.toMap)
     encoderStages += new ColumnPruner(tempColumns.toSet)
 
-    if (dataset.schema.fieldNames.contains(resolvedFormula.label) &&
-      dataset.schema(resolvedFormula.label).dataType == StringType) {
+    if ((dataset.schema.fieldNames.contains(resolvedFormula.label) &&
+      dataset.schema(resolvedFormula.label).dataType == StringType) || $(forceIndexLabel)) {
       encoderStages += new StringIndexer()
         .setInputCol(resolvedFormula.label)
         .setOutputCol($(labelCol))
@@ -180,6 +202,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
+    require(!hasLabelCol(schema) || !$(forceIndexLabel),
+      "If label column already exists, forceIndexLabel can not be set with true.")
     if (hasLabelCol(schema)) {
       StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
     } else {

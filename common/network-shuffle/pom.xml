@@ -26,7 +26,6 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-network-shuffle_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Shuffle Streaming Service</name>
@@ -44,24 +43,8 @@
     </dependency>
 
     <dependency>
-      <groupId>org.fusesource.leveldbjni</groupId>
-      <artifactId>leveldbjni-all</artifactId>
-      <version>1.8</version>
-    </dependency>
-
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
-    </dependency>
-
-    <dependency>
       <groupId>io.dropwizard.metrics</groupId>
       <artifactId>metrics-core</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-annotations</artifactId>
     </dependency>
 
     <!-- Provided dependencies -->

@@ -48,7 +48,7 @@ if [ "$SPARK_MASTER_PORT" = "" ]; then
 fi
 
 if [ "$SPARK_MASTER_HOST" = "" ]; then
-  SPARK_MASTER_HOST=`hostname`
+  SPARK_MASTER_HOST=`hostname -f`
 fi
 
 if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then

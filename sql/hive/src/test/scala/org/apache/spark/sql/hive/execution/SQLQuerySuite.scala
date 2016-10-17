@@ -19,14 +19,16 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
+import scala.sys.process.{Process, ProcessLogger}
+import scala.util.Try
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
@@ -62,6 +64,21 @@ case class Order(
 class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
+
+  test("script") {
+    val scriptFilePath = getTestResourcePath("test_script.sh")
+    if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
+      val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
+      df.createOrReplaceTempView("script_table")
+      val query1 = sql(
+        s"""
+          |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
+          |REDUCE c1, c2, c3 USING 'bash $scriptFilePath' AS
+          |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
+      checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
+    }
+    // else skip this test
+  }
 
   test("UDTF") {
     withUserDefinedFunction("udtf_count2" -> true) {
@@ -111,7 +128,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-13651: generator outputs shouldn't be resolved from its child's output") {
-    withTempTable("src") {
+    withTempView("src") {
       Seq(("id1", "value1")).toDF("key", "value").createOrReplaceTempView("src")
       val query =
         sql("SELECT genoutput.* FROM src " +
@@ -325,6 +342,81 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("describe partition") {
+    withTable("partitioned_table") {
+      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
+      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
+
+      checkKeywordsExist(sql("DESC partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name")
+
+      checkKeywordsExist(sql("DESC EXTENDED partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name",
+        "Detailed Partition Information CatalogPartition(",
+        "Partition Values: [Us, 1]",
+        "Storage(Location:",
+        "Partition Parameters")
+
+      checkKeywordsExist(sql("DESC FORMATTED partitioned_table PARTITION (c='Us', d=1)"),
+        "# Partition Information",
+        "# col_name",
+        "# Detailed Partition Information",
+        "Partition Value:",
+        "Database:",
+        "Table:",
+        "Location:",
+        "Partition Parameters:",
+        "# Storage Information")
+    }
+  }
+
+  test("describe partition - error handling") {
+    withTable("partitioned_table", "datasource_table") {
+      sql("CREATE TABLE partitioned_table (a STRING, b INT) PARTITIONED BY (c STRING, d STRING)")
+      sql("ALTER TABLE partitioned_table ADD PARTITION (c='Us', d=1)")
+
+      val m = intercept[NoSuchPartitionException] {
+        sql("DESC partitioned_table PARTITION (c='Us', d=2)")
+      }.getMessage()
+      assert(m.contains("Partition not found in table"))
+
+      val m2 = intercept[AnalysisException] {
+        sql("DESC partitioned_table PARTITION (c='Us')")
+      }.getMessage()
+      assert(m2.contains("Partition spec is invalid"))
+
+      val m3 = intercept[ParseException] {
+        sql("DESC partitioned_table PARTITION (c='Us', d)")
+      }.getMessage()
+      assert(m3.contains("PARTITION specification is incomplete: `d`"))
+
+      spark
+        .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
+        .partitionBy("d")
+        .saveAsTable("datasource_table")
+      val m4 = intercept[AnalysisException] {
+        sql("DESC datasource_table PARTITION (d=2)")
+      }.getMessage()
+      assert(m4.contains("DESC PARTITION is not allowed on a datasource table"))
+
+      val m5 = intercept[AnalysisException] {
+        spark.range(10).select('id as 'a, 'id as 'b).createTempView("view1")
+        sql("DESC view1 PARTITION (c='Us', d=1)")
+      }.getMessage()
+      assert(m5.contains("DESC PARTITION is not allowed on a temporary view"))
+
+      withView("permanent_view") {
+        val m = intercept[AnalysisException] {
+          sql("CREATE VIEW permanent_view AS SELECT * FROM partitioned_table")
+          sql("DESC permanent_view PARTITION (c='Us', d=1)")
+        }.getMessage()
+        assert(m.contains("DESC PARTITION is not allowed on a view"))
+      }
+    }
+  }
+
   test("SPARK-5371: union with null and sum") {
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.createOrReplaceTempView("table1")
@@ -419,8 +511,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             assert(r.options("path") === location)
           case None => // OK.
         }
-        assert(
-          catalogTable.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER) === format)
+        assert(catalogTable.provider.get === format)
 
       case r: MetastoreRelation =>
         if (isDataSourceParquet) {
@@ -625,19 +716,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("specifying the column list for CTAS") {
-    Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
+    withTempView("mytable1") {
+      Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
+      withTable("gen__tmp") {
+        sql("create table gen__tmp as select key as a, value as b from mytable1")
+        checkAnswer(
+          sql("SELECT a, b from gen__tmp"),
+          sql("select key, value from mytable1").collect())
+      }
 
-    sql("create table gen__tmp as select key as a, value as b from mytable1")
-    checkAnswer(
-      sql("SELECT a, b from gen__tmp"),
-      sql("select key, value from mytable1").collect())
-    sql("DROP TABLE gen__tmp")
+      withTable("gen__tmp") {
+        val e = intercept[AnalysisException] {
+          sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+        }.getMessage
+        assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
+      }
 
-    intercept[AnalysisException] {
-      sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+      withTable("gen__tmp") {
+        val e = intercept[AnalysisException] {
+          sql(
+            """
+              |CREATE TABLE gen__tmp
+              |PARTITIONED BY (key string)
+              |AS SELECT key, value FROM mytable1
+            """.stripMargin)
+        }.getMessage
+        assert(e.contains("A Create Table As Select (CTAS) statement is not allowed to " +
+          "create a partitioned table using Hive's file formats"))
+      }
     }
-
-    sql("drop table mytable1")
   }
 
   test("command substitution") {
@@ -941,7 +1048,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("Sorting columns are not in Generate") {
-    withTempTable("data") {
+    withTempView("data") {
       spark.range(1, 5)
         .select(array($"id", $"id" + 1).as("a"), $"id".as("b"), (lit(10) - $"id").as("c"))
         .createOrReplaceTempView("data")
@@ -1184,11 +1291,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .selectExpr("id AS a", "id AS b")
       .createOrReplaceTempView("test")
 
+    val scriptFilePath = getTestResourcePath("data")
     checkAnswer(
       sql(
-        """FROM(
+        s"""FROM(
           |  FROM test SELECT TRANSFORM(a, b)
-          |  USING 'python src/test/resources/data/scripts/test_transform.py "\t"'
+          |  USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
           |  AS (c STRING, d STRING)
           |) t
           |SELECT c
@@ -1202,12 +1310,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .selectExpr("id AS a", "id AS b")
       .createOrReplaceTempView("test")
 
+    val scriptFilePath = getTestResourcePath("data")
     val df = sql(
-      """FROM test
+      s"""FROM test
         |SELECT TRANSFORM(a, b)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |WITH SERDEPROPERTIES('field.delim' = '|')
-        |USING 'python src/test/resources/data/scripts/test_transform.py "|"'
+        |USING 'python $scriptFilePath/scripts/test_transform.py "|"'
         |AS (c STRING, d STRING)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |WITH SERDEPROPERTIES('field.delim' = '|')
@@ -1218,7 +1327,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-10741: Sort on Aggregate using parquet") {
     withTable("test10741") {
-      withTempTable("src") {
+      withTempView("src") {
         Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF("c1", "c2").createOrReplaceTempView("src")
         sql("CREATE TABLE test10741 STORED AS PARQUET AS SELECT * FROM src")
       }
@@ -1472,7 +1581,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("multi-insert with lateral view") {
-    withTempTable("t1") {
+    withTempView("t1") {
       spark.range(10)
         .select(array($"id", $"id" + 1).as("arr"), $"id")
         .createOrReplaceTempView("source")
@@ -1754,5 +1863,31 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           Row(2))
       }
     }
+  }
+
+  test("SPARK-17354: Partitioning by dates/timestamps works with Parquet vectorized reader") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      sql(
+        """CREATE TABLE order(id INT)
+          |PARTITIONED BY (pd DATE, pt TIMESTAMP)
+          |STORED AS PARQUET
+        """.stripMargin)
+
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      sql(
+        """INSERT INTO TABLE order PARTITION(pd, pt)
+          |SELECT 1 AS id, CAST('1990-02-24' AS DATE) AS pd, CAST('1990-02-24' AS TIMESTAMP) AS pt
+        """.stripMargin)
+      val actual = sql("SELECT * FROM order")
+      val expected = sql(
+        "SELECT 1 AS id, CAST('1990-02-24' AS DATE) AS pd, CAST('1990-02-24' AS TIMESTAMP) AS pt")
+      checkAnswer(actual, expected)
+      sql("DROP TABLE order")
+    }
+  }
+
+  def testCommandAvailable(command: String): Boolean = {
+    val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
+    attempt.isSuccess && attempt.get == 0
   }
 }

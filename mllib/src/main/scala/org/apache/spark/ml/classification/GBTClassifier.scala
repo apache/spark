@@ -40,7 +40,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
  * learning algorithm for classification.
  * It supports binary labels, as well as both continuous and categorical features.
  * Note: Multiclass labels are not currently supported.
@@ -158,7 +158,7 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
 }
 
 /**
- * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
  * model for classification.
  * It supports binary labels, as well as both continuous and categorical features.
  * Note: Multiclass labels are not currently supported.
@@ -233,8 +233,8 @@ class GBTClassificationModel private[ml](
    * The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
    * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
    * and follows the implementation from scikit-learn.
-   *
-   * @see [[DecisionTreeClassificationModel.featureImportances]]
+
+   * See `DecisionTreeClassificationModel.featureImportances`
    */
   @Since("2.0.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
