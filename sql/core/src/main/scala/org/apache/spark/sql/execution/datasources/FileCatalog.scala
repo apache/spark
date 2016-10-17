@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
  * A collection of data files from a partitioned relation, along with the partition values in the
  * form of an [[InternalRow]].
  */
-case class Partition(values: InternalRow, files: Seq[FileStatus])
+case class PartitionFiles(values: InternalRow, files: Seq[FileStatus])
 
 /**
  * An interface for objects capable of enumerating the root paths of a relation as well as the
@@ -50,7 +50,7 @@ trait FileCatalog {
    *                where these predicates are guaranteed to evaluate to `true`.  Thus, these
    *                filters will not need to be evaluated again on the returned data.
    */
-  def listFiles(filters: Seq[Expression]): Seq[Partition]
+  def listFiles(filters: Seq[Expression]): Seq[PartitionFiles]
 
   /**
    * Returns the list of files that will be read when scanning this relation. This call may be

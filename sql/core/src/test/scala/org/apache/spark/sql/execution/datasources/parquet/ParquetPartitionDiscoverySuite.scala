@@ -630,7 +630,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
             HadoopFsRelation(location: PartitioningAwareFileCatalog, _, _, _, _, _), _, _) =>
           assert(location.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {
-        fail(s"Expecting a ParquetRelation2, but got:\n$queryExecution")
+        fail(s"Expecting a matching HadoopFsRelation, but got:\n$queryExecution")
       }
     }
   }

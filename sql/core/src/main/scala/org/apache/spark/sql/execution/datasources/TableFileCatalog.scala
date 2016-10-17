@@ -50,7 +50,7 @@ class TableFileCatalog(
 
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
-  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
+  override def listFiles(filters: Seq[Expression]): Seq[PartitionFiles] = {
     filterPartitions(filters).listFiles(Nil)
   }
 

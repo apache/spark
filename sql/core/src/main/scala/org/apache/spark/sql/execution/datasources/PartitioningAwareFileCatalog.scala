@@ -57,9 +57,9 @@ abstract class PartitioningAwareFileCatalog(
 
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
-  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
+  override def listFiles(filters: Seq[Expression]): Seq[PartitionFiles] = {
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
+      PartitionFiles(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
         case PartitionDirectory(values, path) =>
@@ -72,7 +72,7 @@ abstract class PartitioningAwareFileCatalog(
               // Directory does not exist, or has no children files
               Nil
           }
-          Partition(values, files)
+          PartitionFiles(values, files)
       }
     }
     logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))
