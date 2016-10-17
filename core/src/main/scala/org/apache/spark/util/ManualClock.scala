@@ -27,6 +27,7 @@ package org.apache.spark.util
 private[spark] class ManualClock(private var time: Long) extends Clock {
 
   private var _isWaiting = false
+  private var _readyForFirstPeek = false
 
   /**
    * @return `ManualClock` with initial time 0
@@ -43,14 +44,19 @@ private[spark] class ManualClock(private var time: Long) extends Clock {
    */
   def setTime(timeToSet: Long): Unit = synchronized {
     time = timeToSet
+    _readyForFirstPeek = false
     notifyAll()
   }
 
   /**
+   * Note: if we don't want to advance too early, we should place a `isWaitingAndReadyForFirstPeek`
+   * guard before we call this. See SPARK-16002. See also `[sql] StreamTest#AdvanceManualClock`.
+   *
    * @param timeToAdd time (in milliseconds) to add to the clock's time
    */
   def advance(timeToAdd: Long): Unit = synchronized {
     time += timeToAdd
+    _readyForFirstPeek = false
     notifyAll()
   }
 
@@ -60,6 +66,7 @@ private[spark] class ManualClock(private var time: Long) extends Clock {
    */
   def waitTillTime(targetTime: Long): Long = synchronized {
     _isWaiting = true
+    _readyForFirstPeek = true
     try {
       while (time < targetTime) {
         wait(10)
@@ -67,11 +74,13 @@ private[spark] class ManualClock(private var time: Long) extends Clock {
       getTimeMillis()
     } finally {
       _isWaiting = false
+      _readyForFirstPeek = false
     }
   }
 
   /**
-   * Returns whether there is any thread being blocked in `waitTillTime`.
+   * Returns whether there is any thread being blocked in `waitTillTime`, and this will be the first
+   * time it's been peeked in the blocking state.
    */
-  def isWaiting: Boolean = synchronized { _isWaiting }
+  def isWaiting: Boolean = synchronized { _isWaiting && _readyForFirstPeek }
 }
