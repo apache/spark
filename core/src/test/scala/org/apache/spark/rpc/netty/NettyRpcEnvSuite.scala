@@ -27,8 +27,8 @@ class NettyRpcEnvSuite extends RpcEnvSuite {
       name: String,
       port: Int,
       clientMode: Boolean = false): RpcEnv = {
-    val config = RpcEnvConfig(conf, "test", "localhost", port, new SecurityManager(conf),
-      clientMode)
+    val config = RpcEnvConfig(conf, "test", "localhost", "localhost", port,
+      new SecurityManager(conf), clientMode)
     new NettyRpcEnvFactory().create(config)
   }
 
@@ -39,6 +39,18 @@ class NettyRpcEnvSuite extends RpcEnvSuite {
     }
     assert(e.getCause.isInstanceOf[RpcEndpointNotFoundException])
     assert(e.getCause.getMessage.contains(uri))
+  }
+
+  test("advertise address different from bind address") {
+    val sparkConf = new SparkConf()
+    val config = RpcEnvConfig(sparkConf, "test", "localhost", "example.com", 0,
+      new SecurityManager(sparkConf), false)
+    val env = new NettyRpcEnvFactory().create(config)
+    try {
+      assert(env.address.hostPort.startsWith("example.com:"))
+    } finally {
+      env.shutdown()
+    }
   }
 
 }

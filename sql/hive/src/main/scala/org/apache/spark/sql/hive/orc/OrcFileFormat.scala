@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, Re
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -146,12 +147,15 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
         }
 
+        val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
+        Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => recordsIterator.close()))
+
         // Unwraps `OrcStruct`s to `UnsafeRow`s
         OrcRelation.unwrapOrcStructs(
           conf,
           requiredSchema,
           Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
-          new RecordReaderIterator[OrcStruct](orcRecordReader))
+          recordsIterator)
       }
     }
   }
@@ -190,7 +194,8 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
       row: InternalRow): Unit = {
     val fieldRefs = oi.getAllStructFieldRefs
     var i = 0
-    while (i < fieldRefs.size) {
+    val size = fieldRefs.size
+    while (i < size) {
 
       oi.setStructFieldData(
         struct,
@@ -276,7 +281,7 @@ private[orc] object OrcRelation extends HiveInspectors {
       maybeStructOI: Option[StructObjectInspector],
       iterator: Iterator[Writable]): Iterator[InternalRow] = {
     val deserializer = new OrcSerde
-    val mutableRow = new SpecificMutableRow(dataSchema.map(_.dataType))
+    val mutableRow = new SpecificInternalRow(dataSchema.map(_.dataType))
     val unsafeProjection = UnsafeProjection.create(dataSchema)
 
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
@@ -289,7 +294,8 @@ private[orc] object OrcRelation extends HiveInspectors {
       iterator.map { value =>
         val raw = deserializer.deserialize(value)
         var i = 0
-        while (i < fieldRefs.length) {
+        val length = fieldRefs.length
+        while (i < length) {
           val fieldValue = oi.getStructFieldData(raw, fieldRefs(i))
           if (fieldValue == null) {
             mutableRow.setNullAt(fieldOrdinals(i))
@@ -307,7 +313,17 @@ private[orc] object OrcRelation extends HiveInspectors {
 
   def setRequiredColumns(
       conf: Configuration, physicalSchema: StructType, requestedSchema: StructType): Unit = {
-    val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
+    val caseInsensitiveFieldMap: Map[String, Int] = physicalSchema.fieldNames
+      .zipWithIndex
+      .map(f => (f._1.toLowerCase, f._2))
+      .toMap
+    val ids = requestedSchema.map { a =>
+      val exactMatch: Option[Int] = physicalSchema.getFieldIndex(a.name)
+      val res = exactMatch.getOrElse(
+        caseInsensitiveFieldMap.getOrElse(a.name,
+          throw new IllegalArgumentException(s"""Field "$a.name" does not exist.""")))
+      res: Integer
+    }
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
   }

@@ -36,8 +36,8 @@ final class TestProbabilisticClassificationModel(
     rawPrediction
   }
 
-  def friendlyPredict(input: Vector): Double = {
-    predict(input)
+  def friendlyPredict(values: Double*): Double = {
+    predict(Vectors.dense(values.toArray))
   }
 }
 
@@ -45,16 +45,37 @@ final class TestProbabilisticClassificationModel(
 class ProbabilisticClassifierSuite extends SparkFunSuite {
 
   test("test thresholding") {
-    val thresholds = Array(0.5, 0.2)
     val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
-      .setThresholds(thresholds)
-    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 1.0))) === 1.0)
-    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 0.2))) === 0.0)
+      .setThresholds(Array(0.5, 0.2))
+    assert(testModel.friendlyPredict(1.0, 1.0) === 1.0)
+    assert(testModel.friendlyPredict(1.0, 0.2) === 0.0)
   }
 
   test("test thresholding not required") {
     val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
-    assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 2.0))) === 1.0)
+    assert(testModel.friendlyPredict(1.0, 2.0) === 1.0)
+  }
+
+  test("test tiebreak") {
+    val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
+      .setThresholds(Array(0.4, 0.4))
+    assert(testModel.friendlyPredict(0.6, 0.6) === 0.0)
+  }
+
+  test("test one zero threshold") {
+    val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
+      .setThresholds(Array(0.0, 0.1))
+    assert(testModel.friendlyPredict(1.0, 10.0) === 0.0)
+    assert(testModel.friendlyPredict(0.0, 10.0) === 1.0)
+  }
+
+  test("bad thresholds") {
+    intercept[IllegalArgumentException] {
+      new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(Array(0.0, 0.0))
+    }
+    intercept[IllegalArgumentException] {
+      new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(Array(-0.1, 0.1))
+    }
   }
 }
 

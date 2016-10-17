@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -27,7 +27,6 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 /**
- * ::DeveloperApi::
  * Data sources should implement this trait so that they can register an alias to their data source.
  * This allows users to give the data source alias as the format type over the fully qualified
  * class name.
@@ -36,7 +35,7 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 1.5.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 trait DataSourceRegister {
 
   /**
@@ -53,7 +52,6 @@ trait DataSourceRegister {
 }
 
 /**
- * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source.  When
  * Spark SQL is given a DDL operation with a USING clause specified (to specify the implemented
  * RelationProvider), this interface is used to pass in the parameters specified by a user.
@@ -67,7 +65,7 @@ trait DataSourceRegister {
  *
  * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 trait RelationProvider {
   /**
    * Returns a new base relation with the given parameters.
@@ -78,7 +76,6 @@ trait RelationProvider {
 }
 
 /**
- * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source
  * with a given schema.  When Spark SQL is given a DDL operation with a USING clause specified (
  * to specify the implemented SchemaRelationProvider) and a user defined schema, this interface
@@ -98,7 +95,7 @@ trait RelationProvider {
  *
  * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 trait SchemaRelationProvider {
   /**
    * Returns a new base relation with the given parameters and user defined schema.
@@ -112,17 +109,28 @@ trait SchemaRelationProvider {
 }
 
 /**
+ * ::Experimental::
  * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
+ *
+ * @since 2.0.0
  */
+@Experimental
+@InterfaceStability.Unstable
 trait StreamSourceProvider {
 
-  /** Returns the name and schema of the source that can be used to continually read data. */
+  /**
+   * Returns the name and schema of the source that can be used to continually read data.
+   * @since 2.0.0
+   */
   def sourceSchema(
       sqlContext: SQLContext,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): (String, StructType)
 
+  /**
+   * @since 2.0.0
+   */
   def createSource(
       sqlContext: SQLContext,
       metadataPath: String,
@@ -132,8 +140,13 @@ trait StreamSourceProvider {
 }
 
 /**
+ * ::Experimental::
  * Implemented by objects that can produce a streaming [[Sink]] for a specific format or system.
+ *
+ * @since 2.0.0
  */
+@Experimental
+@InterfaceStability.Unstable
 trait StreamSinkProvider {
   def createSink(
       sqlContext: SQLContext,
@@ -145,7 +158,7 @@ trait StreamSinkProvider {
 /**
  * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 trait CreatableRelationProvider {
   /**
    * Save the DataFrame to the destination and return a relation with the given parameters based on
@@ -169,7 +182,6 @@ trait CreatableRelationProvider {
 }
 
 /**
- * ::DeveloperApi::
  * Represents a collection of tuples with a known schema. Classes that extend BaseRelation must
  * be able to produce the schema of their data in the form of a [[StructType]]. Concrete
  * implementation should inherit from one of the descendant `Scan` classes, which define various
@@ -181,7 +193,7 @@ trait CreatableRelationProvider {
  *
  * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 abstract class BaseRelation {
   def sqlContext: SQLContext
   def schema: StructType
@@ -227,30 +239,27 @@ abstract class BaseRelation {
 }
 
 /**
- * ::DeveloperApi::
  * A BaseRelation that can produce all of its tuples as an RDD of Row objects.
  *
  * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 trait TableScan {
   def buildScan(): RDD[Row]
 }
 
 /**
- * ::DeveloperApi::
  * A BaseRelation that can eliminate unneeded columns before producing an RDD
  * containing all of its tuples as Row objects.
  *
  * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 trait PrunedScan {
   def buildScan(requiredColumns: Array[String]): RDD[Row]
 }
 
 /**
- * ::DeveloperApi::
  * A BaseRelation that can eliminate unneeded columns and filter using selected
  * predicates before producing an RDD containing all matching tuples as Row objects.
  *
@@ -263,13 +272,12 @@ trait PrunedScan {
  *
  * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 trait PrunedFilteredScan {
   def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row]
 }
 
 /**
- * ::DeveloperApi::
  * A BaseRelation that can be used to insert data into it through the insert method.
  * If overwrite in insert method is true, the old data in the relation should be overwritten with
  * the new data. If overwrite in insert method is false, the new data should be appended.
@@ -286,7 +294,7 @@ trait PrunedFilteredScan {
  *
  * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 trait InsertableRelation {
   def insert(data: DataFrame, overwrite: Boolean): Unit
 }
@@ -302,6 +310,7 @@ trait InsertableRelation {
  * @since 1.3.0
  */
 @Experimental
+@InterfaceStability.Unstable
 trait CatalystScan {
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
 }

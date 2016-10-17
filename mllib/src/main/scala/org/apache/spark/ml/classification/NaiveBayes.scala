@@ -19,23 +19,21 @@ package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
-import org.apache.spark.mllib.classification.{NaiveBayesModel => OldNaiveBayesModel}
-import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * Params for Naive Bayes Classifiers.
  */
-private[ml] trait NaiveBayesParams extends PredictorParams {
+private[ml] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
 
   /**
    * The smoothing parameter.
@@ -56,7 +54,7 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
    */
   final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
     "which is a string (case-sensitive). Supported options: multinomial (default) and bernoulli.",
-    ParamValidators.inArray[String](OldNaiveBayes.supportedModelTypes.toArray))
+    ParamValidators.inArray[String](NaiveBayes.supportedModelTypes.toArray))
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
@@ -64,7 +62,7 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
 
 /**
  * Naive Bayes Classifiers.
- * It supports both Multinomial NB
+ * It supports Multinomial NB
  * ([[http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html]])
  * which can handle finitely supported discrete data. For example, by converting documents into
  * TF-IDF vectors, it can be used for document classification. By making every vector a
@@ -77,6 +75,8 @@ class NaiveBayes @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
   with NaiveBayesParams with DefaultParamsWritable {
+
+  import NaiveBayes.{Bernoulli, Multinomial}
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("nb"))
@@ -98,21 +98,125 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setModelType(value: String): this.type = set(modelType, value)
-  setDefault(modelType -> OldNaiveBayes.Multinomial)
+  setDefault(modelType -> NaiveBayes.Multinomial)
+
+  /**
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * Default is not set, so all instances have weight one.
+   *
+   * @group setParam
+   */
+  @Since("2.1.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
+  /**
+   * ml assumes input labels in range [0, numClasses). But this implementation
+   * is also called by mllib NaiveBayes which allows other kinds of input labels
+   * such as {-1, +1}. Here we use this parameter to switch between different processing logic.
+   * It should be removed when we remove mllib NaiveBayes.
+   */
+  private[spark] var isML: Boolean = true
+
+  private[spark] def setIsML(isML: Boolean): this.type = {
+    this.isML = isML
+    this
+  }
 
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
-    val numClasses = getNumClasses(dataset)
-
-    if (isDefined(thresholds)) {
-      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-        ".train() called with non-matching numClasses and thresholds.length." +
-        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+    if (isML) {
+      val numClasses = getNumClasses(dataset)
+      if (isDefined(thresholds)) {
+        require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+          ".train() called with non-matching numClasses and thresholds.length." +
+          s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+      }
     }
 
-    val oldDataset: RDD[OldLabeledPoint] =
-      extractLabeledPoints(dataset).map(OldLabeledPoint.fromML)
-    val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))
-    NaiveBayesModel.fromOld(oldModel, this)
+    val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
+      val values = v match {
+        case sv: SparseVector => sv.values
+        case dv: DenseVector => dv.values
+      }
+
+      require(values.forall(_ >= 0.0),
+        s"Naive Bayes requires nonnegative feature values but found $v.")
+    }
+
+    val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
+      val values = v match {
+        case sv: SparseVector => sv.values
+        case dv: DenseVector => dv.values
+      }
+
+      require(values.forall(v => v == 0.0 || v == 1.0),
+        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
+    }
+
+    val requireValues: Vector => Unit = {
+      $(modelType) match {
+        case Multinomial =>
+          requireNonnegativeValues
+        case Bernoulli =>
+          requireZeroOneBernoulliValues
+        case _ =>
+          // This should never happen.
+          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+      }
+    }
+
+    val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
+    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+
+    // Aggregates term frequencies per label.
+    // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
+    // TODO: similar to reduceByKeyLocally to save one stage.
+    val aggregated = dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd
+      .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
+      }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
+      seqOp = {
+         case ((weightSum: Double, featureSum: DenseVector), (weight, features)) =>
+           requireValues(features)
+           BLAS.axpy(weight, features, featureSum)
+           (weightSum + weight, featureSum)
+      },
+      combOp = {
+         case ((weightSum1, featureSum1), (weightSum2, featureSum2)) =>
+           BLAS.axpy(1.0, featureSum2, featureSum1)
+           (weightSum1 + weightSum2, featureSum1)
+      }).collect().sortBy(_._1)
+
+    val numLabels = aggregated.length
+    val numDocuments = aggregated.map(_._2._1).sum
+
+    val labelArray = new Array[Double](numLabels)
+    val piArray = new Array[Double](numLabels)
+    val thetaArray = new Array[Double](numLabels * numFeatures)
+
+    val lambda = $(smoothing)
+    val piLogDenom = math.log(numDocuments + numLabels * lambda)
+    var i = 0
+    aggregated.foreach { case (label, (n, sumTermFreqs)) =>
+      labelArray(i) = label
+      piArray(i) = math.log(n + lambda) - piLogDenom
+      val thetaLogDenom = $(modelType) match {
+        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
+        case Bernoulli => math.log(n + 2.0 * lambda)
+        case _ =>
+          // This should never happen.
+          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+      }
+      var j = 0
+      while (j < numFeatures) {
+        thetaArray(i * numFeatures + j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        j += 1
+      }
+      i += 1
+    }
+
+    val pi = Vectors.dense(piArray)
+    val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
+    new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
   }
 
   @Since("1.5.0")
@@ -121,6 +225,14 @@ class NaiveBayes @Since("1.5.0") (
 
 @Since("1.6.0")
 object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
+  /** String name for multinomial model type. */
+  private[spark] val Multinomial: String = "multinomial"
+
+  /** String name for Bernoulli model type. */
+  private[spark] val Bernoulli: String = "bernoulli"
+
+  /* Set of modelTypes that NaiveBayes supports */
+  private[spark] val supportedModelTypes = Set(Multinomial, Bernoulli)
 
   @Since("1.6.0")
   override def load(path: String): NaiveBayes = super.load(path)
@@ -140,7 +252,20 @@ class NaiveBayesModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
-  import OldNaiveBayes.{Bernoulli, Multinomial}
+  import NaiveBayes.{Bernoulli, Multinomial}
+
+  /**
+   * mllib NaiveBayes is a wrapper of ml implementation currently.
+   * Input labels of mllib could be {-1, +1} and mllib NaiveBayesModel exposes labels,
+   * both of which are different from ml, so we should store the labels sequentially
+   * to be called by mllib. This should be removed when we remove mllib NaiveBayes.
+   */
+  private[spark] var oldLabels: Array[Double] = null
+
+  private[spark] def setOldLabels(labels: Array[Double]): this.type = {
+    this.oldLabels = labels
+    this
+  }
 
   /**
    * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
@@ -175,10 +300,8 @@ class NaiveBayesModel private[ml] (
 
   private def bernoulliCalculation(features: Vector) = {
     features.foreachActive((_, value) =>
-      if (value != 0.0 && value != 1.0) {
-        throw new SparkException(
-          s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
-      }
+      require(value == 0.0 || value == 1.0,
+        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $features.")
     )
     val prob = thetaMinusNegTheta.get.multiply(features)
     BLAS.axpy(1.0, pi, prob)
@@ -237,18 +360,6 @@ class NaiveBayesModel private[ml] (
 
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
-
-  /** Convert a model from the old API */
-  private[ml] def fromOld(
-      oldModel: OldNaiveBayesModel,
-      parent: NaiveBayes): NaiveBayesModel = {
-    val uid = if (parent != null) parent.uid else Identifiable.randomUID("nb")
-    val labels = Vectors.dense(oldModel.labels)
-    val pi = Vectors.dense(oldModel.pi)
-    val theta = new DenseMatrix(oldModel.labels.length, oldModel.theta(0).length,
-      oldModel.theta.flatten, true)
-    new NaiveBayesModel(uid, pi, theta)
-  }
 
   @Since("1.6.0")
   override def read: MLReader[NaiveBayesModel] = new NaiveBayesModelReader

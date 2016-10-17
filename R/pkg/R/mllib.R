@@ -694,12 +694,22 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' }
 #' @note spark.mlp since 2.1.0
 setMethod("spark.mlp", signature(data = "SparkDataFrame"),
-          function(data, blockSize = 128, layers = c(3, 5, 2), solver = "l-bfgs", maxIter = 100,
-                   tol = 0.5, stepSize = 1, seed = 1) {
+          function(data, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
+                   tol = 1E-6, stepSize = 0.03, seed = NULL) {
+            if (is.null(layers)) {
+              stop ("layers must be a integer vector with length > 1.")
+            }
+            layers <- as.integer(na.omit(layers))
+            if (length(layers) <= 1) {
+              stop ("layers must be a integer vector with length > 1.")
+            }
+            if (!is.null(seed)) {
+              seed <- as.character(as.integer(seed))
+            }
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
                                 "fit", data@sdf, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
-                                as.numeric(stepSize), as.integer(seed))
+                                as.numeric(stepSize), seed)
             new("MultilayerPerceptronClassificationModel", jobj = jobj)
           })
 
@@ -1398,20 +1408,22 @@ setMethod("summary", signature(object = "KSTest"),
             distParams <- unlist(callJMethod(jobj, "distParams"))
             degreesOfFreedom <- callJMethod(jobj, "degreesOfFreedom")
 
-            list(p.value = pValue, statistic = statistic, nullHypothesis = nullHypothesis,
-                 nullHypothesis.name = distName, nullHypothesis.parameters = distParams,
-                 degreesOfFreedom = degreesOfFreedom)
+            ans <- list(p.value = pValue, statistic = statistic, nullHypothesis = nullHypothesis,
+                        nullHypothesis.name = distName, nullHypothesis.parameters = distParams,
+                        degreesOfFreedom = degreesOfFreedom, jobj = jobj)
+            class(ans) <- "summary.KSTest"
+            ans
           })
 
 #  Prints the summary of KSTest
 
 #' @rdname spark.kstest
-#' @param x test result object of KSTest by \code{spark.kstest}.
+#' @param x summary object of KSTest returned by \code{summary}.
 #' @export
 #' @note print.summary.KSTest since 2.1.0
 print.summary.KSTest <- function(x, ...) {
-  jobj <- x@jobj
+  jobj <- x$jobj
   summaryStr <- callJMethod(jobj, "summary")
-  cat(summaryStr)
-  invisible(summaryStr)
+  cat(summaryStr, "\n")
+  invisible(x)
 }

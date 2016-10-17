@@ -906,7 +906,9 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
 
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the value is null.
+    val errMsgField = ctx.addReferenceObj(errMsg)
 
     val code = s"""
       ${childGen.code}
@@ -938,7 +940,12 @@ case class GetExternalRowField(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
+  private val errMsg = s"The ${index}th field '$fieldName' of input row cannot be null."
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the field is null.
+    val errMsgField = ctx.addReferenceObj(errMsg)
     val row = child.genCode(ctx)
     val code = s"""
       ${row.code}
@@ -948,8 +955,7 @@ case class GetExternalRowField(
       }
 
       if (${row.value}.isNullAt($index)) {
-        throw new RuntimeException("The ${index}th field '$fieldName' of input row " +
-          "cannot be null.");
+        throw new RuntimeException($errMsgField);
       }
 
       final Object ${ev.value} = ${row.value}.get($index);
@@ -974,7 +980,12 @@ case class ValidateExternalType(child: Expression, expected: DataType)
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
+  private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the type doesn't match.
+    val errMsgField = ctx.addReferenceObj(errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
 
@@ -995,8 +1006,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         if ($typeCheck) {
           ${ev.value} = (${ctx.boxedType(dataType)}) $obj;
         } else {
-          throw new RuntimeException($obj.getClass().getName() + " is not a valid " +
-            "external type for schema of ${expected.simpleString}");
+          throw new RuntimeException($obj.getClass().getName() + $errMsgField);
         }
       }
 

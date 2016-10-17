@@ -21,14 +21,16 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.Partition
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.Partition
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
+import org.apache.spark.sql.execution.datasources.jdbc._
+import org.apache.spark.sql.execution.datasources.json.InferSchema
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -37,6 +39,7 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 1.4.0
  */
+@InterfaceStability.Stable
 class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
@@ -228,13 +231,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    val props = new Properties()
-    extraOptions.foreach { case (key, value) =>
-      props.put(key, value)
-    }
-    // connectionProperties should override settings in extraOptions
-    props.putAll(connectionProperties)
-    val relation = JDBCRelation(url, table, parts, props)(sparkSession)
+    // connectionProperties should override settings in extraOptions.
+    val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
+    val options = new JDBCOptions(url, table, params)
+    val relation = JDBCRelation(parts, options)(sparkSession)
     sparkSession.baseRelationToDataFrame(relation)
   }
 
@@ -285,14 +285,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   * during parsing.</li>
-   * <ul>
-   *  <li> - `PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
-   *  the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
-   *  a schema is set by user, it sets `null` for extra fields.</li>
-   *  <li> - `DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *  <li> - `FAILFAST` : throws an exception when it meets corrupted records.</li>
-   * </ul>
+   * during parsing.
+   *   <ul>
+   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
+   *     the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *     a schema is set by user, it sets `null` for extra fields.</li>
+   *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *   </ul>
+   * </li>
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
@@ -378,7 +379,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * type.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
    * the separator can be part of the value. If you would like to turn off quotations, you need to
-   * set not `null` but an empty string. This behaviour is different form
+   * set not `null` but an empty string. This behaviour is different from
    * `com.databricks.spark.csv`.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
@@ -391,7 +392,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
    * whitespaces from values being read should be skipped.</li>
-   * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
+   * <li>`nullValue` (default empty string): sets the string representation of a null value. Since
+   * 2.0.1, this applies to all supported types including the string type.</li>
    * <li>`nanValue` (default `NaN`): sets the string representation of a non-number" value.</li>
    * <li>`positiveInf` (default `Inf`): sets the string representation of a positive infinity
    * value.</li>
@@ -406,18 +408,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()` or ISO 8601 format.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
-   * <li>`maxCharsPerColumn` (default `1000000`): defines the maximum number of characters allowed
-   * for any given value being read.</li>
+   * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
+   * for any given value being read. By default, it is -1 meaning unlimited length</li>
    * <li>`maxMalformedLogPerPartition` (default `10`): sets the maximum number of malformed rows
    * Spark will log for each partition. Malformed records beyond this number will be ignored.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   *    during parsing.</li>
-   * <ul>
-   *   <li> - `PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
-   *     a schema is set by user, it sets `null` for extra fields.</li>
-   *   <li> - `DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *   <li> - `FAILFAST` : throws an exception when it meets corrupted records.</li>
-   * </ul>
+   *    during parsing.
+   *   <ul>
+   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
+   *       a schema is set by user, it sets `null` for extra fields.</li>
+   *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *   </ul>
+   * </li>
    * </ul>
    * @since 2.0.0
    */

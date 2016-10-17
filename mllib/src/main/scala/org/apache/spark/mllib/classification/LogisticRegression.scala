@@ -19,6 +19,7 @@ package org.apache.spark.mllib.classification
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.linalg.DenseMatrix
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.classification.impl.GLMClassificationModel
 import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
@@ -430,8 +431,9 @@ class LogisticRegressionWithLBFGS
         lr.setStandardization(useFeatureScaling)
         if (userSuppliedWeights) {
           val uid = Identifiable.randomUID("logreg-static")
-          lr.setInitialModel(new org.apache.spark.ml.classification.LogisticRegressionModel(
-            uid, initialWeights.asML, 1.0))
+          lr.setInitialModel(new org.apache.spark.ml.classification.LogisticRegressionModel(uid,
+            new DenseMatrix(1, initialWeights.size, initialWeights.toArray),
+            Vectors.dense(1.0).asML, 2, false))
         }
         lr.setFitIntercept(addIntercept)
         lr.setMaxIter(optimizer.getNumIterations())

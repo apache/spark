@@ -552,7 +552,7 @@ case class HashAggregateExec(
       } else {
         ctx.addMutableState(fastHashMapClassName, fastHashMapTerm,
           s"$fastHashMapTerm = new $fastHashMapClassName(" +
-            s"agg_plan.getTaskMemoryManager(), agg_plan.getEmptyAggregationBuffer());")
+            s"$thisPlan.getTaskMemoryManager(), $thisPlan.getEmptyAggregationBuffer());")
         ctx.addMutableState(
           "org.apache.spark.unsafe.KVIterator",
           iterTermForFastHashMap, "")

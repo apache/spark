@@ -80,6 +80,7 @@ private[spark] object UIData {
     var numKilledTasks: Int = _
 
     var executorRunTime: Long = _
+    var executorCpuTime: Long = _
 
     var inputBytes: Long = _
     var inputRecords: Long = _
@@ -137,7 +138,9 @@ private[spark] object UIData {
       metrics.map { m =>
         TaskMetricsUIData(
           executorDeserializeTime = m.executorDeserializeTime,
+          executorDeserializeCpuTime = m.executorDeserializeCpuTime,
           executorRunTime = m.executorRunTime,
+          executorCpuTime = m.executorCpuTime,
           resultSize = m.resultSize,
           jvmGCTime = m.jvmGCTime,
           resultSerializationTime = m.resultSerializationTime,
@@ -177,14 +180,11 @@ private[spark] object UIData {
     }
   }
 
-  class ExecutorUIData(
-      val startTime: Long,
-      var finishTime: Option[Long] = None,
-      var finishReason: Option[String] = None)
-
   case class TaskMetricsUIData(
       executorDeserializeTime: Long,
+      executorDeserializeCpuTime: Long,
       executorRunTime: Long,
+      executorCpuTime: Long,
       resultSize: Long,
       jvmGCTime: Long,
       resultSerializationTime: Long,

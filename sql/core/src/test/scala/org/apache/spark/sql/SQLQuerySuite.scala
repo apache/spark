@@ -1106,6 +1106,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-17863: SELECT distinct does not work correctly if order by missing attribute") {
+    checkAnswer(
+      sql("""select distinct struct.a, struct.b
+          |from (
+          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+          |  union all
+          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+          |order by a, b
+          |""".stripMargin),
+      Row(1, 2) :: Nil)
+
+    val error = intercept[AnalysisException] {
+      sql("""select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by struct.a, struct.b
+            |""".stripMargin)
+    }
+    assert(error.message contains "cannot resolve '`struct.a`' given input columns: [a, b]")
+
+  }
+
   test("cast boolean to string") {
     // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
     checkAnswer(
@@ -1645,21 +1669,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
     }
-    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro. " +
-      "Please use Spark package http://spark-packages.org/package/databricks/spark-avro"))
+    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro."))
 
     // data source type is case insensitive
     e = intercept[AnalysisException] {
       sql(s"select id from Avro.`file_path`")
     }
-    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
-      "http://spark-packages.org/package/databricks/spark-avro"))
+    assert(e.message.contains("Failed to find data source: avro."))
 
     e = intercept[AnalysisException] {
       sql(s"select id from avro.`file_path`")
     }
-    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
-      "http://spark-packages.org/package/databricks/spark-avro"))
+    assert(e.message.contains("Failed to find data source: avro."))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
@@ -2669,5 +2690,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       x
     }.limit(1).queryExecution.toRdd.count()
     assert(numRecordsRead.value === 10)
+  }
+
+  test("CREATE TABLE USING should not fail if a same-name temp view exists") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        spark.range(10).createTempView("same_name")
+        sql("CREATE TABLE same_name(i int) USING json")
+        checkAnswer(spark.table("same_name"), spark.range(10).toDF())
+        assert(spark.table("default.same_name").collect().isEmpty)
+      }
+    }
   }
 }

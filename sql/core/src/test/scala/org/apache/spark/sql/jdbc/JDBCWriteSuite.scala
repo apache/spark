@@ -20,11 +20,13 @@ package org.apache.spark.sql.jdbc
 import java.sql.DriverManager
 import java.util.Properties
 
+import scala.collection.JavaConverters.propertiesAsScalaMapConverter
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SaveMode}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -111,8 +113,8 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     (-1 to 0).foreach { size =>
       val properties = new Properties()
-      properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
-      val e = intercept[SparkException] {
+      properties.setProperty(JDBCOptions.JDBC_BATCH_INSERT_SIZE, size.toString)
+      val e = intercept[IllegalArgumentException] {
         df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
       }.getMessage
       assert(e.contains(s"Invalid value `$size` for parameter `batchsize`"))
@@ -124,10 +126,23 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     (1 to 3).foreach { size =>
       val properties = new Properties()
-      properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
+      properties.setProperty(JDBCOptions.JDBC_BATCH_INSERT_SIZE, size.toString)
       df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
       assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).count())
     }
+  }
+
+  test("CREATE with ignore") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+
+    df.write.mode(SaveMode.Ignore).jdbc(url1, "TEST.DROPTEST", properties)
+    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
+    assert(3 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
+
+    df2.write.mode(SaveMode.Ignore).jdbc(url1, "TEST.DROPTEST", properties)
+    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
+    assert(3 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
   }
 
   test("CREATE with overwrite") {
@@ -207,5 +222,85 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+  }
+
+  test("save works for format(\"jdbc\") if url and dbtable are set") {
+    val df = sqlContext.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    df.write.format("jdbc")
+    .options(Map("url" -> url, "dbtable" -> "TEST.SAVETEST"))
+    .save()
+
+    assert(2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).count)
+    assert(
+      2 === sqlContext.read.jdbc(url, "TEST.SAVETEST", new Properties).collect()(0).length)
+  }
+
+  test("save API with SaveMode.Overwrite") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+
+    df.write.format("jdbc")
+      .option("url", url1)
+      .option("dbtable", "TEST.SAVETEST")
+      .options(properties.asScala)
+      .save()
+    df2.write.mode(SaveMode.Overwrite).format("jdbc")
+      .option("url", url1)
+      .option("dbtable", "TEST.SAVETEST")
+      .options(properties.asScala)
+      .save()
+    assert(1 === spark.read.jdbc(url1, "TEST.SAVETEST", properties).count())
+    assert(2 === spark.read.jdbc(url1, "TEST.SAVETEST", properties).collect()(0).length)
+  }
+
+  test("save errors if url is not specified") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    val e = intercept[RuntimeException] {
+      df.write.format("jdbc")
+        .option("dbtable", "TEST.SAVETEST")
+        .options(properties.asScala)
+        .save()
+    }.getMessage
+    assert(e.contains("Option 'url' is required"))
+  }
+
+  test("save errors if dbtable is not specified") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    val e = intercept[RuntimeException] {
+      df.write.format("jdbc")
+        .option("url", url1)
+        .options(properties.asScala)
+        .save()
+    }.getMessage
+    assert(e.contains("Option 'dbtable' is required"))
+  }
+
+  test("save errors if wrong user/password combination") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    val e = intercept[org.h2.jdbc.JdbcSQLException] {
+      df.write.format("jdbc")
+        .option("dbtable", "TEST.SAVETEST")
+        .option("url", url1)
+        .save()
+    }.getMessage
+    assert(e.contains("Wrong user name or password"))
+  }
+
+  test("save errors if partitionColumn and numPartitions and bounds not set") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    val e = intercept[java.lang.IllegalArgumentException] {
+      df.write.format("jdbc")
+        .option("dbtable", "TEST.SAVETEST")
+        .option("url", url1)
+        .option("partitionColumn", "foo")
+        .save()
+    }.getMessage
+    assert(e.contains("If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
+      " and 'numPartitions' are required."))
   }
 }
