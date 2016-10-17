@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.catalog
 import java.util.Date
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
@@ -86,7 +86,27 @@ object CatalogStorageFormat {
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
     storage: CatalogStorageFormat,
-    parameters: Map[String, String] = Map.empty)
+    parameters: Map[String, String] = Map.empty) {
+
+  override def toString: String = {
+    val output =
+      Seq(
+        s"Partition Values: [${spec.values.mkString(", ")}]",
+        s"$storage",
+        s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+
+    output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+  }
+
+  /**
+   * Given the partition schema, returns a row with that schema holding the partition values.
+   */
+  def toRow(partitionSchema: StructType): InternalRow = {
+    InternalRow.fromSeq(partitionSchema.map { case StructField(name, dataType, _, _) =>
+      Cast(Literal(spec(name)), dataType).eval()
+    })
+  }
+}
 
 
 /**

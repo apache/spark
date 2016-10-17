@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Connection
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
 import org.apache.spark.sql.types._
 
 /**
@@ -31,6 +31,7 @@ import org.apache.spark.sql.types._
  *                     send a null value to the database.
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
 
 /**
@@ -53,6 +54,7 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * for the given Catalyst type.
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 abstract class JdbcDialect extends Serializable {
   /**
    * Check if this dialect instance can handle a certain jdbc url.
@@ -100,6 +102,19 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
+   * The SQL query that should be used to discover the schema of a table. It only needs to
+   * ensure that the result set has the same schema as the table, such as by calling
+   * "SELECT * ...". Dialects can override this method to return a query that works best in a
+   * particular database.
+   * @param table The name of the table.
+   * @return The SQL query to use for discovering the schema.
+   */
+  @Since("2.1.0")
+  def getSchemaQuery(table: String): String = {
+    s"SELECT * FROM $table WHERE 1=0"
+  }
+
+  /**
    * Override connection specific properties to run before a select is made.  This is in place to
    * allow dialects that need special treatment to optimize behavior.
    * @param connection The connection object
@@ -129,6 +144,7 @@ abstract class JdbcDialect extends Serializable {
  * sure to register your dialects first.
  */
 @DeveloperApi
+@InterfaceStability.Evolving
 object JdbcDialects {
 
   /**

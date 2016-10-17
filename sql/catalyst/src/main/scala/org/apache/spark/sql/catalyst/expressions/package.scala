@@ -81,7 +81,7 @@ package object expressions  {
     def currentValue: InternalRow
 
     /** Uses the given row to store the output of the projection. */
-    def target(row: MutableRow): MutableProjection
+    def target(row: InternalRow): MutableProjection
   }
 
 

@@ -111,6 +111,7 @@
     <module>external/kafka-0-8-assembly</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
+    <module>external/kafka-0-10-sql</module>
   </modules>
 
   <properties>
@@ -743,7 +744,7 @@
       <dependency>
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
-        <version>3.6.6</version>
+        <version>5.0.2</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>

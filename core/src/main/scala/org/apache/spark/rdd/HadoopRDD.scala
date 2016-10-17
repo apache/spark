@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.io.EOFException
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -43,6 +43,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
@@ -138,6 +139,8 @@ class HadoopRDD[K, V](
   private val createTime = new Date()
 
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
+
+  private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
@@ -253,8 +256,7 @@ class HadoopRDD[K, V](
         try {
           finished = !reader.next(key, value)
         } catch {
-          case eof: EOFException =>
-            finished = true
+          case e: IOException if ignoreCorruptFiles => finished = true
         }
         if (!finished) {
           inputMetrics.incRecordsRead(1)

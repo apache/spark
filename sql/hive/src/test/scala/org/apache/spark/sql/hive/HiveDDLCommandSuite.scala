@@ -243,7 +243,7 @@ class HiveDDLCommandSuite extends PlanTest {
       .asInstanceOf[ScriptTransformation].copy(ioschema = null)
     val plan2 = parser.parsePlan("map a, b using 'func' as c, d from e")
       .asInstanceOf[ScriptTransformation].copy(ioschema = null)
-    val plan3 = parser.parsePlan("reduce a, b using 'func' as (c: int, d decimal(10, 0)) from e")
+    val plan3 = parser.parsePlan("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e")
       .asInstanceOf[ScriptTransformation].copy(ioschema = null)
 
     val p = ScriptTransformation(

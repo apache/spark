@@ -25,7 +25,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Params for [[QuantileDiscretizer]].

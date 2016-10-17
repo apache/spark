@@ -222,7 +222,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def getListing(): Iterable[FsApplicationHistoryInfo] = applications.values
+  override def getListing(): Iterator[FsApplicationHistoryInfo] = applications.values.iterator
+
+  override def getApplicationInfo(appId: String): Option[FsApplicationHistoryInfo] = {
+    applications.get(appId)
+  }
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     try {
@@ -290,7 +294,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .filter { entry =>
           try {
             val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
-            !entry.isDirectory() && prevFileSize < entry.getLen()
+            !entry.isDirectory() &&
+              // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
+              // reading a garbage file is safe, but we would log an error which can be scary to
+              // the end-user.
+              !entry.getPath().getName().startsWith(".") &&
+              prevFileSize < entry.getLen()
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on
