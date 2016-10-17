@@ -1383,7 +1383,11 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
+   *
+   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
+   *                     same RDD/partition. This adds some additional overhead for tracking and
+   *                     is an experimental feature.
    */
   @Experimental
   def longAccumulator(dataProperty: Boolean): LongAccumulator = {
@@ -1393,7 +1397,11 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
+   *
+   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
+   *                     same RDD/partition. This adds some additional overhead for tracking and
+   *                     is an experimental feature.
    */
   @Experimental
   def longAccumulator(dataProperty: Boolean, name: String): LongAccumulator = {
