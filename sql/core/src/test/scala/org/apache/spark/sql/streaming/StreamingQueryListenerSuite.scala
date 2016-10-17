@@ -43,7 +43,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     // Make sure we don't leak any events to the next test
   }
 
-  test(s"single listener, check trigger statuses") {
+  ignore("single listener, check trigger statuses") {
     import StreamingQueryListenerSuite._
     clock = new ManualClock()
 
@@ -81,7 +81,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       AssertOnLastQueryStatus { status: StreamingQueryStatus =>
         // Check the correctness of the trigger info of the last completed batch reported by
         // onQueryProgress
-        assert(Seq("-1", "0").contains(status.triggerDetails.get("triggerId")))
+        assert(status.triggerDetails.get("triggerId") == "0")
         assert(status.triggerDetails.get("isTriggerActive") === "false")
         assert(status.triggerDetails.get("isDataPresentInTrigger") === "true")
 
@@ -101,7 +101,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         assert(status.triggerDetails.get("numRows.state.aggregation1.updated") === "1")
 
         assert(status.sourceStatuses.length === 1)
-        assert(Seq("-1", "0").contains(status.sourceStatuses(0).triggerDetails.get("triggerId")))
+        assert(status.sourceStatuses(0).triggerDetails.get("triggerId") === "0")
         assert(status.sourceStatuses(0).triggerDetails.get("latency.getOffset.source") === "100")
         assert(status.sourceStatuses(0).triggerDetails.get("latency.getBatch.source") === "200")
         assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "2")

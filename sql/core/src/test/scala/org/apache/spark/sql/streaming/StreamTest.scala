@@ -342,9 +342,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                    s"can not advance clock of type ${currentStream.triggerClock.getClass}")
             val clock = currentStream.triggerClock.asInstanceOf[ManualClock]
             // Make sure we don't advance ManualClock too early. See SPARK-16002.
-            eventually("ManualClock has not yet entered the waiting state, or the clock has been " +
-              "advanced too early") {
-              assert(clock.isWaitingAndReadyForFirstPeek)
+            eventually("ManualClock has not yet entered the waiting state") {
+              assert(clock.isWaiting)
             }
             currentStream.triggerClock.asInstanceOf[ManualClock].advance(timeToAdd)
 
