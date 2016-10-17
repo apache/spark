@@ -34,7 +34,7 @@ import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.TestUtils.JavaSourceFromString
-import org.apache.spark.util.{Executable, ResetSystemProperties, SparkConfigParseUtils, Utils}
+import org.apache.spark.util.{CommandLineUtils, ResetSystemProperties, Utils}
 
 
 trait TestPrematureExit {
@@ -58,8 +58,7 @@ trait TestPrematureExit {
   private[spark] def testPrematureExit(
       input: Array[String],
       searchString: String,
-      mainObject: Executable with SparkConfigParseUtils = SparkSubmit)
-    : Unit = {
+      mainObject: CommandLineUtils = SparkSubmit) : Unit = {
     val printStream = new BufferPrintStream()
     mainObject.printStream = printStream
 

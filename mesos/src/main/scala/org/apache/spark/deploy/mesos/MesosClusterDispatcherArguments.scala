@@ -95,8 +95,9 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
       parse(tail)
 
     case ("--conf") :: value :: tail =>
-      MesosClusterDispatcher.
-        parseSparkConfProperty(value, (k: String, v: String) => confProperties(k) = v)
+      val pair = MesosClusterDispatcher.
+        parseSparkConfProperty(value)
+        confProperties(pair._1) = pair._2
       parse(tail)
 
     case ("--help") :: tail =>

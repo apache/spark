@@ -62,7 +62,7 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit extends Executable with SparkConfigParseUtils {
+object SparkSubmit extends CommandLineUtils {
 
   // Cluster managers
   private val YARN = 1

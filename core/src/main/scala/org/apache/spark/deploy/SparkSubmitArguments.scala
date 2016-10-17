@@ -30,7 +30,7 @@ import scala.io.Source
 
 import org.apache.spark.deploy.SparkSubmitAction._
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
-import org.apache.spark.util.{SparkConfigParseUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
@@ -412,7 +412,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         repositories = value
 
       case CONF =>
-        SparkSubmit.parseSparkConfProperty(value, (k: String, v: String) => sparkProperties(k) = v)
+        val (confName, confValue) = SparkSubmit.parseSparkConfProperty(value)
+        sparkProperties(confName) = confValue
 
       case PROXY_USER =>
         proxyUser = value
