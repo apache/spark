@@ -1402,6 +1402,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
    *                     same RDD/partition. This adds some additional overhead for tracking and
    *                     is an experimental feature.
+   * @param name The name of accumulator.
    */
   @Experimental
   def longAccumulator(dataProperty: Boolean, name: String): LongAccumulator = {
