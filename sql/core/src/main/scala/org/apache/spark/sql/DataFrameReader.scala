@@ -244,10 +244,26 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @since 1.4.0
    */
-  def json(path: String): DataFrame = {
+
+  def json(path: String, isStandard: Boolean = false ): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    json(Seq(path): _*)
+    if (!isStandard) {
+      json(Seq(path): _*)
+    } else {
+      val jsonRDD = sparkSession.sparkContext.wholeTextFiles(path)
+        .map(line => line.toString().replaceAll("\\s+", ""))
+        .map { jsonLine =>
+          val index = jsonLine.indexOf(",")
+          jsonLine.substring(index + 1, jsonLine.length - 1)
+        }
+      sparkSession.read.json(jsonRDD)
+    }
   }
+
+  /**
+    *  To  keep compatible with spark-1.6 we provide this method  see SPARK-16009
+    */
+  def json(path: String): DataFrame = format("json").load(path)
 
   /**
    * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
