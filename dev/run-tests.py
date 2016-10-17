@@ -390,7 +390,7 @@ def run_scala_tests_maven(test_profiles):
 
 def run_scala_tests_sbt(test_modules, test_profiles):
 
-    sbt_test_goals = [ "sql/test-only *StreamingQueryListener*" ]
+    sbt_test_goals = [ "sql/test-only *StreamingQueryListener*" for x in range(0, 200) ]
 
     if not sbt_test_goals:
         return
@@ -399,8 +399,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
 
     print("[info] Running Spark tests using SBT with these arguments: ",
           " ".join(profiles_and_goals))
-    for x in range(0, 100):
-        exec_sbt(profiles_and_goals)
+    exec_sbt(profiles_and_goals)
 
 
 def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
