@@ -46,7 +46,7 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
     case Literal(s, IntegerType) => s.asInstanceOf[Int]
     case Literal(s, LongType) => s.asInstanceOf[Long]
     case _ => throw new AnalysisException(
-      s"Input argument to $prettyName must be an integer/long literal.")
+      s"Input argument to $prettyName must be an integer/long/NULL literal.")
   }
 
   override def nullable: Boolean = false
