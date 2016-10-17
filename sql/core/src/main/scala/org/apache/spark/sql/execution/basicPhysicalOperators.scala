@@ -87,7 +87,14 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
-    case IsNotNull(a: NullIntolerant) if a.references.subsetOf(child.outputSet) => true
+    case IsNotNull(a) => isNullIntolerant(a) && a.references.subsetOf(child.outputSet)
+    case _ => false
+  }
+
+  // One expression is null intolerant iff it and its children are null intolerant
+  private def isNullIntolerant(expr: Expression): Boolean = expr match {
+    case e: NullIntolerant =>
+      if (e.isInstanceOf[LeafExpression]) true else e.children.forall(isNullIntolerant)
     case _ => false
   }
 

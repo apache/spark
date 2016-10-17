@@ -27,8 +27,8 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, Union}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Project, Union}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.functions._
@@ -1614,5 +1614,49 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
       qe.assertAnalyzed()
     }
+  }
+
+  private def verifyNullabilityInFilterExec(expr: String, isNullIntolerant: Boolean): Unit = {
+    val df = sparkContext.parallelize(Seq(
+      null.asInstanceOf[java.lang.Integer] -> new java.lang.Integer(3),
+      new java.lang.Integer(1) -> null.asInstanceOf[java.lang.Integer],
+      new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF("a", "b")
+
+    val dfWithFilter = df.where(s"isnotnull($expr)").selectExpr(expr)
+    dfWithFilter.queryExecution.optimizedPlan.collect {
+      // In the logical plan, all the output columns are nullable
+      case e: Filter => assert(e.output.forall(_.nullable))
+    }
+
+    dfWithFilter.queryExecution.executedPlan.collect {
+      // When the child expression in isnotnull is null-intolerant (i.e. any null input will
+      // result in null output), the columns are converted to not nullable; Otherwise, no change
+      // should be made.
+      case e: FilterExec =>
+        assert(e.output.forall(o => if (isNullIntolerant) !o.nullable else o.nullable))
+    }
+  }
+
+  test("SPARK-17957: no change on nullability in FilterExec output") {
+    verifyNullabilityInFilterExec("coalesce(a, b)", isNullIntolerant = false)
+
+    verifyNullabilityInFilterExec(
+      "cast(coalesce(cast(coalesce(a, b) as double), 0.0) as int)", isNullIntolerant = false)
+  }
+
+  test("SPARK-17957: set nullability to false in FilterExec output") {
+    verifyNullabilityInFilterExec("a + b * 3", isNullIntolerant = true)
+
+    verifyNullabilityInFilterExec("a + b", isNullIntolerant = true)
+
+    verifyNullabilityInFilterExec("cast((a + b) as boolean)", isNullIntolerant = true)
+  }
+
+  test("SPARK-17957: outer join + na.fill") {
+    val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
+    val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
+    val df3 = Seq((3, 1)).toDF("a", "d")
+    checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
   }
 }
