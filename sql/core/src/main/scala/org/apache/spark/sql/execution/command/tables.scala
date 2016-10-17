@@ -249,9 +249,10 @@ case class LoadDataCommand(
         val uri = Utils.resolveURI(path)
         val filePath = uri.getPath()
         val exists = if (filePath.contains("*")) {
-          val splitPath = filePath.split(File.separator)
-          val filePattern = splitPath.last
-          val dir = splitPath.dropRight(1).mkString(File.separator)
+          val fileSystem = FileSystems.getDefault
+          val pathPattern = fileSystem.getPath(filePath)
+          val dir = pathPattern.getParent.toString
+          val filePattern = pathPattern.getName(pathPattern.getNameCount - 1).toString
           if (dir.contains("*")) {
             throw new AnalysisException(
               s"LOAD DATA input path allows only filename wildcard: $path")
@@ -261,8 +262,8 @@ case class LoadDataCommand(
           if (files == null) {
             false
           } else {
-            val matcher = FileSystems.getDefault.getPathMatcher("glob:" + filePattern)
-            files.exists(f => matcher.matches(FileSystems.getDefault.getPath(f.getName)))
+            val matcher = fileSystem.getPathMatcher("glob:" + filePattern)
+            files.exists(f => matcher.matches(fileSystem.getPath(f.getName)))
           }
         } else {
           new File(filePath).exists()
