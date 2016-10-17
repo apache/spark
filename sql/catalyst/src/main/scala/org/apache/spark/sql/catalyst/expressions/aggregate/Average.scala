@@ -24,7 +24,14 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the mean calculated from values of a group.")
+  usage =
+    """
+      _FUNC_(expr) - Returns the mean calculated from values of a group.
+
+        Arguments:
+          expr - any numeric datatype or any nonnumeric datatype expression that can be implicitly
+            converted to numeric type.
+    """)
 case class Average(child: Expression) extends DeclarativeAggregate {
 
   override def prettyName: String = "avg"

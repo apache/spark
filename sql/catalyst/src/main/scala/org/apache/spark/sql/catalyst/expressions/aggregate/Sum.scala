@@ -23,7 +23,14 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the sum calculated from values of a group.")
+  usage =
+    """
+      _FUNC_(expr) - Returns the sum calculated from values of a group.
+
+        Arguments:
+          expr - any numeric type or any nonnumeric type expression that can be implicitly
+            converted to double type.
+    """)
 case class Sum(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil

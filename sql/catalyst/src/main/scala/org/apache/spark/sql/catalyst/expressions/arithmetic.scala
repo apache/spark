@@ -25,7 +25,13 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns -a.")
+  usage =
+    """
+      _FUNC_(expr) - Returns -expr."
+
+       Arguments:
+         expr - any type expression.
+    """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
 

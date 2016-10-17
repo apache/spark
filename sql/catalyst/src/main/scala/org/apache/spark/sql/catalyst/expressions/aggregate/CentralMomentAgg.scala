@@ -132,7 +132,14 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
 // Compute the population standard deviation of a column
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the population standard deviation calculated from values of a group.")
+  usage =
+    """
+      _FUNC_(expr) - Returns the population standard deviation calculated from values of a group.
+
+        Arguments:
+          expr - any numeric type or any nonnumeric type expression that can be implicitly
+            converted to double type.
+    """)
 // scalastyle:on line.size.limit
 case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 
@@ -148,7 +155,14 @@ case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 
 // Compute the sample standard deviation of a column
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the sample standard deviation calculated from values of a group.")
+  usage =
+    """
+      _FUNC_(expr) - Returns the sample standard deviation calculated from values of a group.
+
+        Arguments:
+          expr - any numeric type or any nonnumeric type expression that can be implicitly
+            converted to double type.
+    """)
 case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
@@ -164,7 +178,14 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
 // Compute the population variance of a column
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the population variance calculated from values of a group.")
+  usage =
+    """
+      _FUNC_(expr) - Returns the population variance calculated from values of a group.
+
+        Arguments:
+          expr - any numeric type or any nonnumeric type expression that can be implicitly
+            converted to double type.
+    """)
 case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
@@ -179,7 +200,14 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
 // Compute the sample variance of a column
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the sample variance calculated from values of a group.")
+  usage =
+    """
+      _FUNC_(expr) - Returns the sample variance calculated from values of a group.
+
+        Arguments:
+          expr - any numeric type or any nonnumeric type expression that can be implicitly
+            converted to double type.
+    """)
 case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
@@ -194,8 +222,15 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the Skewness value calculated from values of a group.")
-case class Skewness(child: Expression) extends CentralMomentAgg(child) {
+  usage =
+    """
+      _FUNC_(expr) - Returns the Skewness value calculated from values of a group.
+
+        Arguments:
+          expr - any numeric type or any nonnumeric type expression that can be implicitly
+            converted to double type.
+    """)
+case class Skewness(expr: Expression) extends CentralMomentAgg(expr) {
 
   override def prettyName: String = "skewness"
 
@@ -209,7 +244,14 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the Kurtosis value calculated from values of a group.")
+  usage =
+    """
+      _FUNC_(expr) - Returns the Kurtosis value calculated from values of a group.
+
+        Arguments:
+          expr - any numeric type or any nonnumeric type expression that can be implicitly
+            converted to double type.
+    """)
 case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 4

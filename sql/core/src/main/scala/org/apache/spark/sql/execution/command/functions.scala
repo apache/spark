@@ -125,7 +125,7 @@ case class DescribeFunctionCommand(
 
           if (isExtended) {
             result :+
-              Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
+              Row(s"Extended Usage: ${replaceFunctionName(info.getExtended, info.getName)}")
           } else {
             result
           }
