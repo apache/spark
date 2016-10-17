@@ -562,7 +562,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
   }
 
   override def executeCollect(): Array[InternalRow] = {
-    ThreadUtils.awaitResult(relationFuture, Duration.Inf)
+    ThreadUtils.awaitResultInForkJoinSafely(relationFuture, Duration.Inf)
   }
 }
 

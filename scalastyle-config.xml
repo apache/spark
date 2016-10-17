@@ -200,6 +200,7 @@ This file is divided into 3 sections:
       // scalastyle:off awaitresult
       Await.result(...)
       // scalastyle:on awaitresult
+      If your codes use ThreadLocal and run in a user's thread, use ThreadUtils.awaitResultInForkJoinSafely instead.
     ]]></customMessage>
   </check>
 

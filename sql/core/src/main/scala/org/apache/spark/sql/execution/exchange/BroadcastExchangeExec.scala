@@ -128,7 +128,8 @@ case class BroadcastExchangeExec(
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    ThreadUtils.awaitResult(relationFuture, timeout).asInstanceOf[broadcast.Broadcast[T]]
+    ThreadUtils.awaitResultInForkJoinSafely(relationFuture, timeout)
+      .asInstanceOf[broadcast.Broadcast[T]]
   }
 }
 

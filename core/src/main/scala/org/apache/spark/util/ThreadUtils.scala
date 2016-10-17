@@ -194,4 +194,25 @@ private[spark] object ThreadUtils {
         throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }
+
+  /**
+   * Calls [[Awaitable.result]] directly, wraps and re-throws any exceptions with nice stack
+   * track.
+   *
+   * Codes running in the user's thread may be in a thread of Scala ForkJoinPool. As concurrent
+   * executions in ForkJoinPool may see some [[ThreadLocal]] value unexpectedly, this method
+   * basically prevents ForkJoinPool from running other tasks in the current waiting thread.
+   */
+  @throws(classOf[SparkException])
+  def awaitResultInForkJoinSafely[T](awaitable: Awaitable[T], atMost: Duration): T = {
+    try {
+      // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
+      // See SPARK-13747.
+      val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
+      awaitable.result(Duration.Inf)(awaitPermission)
+    } catch {
+      case NonFatal(t) =>
+        throw new SparkException("Exception thrown in awaitResult: ", t)
+    }
+  }
 }
