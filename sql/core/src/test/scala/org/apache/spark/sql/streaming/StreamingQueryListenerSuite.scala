@@ -45,7 +45,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   test("single listener, check trigger statuses") {
     import StreamingQueryListenerSuite._
-    clock = new ManualClock()
+    clock = new StreamManualClock
 
     /** Custom MemoryStream that waits for manual clock to reach a time */
     val inputData = new MemoryStream[Int](0, sqlContext) {
@@ -74,9 +74,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     testStream(mapped, OutputMode.Complete)(
       StartStream(triggerClock = clock),
       AddData(inputData, 1, 2),
-      AdvanceManualClock(0, 100),  // unblock getOffset, will block on getBatch
-      AdvanceManualClock(100, 200),  // unblock getBatch, will block on computation
-      AdvanceManualClock(300, 300),  // unblock computation
+      AdvanceManualClock(100),  // unblock getOffset, will block on getBatch
+      AdvanceManualClock(200),  // unblock getBatch, will block on computation
+      AdvanceManualClock(300),  // unblock computation
       AssertOnQuery { _ => clock.getTimeMillis() === 600 },
       AssertOnLastQueryStatus { status: StreamingQueryStatus =>
         // Check the correctness of the trigger info of the last completed batch reported by

@@ -161,12 +161,12 @@ class StreamSuite extends StreamTest {
 
     val inputData = MemoryStream[Int]
     testStream(inputData.toDS())(
-      StartStream(ProcessingTime("10 seconds"), new ManualClock),
+      StartStream(ProcessingTime("10 seconds"), new StreamManualClock),
 
       /* -- batch 0 ----------------------- */
       // Add some data in batch 0
       AddData(inputData, 1, 2, 3),
-      AdvanceManualClock(0, 10 * 1000), // 10 seconds
+      AdvanceManualClock(10 * 1000), // 10 seconds
 
       /* -- batch 1 ----------------------- */
       // Check the results of batch 0
@@ -176,7 +176,7 @@ class StreamSuite extends StreamTest {
       CheckSinkLatestBatchId(0),
       // Add some data in batch 1
       AddData(inputData, 4, 5, 6),
-      AdvanceManualClock(10 * 1000, 10 * 1000),
+      AdvanceManualClock(10 * 1000),
 
       /* -- batch _ ----------------------- */
       // Check the results of batch 1
@@ -185,9 +185,9 @@ class StreamSuite extends StreamTest {
       CheckOffsetLogLatestBatchId(1),
       CheckSinkLatestBatchId(1),
 
-      AdvanceManualClock(20 * 1000, 10 * 1000),
-      AdvanceManualClock(30 * 1000, 10 * 1000),
-      AdvanceManualClock(40 * 1000, 10 * 1000),
+      AdvanceManualClock(10 * 1000),
+      AdvanceManualClock(10 * 1000),
+      AdvanceManualClock(10 * 1000),
 
       /* -- batch __ ---------------------- */
       // Check the results of batch 1 again; this is to make sure that, when there's no new data,
@@ -203,7 +203,7 @@ class StreamSuite extends StreamTest {
 
       /* -- batch 1 rerun ----------------- */
       // this batch 1 would re-run because the latest batch id logged in offset log is 1
-      AdvanceManualClock(60 * 1000, 10 * 1000),
+      AdvanceManualClock(10 * 1000),
 
       /* -- batch 2 ----------------------- */
       // Check the results of batch 1
@@ -213,7 +213,7 @@ class StreamSuite extends StreamTest {
       CheckSinkLatestBatchId(1),
       // Add some data in batch 2
       AddData(inputData, 7, 8, 9),
-      AdvanceManualClock(70 * 1000, 10 * 1000),
+      AdvanceManualClock(10 * 1000),
 
       /* -- batch 3 ----------------------- */
       // Check the results of batch 2
