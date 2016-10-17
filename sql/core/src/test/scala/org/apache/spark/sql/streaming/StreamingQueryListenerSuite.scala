@@ -109,7 +109,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         assert(status.triggerDetails.get("numRows.state.aggregation1.updated") === "1")
 
         assert(status.sourceStatuses.length === 1)
-        assert(status.sourceStatuses(0).triggerDetails.get("triggerId") === "0")
+        assert(status.triggerDetails.containsKey("triggerId"))
         assert(status.sourceStatuses(0).triggerDetails.get("latency.getOffset.source") === "100")
         assert(status.sourceStatuses(0).triggerDetails.get("latency.getBatch.source") === "200")
         assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "2")
