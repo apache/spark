@@ -774,7 +774,7 @@ class Dataset[T] private[sql](
    * @param right Right side of the join operation.
    *
    * @group untypedrel
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def crossJoin(right: Dataset[_]): DataFrame = withPlan {
     Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
@@ -2399,6 +2399,18 @@ class Dataset[T] private[sql](
   def persist(newLevel: StorageLevel): this.type = {
     sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
     this
+  }
+
+  /**
+   * Get the Dataset's current storage level, or StorageLevel.NONE if not persisted.
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  def storageLevel: StorageLevel = {
+    sparkSession.sharedState.cacheManager.lookupCachedData(this).map { cachedData =>
+      cachedData.cachedRepresentation.storageLevel
+    }.getOrElse(StorageLevel.NONE)
   }
 
   /**
