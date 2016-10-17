@@ -888,9 +888,9 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_struct_type(self):
         from pyspark.sql.types import StructType, StringType, StructField
-        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        struct1 = StructType().add(u"f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True),
-                              StructField("f2", StringType(), True, None)])
+                              StructField(u"f2", StringType(), True, None)])
         self.assertEqual(struct1, struct2)
 
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)

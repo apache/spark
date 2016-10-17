@@ -496,10 +496,7 @@ class StructType(DataType):
         True
         >>> struct1 = StructType().add("f1", "string", True)
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
-        >>> struct3 = StructType().add(u"f1", u"string", True)
         >>> struct1 == struct2
-        True
-        >>> struct1 == struct3
         True
 
         :param field: Either the name of the field or a StructField object
