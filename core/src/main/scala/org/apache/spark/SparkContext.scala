@@ -41,7 +41,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
@@ -1255,22 +1255,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] = {
-    accumulator(initialValue, dataProperty = false)
-  }
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
-   * values to using the `+=` method. Only the driver can access the accumulator's `value`.
-   *
-   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
-   *                     same RDD/partition. This adds some additional overhead for tracking and
-   *                     is an experimental feature.
-   */
-  @deprecated("use AccumulatorV2", "2.1.0")
-  def accumulator[T](initialValue: T, dataProperty: Boolean)(implicit param: AccumulatorParam[T])
-      : Accumulator[T] =
-  {
-    val acc = new Accumulator(initialValue, param, name = None, dataProperty = dataProperty)
+    val acc = new Accumulator(initialValue, param, name = None)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1285,23 +1270,7 @@ class SparkContext(config: SparkConf) extends Logging {
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    accumulator(initialValue, name, dataProperty = false)
-  }
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
-   * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
-   * driver can access the accumulator's `value`.
-   *
-   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
-   *                     same RDD/partition. This adds some additional overhead for tracking and is
-   *                     an experimental feature.
-   * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
-   */
-  @deprecated("use AccumulatorV2", "2.1.0")
-  def accumulator[T](initialValue: T, name: String, dataProperty: Boolean)
-    (implicit param: AccumulatorParam[T]) : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name), dataProperty = dataProperty)
+    val acc = new Accumulator(initialValue, param, Some(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1376,6 +1345,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *                     same RDD/partition. This adds some additional overhead for tracking and
    *                     is an experimental feature.
    */
+  @Experimental
   def register(acc: AccumulatorV2[_, _], dataProperty: Boolean): Unit = {
     acc.register(this, dataProperty = dataProperty)
   }
@@ -1389,6 +1359,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *                     is an experimental feature.
    * @param name The name of accumulator.
    */
+  @Experimental
   def register(acc: AccumulatorV2[_, _], dataProperty: Boolean, name: String): Unit = {
     acc.register(this, name = Some(name), dataProperty = dataProperty)
   }
@@ -1414,18 +1385,20 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
    */
-  def dataPropertyLongAccumulator: LongAccumulator = {
+  @Experimental
+  def longAccumulator(dataProperty: Boolean): LongAccumulator = {
     val acc = new LongAccumulator
-    register(acc, dataProperty = true)
+    register(acc, dataProperty)
     acc
   }
 
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
    */
-  def dataPropertyLongAccumulator(name: String): LongAccumulator = {
+  @Experimental
+  def longAccumulator(dataProperty: Boolean, name: String): LongAccumulator = {
     val acc = new LongAccumulator
-    register(acc, dataProperty = true, name)
+    register(acc, dataProperty, name)
     acc
   }
 

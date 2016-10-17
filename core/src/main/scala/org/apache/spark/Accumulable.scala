@@ -46,11 +46,6 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, LegacyAcc
  *                          for system and time metrics like serialization time or bytes spilled,
  *                          and false for things with absolute values like number of input rows.
  *                          This should be used for internal metrics only.
- * @param dataProperty Data property [[Accumulable]]s will only have values added once for each
- *                     RDD/Partition/Shuffle combination. This prevents double counting on
- *                     reevaluation. Partial evaluation of a partition will not increment a data
- *                     property [[Accumulable]]. Data property [[Accumulable]]s are currently
- *                     experimental and the behaviour may change in future versions.
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
@@ -61,26 +56,15 @@ class Accumulable[R, T] private (
     @transient private val initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
-    private[spark] val countFailedValues: Boolean,
-    private[spark] val dataProperty: Boolean)
+    private[spark] val countFailedValues: Boolean)
   extends Serializable {
 
   private[spark] def this(
       initialValue: R,
       param: AccumulableParam[R, T],
       name: Option[String],
-      countFailedValues: Boolean,
-      dataProperty: Boolean) = {
-    this(AccumulatorContext.newId(), initialValue, param, name, countFailedValues, dataProperty)
-  }
-
-  private[spark] def this(
-      initialValue: R,
-      param: AccumulableParam[R, T],
-      name: Option[String],
       countFailedValues: Boolean) = {
-    this(AccumulatorContext.newId(), initialValue, param, name, countFailedValues,
-      false /* dataProperty */)
+    this(AccumulatorContext.newId(), initialValue, param, name, countFailedValues)
   }
 
   private[spark] def this(initialValue: R, param: AccumulableParam[R, T], name: Option[String]) = {
@@ -91,7 +75,7 @@ class Accumulable[R, T] private (
 
   val zero = param.zero(initialValue)
   private[spark] val newAcc = new LegacyAccumulatorWrapper(initialValue, param)
-  newAcc.metadata = AccumulatorMetadata(id, name, countFailedValues, dataProperty)
+  newAcc.metadata = AccumulatorMetadata(id, name, countFailedValues, dataProperty = false)
   // Register the new accumulator in ctor, to follow the previous behaviour.
   AccumulatorContext.register(newAcc)
 

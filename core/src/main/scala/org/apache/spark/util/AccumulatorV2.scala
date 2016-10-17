@@ -79,7 +79,7 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
     new mutable.HashMap[(Int, Int, Int), AccumulatorV2[IN, OUT]]()
   // Completed contains the set of (rdd id, shuffle id, partition id) that have been
   // fully processed on the worker side. This is used to determine if the updates should
-  // be sent back to the driver for a particular rdd/shuffle/partition combination.
+  // be merged on the driver for a particular rdd/shuffle/partition combination.
   private[spark] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
   // Processed is keyed by (rdd id, shuffle id) and the value is a bitset containing all partitions
   // for the given key which have been merged into the value. This is used on the driver.
@@ -224,6 +224,7 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
    * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
    */
   final private[spark] lazy val merge: (AccumulatorV2[IN, OUT] => Unit) = {
+    assert(isAtDriverSide)
     // Handle data property accumulators
     if (metadata != null && metadata.dataProperty) {
       dataPropertyMerge _

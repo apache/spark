@@ -48,11 +48,6 @@ package org.apache.spark
  * @param param helper object defining how to add elements of type `T`
  * @param name human-readable name associated with this accumulator
  * @param countFailedValues whether to accumulate values from failed tasks
- * @param dataProperty Data property accumulators will only have values added once for each
- *                     RDD/Partition/Shuffle combination. This prevents double counting on
- *                     reevaluation. Partial evaluation of a partition will not increment a data
- *                     property accumulator. Data property accumulators are currently experimental
- *                     and the behaviour may change in future versions.
  * @tparam T result type
 */
 @deprecated("use AccumulatorV2", "2.0.0")
@@ -61,9 +56,8 @@ class Accumulator[T] private[spark] (
     @transient private val initialValue: T,
     param: AccumulatorParam[T],
     name: Option[String] = None,
-    countFailedValues: Boolean = false,
-    dataProperty: Boolean = false)
-  extends Accumulable[T, T](initialValue, param, name, countFailedValues, dataProperty)
+    countFailedValues: Boolean = false)
+  extends Accumulable[T, T](initialValue, param, name, countFailedValues)
 
 
 /**
