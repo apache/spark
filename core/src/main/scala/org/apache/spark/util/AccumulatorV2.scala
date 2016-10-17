@@ -196,6 +196,8 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
     if (metadata != null && metadata.dataProperty) {
       val updateInfo = TaskContext.get().getRDDPartitionInfo()
       val base = pending.getOrElse(updateInfo, copyAndReset())
+      // Since we may have constructed a new accumulator, set atDriverSide to false as the default
+      // new accumulators will have atDriverSide equal to true.
       base.atDriverSide = false
       base.addImpl(v)
       pending(updateInfo) = base
@@ -234,14 +236,14 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
   }
 
   final private[spark] def dataPropertyMerge(other: AccumulatorV2[IN, OUT]) = {
-        val term = other.pending.filter{case (k, v) => other.completed.contains(k)}
-      term.foreach { case ((rddId, shuffleWriteId, splitId), v) =>
-        val splits = processed.getOrElseUpdate((rddId, shuffleWriteId), new mutable.BitSet())
-        if (!splits.contains(splitId)) {
-          splits += splitId
-          mergeImpl(v)
-        }
+    val term = other.pending.filter{case (k, v) => other.completed.contains(k)}
+    term.foreach { case ((rddId, shuffleWriteId, splitId), v) =>
+      val splits = processed.getOrElseUpdate((rddId, shuffleWriteId), new mutable.BitSet())
+      if (!splits.contains(splitId)) {
+        splits += splitId
+        mergeImpl(v)
       }
+    }
   }
 
 

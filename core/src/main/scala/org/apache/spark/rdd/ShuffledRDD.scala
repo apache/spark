@@ -110,6 +110,9 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     // If our task has data property accumulators we need to keep track of which partitions
     // we are processing.
     if (context.taskMetrics.hasDataPropertyAccumulators()) {
+      // Note: we only set this once rather than resetting per element like in `MapPartitionsRDD`
+      // since the user's aggregator code will be evaluated on the entire input before it returns
+      // the iterator to its results.
       context.setRDDPartitionInfo(id, shuffleWriteId, split.index)
     }
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]

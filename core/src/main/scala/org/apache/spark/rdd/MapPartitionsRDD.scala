@@ -55,6 +55,8 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
       context.setRDDPartitionInfo(id, shuffleWriteId, split.index)
       f(context, split.index, wrappedData)
     } else {
+      // There are no data property accumulators so we avoid the overhead of keeping track of the
+      // partition information.
       f(context, split.index, input)
     }
   }
