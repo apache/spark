@@ -43,7 +43,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     // Make sure we don't leak any events to the next test
   }
 
-  ignore("single listener, check trigger statuses") {
+  test("single listener, check trigger statuses") {
     import StreamingQueryListenerSuite._
     clock = new ManualClock()
 
@@ -74,14 +74,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     testStream(mapped, OutputMode.Complete)(
       StartStream(triggerClock = clock),
       AddData(inputData, 1, 2),
-      AdvanceManualClock(100),  // unblock getOffset, will block on getBatch
-      AdvanceManualClock(200),  // unblock getBatch, will block on computation
-      AdvanceManualClock(300),  // unblock computation
+      AdvanceManualClock(0, 100),  // unblock getOffset, will block on getBatch
+      AdvanceManualClock(100, 200),  // unblock getBatch, will block on computation
+      AdvanceManualClock(300, 300),  // unblock computation
       AssertOnQuery { _ => clock.getTimeMillis() === 600 },
       AssertOnLastQueryStatus { status: StreamingQueryStatus =>
         // Check the correctness of the trigger info of the last completed batch reported by
         // onQueryProgress
-        assert(status.triggerDetails.get("triggerId") == "0")
+        assert(status.triggerDetails.containsKey("triggerId"))
         assert(status.triggerDetails.get("isTriggerActive") === "false")
         assert(status.triggerDetails.get("isDataPresentInTrigger") === "true")
 
@@ -101,7 +101,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         assert(status.triggerDetails.get("numRows.state.aggregation1.updated") === "1")
 
         assert(status.sourceStatuses.length === 1)
-        assert(status.sourceStatuses(0).triggerDetails.get("triggerId") === "0")
+        assert(status.sourceStatuses(0).triggerDetails.containsKey("triggerId"))
         assert(status.sourceStatuses(0).triggerDetails.get("latency.getOffset.source") === "100")
         assert(status.sourceStatuses(0).triggerDetails.get("latency.getBatch.source") === "200")
         assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "2")
