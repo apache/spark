@@ -84,7 +84,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 
   /**
    * Param for KMeansModel to use for warm start.
-   * The setting of initialModel takes precedence of param K.
+   * Whenever initialModel is set, the initialModel k will override the param k.
    * @group param
    */
   final val initialModel: Param[KMeansModel] =
@@ -298,7 +298,14 @@ class KMeans @Since("1.5.0") (
 
   /** @group setParam */
   @Since("1.5.0")
-  def setK(value: Int): this.type = set(k, value)
+  def setK(value: Int): this.type = {
+    if (isSet(initialModel)) {
+      logWarning("initialModel is set, so k will be ignored. Clear initialModel first.")
+      this
+    } else {
+      set(k, value)
+    }
+  }
 
   /** @group expertSetParam */
   @Since("1.5.0")
@@ -326,9 +333,10 @@ class KMeans @Since("1.5.0") (
     val kOfInitialModel = value.parentModel.clusterCenters.length
     if (isSet(k)) {
       if ($(k) != kOfInitialModel) {
+        val previousK = $(k)
         set(k, kOfInitialModel)
         logWarning(s"Param K is set to $kOfInitialModel by the initialModel." +
-          s" Previous value is ${$(k)}.")
+          s" Previous value is $previousK.")
       }
     } else {
       set(k, kOfInitialModel)
@@ -356,7 +364,7 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
 
     if (isDefined(initialModel)) {
-      // Check the equal of number of dimension
+      // Check the equal of dimension
       val dimOfData = rdd.first().size
       val dimOfInitialModel = $(initialModel).clusterCenters.head.size
       require(dimOfData == dimOfInitialModel,
@@ -418,11 +426,8 @@ object KMeans extends DefaultParamsReadable[KMeans] {
       val instance = new KMeans(metadata.uid)
 
       DefaultParamsReader.getAndSetParams(instance, metadata)
-      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc) match {
-        case Success(v) =>
-          instance.setInitialModel(v)
-        case Failure(e) =>  // Fail to load initial model
-      }
+      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc)
+        .foreach(v => instance.setInitialModel(v))
       instance
     }
   }

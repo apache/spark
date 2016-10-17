@@ -174,19 +174,17 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     val testNewK = 10
     val randomModel = KMeansSuite.generateRandomKMeansModel(dim, testNewK)
     assert(kmeans.setInitialModel(randomModel).getK === testNewK)
-
-    val differentKRandomModel = KMeansSuite.generateRandomKMeansModel(dim, testNewK + 1)
-    assert(kmeans.setInitialModel(differentKRandomModel).getK === testNewK + 1)
   }
 
-  test("Reset K after setting initial model") {
-    val kmeans = new KMeans().setSeed(1).setMaxIter(1)
+  test("Ignore k if initialModel is set") {
+    val kmeans = new KMeans()
 
-    val wrongKModel = KMeansSuite.generateRandomKMeansModel(dim, k)
-    val wrongKModelThrown = intercept[IllegalArgumentException] {
-      kmeans.setInitialModel(wrongKModel).setK(k + 1).fit(dataset)
-    }
-    assert(wrongKModelThrown.getMessage.contains("mismatched cluster count"))
+    val m1 = KMeansSuite.generateRandomKMeansModel(dim, k)
+    // ignore k if initialModel is set
+    assert(kmeans.setInitialModel(m1).setK(k - 1).getK === k)
+    kmeans.clear(kmeans.initialModel)
+    // k is not ignored after initialModel is cleared
+    assert(kmeans.setK(k - 1).getK === k - 1)
   }
 }
 
