@@ -240,6 +240,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
+   * With param isStandard we can load multi-lines json object directly.
    * See the documentation on the overloaded `json()` method with varargs for more details.
    *
    * @since 1.4.0
