@@ -123,23 +123,25 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             }
             if(isHomogenousStruct) {
               val counter = ctx.freshName("counter")
+              val rowWriterChild = ctx.freshName("rowWriterChild")
 
               s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
 
               final int $tmpCursor = $bufferHolder.cursor;
-             """ +
-              s"""
+
                  if (${input.value} instanceof UnsafeRow) {
                    ${writeUnsafeData(ctx, s"((UnsafeRow) ${input.value})", bufferHolder)};
                  } else {
+                      $rowWriterClass $rowWriterChild = new $rowWriterClass($bufferHolder, ${t.length});
+                      $rowWriterChild.reset();
                       for(int $counter = 0; $counter < ${t.length}; ++$counter) {
-                           $rowWriter.reset();
                            if (${input.value}.isNullAt($index)) {
-                             $rowWriter.setNullAt($index);
+                             $rowWriterChild.setNullAt($index);
                            }else {
-                             $rowWriter.write($counter, ${ctx.getValue(input.value, t.fields(0).dataType, counter)});
+                             $rowWriterChild.write($counter, ${ctx.getValue(input.value, t.fields(0).dataType,
+                               counter)});
                            }
                        }
                  }
