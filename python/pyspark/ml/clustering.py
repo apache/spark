@@ -318,7 +318,7 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("computeCost", dataset)
 
-    @since("2.0.0")
+    @since("2.1.0")
     def hasSummary(self):
         """
         Return true if there exists summary of model.
@@ -326,10 +326,10 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return self.summary is not None
 
     @property
-    @since("2.0.0")
+    @since("2.1.0")
     def summary(self):
         """
-        Gets summary of model on training set.
+        Gets summary of model on training set. Or raise exception if no summary is present.
         """
         return KMeansSummary(self._call_java("summary"))
 
@@ -338,14 +338,14 @@ class KMeansSummary(JavaWrapper):
     """
     Summary of KMeans.
 
-    .. versionadded:: 2.0.0
+    .. versionadded:: 2.1.0
     """
 
     def __init__(self, _java_summary):
         super(KMeansSummary, self).__init__(_java_summary)
 
     @property
-    @since("2.0.0")
+    @since("2.1.0")
     def clusterSizes(self):
         """
         Size of (number of data points in) each cluster.
@@ -353,7 +353,7 @@ class KMeansSummary(JavaWrapper):
         return self._call_java("clusterSizes")
 
     @property
-    @since("2.0.0")
+    @since("2.1.0")
     def predictions(self):
         """
         return the DataFrame of predictions that is produced by KMeansModel.transform().
@@ -361,7 +361,7 @@ class KMeansSummary(JavaWrapper):
         return self._call_java("predictions")
 
     @property
-    @since("2.0.0")
+    @since("2.1.0")
     def predictionCol(self):
         """
         Name for column of predicted clusters.
@@ -369,7 +369,7 @@ class KMeansSummary(JavaWrapper):
         return self._call_java("predictionCol")
 
     @property
-    @since("2.0.0")
+    @since("2.1.0")
     def featuresCol(self):
         """
         Name for column of features.
@@ -377,7 +377,7 @@ class KMeansSummary(JavaWrapper):
         return self._call_java("featuresCol")
 
     @property
-    @since("2.0.0")
+    @since("2.1.0")
     def k(self):
         """
         Number of clusters.
