@@ -135,6 +135,18 @@ class DataFrame(object):
         """
         self._jdf.registerTempTable(name)
 
+    def createGlobalTempView(self, name):
+        """
+        This is just an alias of :func:`registerTempTable`, and is only used for
+        forward compatibility.
+
+        >>> df.createGlobalTempView("global_view")
+        >>> df2 = sqlContext.sql("select * from global_view")
+        >>> sorted(df.collect()) == sorted(df2.collect())
+        True
+        """
+        self.registerTempTable(name)
+
     def registerAsTable(self, name):
         """
         .. note:: Deprecated in 1.4, use :func:`registerTempTable` instead.

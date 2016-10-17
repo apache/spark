@@ -1667,6 +1667,11 @@ class DataFrame private[sql](
   }
 
   /**
+   * This is just an alias of [[registerTempTable]], and is only used for forward compatibility.
+   */
+  def createGlobalTempView(viewName: String): Unit = registerTempTable(viewName)
+
+  /**
    * :: Experimental ::
    * Interface for saving the content of the [[DataFrame]] out into external storage.
    *
