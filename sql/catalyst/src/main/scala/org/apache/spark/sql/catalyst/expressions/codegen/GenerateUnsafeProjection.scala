@@ -135,6 +135,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
                    ${writeUnsafeData(ctx, s"((UnsafeRow) ${input.value})", bufferHolder)};
                  } else {
                       for(int $counter = 0; $counter < ${t.length}; ++$counter) {
+                           $rowWriter.reset();
                            if (${input.value}.isNullAt($index)) {
                              $rowWriter.setNullAt($index);
                            }else {
@@ -142,9 +143,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
                            }
                        }
                  }
-               """ +
-              s"""
-              $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+                 $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
             """
 
 
