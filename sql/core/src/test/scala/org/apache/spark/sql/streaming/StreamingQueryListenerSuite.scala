@@ -181,7 +181,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val json = JsonProtocol.sparkEventToJson(queryStarted)
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryStartedEvent]
-    assertStreamingQueryInfoEquals(queryStarted.status, newQueryStarted.status)
+    assertStreamingQueryInfoEquals(queryStarted.queryStatus, newQueryStarted.queryStatus)
   }
 
   test("QueryProgress serialization") {
@@ -190,7 +190,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val json = JsonProtocol.sparkEventToJson(queryProcess)
     val newQueryProcess = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryProgressEvent]
-    assertStreamingQueryInfoEquals(queryProcess.status, newQueryProcess.status)
+    assertStreamingQueryInfoEquals(queryProcess.queryStatus, newQueryProcess.queryStatus)
   }
 
   test("QueryTerminated serialization") {
