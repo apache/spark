@@ -294,6 +294,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.logs.rolling.enableCompression</code></td>
+  <td>false</td>
+  <td>
+    Enable executor log compression. If it is enabled, the rolled executor logs will be compressed.
+    Disabled by default.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
   <td>(none)</td>
   <td>

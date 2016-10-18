@@ -250,6 +250,15 @@ SPARK_WORKER_OPTS supports the following system properties:
     especially if you run jobs very frequently.
   </td>
 </tr>
+<tr>
+  <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
+  <td>100</td>
+  <td>
+    For compressed log files, the uncompressed file can only be computed by uncompressing the files.
+    Spark caches the uncompressed file size of compressed log files. This property controls the cache
+    size.
+  </td>
+</tr>
 </table>
 
 # Connecting an Application to the Cluster
