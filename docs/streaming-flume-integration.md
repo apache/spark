@@ -115,11 +115,11 @@ Configuring Flume on the chosen machine requires the following two steps.
 		artifactId = scala-library
 		version = {{site.SCALA_VERSION}}
 
-	(iii) *Commons Lang 3 JAR*: Download the Commons Lang 3 JAR. It can be found with the following artifact detail (or, [direct link](http://search.maven.org/remotecontent?filepath=org/apache/commons/commons-lang3/3.5/commons-lang3-3.5.jar)).
+	(iii) *Commons Lang 3 JAR*: Download the Commons Lang 3 JAR. It can be found with the following artifact detail (or, [direct link](http://search.maven.org/remotecontent?filepath=org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar)).
 
 		groupId = org.apache.commons
 		artifactId = commons-lang3
-		version = 3.5
+		version = 3.3.2
 
 2. **Configuration file**: On that machine, configure Flume agent to send data to an Avro sink by having the following in the configuration file.
 
