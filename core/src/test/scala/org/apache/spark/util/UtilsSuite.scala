@@ -295,12 +295,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     content.size
   }
 
+  private val workerConf = new SparkConf()
+
   def testOffsetBytes(isCompressed: Boolean): Unit = {
     val tmpDir2 = Utils.createTempDir()
     val suffix = getSuffix(isCompressed)
     val f1Path = tmpDir2 + "/f1" + suffix
     writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
-    val f1Length = Utils.getFileLength(new File(f1Path))
+    val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 
     // Read first few bytes
     assert(Utils.offsetBytes(f1Path, f1Length, 0, 5) === "1\n2\n3")
@@ -334,13 +336,12 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   def testOffsetBytesMultipleFiles(isCompressed: Boolean): Unit = {
     val tmpDir = Utils.createTempDir()
     val suffix = getSuffix(isCompressed)
-    val files = (1 to 3).map(i => new File(tmpDir, i.toString + suffix)) ++
-      Seq(new File(tmpDir, "4"))
+    val files = (1 to 3).map(i => new File(tmpDir, i.toString + suffix)) :+ new File(tmpDir, "4")
     writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
     writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
     writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8))
     writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(StandardCharsets.UTF_8))
-    val fileLengths = files.map(Utils.getFileLength)
+    val fileLengths = files.map(Utils.getFileLength(_, workerConf))
 
     // Read first few bytes in the 1st file
     assert(Utils.offsetBytes(files, fileLengths, 0, 5) === "01234")

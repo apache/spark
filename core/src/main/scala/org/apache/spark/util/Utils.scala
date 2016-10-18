@@ -1452,52 +1452,54 @@ private[spark] object Utils extends Logging {
     CallSite(shortForm, longForm)
   }
 
-  val UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE = "spark.worker.ui.compressedLogFileLengthCacheSize"
-  val DEFAULT_UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE = 100
+  private val UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF =
+    "spark.worker.ui.compressedLogFileLengthCacheSize"
+  private val DEFAULT_UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE = 100
   private var compressedLogFileLengthCache: LoadingCache[String, java.lang.Long] = null
   private def getCompressedLogFileLengthCache(
       sparkConf: SparkConf): LoadingCache[String, java.lang.Long] = this.synchronized {
     if (compressedLogFileLengthCache == null) {
       val compressedLogFileLengthCacheSize = sparkConf.getInt(
-        UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE,
+        UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF,
         DEFAULT_UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE)
       compressedLogFileLengthCache = CacheBuilder.newBuilder()
         .maximumSize(compressedLogFileLengthCacheSize)
         .build[String, java.lang.Long](new CacheLoader[String, java.lang.Long]() {
         override def load(path: String): java.lang.Long = {
-          Utils.getFileLength(new File(path))
+          Utils.getCompressedFileLength(new File(path))
         }
       })
     }
     compressedLogFileLengthCache
   }
 
-  def getFileLength(file: File, sparkConf: SparkConf): Long = {
+  /**
+   * Return the file length, if the file is compressed it returns the uncompressed file length.
+   * It also caches the uncompressed file size to avoid repeated decompression. The cache size is
+   * read from workerConf.
+   * */
+  def getFileLength(file: File, workConf: SparkConf): Long = {
     if (file.getName.endsWith(".gz")) {
-      getCompressedLogFileLengthCache(sparkConf).get(file.getAbsolutePath)
+      getCompressedLogFileLengthCache(workConf).get(file.getAbsolutePath)
     } else {
-      getFileLength(file)
+      file.length
     }
   }
 
-  /** Return the file length, if the file is compressed it returns the uncompressed file length. */
-  private[util] def getFileLength(file: File): Long = {
+  /** Return uncompressed file length of a compressed file. */
+  private def getCompressedFileLength(file: File): Long = {
     try {
       // Uncompress .gz file to determine file size.
-      if (file.getName.endsWith(".gz")) {
-        var fileSize = 0L
-        val gzInputStream = new GZIPInputStream(new FileInputStream(file))
-        val bufSize = 1024
-        val buf = new Array[Byte](bufSize)
-        var numBytes = IOUtils.read(gzInputStream, buf)
-        while (numBytes > 0) {
-          fileSize += numBytes
-          numBytes = IOUtils.read(gzInputStream, buf)
-        }
-        fileSize
-      } else {
-        file.length
+      var fileSize = 0L
+      val gzInputStream = new GZIPInputStream(new FileInputStream(file))
+      val bufSize = 1024
+      val buf = new Array[Byte](bufSize)
+      var numBytes = IOUtils.read(gzInputStream, buf)
+      while (numBytes > 0) {
+        fileSize += numBytes
+        numBytes = IOUtils.read(gzInputStream, buf)
       }
+      fileSize
     } catch {
       case e: Throwable =>
         logWarning(s"Cannot get file length of ${file}", e)
