@@ -112,7 +112,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             val isHomogenousStruct = {
               var i = 1
               val ref =  ctx.javaType(t.fields(0).dataType)
-              var broken = false || !ctx.isPrimitiveType(ref) || t.length <=1 || input.isNull != "false"
+              var broken = false || !ctx.isPrimitiveType(ref) || t.length <=1
               while( !broken && i < t.length) {
                 if(ctx.javaType(t.fields(i).dataType) != ref) {
                   broken = true
