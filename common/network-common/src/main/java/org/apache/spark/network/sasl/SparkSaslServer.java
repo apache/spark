@@ -17,6 +17,11 @@
 
 package org.apache.spark.network.sasl;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.Properties;
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.NameCallback;
@@ -27,17 +32,23 @@ import javax.security.sasl.RealmCallback;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Map;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.base64.Base64;
+import org.apache.commons.crypto.cipher.CryptoCipherFactory;
+import org.apache.commons.crypto.random.CryptoRandom;
+import org.apache.commons.crypto.random.CryptoRandomFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.sasl.aes.AesConfigMessage;
+import org.apache.spark.network.sasl.aes.AesCipher;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * A SASL Server for Spark which simply keeps track of the state of a single SASL session, from the
@@ -147,6 +158,62 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   @Override
   public byte[] unwrap(byte[] data, int offset, int len) throws SaslException {
     return saslServer.unwrap(data, offset, len);
+  }
+
+  /**
+   * Negotiate with peer for extended options, such as using AES cipher.
+   * @param message is message receive from peer which may contains communication parameters.
+   * @param callback is rpc callback.
+   * @param conf contains transport configuration.
+   * @return Object which represent the result of negotiateAesSessionKey.
+   */
+  public AesCipher negotiateAesSessionKey(ByteBuffer message, RpcResponseCallback callback, TransportConf conf)
+   {
+    AesCipher cipher;
+
+    // Receive initial option from client
+    AesConfigMessage cipherOption = new AesConfigMessage(null, null, null, null);
+    //  AesConfigMessage.decode(Unpooled.wrappedBuffer(message));
+    String transformation = AesCipher.TRANSFORM;
+    Properties properties = new Properties();
+
+    try {
+      // Generate key and iv
+      if (conf.saslEncryptionAesCipherKeySizeBits() % 8 != 0) {
+        throw new IllegalArgumentException("The AES cipher key size in bits should be a multiple " +
+          "of byte");
+      }
+
+      int keyLen = conf.saslEncryptionAesCipherKeySizeBits() / 8;
+      int paramLen = CryptoCipherFactory.getCryptoCipher(transformation,properties).getBlockSize();
+      byte[] inKey = new byte[keyLen];
+      byte[] outKey = new byte[keyLen];
+      byte[] inIv = new byte[paramLen];
+      byte[] outIv = new byte[paramLen];
+
+      CryptoRandom random = CryptoRandomFactory.getCryptoRandom(properties);
+      random.nextBytes(inKey);
+      random.nextBytes(outKey);
+      random.nextBytes(inIv);
+      random.nextBytes(outIv);
+
+      // Update cipher option for client. The key is encrypted.
+      cipherOption.setParameters(wrap(inKey, 0, inKey.length), inIv,
+        wrap(outKey, 0, outKey.length), outIv);
+
+      // Enable AES on saslServer
+      cipher = new AesCipher(properties, inKey, outKey, inIv, outIv);
+
+      // Send cipher option to client
+      ByteBuf buf = Unpooled.buffer(cipherOption.encodedLength());
+      cipherOption.encode(buf);
+      callback.onSuccess(buf.nioBuffer());
+    } catch (Exception e) {
+      logger.error("AES negotiation exception ", e);
+      throw Throwables.propagate(e);
+    }
+
+    return cipher;
   }
 
   /**

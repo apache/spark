@@ -54,6 +54,8 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.sasl.aes.AesCipher;
+import org.apache.spark.network.sasl.aes.AesEncryption;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
@@ -66,6 +68,9 @@ import org.apache.spark.network.util.TransportConf;
  * Jointly tests SparkSaslClient and SparkSaslServer, as both are black boxes.
  */
 public class SparkSaslSuite {
+
+  private static final String BLOCK_SIZE_CONF = "spark.network.sasl.maxEncryptedBlockSize";
+  private static final String AES_ENABLED_CONF = "spark.authenticate.sasl.encryption.aes.enabled";
 
   /** Provides a secret key holder which returns secret key == appId */
   private SecretKeyHolder secretKeyHolder = new SecretKeyHolder() {
@@ -149,7 +154,7 @@ public class SparkSaslSuite {
       .when(rpcHandler)
       .receive(any(TransportClient.class), any(ByteBuffer.class), any(RpcResponseCallback.class));
 
-    SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
+    SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false, false);
     try {
       ByteBuffer response = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
         TimeUnit.SECONDS.toMillis(10));
@@ -271,11 +276,11 @@ public class SparkSaslSuite {
       RpcHandler rpcHandler = mock(RpcHandler.class);
       when(rpcHandler.getStreamManager()).thenReturn(sm);
 
-      byte[] data = new byte[8 * 1024];
+      byte[] data = new byte[128 * 1024 * 1024];
       new Random().nextBytes(data);
       Files.write(data, file);
 
-      ctx = new SaslTestCtx(rpcHandler, true, false);
+      ctx = new SaslTestCtx(rpcHandler, true, false, false);
 
       final CountDownLatch lock = new CountDownLatch(1);
 
@@ -291,7 +296,7 @@ public class SparkSaslSuite {
         }).when(callback).onSuccess(anyInt(), any(ManagedBuffer.class));
 
       ctx.client.fetchChunk(0, 0, callback);
-      lock.await(10, TimeUnit.SECONDS);
+      lock.await(20, TimeUnit.SECONDS);
 
       verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
       verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
@@ -317,7 +322,7 @@ public class SparkSaslSuite {
 
     SaslTestCtx ctx = null;
     try {
-      ctx = new SaslTestCtx(mock(RpcHandler.class), false, false);
+      ctx = new SaslTestCtx(mock(RpcHandler.class), false, false, false);
       fail("Should have failed to connect without encryption.");
     } catch (Exception e) {
       assertTrue(e.getCause() instanceof SaslException);
@@ -336,7 +341,7 @@ public class SparkSaslSuite {
     // able to understand RPCs sent to it and thus close the connection.
     SaslTestCtx ctx = null;
     try {
-      ctx = new SaslTestCtx(mock(RpcHandler.class), true, true);
+      ctx = new SaslTestCtx(mock(RpcHandler.class), true, true, false);
       ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
         TimeUnit.SECONDS.toMillis(10));
       fail("Should have failed to send RPC to server.");
@@ -374,6 +379,71 @@ public class SparkSaslSuite {
     }
   }
 
+  @Test
+  public void testSaslEncryptionAes() throws Exception {
+    System.setProperty(BLOCK_SIZE_CONF, "10k");
+    System.setProperty(AES_ENABLED_CONF, "true");
+
+    final AtomicReference<ManagedBuffer> response = new AtomicReference<>();
+    final File file = File.createTempFile("sasltest", ".txt");
+    SaslTestCtx ctx = null;
+    try {
+      final TransportConf conf = new TransportConf("rpc", new SystemPropertyConfigProvider());
+      StreamManager sm = mock(StreamManager.class);
+      when(sm.getChunk(anyLong(), anyInt())).thenAnswer(new Answer<ManagedBuffer>() {
+        @Override
+        public ManagedBuffer answer(InvocationOnMock invocation) {
+          return new FileSegmentManagedBuffer(conf, file, 0, file.length());
+        }
+      });
+
+      RpcHandler rpcHandler = mock(RpcHandler.class);
+      when(rpcHandler.getStreamManager()).thenReturn(sm);
+
+      byte[] data = new byte[ 256 * 1024 * 1024];
+      new Random().nextBytes(data);
+      Files.write(data, file);
+
+      ctx = new SaslTestCtx(rpcHandler, true, false, true);
+
+      final Object lock = new Object();
+
+      ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
+      doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          response.set((ManagedBuffer) invocation.getArguments()[1]);
+          response.get().retain();
+          synchronized (lock) {
+            lock.notifyAll();
+          }
+          return null;
+        }
+      }).when(callback).onSuccess(anyInt(), any(ManagedBuffer.class));
+
+      synchronized (lock) {
+        ctx.client.fetchChunk(0, 0, callback);
+        lock.wait(20 * 1000);
+      }
+
+      verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
+      verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
+
+      byte[] received = ByteStreams.toByteArray(response.get().createInputStream());
+      assertTrue(Arrays.equals(data, received));
+    } finally {
+      file.delete();
+      if (ctx != null) {
+        ctx.close();
+      }
+      if (response.get() != null) {
+        response.get().release();
+      }
+      System.clearProperty(BLOCK_SIZE_CONF);
+      System.clearProperty(AES_ENABLED_CONF);
+    }
+  }
+
   private static class SaslTestCtx {
 
     final TransportClient client;
@@ -386,7 +456,8 @@ public class SparkSaslSuite {
     SaslTestCtx(
         RpcHandler rpcHandler,
         boolean encrypt,
-        boolean disableClientEncryption)
+        boolean disableClientEncryption,
+        boolean aesEnable)
       throws Exception {
 
       TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
@@ -397,7 +468,11 @@ public class SparkSaslSuite {
 
       TransportContext ctx = new TransportContext(conf, rpcHandler);
 
-      this.checker = new EncryptionCheckerBootstrap();
+      String encryptHandlerName = aesEnable ? AesEncryption.ENCRYPTION_HANDLER_NAME :
+        SaslEncryption.ENCRYPTION_HANDLER_NAME;
+
+      this.checker = new EncryptionCheckerBootstrap(encryptHandlerName);
+
       this.server = ctx.createServer(Arrays.asList(new SaslServerBootstrap(conf, keyHolder),
         checker));
 
@@ -437,13 +512,18 @@ public class SparkSaslSuite {
     implements TransportServerBootstrap {
 
     boolean foundEncryptionHandler;
+    String encryptHandlerName;
+
+    public EncryptionCheckerBootstrap(String encryptHandlerName) {
+      this.encryptHandlerName = encryptHandlerName;
+    }
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
       if (!foundEncryptionHandler) {
         foundEncryptionHandler =
-          ctx.channel().pipeline().get(SaslEncryption.ENCRYPTION_HANDLER_NAME) != null;
+          ctx.channel().pipeline().get(encryptHandlerName) != null;
       }
       ctx.write(msg, promise);
     }
