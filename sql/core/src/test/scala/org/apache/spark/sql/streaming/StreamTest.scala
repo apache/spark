@@ -690,7 +690,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     override def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = {
       asyncTestWaiter {
         assert(startStatus != null, "onQueryTerminated called before onQueryStarted")
-        terminationStatus = queryTerminated.status
+        terminationStatus = queryTerminated.queryStatus
         terminationException = queryTerminated.exception
       }
       asyncTestWaiter.dismiss()
