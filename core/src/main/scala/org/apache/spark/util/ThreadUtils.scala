@@ -196,8 +196,8 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Calls [[Awaitable.result]] directly, wraps and re-throws any exceptions with nice stack
-   * track.
+   * Calls [[Awaitable.result]] directly to avoid using `ForkJoinPool`'s `BlockingContext`, wraps
+   * and re-throws any exceptions with nice stack track.
    *
    * Codes running in the user's thread may be in a thread of Scala ForkJoinPool. As concurrent
    * executions in ForkJoinPool may see some [[ThreadLocal]] value unexpectedly, this method
