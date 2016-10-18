@@ -211,7 +211,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       }
     }
 
-    def isStreamWaitingAt(time: Long): Boolean = synchronized { waitStartTime.contains(time) }
+    def isStreamWaitingAt(time: Long): Boolean = synchronized {
+      waitStartTime == Some(time)
+    }
   }
 
 
