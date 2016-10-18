@@ -36,12 +36,11 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.sasl.aes.AesCipherOption;
+import org.apache.spark.network.sasl.aes.AesConfigMessage;
 import org.apache.spark.network.sasl.aes.AesCipher;
 import org.apache.spark.network.util.TransportConf;
 
@@ -134,17 +133,17 @@ public class SparkSaslClient implements SaslEncryptionBackend {
    * @param client is transport client used to connect to peer.
    * @param conf contain client transport configuration.
    * @throws IOException
-   * @return The object represent the result of negotiate.
+   * @return The object represent the result of negotiateAesSessionKey.
    */
-  public Object negotiate(TransportClient client, TransportConf conf) throws IOException {
+  public AesCipher negotiateAesSessionKey(TransportClient client, TransportConf conf) throws IOException {
     // Create option for negotiation
-    AesCipherOption cipherOption = new AesCipherOption();
+    AesConfigMessage cipherOption = new AesConfigMessage(null, null, null, null);
     ByteBuf buf = Unpooled.buffer(cipherOption.encodedLength());
     cipherOption.encode(buf);
 
     // Send option to server and decode received negotiated option
     ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.saslRTTimeoutMs());
-    cipherOption = AesCipherOption.decode(Unpooled.wrappedBuffer(response));
+    cipherOption = AesConfigMessage.decode(Unpooled.wrappedBuffer(response));
 
     // Decrypt key from option. Server's outKey is client's inKey, and vice versa.
     byte[] outKey = unwrap(cipherOption.inKey, 0, cipherOption.inKey.length);

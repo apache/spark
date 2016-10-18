@@ -20,7 +20,6 @@ package org.apache.spark.network.sasl;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import javax.security.sasl.Sasl;
-import javax.security.sasl.SaslException;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -117,35 +116,36 @@ class SaslRpcHandler extends RpcHandler {
     // method returns. This assumes that the code ensures, through other means, that no outbound
     // messages are being written to the channel while negotiation is still going on.
     if (saslServer.isComplete()) {
-      if (SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
-        try {
-          if (conf.saslEncryptionAesEnabled()) {
-            // Extra negotiation should happen after authentication, so return directly while
-            // processing authenticate.
-            if (!isAuthenticated) {
-              logger.debug("SASL authentication successful for channel {}", client);
-              isAuthenticated = true;
-              return ;
-            } else {
-              Object result = saslServer.negotiate(message, callback, conf);
-              if (result instanceof AesCipher) {
-                logger.debug("Enabling AES cipher for Server channel {}", client);
-                AesEncryption.addToChannel(channel, (AesCipher) result);
-              }
-            }
-          } else {
-            logger.info("Enabling encryption for channel {}", client);
-            SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
-          }
-          saslServer = null;
-        } catch (SaslException e) {
-          return ;
-        }
-      } else {
+      if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("SASL authentication successful for channel {}", client);
         saslServer.dispose();
         saslServer = null;
+        isComplete = true;
+        return ;
       }
+
+      if (!conf.saslEncryptionAesEnabled()) {
+        logger.debug("Enabling encryption for channel {}", client);
+        SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
+      } else {
+        // Extra negotiation should happen after authentication, so return directly while
+        // processing authenticate.
+        if (!isAuthenticated) {
+          logger.debug("SASL authentication successful for channel {}", client);
+          isAuthenticated = true;
+          return;
+        } else {
+          try {
+            AesCipher cipher = saslServer.negotiateAesSessionKey(message, callback, conf);
+            logger.info("Enabling AES cipher for Server channel {}", client);
+            AesEncryption.addToChannel(channel, cipher);
+          } catch (IOException ioe) {
+            throw new RuntimeException(ioe);
+          }
+        }
+      }
+
+      saslServer = null;
       isComplete = true;
     }
   }

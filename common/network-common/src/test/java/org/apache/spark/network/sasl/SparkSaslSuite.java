@@ -41,9 +41,6 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import org.apache.spark.network.sasl.aes.AesCipher;
-import org.apache.spark.network.sasl.aes.AesCipherOption;
-import org.apache.spark.network.sasl.aes.AesEncryption;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -57,6 +54,8 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.sasl.aes.AesCipher;
+import org.apache.spark.network.sasl.aes.AesEncryption;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
@@ -382,7 +381,6 @@ public class SparkSaslSuite {
 
   @Test
   public void testSaslEncryptionAes() throws Exception {
-    String transformation = AesCipher.TRANSFORM;
     System.setProperty(BLOCK_SIZE_CONF, "10k");
     System.setProperty(AES_ENABLED_CONF, "true");
 
@@ -402,7 +400,7 @@ public class SparkSaslSuite {
       RpcHandler rpcHandler = mock(RpcHandler.class);
       when(rpcHandler.getStreamManager()).thenReturn(sm);
 
-      byte[] data = new byte[8 * 1024];
+      byte[] data = new byte[ 8 * 1024 * 1024];
       new Random().nextBytes(data);
       Files.write(data, file);
 
@@ -425,7 +423,7 @@ public class SparkSaslSuite {
 
       synchronized (lock) {
         ctx.client.fetchChunk(0, 0, callback);
-        lock.wait(100 * 1000);
+        lock.wait(10 * 1000);
       }
 
       verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));

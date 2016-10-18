@@ -176,7 +176,7 @@ public class TransportConf {
   }
 
   /**
-   * The trigger for enabling AES cipher for SASL encrypt backend.
+   * The trigger for enabling AES cipher for SASL encryptMore backend.
    */
   public boolean saslEncryptionAesEnabled() {
     return conf.getBoolean("spark.authenticate.sasl.encryption.aes.enabled", false);

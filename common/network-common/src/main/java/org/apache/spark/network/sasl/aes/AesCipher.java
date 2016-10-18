@@ -18,6 +18,7 @@
 package org.apache.spark.network.sasl.aes;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.HashMap;
@@ -25,8 +26,20 @@ import java.util.Properties;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
 
+import com.google.common.base.Throwables;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import org.apache.commons.crypto.cipher.CryptoCipherFactory;
+import org.apache.commons.crypto.random.CryptoRandom;
+import org.apache.commons.crypto.random.CryptoRandomFactory;
 import org.apache.commons.crypto.stream.CryptoInputStream;
 import org.apache.commons.crypto.stream.CryptoOutputStream;
+import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.sasl.SparkSaslServer;
+import org.apache.spark.network.util.TransportConf;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * AES cipher for encryption and decryption.
@@ -41,7 +54,7 @@ public class AesCipher {
   private HashMap<ReadableByteChannel, CryptoInputStream> inputStreamMap;
   private HashMap<WritableByteChannel, CryptoOutputStream> outputStreamMap;
 
-  public static final int STREAM_BUFFER_SIZE = 8192;
+  public static final int STREAM_BUFFER_SIZE = 1024 * 32;
   public static final String TRANSFORM = "AES/CTR/NoPadding";
 
   public AesCipher(

@@ -19,6 +19,7 @@ package org.apache.spark.network.sasl.aes;
 
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
+import java.nio.ByteBuffer;
 
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
@@ -37,65 +38,73 @@ public class AesEncryption {
   public static final String ENCRYPTION_HANDLER_NAME = "AesEncryption";
   public static final String DECRYPTION_HANDLER_NAME = "AesDecryption";
 
-  public static void addToChannel(Channel ch, AesCipher cipher) {
+  public static void addToChannel(Channel ch, AesCipher cipher) throws IOException {
     ch.pipeline().addFirst(ENCRYPTION_HANDLER_NAME, new AesEncryptHandler(cipher))
       .addFirst(DECRYPTION_HANDLER_NAME, new AesDecryptHandler(cipher));
   }
 
   private static class AesEncryptHandler extends ChannelOutboundHandlerAdapter {
-    private final AesCipher cipher;
     private ByteArrayWritableChannel byteChannel;
+    private CryptoOutputStream cos;
 
-    AesEncryptHandler(AesCipher cipher) {
-      this.cipher = cipher;
+    AesEncryptHandler(AesCipher cipher) throws IOException {
       byteChannel = new ByteArrayWritableChannel(AesCipher.STREAM_BUFFER_SIZE);
+      cos = cipher.CreateOutputStream(byteChannel);
     }
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
-      ctx.write(new EncryptMessage(cipher, msg, byteChannel), promise);
+      ctx.write(new EncryptMessage(cos, msg, byteChannel), promise);
+    }
+
+    @Override
+    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+      cos.close();
+      super.close(ctx, promise);
     }
   }
 
   private static class AesDecryptHandler extends ChannelInboundHandlerAdapter {
-    private final AesCipher cipher;
+    private final Logger logger = LoggerFactory.getLogger(AesDecryptHandler.class);
     private CryptoInputStream cis;
     private ByteArrayReadableChannel byteChannel;
+    private long totalDecrypted;
 
-    AesDecryptHandler(AesCipher cipher) {
-      this.cipher = cipher;
-      byteChannel = new ByteArrayReadableChannel();
+    AesDecryptHandler(AesCipher cipher) throws IOException {
+      byteChannel = new ByteArrayReadableChannel(AesCipher.STREAM_BUFFER_SIZE);
+      cis = cipher.CreateInputStream(byteChannel);
+      totalDecrypted = 0;
     }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
       ByteBuf in = (ByteBuf) data;
 
-      try {
-        while (in.isReadable()) {
-          byteChannel.feedData(in);
-          cis = cipher.CreateInputStream(byteChannel);
-
-          int i;
-          byte[] decryptedData = new byte[byteChannel.length()];
-          int offset = 0;
-          while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > 0) {
-            offset += i;
-            if (offset >= decryptedData.length) break;
+      while (in.isReadable()) {
+        byteChannel.feedData(in);
+        int i;
+        byte[] decryptedData = new byte[byteChannel.length()];
+        int offset = 0;
+        while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > 0) {
+          offset += i;
+          if (offset >= decryptedData.length) {
+            break;
           }
-          byteChannel.reset();
-
-          ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, offset));
         }
-      } finally {
-        in.release();
+
+        totalDecrypted += offset;
+        byteChannel.reset();
+        ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, decryptedData.length));
       }
+
+      in.release();
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-      byteChannel.reset();
+      cis.close();
+      logger.debug("{} channel inactive decrypted {} bytes", ctx.channel(), totalDecrypted);
       super.channelInactive(ctx);
     }
   }
@@ -103,22 +112,29 @@ public class AesEncryption {
   private static class EncryptMessage extends AbstractReferenceCounted implements FileRegion {
     private final Logger logger = LoggerFactory.getLogger(EncryptMessage.class);
 
-    private AesCipher cipher;
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
     private long transferred;
-    private ByteArrayWritableChannel byteChannel;
+    private CryptoOutputStream cos;
 
-    EncryptMessage(AesCipher cipher, Object msg, ByteArrayWritableChannel ch) {
+    // Encrypt Data channel used to store encrypted data from crypto stream.
+    private ByteArrayWritableChannel byteEncChannel;
+
+    // Raw data channel used to store raw data from upper handler.
+    private ByteArrayWritableChannel byteRawChannel;
+    private ByteBuffer currentEncrypted;
+
+    EncryptMessage(CryptoOutputStream cos, Object msg, ByteArrayWritableChannel ch) {
       Preconditions.checkArgument(msg instanceof ByteBuf || msg instanceof FileRegion,
         "Unrecognized message type: %s", msg.getClass().getName());
-      this.cipher = cipher;
       this.isByteBuf = msg instanceof ByteBuf;
       this.buf = isByteBuf ? (ByteBuf) msg : null;
       this.region = isByteBuf ? null : (FileRegion) msg;
       this.transferred = 0;
-      byteChannel = ch;
+      byteRawChannel = new ByteArrayWritableChannel(AesCipher.STREAM_BUFFER_SIZE);
+      this.cos = cos;
+      byteEncChannel = ch;
     }
 
     @Override
@@ -139,34 +155,49 @@ public class AesEncryption {
     @Override
     public long transferTo(WritableByteChannel target, long position) throws IOException {
       Preconditions.checkArgument(position == transfered(), "Invalid position.");
-      CryptoOutputStream cos = cipher.CreateOutputStream(target);
 
       do {
-        byteChannel.reset();
-        if (isByteBuf) {
-          int copied = byteChannel.write(buf.nioBuffer());
-          buf.skipBytes(copied);
-        } else {
-          region.transferTo(byteChannel, region.transfered());
+        if(currentEncrypted == null) {
+          encryptMore();
         }
-
-        cos.write(byteChannel.getData(), 0, byteChannel.length());
-        transferred += byteChannel.length();
+        int byteWritten = currentEncrypted.remaining();
+        target.write(currentEncrypted);
+        byteWritten -= currentEncrypted.remaining();
+        transferred += byteWritten;
+        if(!currentEncrypted.hasRemaining()) {
+          currentEncrypted = null;
+          byteEncChannel.reset();
+        }
       } while (transferred < count());
 
-      cos.flush();
-      logger.debug("enc total {} bytes", transferred);
+      logger.debug("{} transferred total {} bytes", target, transferred);
 
       return transferred;
     }
 
+    public void encryptMore() throws IOException {
+
+      byteRawChannel.reset();
+      if (isByteBuf) {
+        int copied = byteRawChannel.write(buf.nioBuffer());
+        buf.skipBytes(copied);
+      } else {
+        region.transferTo(byteRawChannel, region.transfered());
+      }
+      cos.write(byteRawChannel.getData(), 0, byteRawChannel.length());
+      cos.flush();
+
+      currentEncrypted = ByteBuffer.wrap(byteEncChannel.getData(),
+        0, byteEncChannel.length());
+    }
+
     @Override
     protected void deallocate() {
-      byteChannel.reset();
+      byteRawChannel.reset();
+      byteEncChannel.reset();
       if (region != null) {
         region.release();
       }
-
       if (buf != null) {
         buf.release();
       }

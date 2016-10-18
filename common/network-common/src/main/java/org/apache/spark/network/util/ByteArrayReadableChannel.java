@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,57 +30,40 @@ import org.slf4j.LoggerFactory;
 public class ByteArrayReadableChannel implements ReadableByteChannel {
   private final Logger logger = LoggerFactory.getLogger(ByteArrayReadableChannel.class);
 
-  private byte[] data;
-  private int offset;
-
-  public byte[] getData() {
-    return data;
-  }
+  private byte[] backArray;
+  private ByteBuf data;
 
   public int length() {
-    return data.length;
+    return data.readableBytes();
   }
 
   public void reset() {
-    offset = 0;
-    data = null;
+    data.clear();
   }
 
-  public ByteArrayReadableChannel() {
-
+  public ByteArrayReadableChannel(int size) {
+    backArray = new byte[size];
+    data = Unpooled.wrappedBuffer(backArray);
+    data.clear();
   }
 
   public void feedData(ByteBuf buf) {
-    int length = buf.readableBytes();
-
-    if (buf.hasArray()) {
-      data = buf.array();
-      buf.skipBytes(length);
-    } else {
-      data = new byte[length];
-      buf.readBytes(data);
-    }
-
-    logger.debug("ByteReadableChannel: get {} bytes", data.length);
+    int toFeed = Math.min(data.writableBytes(), buf.readableBytes());
+    buf.readBytes(data, toFeed);
+    logger.debug("ByteReadableChannel: get {} bytes", toFeed);
   }
 
   @Override
   public int read(ByteBuffer dst) throws IOException {
-    if (offset == data.length) {
-      logger.debug("channel empty");
-      return 0;
-    }
-
-    int toPut = Math.min(data.length - offset, dst.remaining());
-    dst.put(data, offset, toPut);
-    offset += toPut;
-
+    int toPut = Math.min(data.readableBytes(), dst.remaining());
+    dst.put(backArray, data.readerIndex(), toPut);
+    data.skipBytes(toPut);
     return toPut;
   }
 
   @Override
   public void close() throws IOException {
-
+    data.release();
   }
 
   @Override

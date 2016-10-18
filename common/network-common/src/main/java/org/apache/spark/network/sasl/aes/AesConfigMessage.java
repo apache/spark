@@ -24,7 +24,7 @@ import org.apache.spark.network.protocol.Encoders;
 /**
  * The AES cipher options for SASL encryption negotiation.
  */
-public class AesCipherOption implements Encodable {
+public class AesConfigMessage implements Encodable {
   /** Serialization tag used to catch incorrect payloads. */
   private static final byte TAG_BYTE = (byte) 0xEB;
 
@@ -33,10 +33,7 @@ public class AesCipherOption implements Encodable {
   public byte[] inIv;
   public byte[] outIv;
 
-  public AesCipherOption() {
-    this(null, null, null, null);
-  }
-  public AesCipherOption(byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
+  public AesConfigMessage(byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
     this.inKey = inKey;
     this.inIv = inIv;
     this.outKey = outKey;
@@ -75,20 +72,21 @@ public class AesCipherOption implements Encodable {
     }
   }
 
-  public static AesCipherOption decode(ByteBuf buf) {
+  public static AesConfigMessage decode(ByteBuf buf) {
     if (buf.readByte() != TAG_BYTE) {
       throw new IllegalStateException("Expected SaslMessage, received something else"
         + " (maybe your client does not have SASL enabled?)");
     }
 
-    if (buf.isReadable()) {
+    if (buf.readableBytes() > 0) {
       byte[] inKey = Encoders.ByteArrays.decode(buf);
       byte[] inIv = Encoders.ByteArrays.decode(buf);
       byte[] outKey = Encoders.ByteArrays.decode(buf);
       byte[] outIv = Encoders.ByteArrays.decode(buf);
-      return new AesCipherOption(inKey, inIv, outKey, outIv);
+      return new AesConfigMessage(inKey, inIv, outKey, outIv);
+    } else {
+      return new AesConfigMessage(null, null, null, null);
     }
-    return new AesCipherOption();
   }
 
 }

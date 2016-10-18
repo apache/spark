@@ -91,12 +91,10 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
             new SaslException("Encryption requests by negotiated non-encrypted connection."));
         }
 
-        if(conf.saslEncryptionAesEnabled()) {
-          Object result = saslClient.negotiate(client, conf);
-          if (result instanceof AesCipher) {
-            logger.info("Enabling AES cipher for client channel {}", client);
-            AesEncryption.addToChannel(channel, (AesCipher) result);
-          }
+        if (conf.saslEncryptionAesEnabled()) {
+          AesCipher cipher = saslClient.negotiateAesSessionKey(client, conf);
+          logger.info("Enabling AES cipher for client channel {}", client);
+          AesEncryption.addToChannel(channel, cipher);
         } else {
           SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
         }
