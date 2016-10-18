@@ -83,9 +83,9 @@ abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggre
 
       Arguments:
         expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
         expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
@@ -102,9 +102,9 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
 
       Arguments:
         expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
         expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {

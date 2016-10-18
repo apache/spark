@@ -36,9 +36,9 @@ import org.apache.spark.sql.types._
 
       Arguments:
         expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
         expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 // scalastyle:on line.size.limit
 case class Corr(x: Expression, y: Expression) extends DeclarativeAggregate {

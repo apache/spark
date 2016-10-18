@@ -138,7 +138,7 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
 
       Arguments:
         expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 // scalastyle:on line.size.limit
 case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
@@ -162,7 +162,7 @@ case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 
       Arguments:
         expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 // scalastyle:on line.size.limit
 case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
@@ -186,7 +186,7 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
       Arguments:
         expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
@@ -208,7 +208,7 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
       Arguments:
         expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
@@ -230,7 +230,7 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
       Arguments:
         expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 case class Skewness(expr: Expression) extends CentralMomentAgg(expr) {
 
@@ -252,7 +252,7 @@ case class Skewness(expr: Expression) extends CentralMomentAgg(expr) {
 
       Arguments:
         expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 

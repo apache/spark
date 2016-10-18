@@ -27,8 +27,18 @@ import org.apache.spark.sql.types._
  * Code generation inherited from BinaryArithmetic.
  */
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Bitwise AND.",
-  extended = "> SELECT 3 _FUNC_ 5; 1")
+  usage = "expr1 _FUNC_ expr2 - Bitwise AND.",
+  extended = """
+    expr1 _FUNC_ expr2
+
+      Arguments:
+        expr1 - any intergal numeric type expression.
+        expr2 - any intergal numeric type expression.
+
+      Examples:
+        > SELECT 3 _FUNC_ 5;
+         1
+  """)
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = IntegralType
@@ -55,8 +65,18 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
  * Code generation inherited from BinaryArithmetic.
  */
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Bitwise OR.",
-  extended = "> SELECT 3 _FUNC_ 5; 7")
+  usage = "expr1 _FUNC_ expr2 - Bitwise OR.",
+  extended = """
+    expr1 _FUNC_ expr2
+
+      Arguments:
+        expr1 - any intergal numeric type expression.
+        expr2 - any intergal numeric type expression.
+
+      Examples:
+        > SELECT 3 _FUNC_ 5;
+         7
+  """)
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = IntegralType
@@ -83,8 +103,18 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
  * Code generation inherited from BinaryArithmetic.
  */
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Bitwise exclusive OR.",
-  extended = "> SELECT 3 _FUNC_ 5; 2")
+  usage = "expr1 _FUNC_ expr2 - Bitwise exclusive OR.",
+  extended = """
+    expr1 _FUNC_ expr2
+
+      Arguments:
+        expr1 - any intergal numeric type expression.
+        expr2 - any intergal numeric type expression.
+
+      Examples:
+        > SELECT 3 _FUNC_ 5;
+         2
+  """)
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = IntegralType
@@ -109,8 +139,17 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
  * A function that calculates bitwise not(~) of a number.
  */
 @ExpressionDescription(
-  usage = "_FUNC_ b - Bitwise NOT.",
-  extended = "> SELECT _FUNC_ 0; -1")
+  usage = "_FUNC_ expr - Bitwise NOT.",
+  extended = """
+    _FUNC_ expr
+
+      Arguments:
+        expr - any intergal numeric type expression.
+
+      Examples:
+        > SELECT _FUNC_ 0;
+         -1
+  """)
 case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)

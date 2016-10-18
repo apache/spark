@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
 
       Arguments:
         expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
   """)
 case class Sum(child: Expression) extends DeclarativeAggregate {
 

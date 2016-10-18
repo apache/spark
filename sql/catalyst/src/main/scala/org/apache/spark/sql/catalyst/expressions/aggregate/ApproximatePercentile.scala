@@ -68,11 +68,11 @@ import org.apache.spark.sql.types._
 
       Arguments:
         col - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
         array(...) - an array that contains any numeric type literal that can be implicitly
-          converted to double type.
+          converted to numeric type.
         accuracy - any numeric type or any nonnumeric type literal that can be implicitly
-          converted to int type.
+          converted to numeric type.
 
       Examples:
         > SELECT percentile_approx(10.0, array(0.5, 0.4, 0.1), 100);
@@ -82,11 +82,11 @@ import org.apache.spark.sql.types._
 
       Arguments:
         col - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to double type.
+          converted to numeric type.
         percentage - any numeric type or any nonnumeric type literal that can be
-          implicitly converted to double type.
+          implicitly converted to numeric type.
         accuracy - any numeric type or any nonnumeric type literal that can be implicitly
-          converted to int type.
+          converted to numeric type.
 
       Examples:
         > SELECT percentile_approx(10.0, 0.5, 100);

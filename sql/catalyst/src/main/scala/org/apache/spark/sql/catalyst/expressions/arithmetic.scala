@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
     _FUNC_(expr)
 
       Arguments:
-        expr - any numeric types and interval type.
+        expr - any numeric type or interval type expression.
   """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
@@ -73,7 +73,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
     _FUNC_(expr)
 
       Arguments:
-        expr - any numeric types and interval type.
+        expr - any numeric type or interval type expression.
   """)
 case class UnaryPositive(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
@@ -100,7 +100,7 @@ case class UnaryPositive(child: Expression)
     _FUNC_(expr)
 
       Arguments:
-        expr - any numeric types.
+        expr - any numeric type expression.
 
       Examples:
         > SELECT _FUNC_(-1);
@@ -157,10 +157,10 @@ object BinaryArithmetic {
     expr1 _FUNC_ expr2
 
       Arguments:
-        expr1 - any numeric types, any nonnumeric type expression that can be implicitly
-          converted to numeric type and interval type.
-        expr2 - any numeric types, any nonnumeric type expression that can be implicitly
-          converted to numeric type and interval type.
+        expr1 - any numeric type, interval type or any nonnumeric type expression that
+          can be implicitly converted to numeric type.
+        expr2 - any numeric type, interval type or any nonnumeric type expression that
+          can be implicitly converted to numeric type.
   """)
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
@@ -197,10 +197,10 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
     expr1 _FUNC_ expr2
 
       Arguments:
-        expr1 - any numeric types, any nonnumeric type expression that can be implicitly
-          converted to numeric type and interval type.
-        expr2 - any numeric types, any nonnumeric type expression that can be implicitly
-          converted to numeric type and interval type.
+        expr1 - any numeric type, interval type or any nonnumeric type expression that
+          can be implicitly converted to numeric type.
+        expr2 - any numeric type, interval type or any nonnumeric type expression that
+          can be implicitly converted to numeric type.
   """)
 case class Subtract(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
@@ -238,9 +238,9 @@ case class Subtract(left: Expression, right: Expression)
     expr1 _FUNC_ expr2
 
       Arguments:
-        expr1 - any numeric types and any nonnumeric type expression that can be implicitly
+        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
           converted to numeric type.
-        expr2 - any numeric types and any nonnumeric type expression that can be implicitly
+        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
           converted to numeric type.
   """)
 case class Multiply(left: Expression, right: Expression)
@@ -262,9 +262,9 @@ case class Multiply(left: Expression, right: Expression)
     expr1 _FUNC_ expr2
 
       Arguments:
-        expr1 - any numeric types and any nonnumeric type expression that can be implicitly
+        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
           converted to numeric type.
-        expr2 - any numeric types and any nonnumeric type expression that can be implicitly
+        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
           converted to numeric type.
 
       Examples:
@@ -351,9 +351,9 @@ case class Divide(left: Expression, right: Expression)
     expr1 _FUNC_ expr2
 
        Arguments:
-         expr1 - any numeric types and any nonnumeric type expression that can be implicitly
+         expr1 - any numeric type or any nonnumeric type expression that can be implicitly
            converted to numeric type.
-         expr2 - any numeric types and any nonnumeric type expression that can be implicitly
+         expr2 - any numeric type or any nonnumeric type expression that can be implicitly
            converted to numeric type.
   """)
 case class Remainder(left: Expression, right: Expression)
@@ -441,9 +441,9 @@ case class Remainder(left: Expression, right: Expression)
     _FUNC_(expr1, expr2)
 
       Arguments:
-        expr1 - any numeric types and any nonnumeric type expression that can be implicitly
+        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
           converted to numeric type.
-        expr2 - any numeric types and any nonnumeric type expression that can be implicitly
+        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
           converted to numeric type.
 
       Examples:
@@ -557,8 +557,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic wi
     _FUNC_(expr, ...)
 
       Arguments:
-        expr - any numeric types and any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+        expr - any type expression except struct/map/array type.
 
       Examples:
         > SELECT _FUNC_(10, 9, 2, 4, 3);
@@ -628,8 +627,7 @@ case class Least(children: Seq[Expression]) extends Expression {
     _FUNC_(expr, ...)
 
       Arguments:
-        expr - any numeric types and any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+        expr - any type expression except struct/map/array type.
 
       Examples:
         > SELECT _FUNC_(10, 9, 2, 4, 3);
