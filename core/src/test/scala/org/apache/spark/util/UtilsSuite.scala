@@ -361,10 +361,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.offsetBytes(files, fileLengths, -5, 18) === "0123456789abcdefgh")
 
     // Read some nonexistent bytes at the end
-    assert(Utils.offsetBytes(files, fileLengths, 18, 35) === "ijABCDEFGHIJ")
+    assert(Utils.offsetBytes(files, fileLengths, 18, 45) === "ijABCDEFGHIJ9876543210")
 
     // Read some nonexistent bytes on both ends
-    assert(Utils.offsetBytes(files, fileLengths, -5, 35) === "0123456789abcdefghijABCDEFGHIJ")
+    assert(Utils.offsetBytes(files, fileLengths, -5, 45) ===
+      "0123456789abcdefghijABCDEFGHIJ9876543210")
 
     Utils.deleteRecursively(tmpDir)
   }
