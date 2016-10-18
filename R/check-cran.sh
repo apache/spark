@@ -43,10 +43,22 @@ $FWDIR/create-docs.sh
 "$R_SCRIPT_PATH/"R CMD build $FWDIR/pkg
 
 # Run check as-cran.
-# TODO(shivaram): Remove the skip tests once we figure out the install mechanism
-
 VERSION=`grep Version $FWDIR/pkg/DESCRIPTION | awk '{print $NF}'`
 
-"$R_SCRIPT_PATH/"R CMD check --as-cran SparkR_"$VERSION".tar.gz
+CRAN_CHECK_OPTIONS="--as-cran"
+
+if [ -n "$NO_TESTS" ]
+then
+  CRAN_CHECK_OPTIONS=$CRAN_CHECK_OPTIONS" --no-tests"
+fi
+
+if [ -n "$NO_MANUAL" ]
+then
+  CRAN_CHECK_OPTIONS=$CRAN_CHECK_OPTIONS" --no-manual"
+fi
+
+echo "Running CRAN check with $CRAN_CHECK_OPTIONS options"
+
+"$R_SCRIPT_PATH/"R CMD check $CRAN_CHECK_OPTIONS SparkR_"$VERSION".tar.gz
 
 popd > /dev/null

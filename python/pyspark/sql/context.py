@@ -215,7 +215,7 @@ class SQLContext(object):
 
     @since(1.3)
     @ignore_unicode_prefix
-    def createDataFrame(self, data, schema=None, samplingRatio=None):
+    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
 
@@ -247,6 +247,7 @@ class SQLContext(object):
             ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
             We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
         :param samplingRatio: the sample ratio of rows used for inferring
+        :param verifySchema: verify data types of every row against schema.
         :return: :class:`DataFrame`
 
         .. versionchanged:: 2.0
@@ -254,6 +255,9 @@ class SQLContext(object):
            :class:`pyspark.sql.types.StringType` after 2.0.
            If it's not a :class:`pyspark.sql.types.StructType`, it will be wrapped into a
            :class:`pyspark.sql.types.StructType` and each record will also be wrapped into a tuple.
+
+        .. versionchanged:: 2.0.1
+           Added verifySchema.
 
         >>> l = [('Alice', 1)]
         >>> sqlContext.createDataFrame(l).collect()
@@ -302,7 +306,7 @@ class SQLContext(object):
             ...
         Py4JJavaError: ...
         """
-        return self.sparkSession.createDataFrame(data, schema, samplingRatio)
+        return self.sparkSession.createDataFrame(data, schema, samplingRatio, verifySchema)
 
     @since(1.3)
     def registerDataFrameAsTable(self, df, tableName):

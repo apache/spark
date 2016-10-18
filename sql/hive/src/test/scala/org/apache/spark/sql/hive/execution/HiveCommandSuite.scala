@@ -404,25 +404,24 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
       // An empty sequence of row is returned for session temporary table.
-      val message1 = intercept[AnalysisException] {
+      intercept[NoSuchTableException] {
         sql("SHOW PARTITIONS parquet_temp")
-      }.getMessage
-      assert(message1.contains("is not allowed on a temporary table"))
+      }
 
-      val message2 = intercept[AnalysisException] {
+      val message1 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_tab3")
       }.getMessage
-      assert(message2.contains("not allowed on a table that is not partitioned"))
+      assert(message1.contains("not allowed on a table that is not partitioned"))
 
-      val message3 = intercept[AnalysisException] {
+      val message2 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_tab4 PARTITION(abcd=2015, xyz=1)")
       }.getMessage
-      assert(message3.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
+      assert(message2.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
 
-      val message4 = intercept[AnalysisException] {
+      val message3 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_view1")
       }.getMessage
-      assert(message4.contains("is not allowed on a view or index table"))
+      assert(message3.contains("is not allowed on a view"))
     }
   }
 

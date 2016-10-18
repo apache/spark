@@ -76,7 +76,7 @@ abstract class OutputWriterFactory extends Serializable {
    * through the [[OutputWriterFactory]] implementation.
    * @since 2.0.0
    */
-  private[sql] def newWriter(path: String): OutputWriter = {
+  def newWriter(path: String): OutputWriter = {
     throw new UnsupportedOperationException("newInstance with just path not supported")
   }
 }
@@ -134,13 +134,13 @@ abstract class OutputWriter {
  * @param options Configuration used when reading / writing data.
  */
 case class HadoopFsRelation(
-    sparkSession: SparkSession,
     location: FileCatalog,
     partitionSchema: StructType,
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    options: Map[String, String]) extends BaseRelation with FileRelation {
+    options: Map[String, String])(val sparkSession: SparkSession)
+  extends BaseRelation with FileRelation {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
@@ -249,7 +249,7 @@ trait FileFormat {
    * appends partition values to [[InternalRow]]s produced by the reader function [[buildReader]]
    * returns.
    */
-  private[sql] def buildReaderWithPartitionValues(
+  def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -356,7 +356,7 @@ trait FileCatalog {
 /**
  * Helper methods for gathering metadata from HDFS.
  */
-private[sql] object HadoopFsRelation extends Logging {
+object HadoopFsRelation extends Logging {
 
   /** Checks if we should filter out this path name. */
   def shouldFilterOut(pathName: String): Boolean = {

@@ -38,11 +38,11 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Data corresponding to one partition of a JDBCRDD.
  */
-private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
+case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
   override def index: Int = idx
 }
 
-private[sql] object JDBCRDD extends Logging {
+object JDBCRDD extends Logging {
 
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
@@ -136,7 +136,16 @@ private[sql] object JDBCRDD extends Logging {
             val typeName = rsmd.getColumnTypeName(i + 1)
             val fieldSize = rsmd.getPrecision(i + 1)
             val fieldScale = rsmd.getScale(i + 1)
-            val isSigned = rsmd.isSigned(i + 1)
+            val isSigned = {
+              try {
+                rsmd.isSigned(i + 1)
+              } catch {
+                // Workaround for HIVE-14684:
+                case e: SQLException if
+                  e.getMessage == "Method not supported" &&
+                  rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" => true
+              }
+            }
             val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
             val metadata = new MetadataBuilder()
               .putString("name", columnName)
@@ -192,7 +201,7 @@ private[sql] object JDBCRDD extends Logging {
    * Turns a single Filter into a String representing a SQL expression.
    * Returns None for an unhandled filter.
    */
-  private[jdbc] def compileFilter(f: Filter): Option[String] = {
+  def compileFilter(f: Filter): Option[String] = {
     Option(f match {
       case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
       case EqualNullSafe(attr, value) =>
@@ -275,7 +284,7 @@ private[sql] object JDBCRDD extends Logging {
  * driver code and the workers must be able to access the database; the driver
  * needs to fetch the schema while the workers need to fetch the data.
  */
-private[sql] class JDBCRDD(
+private[jdbc] class JDBCRDD(
     sc: SparkContext,
     getConnection: () => Connection,
     schema: StructType,

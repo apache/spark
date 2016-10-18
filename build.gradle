@@ -50,7 +50,7 @@ allprojects {
   ext {
     scalaBinaryVersion = '2.11'
     scalaVersion = scalaBinaryVersion + '.8'
-    hadoopVersion = '2.7.2'
+    hadoopVersion = '2.7.3'
     protobufVersion = '2.6.1'
     jerseyVersion = '2.22.2'
     sunJerseyVersion = '1.19.1'

@@ -22,6 +22,7 @@
 /lib/
 R-unit-tests.log
 R/unit-tests.out
+R/cran-check.out
 build/*.jar
 build/apache-maven*
 build/scala*

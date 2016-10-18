@@ -426,7 +426,8 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
     iterator.map { value =>
       val raw = converter.convert(rawDeser.deserialize(value))
       var i = 0
-      while (i < fieldRefs.length) {
+      val length = fieldRefs.length
+      while (i < length) {
         val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
         if (fieldValue == null) {
           mutableRow.setNullAt(fieldOrdinals(i))

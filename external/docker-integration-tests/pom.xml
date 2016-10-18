@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.1-SNAPSHOT</version>
+    <version>2.0.1</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -49,38 +49,7 @@
     <dependency>
       <groupId>com.spotify</groupId>
       <artifactId>docker-client</artifactId>
-      <classifier>shaded</classifier>
       <scope>test</scope>
-      <!--
-        See https://github.com/spotify/docker-client/pull/272#issuecomment-155249101
-        for an explanation of why these exclusions are (necessarily) a mess.
-      -->
-      <exclusions>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.jaxrs</groupId>
-          <artifactId>jackson-jaxrs-json-provider</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.datatype</groupId>
-          <artifactId>jackson-datatype-guava</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.core</groupId>
-          <artifactId>jackson-databind</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.glassfish.jersey.core</groupId>
-          <artifactId>jersey-client</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.glassfish.jersey.connectors</groupId>
-          <artifactId>jersey-apache-connector</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.glassfish.jersey.media</groupId>
-          <artifactId>jersey-media-json-jackson</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
@@ -151,43 +120,6 @@
       <version>11.2.0.1.0</version>
       <scope>test</scope>
     </dependency>
-
-    <!-- Jersey dependencies, used to override version.
-     See https://github.com/apache/spark/pull/9503#issuecomment-154369560 for
-     background on why we need to use a newer Jersey only in this test module;
-     we can remove this once https://github.com/spotify/docker-client/pull/272 is
-     merged and a new docker-client release is published. -->
-    <dependency>
-      <groupId>com.sun.jersey</groupId>
-      <artifactId>jersey-server</artifactId>
-      <version>1.19</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.sun.jersey</groupId>
-      <artifactId>jersey-core</artifactId>
-      <version>1.19</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.sun.jersey</groupId>
-      <artifactId>jersey-servlet</artifactId>
-      <version>1.19</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.sun.jersey</groupId>
-      <artifactId>jersey-json</artifactId>
-      <version>1.19</version>
-      <scope>test</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>stax</groupId>
-          <artifactId>stax-api</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <!-- End Jersey dependencies -->
 
     <!-- DB2 JCC driver manual installation instructions
 

@@ -102,7 +102,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     }
   }
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -228,7 +228,7 @@ case class SampleExec(
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -260,6 +260,7 @@ case class SampleExec(
     if (withReplacement) {
       val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
       val initSampler = ctx.freshName("initSampler")
+      ctx.copyResult = true
       ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
         s"$initSampler();")
 
@@ -312,12 +313,12 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   def start: Long = range.start
   def step: Long = range.step
-  def numSlices: Int = range.numSlices
+  def numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
   def numElements: BigInt = range.numElements
 
   override val output: Seq[Attribute] = range.output
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   // output attributes should not affect the results

@@ -58,7 +58,7 @@ test_that("repeatedly starting and stopping SparkR", {
   for (i in 1:4) {
     sc <- suppressWarnings(sparkR.init())
     rdd <- parallelize(sc, 1:20, 2L)
-    expect_equal(count(rdd), 20)
+    expect_equal(countRDD(rdd), 20)
     suppressWarnings(sparkR.stop())
   }
 })
@@ -94,8 +94,9 @@ test_that("rdd GC across sparkR.stop", {
   rm(rdd2)
   gc()
 
-  count(rdd3)
-  count(rdd4)
+  countRDD(rdd3)
+  countRDD(rdd4)
+  sparkR.session.stop()
 })
 
 test_that("job group functions can be called", {

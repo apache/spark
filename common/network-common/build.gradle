@@ -23,4 +23,7 @@ dependencies {
   compile group: 'io.netty', name: 'netty-all', version: nettyAllVersion
   compile group: 'com.google.code.findbugs', name: 'jsr305', version: jsr305Version
   compile group: 'com.google.guava', name: 'guava', version: guavaVersion
+  compile group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version: fasterXmlVersion
+  compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: fasterXmlVersion
+  compile group: 'org.fusesource.leveldbjni', name: 'leveldbjni-all', version: '1.8'
 }

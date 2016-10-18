@@ -40,14 +40,14 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 
 /** A container for all the details required when writing to a table. */
-case class WriteRelation(
+private[datasources] case class WriteRelation(
     sparkSession: SparkSession,
     dataSchema: StructType,
     path: String,
     prepareJobForWrite: Job => OutputWriterFactory,
     bucketSpec: Option[BucketSpec])
 
-private[sql] abstract class BaseWriterContainer(
+private[datasources] abstract class BaseWriterContainer(
     @transient val relation: WriteRelation,
     @transient private val job: Job,
     isAppend: Boolean)
@@ -234,7 +234,7 @@ private[sql] abstract class BaseWriterContainer(
 /**
  * A writer that writes all of the rows in a partition to a single file.
  */
-private[sql] class DefaultWriterContainer(
+private[datasources] class DefaultWriterContainer(
     relation: WriteRelation,
     job: Job,
     isAppend: Boolean)
@@ -293,7 +293,7 @@ private[sql] class DefaultWriterContainer(
  * done by maintaining a HashMap of open files until `maxFiles` is reached.  If this occurs, the
  * writer externally sorts the remaining rows and then writes out them out one file at a time.
  */
-private[sql] class DynamicPartitionWriterContainer(
+private[datasources] class DynamicPartitionWriterContainer(
     relation: WriteRelation,
     job: Job,
     partitionColumns: Seq[Attribute],

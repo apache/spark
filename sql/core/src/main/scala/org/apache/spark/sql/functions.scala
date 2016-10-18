@@ -2596,12 +2596,15 @@ object functions {
    *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
-   *                       valid duration identifiers.
+   *                       valid duration identifiers. Note that the duration is a fixed length of
+   *                       time, and does not vary over time according to a calendar. For example,
+   *                       `1 day` always means 86,400,000 milliseconds, not a calendar day.
    * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
    *                      A new window will be generated every `slideDuration`. Must be less than
    *                      or equal to the `windowDuration`. Check
    *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration
-   *                      identifiers.
+   *                      identifiers. This duration is likewise absolute, and does not vary
+    *                     according to a calendar.
    * @param startTime The offset with respect to 1970-01-01 00:00:00 UTC with which to start
    *                  window intervals. For example, in order to have hourly tumbling windows that
    *                  start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
@@ -2650,11 +2653,15 @@ object functions {
    *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
-   *                       valid duration identifiers.
+   *                       valid duration identifiers. Note that the duration is a fixed length of
+   *                       time, and does not vary over time according to a calendar. For example,
+   *                       `1 day` always means 86,400,000 milliseconds, not a calendar day.
    * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
    *                      A new window will be generated every `slideDuration`. Must be less than
    *                      or equal to the `windowDuration`. Check
-   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration.
+   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration
+   *                      identifiers. This duration is likewise absolute, and does not vary
+   *                     according to a calendar.
    *
    * @group datetime_funcs
    * @since 2.0.0

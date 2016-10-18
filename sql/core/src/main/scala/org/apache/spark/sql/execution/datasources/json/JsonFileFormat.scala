@@ -28,6 +28,7 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -85,7 +86,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
           bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(path, bucketId, dataSchema, context)
+        new JsonOutputWriter(path, parsedOptions, bucketId, dataSchema, context)
       }
     }
   }
@@ -106,7 +107,9 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     (file: PartitionedFile) => {
-      val lines = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map(_.toString)
+      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+      val lines = linesReader.map(_.toString)
 
       JacksonParser.parseJson(
         lines,
@@ -155,6 +158,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
 private[json] class JsonOutputWriter(
     path: String,
+    options: JSONOptions,
     bucketId: Option[Int],
     dataSchema: StructType,
     context: TaskAttemptContext)
@@ -181,7 +185,7 @@ private[json] class JsonOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    JacksonGenerator(dataSchema, gen)(row)
+    JacksonGenerator(dataSchema, gen, options)(row)
     gen.flush()
 
     result.set(writer.toString)

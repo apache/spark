@@ -61,7 +61,7 @@ class DataFrame(object):
         people = sqlContext.read.parquet("...")
         department = sqlContext.read.parquet("...")
 
-        people.filter(people.age > 30).join(department, people.deptId == department.id)\
+        people.filter(people.age > 30).join(department, people.deptId == department.id) \\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
     .. versionadded:: 1.3
@@ -345,10 +345,7 @@ class DataFrame(object):
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
-            port = self._sc._jvm.org.apache.spark.sql.execution.python.EvaluatePython.takeAndServe(
-                self._jdf, num)
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+        return self.limit(num).collect()
 
     @since(1.3)
     def foreach(self, f):

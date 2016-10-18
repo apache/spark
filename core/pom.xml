@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.1-SNAPSHOT</version>
+    <version>2.0.1</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -327,7 +327,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.1</version>
+      <version>0.10.3</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>

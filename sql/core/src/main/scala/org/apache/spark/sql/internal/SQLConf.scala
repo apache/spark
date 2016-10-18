@@ -319,6 +319,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val GATHER_FASTSTAT = SQLConfigBuilder("spark.sql.hive.gatherFastStats")
+      .internal()
+      .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
+        " in parallel while repairing table partitions to avoid the sequential listing in Hive" +
+        " metastore.")
+      .booleanConf
+      .createWithDefault(true)
+
   // This is used to control the when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has
   // a length restriction of 4000 characters). We will split the JSON string of a schema
@@ -537,7 +545,28 @@ object SQLConf {
       .internal()
       .doc("How long that a file is guaranteed to be visible for all readers.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefault(60 * 1000L) // 10 minutes
+      .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
+
+  val FILE_SOURCE_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSource.log.deletion")
+    .internal()
+    .doc("Whether to delete the expired log files in file stream source.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val FILE_SOURCE_LOG_COMPACT_INTERVAL =
+    SQLConfigBuilder("spark.sql.streaming.fileSource.log.compactInterval")
+      .internal()
+      .doc("Number of log files after which all the previous files " +
+        "are compacted into the next log file.")
+      .intConf
+      .createWithDefault(10)
+
+  val FILE_SOURCE_LOG_CLEANUP_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.fileSource.log.cleanupDelay")
+      .internal()
+      .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
 
   val STREAMING_SCHEMA_INFERENCE =
     SQLConfigBuilder("spark.sql.streaming.schemaInference")
@@ -615,6 +644,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
   def nativeView: Boolean = getConf(NATIVE_VIEW)
+
+  def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 

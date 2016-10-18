@@ -31,7 +31,7 @@ private[sql] case class BucketSpec(
     bucketColumnNames: Seq[String],
     sortColumnNames: Seq[String])
 
-private[sql] object BucketingUtils {
+object BucketingUtils {
   // The file name of bucketed data should have 3 parts:
   //   1. some other information in the head of file name
   //   2. bucket id part, some numbers, starts with "_"

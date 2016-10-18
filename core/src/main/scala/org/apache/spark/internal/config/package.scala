@@ -103,4 +103,18 @@ package object config {
     .stringConf
     .checkValues(Set("hive", "in-memory"))
     .createWithDefault("in-memory")
+
+  // To limit memory usage, we only track information for a fixed number of tasks
+  private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
+    .intConf
+    .createWithDefault(100000)
+
+  // To limit how many applications are shown in the History Server summary ui
+  private[spark] val HISTORY_UI_MAX_APPS =
+    ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
+
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")
+      .intConf
+      .createWithDefault(10000)
 }

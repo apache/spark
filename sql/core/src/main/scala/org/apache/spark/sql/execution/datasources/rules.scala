@@ -32,7 +32,7 @@ import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 /**
  * Try to replaces [[UnresolvedRelation]]s with [[ResolveDataSource]].
  */
-private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
       try {
@@ -67,7 +67,7 @@ private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[Lo
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
+case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -147,7 +147,7 @@ private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[Log
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
-private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
+case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
   extends (LogicalPlan => Unit) {
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }

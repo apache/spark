@@ -72,24 +72,24 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Return all metadata that describes more details of this SparkPlan.
    */
-  private[sql] def metadata: Map[String, String] = Map.empty
+  def metadata: Map[String, String] = Map.empty
 
   /**
    * Return all metrics containing metrics of this SparkPlan.
    */
-  private[sql] def metrics: Map[String, SQLMetric] = Map.empty
+  def metrics: Map[String, SQLMetric] = Map.empty
 
   /**
    * Reset all the metrics.
    */
-  private[sql] def resetMetrics(): Unit = {
+  def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
   }
 
   /**
    * Return a LongSQLMetric according to the name.
    */
-  private[sql] def longMetric(name: String): SQLMetric = metrics(name)
+  def longMetric(name: String): SQLMetric = metrics(name)
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
@@ -395,7 +395,7 @@ object SparkPlan {
     ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
-private[sql] trait LeafExecNode extends SparkPlan {
+trait LeafExecNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
 }
@@ -407,7 +407,7 @@ object UnaryExecNode {
   }
 }
 
-private[sql] trait UnaryExecNode extends SparkPlan {
+trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
   override def children: Seq[SparkPlan] = child :: Nil
@@ -415,7 +415,7 @@ private[sql] trait UnaryExecNode extends SparkPlan {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
-private[sql] trait BinaryExecNode extends SparkPlan {
+trait BinaryExecNode extends SparkPlan {
   def left: SparkPlan
   def right: SparkPlan
 

@@ -87,6 +87,16 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-17124 agg should be ordering preserving") {
+    val df = spark.range(2)
+    val ret = df.groupBy("id").agg("id" -> "sum", "id" -> "count", "id" -> "min")
+    assert(ret.schema.map(_.name) == Seq("id", "sum(id)", "count(id)", "min(id)"))
+    checkAnswer(
+      ret,
+      Row(0, 0, 1, 0) :: Row(1, 1, 1, 1) :: Nil
+    )
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
@@ -467,6 +477,18 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(error.message.contains("collect_set() cannot have map type data"))
   }
 
+  test("SPARK-17641: collect functions should not collect null values") {
+    val df = Seq(("1", 2), (null, 2), ("1", 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(collect_list($"a"), collect_list($"b")),
+      Seq(Row(Seq("1", "1"), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), collect_set($"b")),
+      Seq(Row(Seq("1"), Seq(2, 4)))
+    )
+  }
+
   test("SPARK-14664: Decimal sum/avg over window should work.") {
     checkAnswer(
       spark.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),
@@ -474,5 +496,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       spark.sql("select avg(a) over () from values 1.0, 2.0, 3.0 T(a)"),
       Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
+  }
+
+  test("SPARK-17616: distinct aggregate combined with a non-partial aggregate") {
+    val df = Seq((1, 3, "a"), (1, 2, "b"), (3, 4, "c"), (3, 4, "c"), (3, 5, "d"))
+      .toDF("x", "y", "z")
+    checkAnswer(
+      df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
+      Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
   }
 }

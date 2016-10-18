@@ -77,8 +77,8 @@ object ParserUtils {
     Origin(Option(token.getLine), Option(token.getCharPositionInLine))
   }
 
-  /** Assert if a condition holds. If it doesn't throw a parse exception. */
-  def assert(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
+  /** Validate the condition. If it doesn't throw a parse exception. */
+  def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
       throw new ParseException(message, ctx)
     }
@@ -192,9 +192,7 @@ object ParserUtils {
      * Map a [[LogicalPlan]] to another [[LogicalPlan]] if the passed context exists using the
      * passed function. The original plan is returned when the context does not exist.
      */
-    def optionalMap[C <: ParserRuleContext](
-        ctx: C)(
-        f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
+    def optionalMap[C](ctx: C)(f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
       if (ctx != null) {
         f(ctx, plan)
       } else {
