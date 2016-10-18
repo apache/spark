@@ -58,7 +58,8 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
     new AccumulableInfo(
-      id, name, update, value, true, true, Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
+      id, name, update, value, internal = true, countFailedValues = true, dataProperty = false,
+      Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
 }
 

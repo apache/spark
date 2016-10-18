@@ -386,7 +386,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   test("drop internal and sql accumulators") {
     val taskInfo = new TaskInfo(0, 0, 0, 0, "", "", TaskLocality.ANY, false)
     val internalAccum =
-      AccumulableInfo(id = 1, name = Some("internal"), None, None, true, false, None)
+      AccumulableInfo(id = 1, name = Some("internal"), None, None, true, false, false, None)
     val sqlAccum = AccumulableInfo(
       id = 2,
       name = Some("sql"),
@@ -394,6 +394,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       value = None,
       internal = false,
       countFailedValues = false,
+      dataProperty = false,
       metadata = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
     val userAccum = AccumulableInfo(
       id = 3,
@@ -402,6 +403,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       value = None,
       internal = false,
       countFailedValues = false,
+      dataProperty = false,
       metadata = None)
     taskInfo.accumulables ++= Seq(internalAccum, sqlAccum, userAccum)
 

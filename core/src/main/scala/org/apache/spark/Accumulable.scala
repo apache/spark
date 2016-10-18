@@ -156,7 +156,8 @@ class Accumulable[R, T] private (
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
     val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
-    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
+    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues,
+      dataProperty = false)
   }
 
   override def toString: String = if (newAcc._value == null) "null" else newAcc._value.toString

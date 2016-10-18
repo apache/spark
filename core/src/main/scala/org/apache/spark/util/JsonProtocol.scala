@@ -726,7 +726,8 @@ private[spark] object JsonProtocol {
     val countFailedValues = (json \ "Count Failed Values").extractOpt[Boolean].getOrElse(false)
     val dataProperty = (json \ "DataProperty").extractOpt[Boolean].getOrElse(false)
     val metadata = (json \ "Metadata").extractOpt[String]
-    new AccumulableInfo(id, name, update, value, internal, countFailedValues, metadata)
+    new AccumulableInfo(id, name, update, value, internal, countFailedValues, dataProperty,
+      metadata)
   }
 
   /**

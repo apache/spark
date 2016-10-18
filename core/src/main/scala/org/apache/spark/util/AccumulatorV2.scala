@@ -148,7 +148,7 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
     val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
-    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
+    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues, dataProperty)
   }
 
   final private[spark] def isAtDriverSide: Boolean = atDriverSide

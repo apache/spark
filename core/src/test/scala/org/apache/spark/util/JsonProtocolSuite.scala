@@ -379,6 +379,11 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldJson3 = accumulableInfoJson.removeField({ _._1 == "Metadata" })
     val oldInfo3 = JsonProtocol.accumulableInfoFromJson(oldJson3)
     assert(oldInfo3.metadata.isEmpty)
+
+    // "DataProperty" property of AccumulableInfo was added in 2.1.0
+    val oldJson4 = accumulableInfoJson.removeField({ _._1 == "DataProperty" })
+    val oldInfo4 = JsonProtocol.accumulableInfoFromJson(oldJson3)
+    assert(!oldInfo4.dataProperty)
   }
 
   test("ExceptionFailure backward compatibility: accumulator updates") {
@@ -800,9 +805,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       id: Int,
       internal: Boolean = false,
       countFailedValues: Boolean = false,
+      dataProperty: Boolean = false,
       metadata: Option[String] = None): AccumulableInfo =
     new AccumulableInfo(id, Some(s"Accumulable$id"), Some(s"delta$id"), Some(s"val$id"),
-      internal, countFailedValues, metadata)
+      internal, countFailedValues, dataProperty, metadata)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
