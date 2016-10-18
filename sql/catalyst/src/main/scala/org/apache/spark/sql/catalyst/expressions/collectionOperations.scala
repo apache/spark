@@ -28,8 +28,17 @@ import org.apache.spark.sql.types._
  * Given an array or map, returns its size. Returns -1 if null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the size of an array or a map.",
-  extended = " > SELECT _FUNC_(array('b', 'd', 'c', 'a'));\n 4")
+  usage = "_FUNC_(expr) - Returns the size of an array or a map. Returns -1 if null.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - array type or map type expression.
+
+      Examples:
+        > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
+         4
+  """)
 case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
@@ -59,8 +68,17 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
  * Returns an unordered array containing the keys of the map.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(map) - Returns an unordered array containing the keys of the map.",
-  extended = " > SELECT _FUNC_(map(1, 'a', 2, 'b'));\n [1,2]")
+  usage = "_FUNC_(expr) - Returns an unordered array containing the keys of the map.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - map type expression.
+
+      Examples:
+        > SELECT _FUNC_(map(1, 'a', 2, 'b'));
+         [1,2]
+  """)
 case class MapKeys(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -84,7 +102,16 @@ case class MapKeys(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(map) - Returns an unordered array containing the values of the map.",
-  extended = " > SELECT _FUNC_(map(1, 'a', 2, 'b'));\n [\"a\",\"b\"]")
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - map type expression.
+
+      Examples:
+        > SELECT _FUNC_(map(1, 'a', 2, 'b'));
+         ["a","b"]
+  """)
 case class MapValues(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -109,8 +136,18 @@ case class MapValues(child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(array(obj1, obj2, ...), ascendingOrder) - Sorts the input array in ascending order according to the natural ordering of the array elements.",
-  extended = " > SELECT _FUNC_(array('b', 'd', 'c', 'a'), true);\n 'a', 'b', 'c', 'd'")
+  usage = "_FUNC_(expr, ascendingOrder) - Sorts the input array in ascending order according to the natural ordering of the array elements.",
+  extended = """
+    _FUNC_(expr, ascendingOrder)
+
+      Arguments:
+        expr - array type expression.
+        ascendingOrder - boolean type literal.
+
+      Examples:
+        > SELECT _FUNC_(array('b', 'd', 'c', 'a'), true);
+         ["a","b","c","d"]
+  """)
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
@@ -194,8 +231,19 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
  * Checks if the array (left) has the element (right)
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array, value) - Returns TRUE if the array contains the value.",
-  extended = " > SELECT _FUNC_(array(1, 2, 3), 2);\n true")
+  usage = "_FUNC_(expr1, value) - Returns TRUE if the array contains the value.",
+  extended = """
+    _FUNC_(expr1, expr2)
+
+      Arguments:
+        expr1 - array type expression.
+        expr2 - expression in the element type of expr1 or any type that can be implicitly
+          converted to the element type of expr1.
+
+      Examples:
+        > SELECT _FUNC_(array(1, 2, 3), 2);
+         true
+  """)
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
