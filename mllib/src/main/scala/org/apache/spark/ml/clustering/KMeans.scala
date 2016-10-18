@@ -45,6 +45,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 
   /**
    * The number of clusters to create (k). Must be > 1. Default: 2.
+   * The param k will be overwrote by the param initialModel if the latter is set.
    * @group param
    */
   @Since("1.5.0")
@@ -59,6 +60,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * Param for the initialization algorithm. This can be either "random" to choose random points as
    * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
+   * The param initMode will be ignored if the param initialModel is set.
    * @group expertParam
    */
   @Since("1.5.0")
@@ -85,8 +87,10 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 
   /**
    * Param for KMeansModel to use for warm start.
-   * Whenever initialModel is set, the initialModel k will override the param k, while other params
-   * remain unchanged.
+   * Whenever initialModel is set:
+   *   1. the initialModel k will override the param k;
+   *   2. the param initMode is ignored;
+   *   3. other params are remain untouched.
    * @group param
    */
   final val initialModel: Param[KMeansModel] =
@@ -256,7 +260,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
       DefaultParamsReader.getAndSetParams(model, metadata)
       DefaultParamsReader.loadInitialModel[KMeansModel](path, sc) match {
         case Success(v) => model.set(model.initialModel, v)
-        case Failure(e) => if (!e.isInstanceOf[InvalidInputException]) throw e
+        case Failure(_: InvalidInputException) =>  // initialModel doesn't exist, do nothing
+        case Failure(e) => throw e
       }
 
       model
@@ -429,7 +434,8 @@ object KMeans extends DefaultParamsReadable[KMeans] {
       DefaultParamsReader.getAndSetParams(instance, metadata)
       DefaultParamsReader.loadInitialModel[KMeansModel](path, sc) match {
         case Success(v) => instance.setInitialModel(v)
-        case Failure(e) => if (!e.isInstanceOf[InvalidInputException]) throw e
+        case Failure(_: InvalidInputException) =>  // initialModel doesn't exist, do nothing
+        case Failure(e) => throw e
       }
       instance
     }
