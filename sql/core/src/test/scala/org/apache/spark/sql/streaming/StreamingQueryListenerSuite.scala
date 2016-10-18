@@ -177,31 +177,32 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryStarted serialization") {
-    val queryStarted = new StreamingQueryListener.QueryStarted(StreamingQueryStatus.testStatus)
+    val queryStarted = new StreamingQueryListener.QueryStartedEvent(StreamingQueryStatus.testStatus)
     val json = JsonProtocol.sparkEventToJson(queryStarted)
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[StreamingQueryListener.QueryStarted]
-    assertStreamingQueryInfoEquals(queryStarted.queryStatus, newQueryStarted.queryStatus)
+      .asInstanceOf[StreamingQueryListener.QueryStartedEvent]
+    assertStreamingQueryInfoEquals(queryStarted.status, newQueryStarted.status)
   }
 
   test("QueryProgress serialization") {
-    val queryProcess = new StreamingQueryListener.QueryProgress(StreamingQueryStatus.testStatus)
+    val queryProcess = new StreamingQueryListener.QueryProgressEvent(
+      StreamingQueryStatus.testStatus)
     val json = JsonProtocol.sparkEventToJson(queryProcess)
     val newQueryProcess = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[StreamingQueryListener.QueryProgress]
-    assertStreamingQueryInfoEquals(queryProcess.queryStatus, newQueryProcess.queryStatus)
+      .asInstanceOf[StreamingQueryListener.QueryProgressEvent]
+    assertStreamingQueryInfoEquals(queryProcess.status, newQueryProcess.status)
   }
 
   test("QueryTerminated serialization") {
     val exception = new RuntimeException("exception")
-    val queryQueryTerminated = new StreamingQueryListener.QueryTerminated(
+    val queryQueryTerminated = new StreamingQueryListener.QueryTerminatedEvent(
       StreamingQueryStatus.testStatus,
       Some(exception.getMessage))
     val json =
       JsonProtocol.sparkEventToJson(queryQueryTerminated)
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[StreamingQueryListener.QueryTerminated]
-    assertStreamingQueryInfoEquals(queryQueryTerminated.queryStatus, newQueryTerminated.queryStatus)
+      .asInstanceOf[StreamingQueryListener.QueryTerminatedEvent]
+    assertStreamingQueryInfoEquals(queryQueryTerminated.status, newQueryTerminated.status)
     assert(queryQueryTerminated.exception === newQueryTerminated.exception)
   }
 
