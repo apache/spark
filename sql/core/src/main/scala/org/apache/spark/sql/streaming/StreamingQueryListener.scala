@@ -41,7 +41,7 @@ abstract class StreamingQueryListener {
    *       don't block this method as it will block your query.
    * @since 2.0.0
    */
-  def onQueryStarted(queryStarted: QueryStartedEvent): Unit
+  def onQueryStarted(event: QueryStartedEvent): Unit
 
   /**
    * Called when there is some status update (ingestion rate updated, etc.)
@@ -52,13 +52,13 @@ abstract class StreamingQueryListener {
    *       is terminated when you are processing [[QueryProgressEvent]].
    * @since 2.0.0
    */
-  def onQueryProgress(queryProgress: QueryProgressEvent): Unit
+  def onQueryProgress(event: QueryProgressEvent): Unit
 
   /**
    * Called when a query is stopped, with or without error.
    * @since 2.0.0
    */
-  def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit
+  def onQueryTerminated(event: QueryTerminatedEvent): Unit
 }
 
 
@@ -84,7 +84,7 @@ object StreamingQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryStartedEvent private[sql](val status: StreamingQueryStatus) extends Event
+  class QueryStartedEvent private[sql](val queryStatus: StreamingQueryStatus) extends Event
 
   /**
    * :: Experimental ::
@@ -92,7 +92,7 @@ object StreamingQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryProgressEvent private[sql](val status: StreamingQueryStatus) extends Event
+  class QueryProgressEvent private[sql](val queryStatus: StreamingQueryStatus) extends Event
 
   /**
    * :: Experimental ::

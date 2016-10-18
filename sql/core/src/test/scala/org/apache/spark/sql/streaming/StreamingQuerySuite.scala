@@ -292,7 +292,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       @volatile var firstStatus: StreamingQueryStatus = null
       override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = { }
       override def onQueryProgress(queryProgress: QueryProgressEvent): Unit = {
-       if (firstStatus == null) firstStatus = queryProgress.status
+       if (firstStatus == null) firstStatus = queryProgress.queryStatus
       }
       override def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = { }
     }
