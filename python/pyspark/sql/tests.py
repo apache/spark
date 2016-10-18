@@ -1750,7 +1750,6 @@ class SQLTests(ReusedPySparkTestCase):
             return df.collect()[0]["myarray"][0]
         # test whether pyspark can correctly handle int types
         for t in int_types:
-            is_unsigned = t.isupper()
             # test positive numbers
             a = array.array(t, [1])
             while True:
@@ -1760,14 +1759,13 @@ class SQLTests(ReusedPySparkTestCase):
                 except OverflowError:
                     break
             # test negative numbers
-            if not is_unsigned:
-                a = array.array(t, [-1])
-                while True:
-                    try:
-                        self.assertEqual(collected(a), a[0])
-                        a[0] *= 2
-                    except OverflowError:
-                        break
+            a = array.array(t, [-1])
+            while True:
+                try:
+                    self.assertEqual(collected(a), a[0])
+                    a[0] *= 2
+                except OverflowError:
+                    break
         # test whether pyspark can correctly handle float types
         for t in float_types:
             # test upper bound and precision
@@ -1784,6 +1782,7 @@ class SQLTests(ReusedPySparkTestCase):
         # test whether pyspark can correctly handle unsupported types
         for t in unsupported_types:
             try:
+                a = array.array(t)
                 c = collected(a)
                 self.assertTrue(False)  # if no exception thrown, fail the test
             except TypeError:

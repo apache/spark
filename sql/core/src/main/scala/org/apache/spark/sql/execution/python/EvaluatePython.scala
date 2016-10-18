@@ -91,25 +91,31 @@ object EvaluatePython {
 
     case (c: Boolean, BooleanType) => c
 
+    case (c: Byte, ByteType) => c
+    case (c: Short, ByteType) => c.toByte
     case (c: Int, ByteType) => c.toByte
     case (c: Long, ByteType) => c.toByte
 
+    case (c: Byte, ShortType) => c.toShort
+    case (c: Short, ShortType) => c
     case (c: Int, ShortType) => c.toShort
     case (c: Long, ShortType) => c.toShort
 
+    case (c: Byte, IntegerType) => c.toInt
+    case (c: Short, IntegerType) => c.toInt
     case (c: Int, IntegerType) => c
     case (c: Long, IntegerType) => c.toInt
 
+    case (c: Byte, LongType) => c.toLong
+    case (c: Short, LongType) => c.toLong
     case (c: Int, LongType) => c.toLong
     case (c: Long, LongType) => c
 
+    case (c: Float, FloatType) => c
     case (c: Double, FloatType) => c.toFloat
 
-    case (c: Double, DoubleType) => c
-
-    case (c: Float, FloatType) => c
-
     case (c: Float, DoubleType) => c.toDouble
+    case (c: Double, DoubleType) => c
 
     case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c, dt.precision, dt.scale)
 
