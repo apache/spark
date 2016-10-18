@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.dsl.expressions._
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
@@ -43,4 +44,12 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     externalCatalog.client.reset()
   }
 
+  import utils._
+
+  test("list partitions by filter") {
+    val catalog = newBasicCatalog()
+    val selectedPartitions = catalog.listPartitionsByFilter("db2", "tbl2", Seq('a.int === 1))
+    assert(selectedPartitions.length == 1)
+    assert(selectedPartitions.head.spec == part1.spec)
+  }
 }
