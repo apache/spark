@@ -43,10 +43,8 @@ class TableFileCatalog(
     enableFileStatusCache: Boolean) extends FileCatalog {
 
   private val fileStatusCache = if (enableFileStatusCache)  {
-    println("in mem cache")
     new InMemoryCache
   } else {
-    println("using noop cache")
     new NoopCache
   }
 

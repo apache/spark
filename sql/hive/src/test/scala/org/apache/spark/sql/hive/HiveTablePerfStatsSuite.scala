@@ -65,7 +65,9 @@ class HiveTablePerfStatsSuite extends QueryTest with TestHiveSingleton with SQLT
   }
 
   test("lazy partition pruning reads only necessary partition data") {
-    withSQLConf("spark.sql.hive.filesourcePartitionPruning" -> "true") {
+    withSQLConf(
+        "spark.sql.hive.filesourcePartitionPruning" -> "true",
+        "spark.sql.hive.filesourcePartitionFileCacheEnabled" -> "false") {
       withTable("test") {
         withTempDir { dir =>
           setupPartitionedTable("test", dir)
@@ -90,11 +92,84 @@ class HiveTablePerfStatsSuite extends QueryTest with TestHiveSingleton with SQLT
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
 
-          // read all should be cached
+          // read all should not be cached
           HiveCatalogMetrics.reset()
           spark.sql("select * from test").count()
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 5)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
+
+          // cache should be disabled
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+        }
+      }
+    }
+  }
+
+  test("lazy partition pruning with file status caching enabled") {
+    withSQLConf(
+        "spark.sql.hive.filesourcePartitionPruning" -> "true",
+        "spark.sql.hive.filesourcePartitionFileCacheEnabled" -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedTable("test", dir)
+          HiveCatalogMetrics.reset()
+          spark.sql("select * from test where partCol1 = 999").count()
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+
+          HiveCatalogMetrics.reset()
+          spark.sql("select * from test where partCol1 < 2").count()
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 2)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 2)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+
+          HiveCatalogMetrics.reset()
+          spark.sql("select * from test where partCol1 < 3").count()
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 3)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 1)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 2)
+
+          HiveCatalogMetrics.reset()
+          spark.sql("select * from test").count()
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 5)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 2)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 3)
+
+          HiveCatalogMetrics.reset()
+          spark.sql("select * from test").count()
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 5)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 5)
+        }
+      }
+    }
+  }
+
+  test("file status caching respects refresh table and refreshByPath") {
+    withSQLConf(
+        "spark.sql.hive.filesourcePartitionPruning" -> "true",
+        "spark.sql.hive.filesourcePartitionFileCacheEnabled" -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedTable("test", dir)
+          HiveCatalogMetrics.reset()
+          spark.sql("select * from test").count()
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+
+          HiveCatalogMetrics.reset()
+          spark.sql("refresh table test")
+          spark.sql("select * from test").count()
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+
+          spark.catalog.cacheTable("test")
+          HiveCatalogMetrics.reset()
+          spark.catalog.refreshByPath(dir.getAbsolutePath)
+          spark.sql("select * from test").count()
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
+          assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
         }
       }
     }

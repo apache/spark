@@ -266,8 +266,8 @@ object SQLConf {
     SQLConfigBuilder("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
            "unmatching partitions can be eliminated earlier. This only affects Hive tables " +
-           "not converted to filesource relations (see `spark.sql.hive.convertMetastoreParquet` " +
-           "and `spark.sql.hive.convertMetastoreOrc` for more information)." )
+           "not converted to filesource relations (see HiveUtils.CONVERT_METASTORE_PARQUET and " +
+           "HiveUtils.CONVERT_METASTORE_ORC for more information).")
       .booleanConf
       .createWithDefault(false)
 
@@ -275,6 +275,13 @@ object SQLConf {
     SQLConfigBuilder("spark.sql.hive.filesourcePartitionPruning")
       .doc("When true, enable metastore partition pruning for filesource relations as well. " +
            "This is currently implemented for converted Hive tables only.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val HIVE_FILESOURCE_PARTITION_FILE_CACHE_ENABLED =
+    SQLConfigBuilder("spark.sql.hive.filesourcePartitionFileCacheEnabled")
+      .doc("When true, enable caching of partition files in memory. This only takes effect " +
+           "if filesource partition pruning is also enabled.")
       .booleanConf
       .createWithDefault(true)
 
@@ -678,6 +685,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
   def filesourcePartitionPruning: Boolean = getConf(HIVE_FILESOURCE_PARTITION_PRUNING)
+
+  def filesourcePartitionFileCacheEnabled: Boolean =
+    getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_ENABLED)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 
@@ -33,47 +32,6 @@ import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
-
-
-abstract class FileStatusCache {
-  def getLeafFiles(path: Path): Option[Seq[FileStatus]] = None
-  def putLeafFiles(path: Path, leafFiles: Seq[FileStatus]): Unit
-  def invalidateAll(): Unit
-}
-
-class InMemoryCache extends FileStatusCache {
-  private val cache = new ConcurrentHashMap[Path, Seq[FileStatus]]()
-
-  override def getLeafFiles(path: Path): Option[Seq[FileStatus]] = {
-    val res = Option(cache.get(path))
-    res.foreach { r =>
-      HiveCatalogMetrics.incrementFileCacheHits(r.length)
-    }
-    res
-  }
-
-  override def putLeafFiles(path: Path, leafFiles: Seq[FileStatus]): Unit = {
-    println("discovered files: " + leafFiles)
-    HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
-    cache.put(path, leafFiles)
-  }
-
-  override def invalidateAll(): Unit = {
-    println("invalidating all")
-    cache.clear()
-  }
-}
-
-class NoopCache extends FileStatusCache {
-  override def getLeafFiles(path: Path): Option[Seq[FileStatus]] = None
-  override def putLeafFiles(path: Path, leafFiles: Seq[FileStatus]): Unit = {
-    println("[uncached] discovered files: " + leafFiles)
-    HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
-  }
-  override def invalidateAll(): Unit = {
-    println("invalidating all")
-  }
-}
 
 /**
  * An abstract class that represents [[FileCatalog]]s that are aware of partitioned tables.
@@ -285,10 +243,9 @@ abstract class PartitioningAwareFileCatalog(
     for (path <- paths) {
       fileStatusCache.getLeafFiles(path) match {
         case Some(files) =>
-          println("cache hit: " + path)
+          HiveCatalogMetrics.incrementFileCacheHits(files.length)
           output ++= files
         case None =>
-          println("cache miss: " + path)
           pathsToFetch += path
       }
     }
@@ -299,7 +256,8 @@ abstract class PartitioningAwareFileCatalog(
       PartitioningAwareFileCatalog.listLeafFilesInSerial(pathsToFetch, hadoopConf)
     }
     discovered.foreach { case (path, leafFiles) =>
-      fileStatusCache.putLeafFiles(path, leafFiles)
+      HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
+      fileStatusCache.putLeafFiles(path, leafFiles.toArray)
       output ++= leafFiles
     }
     output
