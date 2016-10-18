@@ -1810,52 +1810,29 @@ class LogisticRegressionSuite
 
   }
 
-  test("binary logistic regression with weighted data") {
-    val numClasses = 2
-    val numPoints = 40
-    val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
-      numClasses, numPoints)
-    val testData = Array.tabulate[LabeledPoint](numClasses) { i =>
-      LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
-    }.toSeq.toDF()
-    val lr = new LogisticRegression().setFamily("binomial").setWeightCol("weight")
-    val model = lr.fit(outlierData)
-    val results = model.transform(testData).select("label", "prediction").collect()
-
-    // check that the predictions are the one to one mapping
-    results.foreach { case Row(label: Double, pred: Double) =>
-      assert(label === pred)
+  test("logistic regression with sample weights") {
+    val sqlContext = spark.sqlContext
+    import sqlContext.implicits._
+    val numFeatures = 5
+    val numPoints = 50
+    def modelEquals(m1: LogisticRegressionModel, m2: LogisticRegressionModel): Unit = {
+      assert(m1.coefficientMatrix ~== m2.coefficientMatrix absTol 0.01)
     }
-    val (overSampledData, weightedData) =
-      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(outlierData, "label", "features",
-        42L)
-    val weightedModel = lr.fit(weightedData)
-    val overSampledModel = lr.setWeightCol("").fit(overSampledData)
-    assert(weightedModel.coefficientMatrix ~== overSampledModel.coefficientMatrix relTol 0.01)
-  }
-
-  test("multinomial logistic regression with weighted data") {
-    val numClasses = 5
-    val numPoints = 40
-    val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
-      numClasses, numPoints)
-    val testData = Array.tabulate[LabeledPoint](numClasses) { i =>
-      LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
-    }.toSeq.toDF()
-    val mlr = new LogisticRegression().setFamily("multinomial").setWeightCol("weight")
-    val model = mlr.fit(outlierData)
-    val results = model.transform(testData).select("label", "prediction").collect()
-
-    // check that the predictions are the one to one mapping
-    results.foreach { case Row(label: Double, pred: Double) =>
-      assert(label === pred)
+    val testParams = Seq(
+      ("binomial", smallBinaryDataset, 2),
+      ("multinomial", smallMultinomialDataset, 4)
+    )
+    testParams.foreach { case (family, dataset, numClasses) =>
+      val estimator = new LogisticRegression().setFamily(family)
+      MLTestingUtils.testArbitrarilyScaledWeights[LogisticRegressionModel, LogisticRegression](
+        dataset.as[LabeledPoint], estimator, modelEquals)
+      MLTestingUtils.testOutliersWithSmallWeights[LogisticRegressionModel, LogisticRegression](
+        spark, estimator, Map.empty[Int, Int], numPoints, numClasses, numFeatures, modelEquals,
+        seed)
+      MLTestingUtils.testOversamplingVsWeighting[LogisticRegressionModel, LogisticRegression](spark,
+        estimator, Map.empty[Int, Int], numPoints, numClasses, numFeatures,
+        modelEquals, seed)
     }
-    val (overSampledData, weightedData) =
-      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(outlierData, "label", "features",
-        42L)
-    val weightedModel = mlr.fit(weightedData)
-    val overSampledModel = mlr.setWeightCol("").fit(overSampledData)
-    assert(weightedModel.coefficientMatrix ~== overSampledModel.coefficientMatrix relTol 0.01)
   }
 
   test("set family") {

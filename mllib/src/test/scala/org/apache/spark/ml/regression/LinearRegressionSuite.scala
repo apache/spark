@@ -805,91 +805,36 @@ class LinearRegressionSuite
   }
 
   test("linear regression with weighted samples") {
-    Seq("auto", "l-bfgs", "normal").foreach { solver =>
-      val (data, weightedData) = {
-        val activeData = LinearDataGenerator.generateLinearInput(
-          6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1).map(_.asML)
+    val sqlContext = spark.sqlContext
+    import sqlContext.implicits._
+    val numFeatures = 5
+    val numClasses = 0
+    val numPoints = 50
+    def modelEquals(m1: LinearRegressionModel, m2: LinearRegressionModel): Unit = {
+      assert(m1.coefficients ~== m2.coefficients relTol 0.01)
+      assert(m1.intercept ~== m2.intercept relTol 0.01)
+    }
+    val testParams = Seq(
+      // (elasticNetParam, regParam, fitIntercept, standardization)
+      (0.0, 0.21, true, true),
+      (0.0, 0.21, true, false),
+      (0.0, 0.21, false, false),
+      (1.0, 0.21, true, true)
+    )
 
-        val rnd = new Random(8392)
-        val signedData = activeData.map { case p: LabeledPoint =>
-          (rnd.nextGaussian() > 0.0, p)
-        }
-
-        val data1 = signedData.flatMap {
-          case (true, p) => Iterator(p, p)
-          case (false, p) => Iterator(p)
-        }
-
-        val weightedSignedData = signedData.flatMap {
-          case (true, LabeledPoint(label, features)) =>
-            Iterator(
-              Instance(label, weight = 1.2, features),
-              Instance(label, weight = 0.8, features)
-            )
-          case (false, LabeledPoint(label, features)) =>
-            Iterator(
-              Instance(label, weight = 0.3, features),
-              Instance(label, weight = 0.1, features),
-              Instance(label, weight = 0.6, features)
-            )
-        }
-
-        val noiseData = LinearDataGenerator.generateLinearInput(
-          2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1).map(_.asML)
-        val weightedNoiseData = noiseData.map {
-          case LabeledPoint(label, features) => Instance(label, weight = 0, features)
-        }
-        val data2 = weightedSignedData ++ weightedNoiseData
-
-        (sc.parallelize(data1, 4).toDF(), sc.parallelize(data2, 4).toDF())
-      }
-
-      val trainer1a = (new LinearRegression).setFitIntercept(true)
-        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(true).setSolver(solver)
-      val trainer1b = (new LinearRegression).setFitIntercept(true).setWeightCol("weight")
-        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(true).setSolver(solver)
-
-      // Normal optimizer is not supported with non-zero elasticnet parameter.
-      val model1a0 = trainer1a.fit(data)
-      val model1a1 = trainer1a.fit(weightedData)
-      val model1b = trainer1b.fit(weightedData)
-
-      assert(model1a0.coefficients !~= model1a1.coefficients absTol 1E-3)
-      assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
-      assert(model1a0.coefficients ~== model1b.coefficients absTol 1E-3)
-      assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
-
-      val trainer2a = (new LinearRegression).setFitIntercept(true)
-        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(false).setSolver(solver)
-      val trainer2b = (new LinearRegression).setFitIntercept(true).setWeightCol("weight")
-        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(false).setSolver(solver)
-      val model2a0 = trainer2a.fit(data)
-      val model2a1 = trainer2a.fit(weightedData)
-      val model2b = trainer2b.fit(weightedData)
-      assert(model2a0.coefficients !~= model2a1.coefficients absTol 1E-3)
-      assert(model2a0.intercept !~= model2a1.intercept absTol 1E-3)
-      assert(model2a0.coefficients ~== model2b.coefficients absTol 1E-3)
-      assert(model2a0.intercept ~== model2b.intercept absTol 1E-3)
-
-      val trainer3a = (new LinearRegression).setFitIntercept(false)
-        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(true).setSolver(solver)
-      val trainer3b = (new LinearRegression).setFitIntercept(false).setWeightCol("weight")
-        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(true).setSolver(solver)
-      val model3a0 = trainer3a.fit(data)
-      val model3a1 = trainer3a.fit(weightedData)
-      val model3b = trainer3b.fit(weightedData)
-      assert(model3a0.coefficients !~= model3a1.coefficients absTol 1E-3)
-      assert(model3a0.coefficients ~== model3b.coefficients absTol 1E-3)
-
-      val trainer4a = (new LinearRegression).setFitIntercept(false)
-        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(false).setSolver(solver)
-      val trainer4b = (new LinearRegression).setFitIntercept(false).setWeightCol("weight")
-        .setElasticNetParam(0.0).setRegParam(0.21).setStandardization(false).setSolver(solver)
-      val model4a0 = trainer4a.fit(data)
-      val model4a1 = trainer4a.fit(weightedData)
-      val model4b = trainer4b.fit(weightedData)
-      assert(model4a0.coefficients !~= model4a1.coefficients absTol 1E-3)
-      assert(model4a0.coefficients ~== model4b.coefficients absTol 1E-3)
+    for (solver <- Seq("auto", "l-bfgs", "normal");
+         (elasticNetParam, regParam, fitIntercept, standardization) <- testParams) {
+      val estimator = new LinearRegression()
+        .setFitIntercept(fitIntercept)
+        .setStandardization(standardization)
+        .setRegParam(regParam)
+        .setElasticNetParam(elasticNetParam)
+      MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
+        datasetWithDenseFeature.as[LabeledPoint], new LinearRegression(), modelEquals)
+      MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](spark,
+        estimator, Map.empty[Int, Int], numPoints, numClasses, numFeatures, modelEquals, seed)
+      MLTestingUtils.testOversamplingVsWeighting[LinearRegressionModel, LinearRegression](spark,
+        estimator, Map.empty[Int, Int], numPoints, numClasses, numFeatures, modelEquals, seed)
     }
   }
 
