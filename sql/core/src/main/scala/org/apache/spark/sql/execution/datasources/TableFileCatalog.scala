@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.StructType
 
 
 /**
- * A [[BasicFileCatalog]] for a metastore catalog table.
+ * A [[FileCatalog]] for a metastore catalog table.
  *
  * @param sparkSession a [[SparkSession]]
  * @param db the table's database name
@@ -60,7 +60,7 @@ class TableFileCatalog(
 
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
-  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
+  override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
     filterPartitions(filters).listFiles(Nil)
   }
 
@@ -80,7 +80,7 @@ class TableFileCatalog(
       case Some(schema) =>
         val selectedPartitions = externalCatalog.listPartitionsByFilter(db, table, filters)
         val partitions = selectedPartitions.map { p =>
-          PartitionDirectory(p.toRow(schema), p.storage.locationUri.get)
+          PartitionPath(p.toRow(schema), p.storage.locationUri.get)
         }
         val partitionSpec = PartitionSpec(schema, partitions)
         new PrunedTableFileCatalog(

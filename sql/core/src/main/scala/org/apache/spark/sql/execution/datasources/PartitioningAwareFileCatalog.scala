@@ -90,18 +90,21 @@ abstract class PartitioningAwareFileCatalog(
     fileStatusCache: FileStatusCache = new NoopCache) extends FileCatalog with Logging {
   import PartitioningAwareFileCatalog.BASE_PATH_PARAM
 
+  /** Returns the specification of the partitions inferred from the data. */
+  def partitionSpec(): PartitionSpec
+
   protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
   protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]
 
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
-  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
+  override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
+      PartitionDirectory(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
-        case PartitionDirectory(values, path) =>
+        case PartitionPath(values, path) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
@@ -111,14 +114,20 @@ abstract class PartitioningAwareFileCatalog(
               // Directory does not exist, or has no children files
               Nil
           }
-          Partition(values, files)
+          PartitionDirectory(values, files)
       }
     }
     logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))
     selectedPartitions
   }
 
-  override def allFiles(): Seq[FileStatus] = {
+  /** Returns the list of files that will be read when scanning this relation. */
+  override def inputFiles: Array[String] =
+    allFiles().map(_.getPath.toUri.toString).toArray
+
+  override def sizeInBytes: Long = allFiles().map(_.getLen).sum
+
+  def allFiles(): Seq[FileStatus] = {
     if (partitionSpec().partitionColumns.isEmpty) {
       // For each of the root input paths, get the list of files inside them
       rootPaths.flatMap { path =>
@@ -187,7 +196,7 @@ abstract class PartitioningAwareFileCatalog(
 
   private def prunePartitions(
       predicates: Seq[Expression],
-      partitionSpec: PartitionSpec): Seq[PartitionDirectory] = {
+      partitionSpec: PartitionSpec): Seq[PartitionPath] = {
     val PartitionSpec(partitionColumns, partitions) = partitionSpec
     val partitionColumnNames = partitionColumns.map(_.name).toSet
     val partitionPruningPredicates = predicates.filter {
@@ -204,7 +213,7 @@ abstract class PartitioningAwareFileCatalog(
       })
 
       val selected = partitions.filter {
-        case PartitionDirectory(values, _) => boundPredicate(values)
+        case PartitionPath(values, _) => boundPredicate(values)
       }
       logInfo {
         val total = partitions.length
@@ -388,7 +397,7 @@ object PartitioningAwareFileCatalog extends Logging {
         (path.toString, serializableStatuses)
       }.collect()
 
-    // Turn SerializableFileStatus back to Status
+    // turn SerializableFileStatus back to Status
     statusMap.map { case (path, serializableStatuses) =>
       val statuses = serializableStatuses.map { f =>
         val blockLocations = f.blockLocations.map { loc =>
