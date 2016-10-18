@@ -288,18 +288,32 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void foreach() {
-    final Accumulator<Integer> accum = sc.accumulator(0);
-    final LongAccumulator accumV2 = sc.sc().longAccumulator();
+    final LongAccumulator accum = sc.sc().longAccumulator();
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(new VoidFunction<String>() {
       @Override
       public void call(String s) {
         accum.add(1);
-        accumV2.add(1L);
       }
     });
     assertEquals(2, accum.value().intValue());
-    assertEquals(2, accumV2.value().longValue());
+  }
+
+  @Test
+  public void dataPropertyAccumulator() {
+    final LongAccumulator accum = sc.sc().longAccumulator(true);
+    JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
+    JavaRDD<String> mappedRdd = rdd.map(new Function<String, String>() {
+      @Override
+      public String call(String s) {
+        accum.add(1);
+        return s;
+      }
+    });
+    mappedRdd.count();
+    assertEquals(2, accum.value().intValue());
+    mappedRdd.count();
+    assertEquals(2, accum.value().intValue());
   }
 
   @Test
