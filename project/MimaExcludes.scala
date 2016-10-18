@@ -61,7 +61,10 @@ object MimaExcludes {
       ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.util.AccumulatorV2#mcJ#sp.add"),
       // The add method for some accumulators changed for easier handling of other numerics.
       ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.util.LongAccumulator.add"),
-      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.util.DoubleAccumulator.add")
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.util.DoubleAccumulator.add"),
+      // AccumulableInfo's constructor is internal and we added a new field
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.apply"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.copy")
     ) ++ Seq(
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references"),
       // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
