@@ -25,11 +25,13 @@ import java.nio.charset.StandardCharsets
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
 import com.google.common.io.Files
+import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
@@ -274,63 +276,107 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11" + sep + "00 h")
   }
 
-  test("reading offset bytes of a file") {
+  def getSuffix(isCompressed: Boolean): String = {
+    if (isCompressed) {
+      ".gz"
+    } else {
+      ""
+    }
+  }
+
+  def writeLogFile(path: String, content: Array[Byte]): Unit = {
+    val outputStream = if (path.endsWith(".gz")) {
+      new GZIPOutputStream(new FileOutputStream(path))
+    } else {
+      new FileOutputStream(path)
+    }
+    IOUtils.write(content, outputStream)
+    outputStream.close()
+    content.size
+  }
+
+  private val workerConf = new SparkConf()
+
+  def testOffsetBytes(isCompressed: Boolean): Unit = {
     val tmpDir2 = Utils.createTempDir()
-    val f1Path = tmpDir2 + "/f1"
-    val f1 = new FileOutputStream(f1Path)
-    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
-    f1.close()
+    val suffix = getSuffix(isCompressed)
+    val f1Path = tmpDir2 + "/f1" + suffix
+    writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
+    val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 
     // Read first few bytes
-    assert(Utils.offsetBytes(f1Path, 0, 5) === "1\n2\n3")
+    assert(Utils.offsetBytes(f1Path, f1Length, 0, 5) === "1\n2\n3")
 
     // Read some middle bytes
-    assert(Utils.offsetBytes(f1Path, 4, 11) === "3\n4\n5\n6")
+    assert(Utils.offsetBytes(f1Path, f1Length, 4, 11) === "3\n4\n5\n6")
 
     // Read last few bytes
-    assert(Utils.offsetBytes(f1Path, 12, 18) === "7\n8\n9\n")
+    assert(Utils.offsetBytes(f1Path, f1Length, 12, 18) === "7\n8\n9\n")
 
     // Read some nonexistent bytes in the beginning
-    assert(Utils.offsetBytes(f1Path, -5, 5) === "1\n2\n3")
+    assert(Utils.offsetBytes(f1Path, f1Length, -5, 5) === "1\n2\n3")
 
     // Read some nonexistent bytes at the end
-    assert(Utils.offsetBytes(f1Path, 12, 22) === "7\n8\n9\n")
+    assert(Utils.offsetBytes(f1Path, f1Length, 12, 22) === "7\n8\n9\n")
 
     // Read some nonexistent bytes on both ends
-    assert(Utils.offsetBytes(f1Path, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
+    assert(Utils.offsetBytes(f1Path, f1Length, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
 
     Utils.deleteRecursively(tmpDir2)
   }
 
-  test("reading offset bytes across multiple files") {
+  test("reading offset bytes of a file") {
+    testOffsetBytes(isCompressed = false)
+  }
+
+  test("reading offset bytes of a file (compressed)") {
+    testOffsetBytes(isCompressed = true)
+  }
+
+  def testOffsetBytesMultipleFiles(isCompressed: Boolean): Unit = {
     val tmpDir = Utils.createTempDir()
-    val files = (1 to 3).map(i => new File(tmpDir, i.toString))
-    Files.write("0123456789", files(0), StandardCharsets.UTF_8)
-    Files.write("abcdefghij", files(1), StandardCharsets.UTF_8)
-    Files.write("ABCDEFGHIJ", files(2), StandardCharsets.UTF_8)
+    val suffix = getSuffix(isCompressed)
+    val files = (1 to 3).map(i => new File(tmpDir, i.toString + suffix)) :+ new File(tmpDir, "4")
+    writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
+    writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
+    writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8))
+    writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(StandardCharsets.UTF_8))
+    val fileLengths = files.map(Utils.getFileLength(_, workerConf))
 
     // Read first few bytes in the 1st file
-    assert(Utils.offsetBytes(files, 0, 5) === "01234")
+    assert(Utils.offsetBytes(files, fileLengths, 0, 5) === "01234")
 
     // Read bytes within the 1st file
-    assert(Utils.offsetBytes(files, 5, 8) === "567")
+    assert(Utils.offsetBytes(files, fileLengths, 5, 8) === "567")
 
     // Read bytes across 1st and 2nd file
-    assert(Utils.offsetBytes(files, 8, 18) === "89abcdefgh")
+    assert(Utils.offsetBytes(files, fileLengths, 8, 18) === "89abcdefgh")
 
     // Read bytes across 1st, 2nd and 3rd file
-    assert(Utils.offsetBytes(files, 5, 24) === "56789abcdefghijABCD")
+    assert(Utils.offsetBytes(files, fileLengths, 5, 24) === "56789abcdefghijABCD")
+
+    // Read bytes across 3rd and 4th file
+    assert(Utils.offsetBytes(files, fileLengths, 25, 35) === "FGHIJ98765")
 
     // Read some nonexistent bytes in the beginning
-    assert(Utils.offsetBytes(files, -5, 18) === "0123456789abcdefgh")
+    assert(Utils.offsetBytes(files, fileLengths, -5, 18) === "0123456789abcdefgh")
 
     // Read some nonexistent bytes at the end
-    assert(Utils.offsetBytes(files, 18, 35) === "ijABCDEFGHIJ")
+    assert(Utils.offsetBytes(files, fileLengths, 18, 45) === "ijABCDEFGHIJ9876543210")
 
     // Read some nonexistent bytes on both ends
-    assert(Utils.offsetBytes(files, -5, 35) === "0123456789abcdefghijABCDEFGHIJ")
+    assert(Utils.offsetBytes(files, fileLengths, -5, 45) ===
+      "0123456789abcdefghijABCDEFGHIJ9876543210")
 
     Utils.deleteRecursively(tmpDir)
+  }
+
+  test("reading offset bytes across multiple files") {
+    testOffsetBytesMultipleFiles(isCompressed = false)
+  }
+
+  test("reading offset bytes across multiple files (compressed)") {
+    testOffsetBytesMultipleFiles(isCompressed = true)
   }
 
   test("deserialize long value") {
