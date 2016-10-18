@@ -45,7 +45,6 @@ import org.slf4j.LoggerFactory;
  * AES cipher for encryption and decryption.
  */
 public class AesCipher {
-  private final Logger logger = LoggerFactory.getLogger(AesCipher.class);
   private final SecretKeySpec inKeySpec;
   private final IvParameterSpec inIvSpec;
   private final SecretKeySpec outKeySpec;
@@ -55,7 +54,7 @@ public class AesCipher {
   private HashMap<ReadableByteChannel, CryptoInputStream> inputStreamMap;
   private HashMap<WritableByteChannel, CryptoOutputStream> outputStreamMap;
 
-  public static final int STREAM_BUFFER_SIZE = 1024 *32;
+  public static final int STREAM_BUFFER_SIZE = 1024 * 32;
   public static final String TRANSFORM = "AES/CTR/NoPadding";
 
   public AesCipher(

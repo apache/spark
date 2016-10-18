@@ -276,7 +276,7 @@ public class SparkSaslSuite {
       RpcHandler rpcHandler = mock(RpcHandler.class);
       when(rpcHandler.getStreamManager()).thenReturn(sm);
 
-      byte[] data = new byte[128 * 1024 * 1024];
+      byte[] data = new byte[8 * 1024];
       new Random().nextBytes(data);
       Files.write(data, file);
 
@@ -296,7 +296,7 @@ public class SparkSaslSuite {
         }).when(callback).onSuccess(anyInt(), any(ManagedBuffer.class));
 
       ctx.client.fetchChunk(0, 0, callback);
-      lock.await(20, TimeUnit.SECONDS);
+      lock.await(10, TimeUnit.SECONDS);
 
       verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
       verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
@@ -400,7 +400,7 @@ public class SparkSaslSuite {
       RpcHandler rpcHandler = mock(RpcHandler.class);
       when(rpcHandler.getStreamManager()).thenReturn(sm);
 
-      byte[] data = new byte[ 256 * 1024 * 1024];
+      byte[] data = new byte[ 8 * 1024 * 1024];
       new Random().nextBytes(data);
       Files.write(data, file);
 
@@ -423,7 +423,7 @@ public class SparkSaslSuite {
 
       synchronized (lock) {
         ctx.client.fetchChunk(0, 0, callback);
-        lock.wait(20 * 1000);
+        lock.wait(10 * 1000);
       }
 
       verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));

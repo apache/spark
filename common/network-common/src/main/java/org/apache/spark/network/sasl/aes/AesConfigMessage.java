@@ -78,11 +78,15 @@ public class AesConfigMessage implements Encodable {
         + " (maybe your client does not have SASL enabled?)");
     }
 
-    byte[] inKey = Encoders.ByteArrays.decode(buf);
-    byte[] inIv = Encoders.ByteArrays.decode(buf);
-    byte[] outKey = Encoders.ByteArrays.decode(buf);
-    byte[] outIv = Encoders.ByteArrays.decode(buf);
-    return new AesConfigMessage(inKey, inIv, outKey, outIv);
+    if (buf.readableBytes() > 0) {
+      byte[] inKey = Encoders.ByteArrays.decode(buf);
+      byte[] inIv = Encoders.ByteArrays.decode(buf);
+      byte[] outKey = Encoders.ByteArrays.decode(buf);
+      byte[] outIv = Encoders.ByteArrays.decode(buf);
+      return new AesConfigMessage(inKey, inIv, outKey, outIv);
+    } else {
+      return new AesConfigMessage(null, null, null, null);
+    }
   }
 
 }

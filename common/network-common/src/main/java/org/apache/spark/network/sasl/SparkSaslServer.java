@@ -172,8 +172,7 @@ public class SparkSaslServer implements SaslEncryptionBackend {
     AesCipher cipher;
 
     // Receive initial option from client
-    AesConfigMessage cipherOption = new AesConfigMessage(null, null, null, null);
-    //  AesConfigMessage.decode(Unpooled.wrappedBuffer(message));
+    AesConfigMessage cipherOption = AesConfigMessage.decode(Unpooled.wrappedBuffer(message));
     String transformation = AesCipher.TRANSFORM;
     Properties properties = new Properties();
 
@@ -197,11 +196,11 @@ public class SparkSaslServer implements SaslEncryptionBackend {
       random.nextBytes(inIv);
       random.nextBytes(outIv);
 
-      // Update cipher option for client. The key is encrypted.
+      // Fill cipher config and send it to client.
       cipherOption.setParameters(wrap(inKey, 0, inKey.length), inIv,
         wrap(outKey, 0, outKey.length), outIv);
 
-      // Enable AES on saslServer
+      // Create cipher which will used by server
       cipher = new AesCipher(properties, inKey, outKey, inIv, outIv);
 
       // Send cipher option to client
