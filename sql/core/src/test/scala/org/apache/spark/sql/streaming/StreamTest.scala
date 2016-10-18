@@ -165,7 +165,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     extends StreamAction
 
   /** Advance the trigger clock's time manually. */
-  case class AdvanceManualClock(timeToAdd: Long) extends StreamAction
+  case class AdvanceManualClock(timeWhenWaitStarted: Long, timeToAdd: Long) extends StreamAction
 
   /** Signals that a failure is expected and should not kill the test. */
   case class ExpectFailure[T <: Throwable : ClassTag]() extends StreamAction {
@@ -335,7 +335,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                 }
               })
 
-          case AdvanceManualClock(timeToAdd) =>
+          case AdvanceManualClock(timeWhenWaitStarted, timeToAdd) =>
             verify(currentStream != null,
                    "can not advance manual clock when a stream is not running")
             verify(currentStream.triggerClock.isInstanceOf[ManualClock],
@@ -343,9 +343,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             val clock = currentStream.triggerClock.asInstanceOf[ManualClock]
             // Make sure we don't advance ManualClock too early. See SPARK-16002.
             eventually("ManualClock has not yet entered the waiting state") {
-              assert(clock.isWaiting)
+              assert(clock.isThreadWaitingAt(timeWhenWaitStarted))
             }
-            currentStream.triggerClock.asInstanceOf[ManualClock].advance(timeToAdd)
+            clock.advance(timeToAdd)
 
           case StopStream =>
             verify(currentStream != null, "can not stop a stream that is not running")
