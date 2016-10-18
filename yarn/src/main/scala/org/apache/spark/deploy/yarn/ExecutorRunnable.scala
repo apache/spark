@@ -213,7 +213,7 @@ private[yarn] class ExecutorRunnable(
     val numaNode = allocationMeter%2
 
     val commands = prefixEnv ++ Seq(
-      s" numactl --cpunodebind=$node --preferred=$numaNode " + YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
+      s" numactl --cpunodebind=$numaNode --preferred=$numaNode " + YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
       "-server") ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
