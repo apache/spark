@@ -56,6 +56,7 @@ class ParquetFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
+  ParquetFileFormat.redirectParquetLogs
 
   override def shortName(): String = "parquet"
 
@@ -128,8 +129,6 @@ class ParquetFileFormat
     if (conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
       conf.setBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
     }
-
-    ParquetFileFormat.redirectParquetLogs()
 
     new OutputWriterFactory {
       override def newInstance(
@@ -682,7 +681,7 @@ object ParquetFileFormat extends Logging {
 
   // Parquet initializes its own JUL logger in a static block which always prints to stdout.  Here
   // we redirect the JUL logger via SLF4J JUL bridge handler.
-  val redirectParquetLogsViaSLF4J: Unit = {
+  private val redirectParquetLogsViaSLF4J: Unit = {
     def redirect(logger: JLogger): Unit = {
       logger.getHandlers.foreach(logger.removeHandler)
       logger.setUseParentHandlers(false)
@@ -710,7 +709,8 @@ object ParquetFileFormat extends Logging {
   }
 
   /**
-   * ParquetFileFormat.prepareWrite calls this function to initialize `redirectParquetLogsViaSLF4J`.
+   * The ParquetFileFormat constructor calls this function to initialize
+   * `redirectParquetLogsViaSLF4J`.
    */
-  def redirectParquetLogs(): Unit = {}
+  private def redirectParquetLogs(): Unit = {}
 }
