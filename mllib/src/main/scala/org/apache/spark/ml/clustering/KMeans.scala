@@ -20,6 +20,7 @@ package org.apache.spark.ml.clustering
 import scala.util.{Failure, Success}
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.InvalidInputException
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
@@ -84,7 +85,8 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 
   /**
    * Param for KMeansModel to use for warm start.
-   * Whenever initialModel is set, the initialModel k will override the param k.
+   * Whenever initialModel is set, the initialModel k will override the param k, while other params
+   * remain unchanged.
    * @group param
    */
   final val initialModel: Param[KMeansModel] =
@@ -252,8 +254,10 @@ object KMeansModel extends MLReadable[KMeansModel] {
       }
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
       DefaultParamsReader.getAndSetParams(model, metadata)
-      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc)
-        .foreach(v => model.set(model.initialModel, v))
+      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc) match {
+        case Success(v) => model.set(model.initialModel, v)
+        case Failure(e) => if (!e.isInstanceOf[InvalidInputException]) throw e
+      }
 
       model
     }
@@ -423,8 +427,10 @@ object KMeans extends DefaultParamsReadable[KMeans] {
       val instance = new KMeans(metadata.uid)
 
       DefaultParamsReader.getAndSetParams(instance, metadata)
-      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc)
-        .foreach(v => instance.setInitialModel(v))
+      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc) match {
+        case Success(v) => instance.setInitialModel(v)
+        case Failure(e) => if (!e.isInstanceOf[InvalidInputException]) throw e
+      }
       instance
     }
   }
