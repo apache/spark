@@ -187,12 +187,22 @@ private[spark] class TaskSchedulerImpl(
 
       if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
+         var wasStarved = false
           override def run() {
             if (!hasLaunchedTask) {
+              if (!wasStarved) {
+                sc.listenerBus.postToAll(SparkListenerTasksStarved(
+                    System.currentTimeMillis - STARVATION_TIMEOUT_MS))
+                wasStarved = true
+              }
               logWarning("Initial job has not accepted any resources; " +
                 "check your cluster UI to ensure that workers are registered " +
                 "and have sufficient resources")
             } else {
+              if (wasStarved) {
+                sc.listenerBus.postToAll(SparkListenerTasksUnstarved(
+                  System.currentTimeMillis))
+              }
               this.cancel()
             }
           }
