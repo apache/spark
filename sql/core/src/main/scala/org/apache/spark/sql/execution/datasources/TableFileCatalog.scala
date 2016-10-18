@@ -50,7 +50,7 @@ class TableFileCatalog(
   private val baseLocation = catalogTable.storage.locationUri
 
   // Populated on-demand by calls to cachedAllPartitions
-  private var allPartitions: ListingFileCatalog = null
+  private var cachedAllPartitions: ListingFileCatalog = null
 
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
@@ -59,7 +59,7 @@ class TableFileCatalog(
   }
 
   override def refresh(): Unit = synchronized {
-    allPartitions = null
+    cachedAllPartitions = null
   }
 
   /**
@@ -70,7 +70,7 @@ class TableFileCatalog(
    */
   def filterPartitions(filters: Seq[Expression]): ListingFileCatalog = {
     if (filters.isEmpty) {
-      cachedAllPartitions
+      allPartitions
     } else {
       filterPartitions0(filters)
     }
@@ -95,14 +95,14 @@ class TableFileCatalog(
   }
 
   // Not used in the hot path of queries when metastore partition pruning is enabled
-  def cachedAllPartitions: ListingFileCatalog = synchronized {
-    if (allPartitions == null) {
-      allPartitions = filterPartitions0(Nil)
+  def allPartitions: ListingFileCatalog = synchronized {
+    if (cachedAllPartitions == null) {
+      cachedAllPartitions = filterPartitions0(Nil)
     }
-    allPartitions
+    cachedAllPartitions
   }
 
-  override def inputFiles: Array[String] = cachedAllPartitions.inputFiles
+  override def inputFiles: Array[String] = allPartitions.inputFiles
 }
 
 /**
