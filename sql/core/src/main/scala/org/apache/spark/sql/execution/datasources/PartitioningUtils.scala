@@ -33,8 +33,8 @@ import org.apache.spark.sql.types._
 
 // TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
-object PartitionDirectory {
-  def apply(values: InternalRow, path: String): PartitionDirectory =
+object PartitionPath {
+  def apply(values: InternalRow, path: String): PartitionPath =
     apply(values, new Path(path))
 }
 
@@ -42,14 +42,14 @@ object PartitionDirectory {
  * Holds a directory in a partitioned collection of files as well as as the partition values
  * in the form of a Row.  Before scanning, the files at `path` need to be enumerated.
  */
-case class PartitionDirectory(values: InternalRow, path: Path)
+case class PartitionPath(values: InternalRow, path: Path)
 
 case class PartitionSpec(
     partitionColumns: StructType,
-    partitions: Seq[PartitionDirectory])
+    partitions: Seq[PartitionPath])
 
 object PartitionSpec {
-  val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[PartitionDirectory])
+  val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[PartitionPath])
 }
 
 object PartitioningUtils {
@@ -141,7 +141,7 @@ object PartitioningUtils {
       // Finally, we create `Partition`s based on paths and resolved partition values.
       val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
         case (PartitionValues(_, literals), (path, _)) =>
-          PartitionDirectory(InternalRow.fromSeq(literals.map(_.value)), path)
+          PartitionPath(InternalRow.fromSeq(literals.map(_.value)), path)
       }
 
       PartitionSpec(StructType(fields), partitions)
