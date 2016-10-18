@@ -133,10 +133,9 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
       """.stripMargin
     } else {
       val groupedOrderingItr = ordering.grouped(numberOfComparisonsThreshold)
-      var groupedOrderingLength = 0
-      groupedOrderingItr.zipWithIndex.foreach { case (orderingGroup, i) =>
-        groupedOrderingLength += 1
-        val funcName = s"compare_$i"
+      val funcNamePrefix = ctx.freshName("compare")
+      val funcNames = groupedOrderingItr.zipWithIndex.map { case (orderingGroup, i) =>
+        val funcName = s"${funcNamePrefix}_$i"
         val funcCode =
           s"""
              |private int $funcName(InternalRow a, InternalRow b) {
@@ -146,11 +145,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
              |}
           """.stripMargin
         ctx.addNewFunction(funcName, funcCode)
+        funcName
       }
 
-      (0 to groupedOrderingLength - 1).map { i =>
+      funcNames.zipWithIndex.map { case (funcName, i) =>
         s"""
-           |int comp_$i = compare_$i(a, b);
+           |int comp_$i = ${funcName}(a, b);
            |if (comp_$i != 0) {
            |  return comp_$i;
            |}
