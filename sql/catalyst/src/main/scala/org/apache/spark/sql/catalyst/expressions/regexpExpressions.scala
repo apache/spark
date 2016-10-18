@@ -70,20 +70,18 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
 @ExpressionDescription(
   usage = "str _FUNC_ pattern - Returns true if str matches pattern, " +
     "null if any arguments are null, false otherwise.",
-  extended = """
-    |The pattern is a string which is matched literally, with exception to the
-    |following symbols:
-    |
-    |    _ matches any one character in the input (similar to . in posix
-    |    regular expressions)
-    |
-    |    % matches zero ore more characters in the input (similar to .* in
-    |    posix regular expressions)
-    |
-    |The default escape character is '\\'. Any character after the escape
-    |character will be matched against literally.
-    |
-    |Use RLIKE to match with standard regular expressions.""")
+  extended =
+    "The pattern is a string which is matched literally, with exception to the " +
+    "following special symbols:\n\n" +
+    "    _ matches any one character in the input (similar to . in posix " +
+    "regular expressions)\n\n" +
+    "    % matches zero ore more characters in the input (similar to .* in " +
+    "posix regular expressions\n\n" +
+    "The default escape character is '\\'. If an escape character precedes a special symbol or " +
+    "another escape character, the following character is matched literally, otherwise the " +
+     "escape character is treated literally. I.e. '\\%' would match '%', whereas '\\a' matches " +
+     "'\\a'.\n\n" +
+    "Use RLIKE to match with standard regular expressions.")
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 

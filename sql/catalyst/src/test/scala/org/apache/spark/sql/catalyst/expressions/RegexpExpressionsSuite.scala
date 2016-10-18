@@ -62,7 +62,6 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("a" like "", false)
     checkEvaluation("" like "a", false)
 
-
     // SI-17647 double-escaping backslash
     checkEvaluation("""\\\\""" like """%\\%""", true) // triple quotes to avoid java string escaping
     checkEvaluation("""%%""" like """%%""", true)
@@ -78,8 +77,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("a\u20ACa" like "_€_", true)
     // scalastyle:on nonascii
 
-    // escaping at end position
-    checkEvaluation("""a\""" like """a\""", false) // TODO: should throw an exception?
+    // escaping non-escapable should match literally
+    checkEvaluation("""\a""" like """\a""", true)
+    checkEvaluation("""a\""" like """a\""", true)
 
     // case
     checkEvaluation("A" like "a%", false)
@@ -125,8 +125,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("a\u20ACa" like regEx, true, create_row("_€_"))
     // scalastyle:on nonascii
 
-    // TODO: should throw an exception?
-    checkEvaluation("""a\""" like regEx, false, create_row("""a\"""))
+    // escaping non-escapable should match literally
+    checkEvaluation("""\a""" like regEx, true, create_row("""\a"""))
+    checkEvaluation("""a\""" like regEx, true, create_row("""a\"""))
 
     checkEvaluation("A" like regEx, false, create_row("a%"))
     checkEvaluation("a" like regEx, false, create_row("A%"))

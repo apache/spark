@@ -23,27 +23,27 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils {
 
-  // replace the _ with .{1} exactly match 1 time of any character
-  // replace the % with .*, match 0 or more times with any character
+  /** Convert 'like' pattern to Java regex. */
   def escapeLikeRegex(str: String): String = {
-    val builder = new StringBuilder()
-    var escaping = false
-    for (next <- str) {
-      if (escaping) {
-        builder ++= Pattern.quote(Character.toString(next))
-        escaping = false
-      } else if (next == '\\') {
-        escaping = true
-      } else {
-        builder ++= (next match {
-          case '_' => "."
-          case '%' => ".*"
-          case _ => Pattern.quote(Character.toString(next))
-        })
-        escaping = false
+    val in = str.toIterator
+    val out = new StringBuilder()
+
+    while (in.hasNext) {
+      in.next match {
+        case '\\' if in.hasNext =>
+          in.next match {
+            case '\\' => out ++= Pattern.quote("\\")
+            case '_' => out ++= Pattern.quote("_")
+            case '%' => out ++= Pattern.quote("%")
+            // escape before non-escapable character treated literally
+            case c => out ++= Pattern.quote("\\" + c)
+          }
+        case '_' => out ++= "."
+        case '%' => out ++= ".*"
+        case c => out ++= Pattern.quote(Character.toString(c))
       }
     }
-    "(?s)" + builder.result() // (?s) enables dotall mode, causing "." to match new lines
+    "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
   private[this] val trueStrings = Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
