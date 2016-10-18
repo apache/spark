@@ -56,19 +56,18 @@ abstract class XPathExtract extends BinaryExpression with ExpectsInputTypes with
 }
 
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(xml, xpath) - Evaluates a boolean xpath expression.
+  usage = "_FUNC_(xml, xpath) - Evaluates a boolean XPath expression.",
+  extended = """
+    _FUNC_(xml, xpath)
 
-        Arguments:
-          xml - string type that represents XML documentation.
-          path - string type literal that represents xpath expression.
-    """,
-  extended =
-    """
-       > SELECT _FUNC_('<a><b>1</b></a>','a/b');
-        true
-    """)
+      Arguments:
+        xml - string type expression that represents XML document.
+        xpath - string type literal that represents XPath expression.
+
+      Examples:
+        > SELECT _FUNC_('<a><b>1</b></a>','a/b');
+         true
+  """)
 case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract {
 
   override def prettyName: String = "xpath_boolean"
@@ -80,19 +79,18 @@ case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract 
 }
 
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(xml, xpath) - Returns a short value that matches the xpath expression.
+  usage = "_FUNC_(xml, xpath) - Returns a short value that matches the XPath expression.",
+  extended = """
+    _FUNC_(xml, xpath)
 
-        Arguments:
-          xml - string type that represents XML documentation.
-          path - string type literal that represents xpath expression.
-    """,
-  extended =
-    """
-      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
-       3
-    """)
+      Arguments:
+        xml - string type expression that represents XML document.
+        xpath - string type literal that represents XPath expression.
+
+      Examples:
+        > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+         3
+  """)
 case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_int"
   override def dataType: DataType = ShortType
@@ -104,19 +102,18 @@ case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
 }
 
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(xml, xpath) - Returns a short value that matches the xpath expression.
+  usage = "_FUNC_(xml, xpath) - Returns an integer value that matches the XPath expression.",
+  extended = """
+    _FUNC_(xml, xpath)
 
-        Arguments:
-          xml - string type that represents XML documentation.
-          path - string type literal that represents xpath expression.
-    """,
-  extended =
-    """
-      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
-       3
-    """)
+      Arguments:
+        xml - string type expression that represents XML document.
+        xpath - string type literal that represents XPath expression.
+
+      Examples:
+        > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+         3
+  """)
 case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_int"
   override def dataType: DataType = IntegerType
@@ -128,19 +125,18 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
 }
 
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(xml, xpath) - Returns a short value that matches the xpath expression.
+  usage = "_FUNC_(xml, xpath) - Returns a long value that matches the XPath expression.",
+  extended = """
+    _FUNC_(xml, xpath)
 
-        Arguments:
-          xml - string type that represents XML documentation.
-          path - string type literal that represents xpath expression.
-    """,
-  extended =
-    """
-      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
-       3
-    """)
+      Arguments:
+        xml - string type expression that represents XML document.
+        xpath - string type literal that represents XPath expression.
+
+      Examples:
+        > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+         3
+  """)
 case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_long"
   override def dataType: DataType = LongType
@@ -152,19 +148,18 @@ case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
 }
 
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(xml, xpath) - Returns a short value that matches the xpath expression.
+  usage = "_FUNC_(xml, xpath) - Returns a float value that matches the XPath expression.",
+  extended = """
+    _FUNC_(xml, xpath)
 
-        Arguments:
-          xml - string type that represents XML documentation.
-          path - string type literal that represents xpath expression.
-    """,
-  extended =
-    """
-      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
-       3.0
-    """)
+      Arguments:
+        xml - string type expression that represents XML document.
+        xpath - string type literal that represents XPath expression.
+
+      Examples:
+        > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+         3.0
+  """)
 case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_float"
   override def dataType: DataType = FloatType
@@ -176,19 +171,18 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
 }
 
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(xml, xpath) - Returns a short value that matches the xpath expression.
+  usage = "_FUNC_(xml, xpath) - Returns a double value that matches the XPath expression.",
+  extended = """
+    _FUNC_(xml, xpath)
 
-        Arguments:
-          xml - string type that represents XML documentation.
-          path - string type literal that represents xpath expression.
-    """,
-  extended =
-    """
-      > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
-       3.0
-    """)
+      Arguments:
+        xml - string type expression that represents XML document.
+        xpath - string type literal that represents XPath expression.
+
+      Examples:
+        > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
+         3.0
+  """)
 case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_float"
   override def dataType: DataType = DoubleType
@@ -199,21 +193,21 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(xml, xpath) - Returns the text contents of the first xml node that matches the
-        xpath expression.
+  usage = "_FUNC_(xml, xpath) - Returns the text contents of the first xml node that matches the XPath expression.",
+  extended = """
+    _FUNC_(xml, xpath)
 
-        Arguments:
-          xml - string type that represents XML documentation.
-          path - string type literal that represents xpath expression.
-    """,
-  extended =
-    """
-      > SELECT _FUNC_('<a><b>b</b><c>cc</c></a>','a/c');
-       cc
-    """)
+      Arguments:
+        xml - string type expression that represents XML document.
+        path - string type literal that represents XPath expression.
+
+      Examples:
+        > SELECT _FUNC_('<a><b>b</b><c>cc</c></a>','a/c');
+         cc
+  """)
+// scalastyle:on line.size.limit
 case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_string"
   override def dataType: DataType = StringType
@@ -224,21 +218,21 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(xml, xpath) - Returns a string array of values within xml nodes that match the
-        xpath expression
+  usage = "_FUNC_(xml, xpath) - Returns a string array of values within xml nodes that match the XPath expression",
+  extended = """
+    _FUNC_(xml, xpath)
 
-        Arguments:
-          xml - string type that represents XML documentation.
-          path - string type literal that represents xpath expression.
-    """,
-  extended =
-    """
-      > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
-       ['b1','b2','b3']
-    """)
+      Arguments:
+        xml - string type expression that represents XML document.
+        path - string type literal that represents XPath expression.
+
+      Examples:
+        > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
+         ['b1','b2','b3']
+  """)
+// scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath"
   override def dataType: DataType = ArrayType(StringType, containsNull = false)
