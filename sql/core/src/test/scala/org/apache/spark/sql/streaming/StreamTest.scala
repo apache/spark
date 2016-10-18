@@ -204,7 +204,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   case class AssertOnLastQueryStatus(condition: StreamingQueryStatus => Unit)
     extends StreamAction
 
-  class StreamManualClock extends ManualClock {
+  class StreamManualClock(time: Long = 0L) extends ManualClock(time) {
     private var waitStartTime: Option[Long] = None
 
     override def waitTillTime(targetTime: Long): Long = synchronized {

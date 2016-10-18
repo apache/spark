@@ -199,7 +199,7 @@ class StreamSuite extends StreamTest {
 
       /* Stop then restart the Stream  */
       StopStream,
-      StartStream(ProcessingTime("10 seconds"), new ManualClock(60 * 1000)),
+      StartStream(ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
 
       /* -- batch 1 rerun ----------------- */
       // this batch 1 would re-run because the latest batch id logged in offset log is 1
