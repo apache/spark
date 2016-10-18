@@ -40,15 +40,15 @@ class SinkStatus private(
     val offsetDesc: String) {
 
   /** The compact JSON representation of this status. */
-  lazy val json: String = compact(render(jsonValue))
+  def json: String = compact(render(jsonValue))
 
   /** The pretty (i.e. indented) JSON representation of this status. */
-  lazy val prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = pretty(render(jsonValue))
 
-  override lazy val toString: String =
+  override def toString: String =
     "Status of sink " + indent(prettyString).trim
 
-  private[sql] lazy val jsonValue: JValue = {
+  private[sql] def jsonValue: JValue = {
     ("description" -> JString(description)) ~
     ("offsetDesc" -> JString(offsetDesc))
   }

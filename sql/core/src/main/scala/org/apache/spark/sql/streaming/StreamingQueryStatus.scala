@@ -66,12 +66,12 @@ class StreamingQueryStatus private(
   import StreamingQueryStatus._
 
   /** The compact JSON representation of this status. */
-  lazy val json: String = compact(render(jsonValue))
+  def json: String = compact(render(jsonValue))
 
   /** The pretty (i.e. indented) JSON representation of this status. */
-  lazy val prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = pretty(render(jsonValue))
 
-  override lazy val toString: String = {
+  override def toString: String = {
     val sourceStatusLines = sourceStatuses.zipWithIndex.map { case (s, i) =>
       s"Source ${i + 1} - " + indent(s.prettyString).trim
     }
@@ -95,7 +95,7 @@ class StreamingQueryStatus private(
     s"Status of query '$name'\n${indent(allLines)}"
   }
 
-  private[sql] lazy val jsonValue: JValue = {
+  private[sql] def jsonValue: JValue = {
     ("name" -> JString(name)) ~
     ("id" -> JInt(id)) ~
     ("timestamp" -> JInt(timestamp)) ~

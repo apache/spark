@@ -54,15 +54,15 @@ class SourceStatus private(
     val triggerDetails: ju.Map[String, String]) {
 
   /** The compact JSON representation of this status. */
-  lazy val json: String = compact(render(jsonValue))
+  def json: String = compact(render(jsonValue))
 
   /** The pretty (i.e. indented) JSON representation of this status. */
-  lazy val prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = pretty(render(jsonValue))
 
-  override lazy val toString: String =
+  override def toString: String =
     "Status of source " + indent(prettyString).trim
 
-  private[sql] lazy val jsonValue: JValue = {
+  private[sql] def jsonValue: JValue = {
     ("description" -> JString(description)) ~
     ("offsetDesc" -> JString(offsetDesc)) ~
     ("inputRate" -> JDouble(inputRate)) ~
@@ -70,7 +70,7 @@ class SourceStatus private(
     ("triggerDetails" -> JsonProtocol.mapToJson(triggerDetails.asScala))
   }
 
-  private[sql] lazy val prettyString: String = {
+  private[sql] def prettyString: String = {
     val triggerDetailsLines =
       triggerDetails.asScala.map { case (k, v) => s"$k: $v" }
     s"""$description
