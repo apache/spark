@@ -82,8 +82,10 @@ private[spark] class DirectTaskResult[T](
     if (valueObjectDeserialized) {
       valueObject
     } else {
-      valueObject = Option(resultSer).getOrElse(SparkEnv.get.serializer.newInstance())
-        .deserialize(valueBytes)
+      // This should not run when holding a lock because it may cost dozens of seconds for a large
+      // value
+      val ser = if (resultSer == null) SparkEnv.get.serializer.newInstance() else resultSer
+      valueObject = ser.deserialize(valueBytes)
       valueObjectDeserialized = true
       valueObject
     }
