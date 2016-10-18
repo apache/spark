@@ -265,13 +265,15 @@ object SQLConf {
   val HIVE_METASTORE_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
-           "unmatching partitions can be eliminated earlier.")
+           "unmatching partitions can be eliminated earlier. This only affects Hive tables " +
+           "not converted to filesource relations (see `spark.sql.hive.convertMetastoreParquet` " +
+           "and `spark.sql.hive.convertMetastoreOrc` for more information)." )
       .booleanConf
       .createWithDefault(false)
 
   val HIVE_FILESOURCE_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.hive.filesourcePartitionPruning")
-      .doc("When true, enable metastore partition pruning for file source tables as well. " +
+      .doc("When true, enable metastore partition pruning for filesource relations as well. " +
            "This is currently implemented for converted Hive tables only.")
       .booleanConf
       .createWithDefault(true)

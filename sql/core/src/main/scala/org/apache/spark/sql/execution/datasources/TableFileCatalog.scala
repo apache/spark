@@ -40,7 +40,7 @@ class TableFileCatalog(
     table: String,
     partitionSchema: Option[StructType],
     override val sizeInBytes: Long,
-    enableFileStatusCache: Boolean) extends BasicFileCatalog {
+    enableFileStatusCache: Boolean) extends FileCatalog {
 
   private val fileStatusCache = if (enableFileStatusCache)  {
     println("in mem cache")

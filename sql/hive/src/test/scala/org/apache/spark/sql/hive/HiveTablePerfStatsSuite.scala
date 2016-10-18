@@ -24,20 +24,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.QueryTest
 
-class HiveDataFrameSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
-  test("table name with schema") {
-    // regression test for SPARK-11778
-    spark.sql("create schema usrdb")
-    spark.sql("create table usrdb.test(c int)")
-    spark.read.table("usrdb.test")
-    spark.sql("drop table usrdb.test")
-    spark.sql("drop schema usrdb")
-  }
-
-  test("SPARK-15887: hive-site.xml should be loaded") {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-    assert(hiveClient.getConf("hive.in.test", "") == "true")
-  }
+class HiveTablePerfStatsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   private def setupPartitionedTable(tableName: String, dir: File): Unit = {
     spark.range(5).selectExpr("id", "id as partCol1", "id as partCol2").write
