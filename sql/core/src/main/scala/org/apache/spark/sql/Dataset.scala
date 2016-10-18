@@ -184,7 +184,7 @@ class Dataset[T] private[sql](
       case Union(children) if children.forall(hasSideEffects) =>
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
       case _ =>
-        queryExecution.analyzed
+        queryExecution.withCachedData
     }
   }
 
