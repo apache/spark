@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 import java.math.BigInteger
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -56,8 +56,14 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
     check("10", Literal.create(10, IntegerType))
     check("1000000000000000", Literal.create(1000000000000000L, LongType))
+    val decimal = Decimal("1" * 20)
+    check("1" * 20,
+      Literal.create(decimal, DecimalType(decimal.precision, decimal.scale)))
     check("1.5", Literal.create(1.5, DoubleType))
     check("hello", Literal.create("hello", StringType))
+    check("1990-02-24", Literal.create(Date.valueOf("1990-02-24"), DateType))
+    check("1990-02-24 12:00:30",
+      Literal.create(Timestamp.valueOf("1990-02-24 12:00:30"), TimestampType))
     check(defaultPartitionName, Literal.create(null, NullType))
   }
 
@@ -683,6 +689,40 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempPath { dir =>
       df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
+      checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
+    }
+  }
+
+  test("Various inferred partition value types") {
+    val row =
+      Row(
+        Long.MaxValue,
+        4.5,
+        new java.math.BigDecimal(new BigInteger("1" * 20)),
+        java.sql.Date.valueOf("2015-05-23"),
+        java.sql.Timestamp.valueOf("1990-02-24 12:00:30"),
+        "This is a string, /[]?=:",
+        "This is not a partition column")
+
+    val partitionColumnTypes =
+      Seq(
+        LongType,
+        DoubleType,
+        DecimalType(20, 0),
+        DateType,
+        TimestampType,
+        StringType)
+
+    val partitionColumns = partitionColumnTypes.zipWithIndex.map {
+      case (t, index) => StructField(s"p_$index", t)
+    }
+
+    val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
+    val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+    withTempPath { dir =>
+      df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
+      val fields = schema.map(f => Column(f.name))
       checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
     }
   }
