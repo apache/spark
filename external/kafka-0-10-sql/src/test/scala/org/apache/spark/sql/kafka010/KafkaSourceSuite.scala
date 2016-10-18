@@ -27,9 +27,9 @@ import org.apache.kafka.common.TopicPartition
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{ ProcessingTime, StreamTest }
 import org.apache.spark.sql.test.SharedSQLContext
-
+import org.apache.spark.util.ManualClock
 
 abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
@@ -133,6 +133,41 @@ class KafkaSourceSuite extends KafkaSourceTest {
   import testImplicits._
 
   private val topicId = new AtomicInteger(0)
+
+  test("maxOffsetsPerTrigger") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (100 to 200).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("1"), Some(2))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("maxOffsetsPerTrigger", 10)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    val clock = new ManualClock
+    testStream(mapped)(
+      StartStream(ProcessingTime(100), clock),
+      AdvanceManualClock(100),
+      // 1 from smallest, 1 from middle, 8 from biggest
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107),
+      AdvanceManualClock(100),
+      // smallest now empty, 1 more from middle, 9 more from biggest
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116
+      ),
+      StopStream
+    )
+  }
 
   test("cannot stop Kafka stream") {
     val topic = newTopic()

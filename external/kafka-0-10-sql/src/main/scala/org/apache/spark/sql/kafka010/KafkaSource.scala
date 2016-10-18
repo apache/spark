@@ -96,6 +96,9 @@ private[kafka010] case class KafkaSource(
   private val offsetFetchAttemptIntervalMs =
     sourceOptions.getOrElse("fetchOffset.retryIntervalMs", "10").toLong
 
+  private val maxOffsetsPerTrigger =
+    sourceOptions.get("maxOffsetsPerTrigger").map(_.toLong)
+
   /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
@@ -121,6 +124,8 @@ private[kafka010] case class KafkaSource(
     }.partitionToOffsets
   }
 
+  private var currentPartitionOffsets: Option[Map[TopicPartition, Long]] = None
+
   override def schema: StructType = KafkaSource.kafkaSchema
 
   /** Returns the maximum available offset for this source. */
@@ -128,9 +133,52 @@ private[kafka010] case class KafkaSource(
     // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
 
-    val offset = KafkaSourceOffset(fetchLatestOffsets())
-    logDebug(s"GetOffset: ${offset.partitionToOffsets.toSeq.map(_.toString).sorted}")
-    Some(offset)
+    val latest = fetchLatestOffsets()
+    val offsets = maxOffsetsPerTrigger match {
+      case None =>
+        latest
+      case Some(limit) if !currentPartitionOffsets.isDefined =>
+        rateLimit(limit, initialPartitionOffsets, latest)
+      case Some(limit) =>
+        rateLimit(limit, currentPartitionOffsets.get, latest)
+    }
+
+    currentPartitionOffsets = Some(offsets)
+    logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
+    Some(KafkaSourceOffset(offsets))
+  }
+
+  /** Proportionally distribute limit number of offsets among topicpartitions */
+  private def rateLimit(
+      limit: Long,
+      from: Map[TopicPartition, Long],
+      until: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+    val fromNew = fetchNewPartitionEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
+    val sizes = until.flatMap { case (tp, end) =>
+        // If begin isn't defined, something's wrong, but let alert logic in getBatch handle it
+        from.get(tp).orElse(fromNew.get(tp)).flatMap { begin =>
+          val size = end - begin
+          logDebug(s"rateLimit $tp size is $size")
+          if (size > 0) Some(tp -> size) else None
+        }
+    }
+    val total = sizes.values.sum.toDouble
+    if (total < 1) {
+      until
+    } else {
+      until.map { case (tp, end) =>
+          tp -> sizes.get(tp).map { size =>
+            val begin = from.get(tp).getOrElse(fromNew(tp))
+            val prorate = limit * (size / total)
+            logDebug(s"rateLimit $tp prorated amount is $prorate")
+            // Don't completely starve small topicpartitions
+            val off = begin + (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
+            logDebug(s"rateLimit $tp new offset is $off")
+            // Paranoia, make sure not to return an offset that's past end
+            Math.min(end, off)
+          }.getOrElse(end)
+      }
+    }
   }
 
   /**
@@ -153,11 +201,7 @@ private[kafka010] case class KafkaSource(
 
     // Find the new partitions, and get their earliest offsets
     val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
-    val newPartitionOffsets = if (newPartitions.nonEmpty) {
-      fetchNewPartitionEarliestOffsets(newPartitions.toSeq)
-    } else {
-      Map.empty[TopicPartition, Long]
-    }
+    val newPartitionOffsets = fetchNewPartitionEarliestOffsets(newPartitions.toSeq)
     if (newPartitionOffsets.keySet != newPartitions) {
       // We cannot get from offsets for some partitions. It means they got deleted.
       val deletedPartitions = newPartitions.diff(newPartitionOffsets.keySet)
@@ -304,23 +348,28 @@ private[kafka010] case class KafkaSource(
    * some partitions if they are deleted.
    */
   private def fetchNewPartitionEarliestOffsets(
-      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
-    // Poll to get the latest assigned partitions
-    consumer.poll(0)
-    val partitions = consumer.assignment()
-    consumer.pause(partitions)
-    logDebug(s"\tPartitions assigned to consumer: $partitions")
+      newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] =
+    if (newPartitions.isEmpty) {
+      Map.empty[TopicPartition, Long]
+    } else {
+      withRetriesWithoutInterrupt {
+        // Poll to get the latest assigned partitions
+        consumer.poll(0)
+        val partitions = consumer.assignment()
+        consumer.pause(partitions)
+        logDebug(s"\tPartitions assigned to consumer: $partitions")
 
-    // Get the earliest offset of each partition
-    consumer.seekToBeginning(partitions)
-    val partitionOffsets = newPartitions.filter { p =>
-      // When deleting topics happen at the same time, some partitions may not be in `partitions`.
-      // So we need to ignore them
-      partitions.contains(p)
-    }.map(p => p -> consumer.position(p)).toMap
-    logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
-    partitionOffsets
-  }
+        // Get the earliest offset of each partition
+        consumer.seekToBeginning(partitions)
+        val partitionOffsets = newPartitions.filter { p =>
+          // When deleting topics happen at the same time, some partitions may not be in
+          // `partitions`. So we need to ignore them
+          partitions.contains(p)
+        }.map(p => p -> consumer.position(p)).toMap
+        logDebug(s"Got earliest offsets for new partitions: $partitionOffsets")
+        partitionOffsets
+      }
+    }
 
   /**
    * Helper function that does multiple retries on the a body of code that returns offsets.
