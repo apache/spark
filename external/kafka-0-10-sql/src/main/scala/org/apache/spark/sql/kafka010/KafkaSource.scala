@@ -22,7 +22,7 @@ import java.{util => ju}
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
@@ -82,7 +82,7 @@ private[kafka010] case class KafkaSource(
     executorKafkaParams: ju.Map[String, Object],
     sourceOptions: Map[String, String],
     metadataPath: String,
-    startFromEarliestOffset: Boolean,
+    startingOffsets: StartingOffsets,
     failOnDataLoss: Boolean)
   extends Source with Logging {
 
@@ -110,10 +110,10 @@ private[kafka010] case class KafkaSource(
   private lazy val initialPartitionOffsets = {
     val metadataLog = new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession, metadataPath)
     metadataLog.get(0).getOrElse {
-      val offsets = if (startFromEarliestOffset) {
-        KafkaSourceOffset(fetchEarliestOffsets())
-      } else {
-        KafkaSourceOffset(fetchLatestOffsets())
+      val offsets = startingOffsets match {
+        case EarliestOffsets => KafkaSourceOffset(fetchEarliestOffsets())
+        case LatestOffsets => KafkaSourceOffset(fetchLatestOffsets())
+        case SpecificOffsets(p) => KafkaSourceOffset(fetchSpecificStartingOffsets(p))
       }
       metadataLog.add(0, offsets)
       logInfo(s"Initial offsets: $offsets")
@@ -232,6 +232,42 @@ private[kafka010] case class KafkaSource(
   override def toString(): String = s"KafkaSource[$consumerStrategy]"
 
   /**
+   * Set consumer position to specified offsets, making sure all assignments are set.
+   */
+  private def fetchSpecificStartingOffsets(
+      partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
+    withRetriesWithoutInterrupt {
+      // Poll to get the latest assigned partitions
+      consumer.poll(0)
+      val partitions = consumer.assignment()
+      consumer.pause(partitions)
+      assert(partitions.asScala == partitionOffsets.keySet,
+        "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
+          "Use -1 for latest, -2 for earliest, if you don't care.\n" +
+          s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions.asScala}")
+      logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
+
+      partitionOffsets.foreach {
+        case (tp, -1) => consumer.seekToEnd(ju.Arrays.asList(tp))
+        case (tp, -2) => consumer.seekToBeginning(ju.Arrays.asList(tp))
+        case (tp, off) => consumer.seek(tp, off)
+      }
+      val result = partitionOffsets.map {
+        case (tp, _) => tp -> consumer.position(tp)
+      }
+      partitionOffsets.foreach {
+        case (tp, off) if off != -1 && off != -2 =>
+          if (result(tp) != off) {
+            reportDataLoss(
+              s"startingOffsets for $tp was $off but consumer reset to earliest ${result(tp)}")
+          }
+        case _ =>
+          // no real way to check that beginning or end is reasonable
+      }
+      result
+    }
+
+  /**
    * Fetch the earliest offsets of partitions.
    */
   private def fetchEarliestOffsets(): Map[TopicPartition, Long] = withRetriesWithoutInterrupt {
@@ -273,7 +309,7 @@ private[kafka010] case class KafkaSource(
     consumer.poll(0)
     val partitions = consumer.assignment()
     consumer.pause(partitions)
-    logDebug(s"\tPartitioned assigned to consumer: $partitions")
+    logDebug(s"\tPartitions assigned to consumer: $partitions")
 
     // Get the earliest offset of each partition
     consumer.seekToBeginning(partitions)
@@ -317,6 +353,8 @@ private[kafka010] case class KafkaSource(
               try {
                 result = Some(body)
               } catch {
+                case x: OffsetOutOfRangeException =>
+                  reportDataLoss(x.getMessage)
                 case NonFatal(e) =>
                   lastException = e
                   logWarning(s"Error in attempt $attempt getting Kafka offsets: ", e)
@@ -371,6 +409,17 @@ private[kafka010] object KafkaSource {
 
   sealed trait ConsumerStrategy {
     def createConsumer(): Consumer[Array[Byte], Array[Byte]]
+  }
+
+  case class AssignStrategy(partitions: Array[TopicPartition], kafkaParams: ju.Map[String, Object])
+    extends ConsumerStrategy {
+    override def createConsumer(): Consumer[Array[Byte], Array[Byte]] = {
+      val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
+      consumer.assign(ju.Arrays.asList(partitions: _*))
+      consumer
+    }
+
+    override def toString: String = s"Assign[${partitions.mkString(", ")}]"
   }
 
   case class SubscribeStrategy(topics: Seq[String], kafkaParams: ju.Map[String, Object])

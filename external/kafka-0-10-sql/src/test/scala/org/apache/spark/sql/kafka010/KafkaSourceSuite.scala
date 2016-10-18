@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.io.StringWriter
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
+import org.apache.kafka.common.TopicPartition
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
@@ -52,7 +54,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
   protected def makeSureGetOffsetCalled = AssertOnQuery { q =>
     // Because KafkaSource's initialPartitionOffsets is set lazily, we need to make sure
     // its "getOffset" is called before pushing any data. Otherwise, because of the race contion,
-    // we don't know which data should be fetched when `startingOffset` is latest.
+    // we don't know which data should be fetched when `startingOffsets` is latest.
     q.processAllAvailable()
     true
   }
@@ -155,26 +157,52 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
+  test("assign from latest offsets") {
+    val topic = newTopic()
+    testFromLatestOffsets(topic, false, "assign" -> assignString(topic, 0 to 4))
+  }
+
+  test("assign from earliest offsets") {
+    val topic = newTopic()
+    testFromEarliestOffsets(topic, false, "assign" -> assignString(topic, 0 to 4))
+  }
+
+  test("assign from specific offsets") {
+    val topic = newTopic()
+    testFromSpecificOffsets(topic, "assign" -> assignString(topic, 0 to 4))
+  }
+
   test("subscribing topic by name from latest offsets") {
     val topic = newTopic()
-    testFromLatestOffsets(topic, "subscribe" -> topic)
+    testFromLatestOffsets(topic, true, "subscribe" -> topic)
   }
 
   test("subscribing topic by name from earliest offsets") {
     val topic = newTopic()
-    testFromEarliestOffsets(topic, "subscribe" -> topic)
+    testFromEarliestOffsets(topic, true, "subscribe" -> topic)
+  }
+
+  test("subscribing topic by name from specific offsets") {
+    val topic = newTopic()
+    testFromSpecificOffsets(topic, "subscribe" -> topic)
   }
 
   test("subscribing topic by pattern from latest offsets") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-suffix"
-    testFromLatestOffsets(topic, "subscribePattern" -> s"$topicPrefix-.*")
+    testFromLatestOffsets(topic, true, "subscribePattern" -> s"$topicPrefix-.*")
   }
 
   test("subscribing topic by pattern from earliest offsets") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-suffix"
-    testFromEarliestOffsets(topic, "subscribePattern" -> s"$topicPrefix-.*")
+    testFromEarliestOffsets(topic, true, "subscribePattern" -> s"$topicPrefix-.*")
+  }
+
+  test("subscribing topic by pattern from specific offsets") {
+    val topicPrefix = newTopic()
+    val topic = topicPrefix + "-suffix"
+    testFromSpecificOffsets(topic, "subscribePattern" -> s"$topicPrefix-.*")
   }
 
   test("subscribing topic by pattern with topic deletions") {
@@ -233,6 +261,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testBadOptions("subscribe" -> "t", "subscribePattern" -> "t.*")(
       "only one", "options can be specified")
 
+    testBadOptions("subscribe" -> "t", "assign" -> """{"a":[0]}""")(
+      "only one", "options can be specified")
+
+    testBadOptions("assign" -> "")("no topicpartitions to assign")
     testBadOptions("subscribe" -> "")("no topics to subscribe")
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
   }
@@ -293,7 +325,67 @@ class KafkaSourceSuite extends KafkaSourceTest {
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
-  private def testFromLatestOffsets(topic: String, options: (String, String)*): Unit = {
+  private def assignString(topic: String, partitions: Iterable[Int]): String = {
+    val writer = new StringWriter
+    JsonUtils.partitions(
+      partitions.map(p => new TopicPartition(topic, p)),
+      writer)
+    writer.toString
+  }
+
+  private def testFromSpecificOffsets(topic: String, options: (String, String)*): Unit = {
+    val writer = new StringWriter
+    val partitionOffsets = Map(
+      new TopicPartition(topic, 0) -> -2L,
+      new TopicPartition(topic, 1) -> -1L,
+      new TopicPartition(topic, 2) -> 0L,
+      new TopicPartition(topic, 3) -> 1L,
+      new TopicPartition(topic, 4) -> 2L
+    )
+    JsonUtils.partitionOffsets(partitionOffsets, writer)
+    val startingOffsets = writer.toString
+
+    testUtils.createTopic(topic, partitions = 5)
+    // part 0 starts at earliest, these should all be seen
+    testUtils.sendMessages(topic, Array(-20, -21, -22).map(_.toString), Some(0))
+    // part 1 starts at latest, these should all be skipped
+    testUtils.sendMessages(topic, Array(-10, -11, -12).map(_.toString), Some(1))
+    // part 2 starts at 0, these should all be seen
+    testUtils.sendMessages(topic, Array(0, 1, 2).map(_.toString), Some(2))
+    // part 3 starts at 1, first should be skipped
+    testUtils.sendMessages(topic, Array(10, 11, 12).map(_.toString), Some(3))
+    // part 4 starts at 2, first and second should be skipped
+    testUtils.sendMessages(topic, Array(20, 21, 22).map(_.toString), Some(4))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("startingOffsets", startingOffsets)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+    options.foreach { case (k, v) => reader.option(k, v) }
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22),
+      StopStream,
+      StartStream(),
+      CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22), // Should get the data back on recovery
+      AddKafkaData(Set(topic), 30, 31, 32, 33, 34)(ensureDataInMultiplePartition = true),
+      CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22, 30, 31, 32, 33, 34),
+      StopStream
+    )
+  }
+
+  private def testFromLatestOffsets(
+      topic: String,
+      addPartitions: Boolean,
+      options: (String, String)*): Unit = {
     testUtils.createTopic(topic, partitions = 5)
     testUtils.sendMessages(topic, Array("-1"))
     require(testUtils.getLatestOffsets(Set(topic)).size === 5)
@@ -301,7 +393,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val reader = spark
       .readStream
       .format("kafka")
-      .option("startingOffset", s"latest")
+      .option("startingOffsets", s"latest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
     options.foreach { case (k, v) => reader.option(k, v) }
@@ -324,7 +416,9 @@ class KafkaSourceSuite extends KafkaSourceTest {
       AddKafkaData(Set(topic), 7, 8),
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
       AssertOnQuery("Add partitions") { query: StreamExecution =>
-        testUtils.addPartitions(topic, 10)
+        if (addPartitions) {
+          testUtils.addPartitions(topic, 10)
+        }
         true
       },
       AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
@@ -332,7 +426,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
-  private def testFromEarliestOffsets(topic: String, options: (String, String)*): Unit = {
+  private def testFromEarliestOffsets(
+      topic: String,
+      addPartitions: Boolean,
+      options: (String, String)*): Unit = {
     testUtils.createTopic(topic, partitions = 5)
     testUtils.sendMessages(topic, (1 to 3).map { _.toString }.toArray)
     require(testUtils.getLatestOffsets(Set(topic)).size === 5)
@@ -340,7 +437,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val reader = spark.readStream
     reader
       .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
-      .option("startingOffset", s"earliest")
+      .option("startingOffsets", s"earliest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
     options.foreach { case (k, v) => reader.option(k, v) }
@@ -360,7 +457,9 @@ class KafkaSourceSuite extends KafkaSourceTest {
       StartStream(),
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9),
       AssertOnQuery("Add partitions") { query: StreamExecution =>
-        testUtils.addPartitions(topic, 10)
+        if (addPartitions) {
+          testUtils.addPartitions(topic, 10)
+        }
         true
       },
       AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
