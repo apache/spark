@@ -29,20 +29,25 @@ import org.apache.spark.sql.types._
  * a single partition, and we use a single reducer to do the aggregation.).
  */
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(expr) - Returns the first value of `child` for a group of rows.
+  usage = """
+    _FUNC_(expr) - Returns the first value of expr for a group of rows.
 
-        Arguments:
-          expr - any type expression that represents data to collect the first.
+    _FUNC_(expr, isIgnoreNull) - Returns the first value of expr for a group of rows.
+      If isIgnoreNull is true, returns only non-null values.
+  """,
+  extended = """
+    _FUNC_(expr)
 
-      _FUNC_(expr,isIgnoreNull=false) - Returns the first value of `child` for a group of rows.
-        If isIgnoreNull is true, returns only non-null values.
+      Arguments:
+        expr - any type expression that represents data to collect the first.
 
-        Arguments:
-          expr - any type expression that represents data to collect the first.
-          isIgnoreNull - boolean type literal.
-    """)
+    _FUNC_(expr, isIgnoreNull)
+
+      Arguments:
+        expr - any type expression that represents data to collect the first.
+        isIgnoreNull - boolean type literal. If isIgnoreNull is true, returns only non-null
+          values. Default is false.
+  """)
 case class First(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
 
   def this(child: Expression) = this(child, Literal.create(false, BooleanType))

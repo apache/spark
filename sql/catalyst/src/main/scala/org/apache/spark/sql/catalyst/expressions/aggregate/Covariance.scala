@@ -77,16 +77,16 @@ abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggre
 }
 
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.
+  usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.",
+  extended = """
+    _FUNC_(expr1, expr2)
 
-        Arguments:
-          expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-            converted to double type.
-          expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-            converted to double type.
-    """)
+      Arguments:
+        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
+          converted to double type.
+        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
+          converted to double type.
+  """)
 case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(n === Literal(0.0), Literal.create(null, DoubleType),
@@ -96,16 +96,16 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
 }
 
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.
+  usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.",
+  extended = """
+    _FUNC_(expr1, expr2)
 
-        Arguments:
-          expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-            converted to double type.
-          expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-            converted to double type.
-    """)
+      Arguments:
+        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
+          converted to double type.
+        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
+          converted to double type.
+  """)
 case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
     If(n === Literal(0.0), Literal.create(null, DoubleType),

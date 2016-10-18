@@ -49,45 +49,49 @@ import org.apache.spark.sql.types._
  *                           DEFAULT_PERCENTILE_ACCURACY.
  */
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(col, percentage [, accuracy]) - Returns the approximate percentile value of numeric
-        column `col` at the given percentage. The value of percentage must be between 0.0
-        and 1.0. The `accuracy` parameter (default: 10000) is a positive integer literal which
-        controls approximation accuracy at the cost of memory. Higher value of `accuracy` yields
-        better accuracy, `1.0/accuracy` is the relative error of the approximation.
+  usage = """
+    _FUNC_(col, percentage [, accuracy]) - Returns the approximate percentile value of numeric
+      column `col` at the given percentage. The value of percentage must be between 0.0
+      and 1.0. The `accuracy` parameter (default: 10000) is a positive integer literal which
+      controls approximation accuracy at the cost of memory. Higher value of `accuracy` yields
+      better accuracy, `1.0/accuracy` is the relative error of the approximation.
 
-        Arguments:
-          col - any numeric type or any nonnumeric type expression that can be implicitly
-            converted to double type.
-          percentage - any numeric type or any nonnumeric type literal that can be
-            implicitly converted to double type.
-          accuracy - any numeric type or any nonnumeric type literal that can be implicitly
-            converted to int type.
+    _FUNC_(col, array(percentage1 [, percentage2]...) [, accuracy]) - Returns the approximate
+      percentile array of column `col` at the given percentage array. Each value of the
+      percentage array must be between 0.0 and 1.0. The `accuracy` parameter (default: 10000) is
+      a positive integer literal which controls approximation accuracy at the cost of memory.
+      Higher value of `accuracy` yields better accuracy, `1.0/accuracy` is the relative error of
+      the approximation.
+  """,
+  extended = """
+    _FUNC_(col, percentage [, accuracy])
 
-      _FUNC_(col, array(percentage1 [, percentage2]...) [, accuracy]) - Returns the approximate
-        percentile array of column `col` at the given percentage array. Each value of the
-        percentage array must be between 0.0 and 1.0. The `accuracy` parameter (default: 10000) is
-        a positive integer literal which controls approximation accuracy at the cost of memory.
-        Higher value of `accuracy` yields better accuracy, `1.0/accuracy` is the relative error of
-        the approximation.
+      Arguments:
+        col - any numeric type or any nonnumeric type expression that can be implicitly
+          converted to double type.
+        array(...) - an array that contains any numeric type literal that can be implicitly
+          converted to double type.
+        accuracy - any numeric type or any nonnumeric type literal that can be implicitly
+          converted to int type.
 
-        Arguments:
-          col - any numeric type or any nonnumeric type expression that can be implicitly
-            converted to double type.
-          array(...) - an array that contains any numeric type literal that can be implicitly
-            converted to double type.
-          accuracy - any numeric type or any nonnumeric type literal that can be implicitly
-            converted to int type.
-    """,
-  extended =
-    """
-      > SELECT percentile_approx(10.0, 0.5, 100);
-       10.0
+      Examples:
+        > SELECT percentile_approx(10.0, array(0.5, 0.4, 0.1), 100);
+         [10.0,10.0,10.0]
 
-      > SELECT percentile_approx(10.0, array(0.5, 0.4, 0.1), 100);
-       [10.0,10.0,10.0]
-    """)
+    _FUNC_(col, array(percentage1 [, percentage2]...) [, accuracy])
+
+      Arguments:
+        col - any numeric type or any nonnumeric type expression that can be implicitly
+          converted to double type.
+        percentage - any numeric type or any nonnumeric type literal that can be
+          implicitly converted to double type.
+        accuracy - any numeric type or any nonnumeric type literal that can be implicitly
+          converted to int type.
+
+      Examples:
+        > SELECT percentile_approx(10.0, 0.5, 100);
+         10.0
+  """)
 case class ApproximatePercentile(
     child: Expression,
     percentageExpression: Expression,
