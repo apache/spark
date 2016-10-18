@@ -1477,7 +1477,7 @@ private[spark] object Utils extends Logging {
    * Return the file length, if the file is compressed it returns the uncompressed file length.
    * It also caches the uncompressed file size to avoid repeated decompression. The cache size is
    * read from workerConf.
-   * */
+   */
   def getFileLength(file: File, workConf: SparkConf): Long = {
     if (file.getName.endsWith(".gz")) {
       getCompressedLogFileLengthCache(workConf).get(file.getAbsolutePath)
