@@ -17,23 +17,22 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{catalyst, Column}
+import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
- * :: Experimental ::
  * A window specification that defines the partitioning, ordering, and frame boundaries.
  *
  * Use the static methods in [[Window]] to create a [[WindowSpec]].
  *
  * @since 1.4.0
  */
-@Experimental
+@InterfaceStability.Stable
 class WindowSpec private[sql](
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frame: catalyst.expressions.WindowFrame) {
+    frame: WindowFrame) {
 
   /**
    * Defines the partitioning columns in a [[WindowSpec]].

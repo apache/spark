@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
- * :: Experimental ::
  * Utility functions for defining window in DataFrames.
  *
  * {{{
@@ -36,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
  *
  * @since 1.4.0
  */
-@Experimental
+@InterfaceStability.Stable
 object Window {
 
   /**
@@ -163,7 +162,6 @@ object Window {
 }
 
 /**
- * :: Experimental ::
  * Utility functions for defining window in DataFrames.
  *
  * {{{
@@ -176,5 +174,5 @@ object Window {
  *
  * @since 1.4.0
  */
-@Experimental
+@InterfaceStability.Stable
 class Window private()  // So we can see Window in JavaDoc.

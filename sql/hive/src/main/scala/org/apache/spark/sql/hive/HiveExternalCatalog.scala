@@ -29,16 +29,17 @@ import org.apache.thrift.TException
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.execution.command.{ColumnStatStruct, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 
 /**
@@ -111,6 +112,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
         s"as table property keys may not start with '$DATASOURCE_PREFIX' or '$STATISTICS_PREFIX':" +
         s" ${invalidKeys.mkString("[", ", ", "]")}")
+    }
+    // External users are not allowed to set/switch the table type. In Hive metastore, the table
+    // type can be switched by changing the value of a case-sensitive table property `EXTERNAL`.
+    if (table.properties.contains("EXTERNAL")) {
+      throw new AnalysisException("Cannot set or change the preserved property key: 'EXTERNAL'")
     }
   }
 
@@ -639,6 +645,40 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
     client.getPartitions(db, table, partialSpec)
+  }
+
+  override def listPartitionsByFilter(
+      db: String,
+      table: String,
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = withClient {
+    val catalogTable = client.getTable(db, table)
+    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+    val nonPartitionPruningPredicates = predicates.filterNot {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+
+    if (nonPartitionPruningPredicates.nonEmpty) {
+        sys.error("Expected only partition pruning predicates: " +
+          predicates.reduceLeft(And))
+    }
+
+    val partitionSchema = catalogTable.partitionSchema
+
+    if (predicates.nonEmpty) {
+      val clientPrunedPartitions =
+        client.getPartitionsByFilter(catalogTable, predicates)
+      val boundPredicate =
+        InterpretedPredicate.create(predicates.reduce(And).transform {
+          case att: AttributeReference =>
+            val index = partitionSchema.indexWhere(_.name == att.name)
+            BoundReference(index, partitionSchema(index).dataType, nullable = true)
+        })
+      clientPrunedPartitions.filter { case p: CatalogTablePartition =>
+        boundPredicate(p.toRow(partitionSchema))
+      }
+    } else {
+      client.getPartitions(catalogTable)
+    }
   }
 
   // --------------------------------------------------------------------------
