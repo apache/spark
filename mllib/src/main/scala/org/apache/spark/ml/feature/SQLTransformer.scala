@@ -67,7 +67,9 @@ class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) 
     val tableName = Identifiable.randomUID(uid)
     dataset.createOrReplaceTempView(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
-    dataset.sparkSession.sql(realStatement)
+    val result = dataset.sparkSession.sql(realStatement)
+    dataset.sparkSession.catalog.dropTempView(tableName)
+    result
   }
 
   @Since("1.6.0")
