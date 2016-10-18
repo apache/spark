@@ -202,7 +202,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       JsonProtocol.sparkEventToJson(queryQueryTerminated)
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
       .asInstanceOf[StreamingQueryListener.QueryTerminatedEvent]
-    assertStreamingQueryInfoEquals(queryQueryTerminated.status, newQueryTerminated.status)
+    assertStreamingQueryInfoEquals(queryQueryTerminated.queryStatus, newQueryTerminated.queryStatus)
     assert(queryQueryTerminated.exception === newQueryTerminated.exception)
   }
 
