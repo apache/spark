@@ -39,6 +39,7 @@ import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
 
+import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.io.IOUtils
@@ -57,6 +58,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DYN_ALLOCATION_INITIAL_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.spark.util.logging.RollingFileAppender
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -1450,21 +1452,56 @@ private[spark] object Utils extends Logging {
     CallSite(shortForm, longForm)
   }
 
-  def getFileLength(file: File): Long = {
-    // Uncompress .gz file to determine file size.
+  val UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE = "spark.worker.ui.compressedLogFileLengthCacheSize"
+  val DEFAULT_UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE = 100
+  private var compressedLogFileLengthCache: LoadingCache[String, java.lang.Long] = null
+  private def getCompressedLogFileLengthCache(
+      sparkConf: SparkConf): LoadingCache[String, java.lang.Long] = this.synchronized {
+    if (compressedLogFileLengthCache == null) {
+      val compressedLogFileLengthCacheSize = sparkConf.getInt(
+        UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE,
+        DEFAULT_UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE)
+      compressedLogFileLengthCache = CacheBuilder.newBuilder()
+        .maximumSize(compressedLogFileLengthCacheSize)
+        .build[String, java.lang.Long](new CacheLoader[String, java.lang.Long]() {
+        override def load(path: String): java.lang.Long = {
+          Utils.getFileLength(new File(path))
+        }
+      })
+    }
+    compressedLogFileLengthCache
+  }
+
+  def getFileLength(file: File, sparkConf: SparkConf): Long = {
     if (file.getName.endsWith(".gz")) {
-      var fileSize = 0L
-      val gzInputStream = new GZIPInputStream(new FileInputStream(file))
-      val bufSize = 1024
-      val buf = new Array[Byte](bufSize)
-      var numBytes = IOUtils.read(gzInputStream, buf)
-      while (numBytes > 0) {
-        fileSize += numBytes
-        numBytes = IOUtils.read(gzInputStream, buf)
-      }
-      fileSize
+      getCompressedLogFileLengthCache(sparkConf).get(file.getAbsolutePath)
     } else {
-      file.length
+      getFileLength(file)
+    }
+  }
+
+  /** Return the file length, if the file is compressed it returns the uncompressed file length. */
+  private[util] def getFileLength(file: File): Long = {
+    try {
+      // Uncompress .gz file to determine file size.
+      if (file.getName.endsWith(".gz")) {
+        var fileSize = 0L
+        val gzInputStream = new GZIPInputStream(new FileInputStream(file))
+        val bufSize = 1024
+        val buf = new Array[Byte](bufSize)
+        var numBytes = IOUtils.read(gzInputStream, buf)
+        while (numBytes > 0) {
+          fileSize += numBytes
+          numBytes = IOUtils.read(gzInputStream, buf)
+        }
+        fileSize
+      } else {
+        file.length
+      }
+    } catch {
+      case e: Throwable =>
+        logWarning(s"Cannot get file length of ${file}", e)
+        throw e
     }
   }
 

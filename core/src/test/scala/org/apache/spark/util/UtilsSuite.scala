@@ -334,10 +334,12 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   def testOffsetBytesMultipleFiles(isCompressed: Boolean): Unit = {
     val tmpDir = Utils.createTempDir()
     val suffix = getSuffix(isCompressed)
-    val files = (1 to 3).map(i => new File(tmpDir, i.toString + suffix))
+    val files = (1 to 3).map(i => new File(tmpDir, i.toString + suffix)) ++
+      Seq(new File(tmpDir, "4"))
     writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
     writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
     writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8))
+    writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(StandardCharsets.UTF_8))
     val fileLengths = files.map(Utils.getFileLength)
 
     // Read first few bytes in the 1st file
@@ -351,6 +353,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     // Read bytes across 1st, 2nd and 3rd file
     assert(Utils.offsetBytes(files, fileLengths, 5, 24) === "56789abcdefghijABCD")
+
+    // Read bytes across 3rd and 4th file
+    assert(Utils.offsetBytes(files, fileLengths, 25, 35) === "FGHIJ98765")
 
     // Read some nonexistent bytes in the beginning
     assert(Utils.offsetBytes(files, fileLengths, -5, 18) === "0123456789abcdefgh")

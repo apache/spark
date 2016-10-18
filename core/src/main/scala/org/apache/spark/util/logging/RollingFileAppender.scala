@@ -173,9 +173,6 @@ private[spark] object RollingFileAppender {
   val RETAINED_FILES_PROPERTY = "spark.executor.logs.rolling.maxRetainedFiles"
   val DEFAULT_BUFFER_SIZE = 8192
   val ENABLE_COMPRESSION = "spark.executor.logs.rolling.enableCompression"
-  val FILE_UNCOMPRESSED_LENGTH_CACHE_SIZE =
-    "spark.executor.logs.rolling.fileUncompressedLengthCacheSize"
-  val DEFAULT_FILE_UNCOMPRESSED_LENGTH_CACHE_SIZE = 100
 
   val GZIP_LOG_SUFFIX = ".gz"
 
