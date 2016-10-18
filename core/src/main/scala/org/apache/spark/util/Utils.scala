@@ -1502,7 +1502,7 @@ private[spark] object Utils extends Logging {
       fileSize
     } catch {
       case e: Throwable =>
-        logWarning(s"Cannot get file length of ${file}", e)
+        logError(s"Cannot get file length of ${file}", e)
         throw e
     }
   }
