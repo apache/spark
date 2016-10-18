@@ -1,17 +1,20 @@
-import os
+from __future__ import print_function
+import os, sys
 from setuptools import setup, find_packages
 
 VERSION = '2.1.0-SNAPSHOT'
-JARS_PATH = "../assembly/target/scala-2.11/jars/*.jar"
-SCRIPTS = "../bin/*"
+# A temporary path so we can access above the Python project root and fetch scripts and jars we need
 TEMP_PATH = "deps"
+JARS_PATH = "%s/assembly/target/scala-2.11/jars/*.jar" % TEMP_PATH
+SCRIPTS = "%s/bin/*" % TEMP_PATH
 
 # Construct links for setup
-if os.path.isfile(TEMP_PATH):
-    os.remove(TEMP_PATH)
 try:
     os.symlink("../", TEMP_PATH)
+except:
+    print("temp path for symlink to parent already exists %s" % TEMP_PATH, file=sys.stderr)
 
+try:
     setup(
         name='pyspark',
         version=VERSION,
