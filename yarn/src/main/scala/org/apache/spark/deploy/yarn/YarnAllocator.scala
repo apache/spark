@@ -130,6 +130,9 @@ private[yarn] class YarnAllocator(
   private var numUnexpectedContainerRelease = 0L
   private val containerIdToExecutorId = new HashMap[ContainerId, String]
 
+  // Keep track already allocated executor per host
+  val hostToAllocationMeterMap = new HashMap[String, Int]
+
   // Executor memory in MB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
   // Additional memory overhead.
@@ -507,6 +510,10 @@ private[yarn] class YarnAllocator(
 
       if (numExecutorsRunning < targetNumExecutors) {
         if (launchContainers) {
+
+          val allocationMeter = hostToAllocationMeterMap.getOrElseUpdate(executorHostname, 0)
+          hostToAllocationMeterMap.put(executorHostname, allocationMeter + 1)
+
           launcherPool.execute(new Runnable {
             override def run(): Unit = {
               try {
@@ -521,7 +528,8 @@ private[yarn] class YarnAllocator(
                   executorCores,
                   appAttemptId.getApplicationId.toString,
                   securityMgr,
-                  localResources
+                  localResources,
+                  allocationMeter
                 ).run()
                 updateInternalState()
               } catch {
