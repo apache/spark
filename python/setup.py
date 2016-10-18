@@ -48,7 +48,6 @@ try:
         }
     )
 finally:
-    True
-#    os.remove("%s/jars" % TEMP_PATH)
-#    os.remove("%s/bin" % TEMP_PATH)
-#    os.rmdir(TEMP_PATH)
+    os.remove("%s/jars" % TEMP_PATH)
+    os.remove("%s/bin" % TEMP_PATH)
+    os.rmdir(TEMP_PATH)
