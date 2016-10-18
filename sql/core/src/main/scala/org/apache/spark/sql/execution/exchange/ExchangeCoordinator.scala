@@ -21,6 +21,7 @@ import java.util.{HashMap => JHashMap, Map => JMap}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.{MapOutputStatistics, ShuffleDependency, SimpleFutureAction}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -229,121 +230,95 @@ class ExchangeCoordinator(
   * isSkew is 2 mean's other side data skew , so SkewShuffleRowRDD should generate many some
   * partition .
   */
-  def skewPartitionIdx(
+ def skewPartitionIdx(
     mapOutputStatistics: Array[MapOutputStatistics],
     prePartitionNum: Array[Int],
-    partitionStartIndices: Option[Array[Int]] = None) :
+    partitionStartIndices: Option[Array[Int]] = None):
  Array[(Int, Array[(Int, Long, Int, Int)])] = {
 
    if (mapOutputStatistics.length != 2 || !isJoin) {
      return (0 until numExchanges).map(_ =>
        (0, Array[(Int, Long, Int, Int)]((-1, 0, 0, 0)))).toArray
    }
-    // find which partition is skew
-    var skewPartition = mapOutputStatistics.map(ms =>
-      ms.bytesByPartitionId.zipWithIndex
-        .filter( x => x._1 > skewThreshold)
-    )
-    // if 2 stage some partition output size both over than skewSize
-    // then choose a size big one as the skew side.
-    skewPartition = skewPartition.zipWithIndex.map(sti => {
-      val index = if (sti._2 == 0) 1 else 0
-      sti._1.filterNot(
-        p => skewPartition(index).exists(p1 => p1._2 == p._2 && p._1 < p1._1))
-    })
+   // find which partition is skew
+   var skewPartition = mapOutputStatistics.map(ms =>
+     ms.bytesByPartitionId.zipWithIndex
+       .filter(x => x._1 > skewThreshold)
+   )
+   // if 2 stage some partition output size both over than skewSize
+   // then choose a size big one as the skew side.
+   skewPartition = skewPartition.zipWithIndex.map(sti => {
+     val index = if (sti._2 == 0) 1 else 0
+     sti._1.filterNot(
+       p => skewPartition(index).exists(p1 => p1._2 == p._2 && p._1 < p1._1))
+   })
 
-    // skewSize must great than TargetPostShuffleInputSize
-    val isSkew = skewPartition.flatten.length > 0 && isJoin &&
-      skewThreshold > advisoryTargetPostShuffleInputSize
-    (0 until numExchanges).map(thisPart =>
-      if (isSkew) {
-        assert(skewPartition.length == 2)
-        val partStartIndices: Array[Int] = partitionStartIndices match {
-          case Some(indices) => indices
-          case None => Array[Int]()
-        }
-        var partitionNum = 0
-        val otherPart = if (thisPart == 0) 1 else 0
-        var thisPos = 0
-        var otherPos = 0
-        val skewPartitionIdx = ArrayBuffer[(Int, Long, Int, Int)]()
-        // use partStartIndices and skewPartition make new "skewStartIndices"
-        // for example: partStartIndices is [1,3,5,7] skew partition is [2,6,9]
-        // then skewStartIndices describe Indices like :[1,2,3,5,6,7,9] and describe
-        // which index is skew index.
-        for (i <- 0 until partStartIndices.length) {
-          val thisPartitionSkew: (Long, Int) = if (skewPartition(thisPart).isDefinedAt(thisPos)) {
-            skewPartition(thisPart)(thisPos)
-          } else {
-            (-1, -1)
-          }
-          val otherPartitionSkew: (Long, Int) =
-            if (skewPartition(otherPart).isDefinedAt(otherPos)) {
-            skewPartition(otherPart)(otherPos)
-          } else {
-            (-1, -1)
-          }
+   // skewSize must great than TargetPostShuffleInputSize
+   val isSkew = skewPartition.flatten.length > 0 && isJoin &&
+     skewThreshold > advisoryTargetPostShuffleInputSize
+   if (!isSkew) {
+     return (0 until numExchanges).map(_ =>
+       (0, Array[(Int, Long, Int, Int)]((-1, 0, 0, 0)))).toArray
+   }
+   val flatSkewPartition = skewPartition.zipWithIndex.flatMap(m => m._1.map(x => (m._2, x)))
+   val retIndices = new Array[ArrayBuffer[(Int, Long, Int, Int)]](numExchanges)
+   for (i <- 0 until numExchanges) retIndices(i) = new ArrayBuffer[(Int, Long, Int, Int)]
+   val partStartIndices: Array[Int] = partitionStartIndices match {
+     case Some(indices) => indices
+     case None => Array[Int]()
+   }
+   var pos = 0
+   for (i <- 0 until partStartIndices.length) {
+     val (side, thisPartitionSkew) = if (flatSkewPartition.isDefinedAt(pos)) {
+       flatSkewPartition(pos)
+     } else {
+       (0, (-1, -1))
+     }
+     val otherSide = if (side == 0) 1 else 0
+     if (partStartIndices(i) >= thisPartitionSkew._2 && thisPartitionSkew._2 > -1) {
+       retIndices(side).append((1, thisPartitionSkew._1.asInstanceOf[Long],
+         thisPartitionSkew._2, prePartitionNum(side)))
+       retIndices(otherSide).append((2, thisPartitionSkew._1.asInstanceOf[Long],
+         thisPartitionSkew._2, prePartitionNum(side)))
+       pos += 1
 
-          if (partStartIndices(i) == thisPartitionSkew._2 ) {
-            // this skew partition on the partStartIndices,
-            // usually at begin or end of partStartIndices
-            // for example: partStartIndices is [1,3,5,7] and skew partition is 1 or 7
-            skewPartitionIdx.append((1, thisPartitionSkew._1,
-              thisPartitionSkew._2, prePartitionNum(thisPart)))
-            thisPos += 1
-          } else if (partStartIndices(i) > thisPartitionSkew._2 && thisPartitionSkew._2 > -1) {
-            // skew partition in the range of partStartIndices,
-            // usually at middle of partStartIndices
-            // for example: partStartIndices is [1,3,5,7] and skew partition is 2 or 4 etc..
-            skewPartitionIdx.append((1, thisPartitionSkew._1,
-              thisPartitionSkew._2, prePartitionNum(thisPart)))
-            thisPos += 1
-            if (!skewPartition.flatten.exists(m => m._2 == partStartIndices(i))) {
-              // one range of partStartIndices only have one skew partition
-              // so when partStartIndices(i) not equal to other side skew, need add skew partition
-              // to  partStartIndices(i) as normal partition
-              skewPartitionIdx.append((-1, 0, partStartIndices(i), 1))
-            }
-          } else if (partStartIndices(i) == otherPartitionSkew._2) {
-            // As same comment above, but other side parition skew
-            skewPartitionIdx.append((2, otherPartitionSkew._1,
-              otherPartitionSkew._2, prePartitionNum(otherPart)))
-            otherPos += 1
-          } else if (partStartIndices(i) > otherPartitionSkew._2 && otherPartitionSkew._2 > -1) {
-            skewPartitionIdx.append((2, otherPartitionSkew._1,
-              otherPartitionSkew._2, prePartitionNum(otherPart)))
-            otherPos += 1
-            if (!skewPartition.flatten.exists(m => m._2 == partStartIndices(i))) {
-              skewPartitionIdx.append((-1, 0, partStartIndices(i), 1))
-            }
-          } else {
-            skewPartitionIdx.append((-1, 0, partStartIndices(i), 1))
-          }
-        }
-        if (otherPos == skewPartition(otherPart).length - 1) {
-          // for example : partStartIndices is [1,3,5,7], but skew partition is 9
-          skewPartitionIdx.
-            append((2, skewPartition(otherPart)(otherPos)._1,
-              skewPartition(otherPart)(otherPos)._2, prePartitionNum(otherPart)))
-        }
+       if (partStartIndices(i) > thisPartitionSkew._2 &&
+         !flatSkewPartition.exists(m => {
+           m._2._2 == partStartIndices(i)
+         })) {
+         // one range of partStartIndices only have one skew partition
+         // so when partStartIndices(i) not equal to other side skew, need add skew partition
+         // to  partStartIndices(i) as normal partition
+         retIndices(side).append((-1, 0, partStartIndices(i), 1))
+         retIndices(otherSide).append((-1, 0, partStartIndices(i), 1))
+       }
+     } else {
+       retIndices(side).append((-1, 0, partStartIndices(i), 1))
+       retIndices(otherSide).append((-1, 0, partStartIndices(i), 1))
+     }
 
-         if ( thisPos == skewPartition(thisPart).length - 1) {
-           skewPartitionIdx.append((1, skewPartition(thisPart)(thisPos)._1,
-             skewPartition(thisPart)(thisPos)._2, prePartitionNum(thisPart)))
-        }
-        partitionNum = skewPartitionIdx.foldLeft(0) { (z, B) =>
-          if (B._1 < 0) {
-            z + 1
-          } else {
-            val num = B._2 / skewThreshold + 1
-            val partNum = if (num >= B._4) B._4 else num
-            (z + partNum).asInstanceOf[Int]
-          }
-        }
-        (partitionNum, skewPartitionIdx.toArray)
-      } else (0, Array[(Int, Long, Int, Int)]((-1, 0, 0, 0)))).toArray
-
-  }
+   }
+   if (pos == flatSkewPartition.length - 1) {
+     val (side, thisPartitionSkew: (Long, Int)) = flatSkewPartition(pos)
+     val otherSide = if (side == 0) 1 else 0
+     retIndices(side).append((1, thisPartitionSkew._1,
+       thisPartitionSkew._2, prePartitionNum(side)))
+     retIndices(otherSide).append((2, thisPartitionSkew._1,
+       thisPartitionSkew._2, prePartitionNum(side)))
+   }
+   retIndices.map(indices => {
+     val partitionNum = indices.foldLeft(0) { (z, B) =>
+       if (B._1 < 0) {
+         z + 1
+       } else {
+         val num = B._2 / skewThreshold + 1
+         val partNum = if (num >= B._4) B._4 else num
+         (z + partNum).asInstanceOf[Int]
+       }
+     }
+     (partitionNum, indices.toArray)
+   })
+ }
 
   @GuardedBy("this")
   private def doEstimationIfNecessary(): Unit = synchronized {
