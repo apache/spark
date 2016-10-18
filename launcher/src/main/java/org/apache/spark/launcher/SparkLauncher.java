@@ -555,7 +555,7 @@ public class SparkLauncher {
    * @return A handle for the launched application.
    */
   public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
-    if(launchSparkSubmitAsThread) {
+    if (launchSparkSubmitAsThread) {
       return startApplicationAsThread(listeners);
     }
     return startApplicationAsChildProc(listeners);

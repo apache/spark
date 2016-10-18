@@ -66,14 +66,14 @@ private[spark] class Client(
   import Client._
   import YarnSparkHadoopUtil._
 
-  def this(clientArgs: ClientArguments, spConf: SparkConf, sysenvironment: Map[String, String]) =
-    this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf, sysenvironment)
+  def this(clientArgs: ClientArguments, spConf: SparkConf, sysEnv: Map[String, String]) =
+    this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf, sysEnv)
 
   def this(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: SparkConf) =
     this(clientArgs, hadoopConf, spConf, Map() ++ sys.env)
 
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
-    this(clientArgs, spConf, Map() ++  sys.env)
+    this(clientArgs, spConf, Map() ++ sys.env)
 
   private val sysEnvironment: scala.collection.immutable.Map[scala.Predef.String,
    scala.Predef.String] = collection.immutable.Map() ++ sysEnvironmentInput
@@ -665,17 +665,13 @@ private[spark] class Client(
       remoteFs, hadoopConf, remoteConfArchivePath, localResources, LocalResourceType.ARCHIVE,
       LOCALIZED_CONF_DIR, statCache, appMasterOnly = false)
 
-    // Clear the cache-related entries from the configuration to avoid them polluting the
-    // UI's environment page. This works for client mode; for cluster mode, this is handled
-    // by the AM.
+    // Clear the cache-related and spark-launcher entries from the configuration to avoid them
+    // polluting the UI's environment page. This works for client mode; for cluster mode, this
+    // is handled by the AM.
     CACHE_CONFIGS.foreach(sparkConf.remove)
-
-    // Clear the spark-launcher-related entries from the configuration to avoid them polluting the
-    // UI's environment page. This works for client mode; for cluster mode, this is handled
-    // by the AM.
-    sparkConf.remove("spark.launcher.internal.secret")
-    sparkConf.remove("spark.launcher.internal.port")
-
+    Seq("spark.launcher.internal.secret", "spark.launcher.internal.port").foreach { e =>
+      sparkConf.remove(e)
+    }
     localResources
   }
 
@@ -1234,7 +1230,7 @@ private object Client extends Logging {
       getOrElse("false").toBoolean
 
     val sparkConf = new SparkConf
-    if( threadEnabled) {
+    if (threadEnabled) {
       for ((key, value) <- env if key.startsWith("spark.")) {
         sparkConf.set(key, value, true)
       }
@@ -1243,7 +1239,6 @@ private object Client extends Logging {
     val args = new ClientArguments(argStrings)
     new Client(args, sparkConf, env).run()
   }
-
 
   // Alias for the user jar
   val APP_JAR_NAME: String = "__app__.jar"
