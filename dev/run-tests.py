@@ -390,7 +390,7 @@ def run_scala_tests_maven(test_profiles):
 
 def run_scala_tests_sbt(test_modules, test_profiles):
 
-    sbt_test_goals = [ "sql/test-only *StreamingQuery*" for x in range(0, 200) ]
+    sbt_test_goals = list(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
     if not sbt_test_goals:
         return
@@ -399,6 +399,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
 
     print("[info] Running Spark tests using SBT with these arguments: ",
           " ".join(profiles_and_goals))
+
     exec_sbt(profiles_and_goals)
 
 
@@ -537,7 +538,7 @@ def main():
     setup_test_environ(test_environ)
 
     test_modules = determine_modules_to_test(changed_modules)
-    '''
+
     # license checks
     run_apache_rat_checks()
 
@@ -564,21 +565,21 @@ def main():
 
     if any(m.should_run_build_tests for m in test_modules):
         run_build_tests()
-        '''
+
     # spark build
     build_apache_spark(build_tool, hadoop_version)
+
     # backwards compatibility checks
-    
     if build_tool == "sbt":
         # Note: compatibility tests only supported in sbt for now
         detect_binary_inop_with_mima(hadoop_version)
         # Since we did not build assembly/package before running dev/mima, we need to
         # do it here because the tests still rely on it; see SPARK-13294 for details.
         build_spark_assembly_sbt(hadoop_version)
-    
+
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
-  
+
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
         run_python_tests(modules_with_python_tests, opts.parallelism)
