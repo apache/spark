@@ -448,7 +448,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * properties, and filter out these special entries from table properties.
    */
   private def restoreTableMetadata(table: CatalogTable): CatalogTable = {
-    val catalogTable = if (table.tableType == VIEW) {
+    val catalogTable = if (table.tableType == VIEW || conf.get(DEBUG_MODE)) {
       table
     } else {
       getProviderFromTableProperties(table).map { provider =>
@@ -467,18 +467,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         } else {
           table.storage
         }
-        val tableProps = if (conf.get(DEBUG_MODE)) {
-          table.properties
-        } else {
-          getOriginalTableProperties(table)
-        }
         table.copy(
           storage = storage,
           schema = getSchemaFromTableProperties(table),
           provider = Some(provider),
           partitionColumnNames = getPartitionColumnsFromTableProperties(table),
           bucketSpec = getBucketSpecFromTableProperties(table),
-          properties = tableProps)
+          properties = getOriginalTableProperties(table))
       } getOrElse {
         table.copy(provider = Some("hive"))
       }
