@@ -81,16 +81,6 @@ class FileCatalogSuite extends SharedSQLContext {
     }
   }
 
-  test("PartitioningAwareFileCatalog - file filtering") {
-    assert(!PartitioningAwareFileCatalog.shouldFilterOut("abcd"))
-    assert(PartitioningAwareFileCatalog.shouldFilterOut(".ab"))
-    assert(PartitioningAwareFileCatalog.shouldFilterOut("_cd"))
-    assert(!PartitioningAwareFileCatalog.shouldFilterOut("_metadata"))
-    assert(!PartitioningAwareFileCatalog.shouldFilterOut("_common_metadata"))
-    assert(PartitioningAwareFileCatalog.shouldFilterOut("_ab_metadata"))
-    assert(PartitioningAwareFileCatalog.shouldFilterOut("_cd_common_metadata"))
-  }
-
   test("SPARK-17613 - PartitioningAwareFileCatalog: base path w/o '/' at end") {
     class MockCatalog(
       override val rootPaths: Seq[Path])
