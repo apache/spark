@@ -788,6 +788,7 @@ object MimaExcludes {
       // SPARK-16240: ML persistence backward compatibility for LDA
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.clustering.LDA$")
     ) ++ Seq(
+      // [SPARK-17731][SQL][Streaming] Metrics for structured streaming
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryInfo"),
       ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryStarted.this"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryStarted.queryInfo"),
