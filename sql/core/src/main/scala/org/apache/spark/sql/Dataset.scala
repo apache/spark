@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand, GlobalTempView, LocalTempView}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
@@ -774,7 +774,7 @@ class Dataset[T] private[sql](
    * @param right Right side of the join operation.
    *
    * @group untypedrel
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def crossJoin(right: Dataset[_]): DataFrame = withPlan {
     Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
@@ -1892,17 +1892,25 @@ class Dataset[T] private[sql](
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
-    val groupCols = colNames.map { colName =>
-      allColumns.find(col => resolver(col.name, colName)).getOrElse(
+    val groupCols = colNames.flatMap { colName =>
+      // It is possibly there are more than one columns with the same name,
+      // so we call filter instead of find.
+      val cols = allColumns.filter(col => resolver(col.name, colName))
+      if (cols.isEmpty) {
         throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
+          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+      }
+      cols
     }
     val groupColExprIds = groupCols.map(_.exprId)
     val aggCols = logicalPlan.output.map { attr =>
       if (groupColExprIds.contains(attr.exprId)) {
         attr
       } else {
-        Alias(new First(attr).toAggregateExpression(), attr.name)()
+        // Removing duplicate rows should not change output attributes. We should keep
+        // the original exprId of the attribute. Otherwise, to select a column in original
+        // dataset will cause analysis exception due to unresolved attribute.
+        Alias(new First(attr).toAggregateExpression(), attr.name)(exprId = attr.exprId)
       }
     }
     Aggregate(groupCols, aggCols, logicalPlan)
@@ -2394,6 +2402,18 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Get the Dataset's current storage level, or StorageLevel.NONE if not persisted.
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  def storageLevel: StorageLevel = {
+    sparkSession.sharedState.cacheManager.lookupCachedData(this).map { cachedData =>
+      cachedData.cachedRepresentation.storageLevel
+    }.getOrElse(StorageLevel.NONE)
+  }
+
+  /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
    *
    * @param blocking Whether to block until all blocks are deleted.
@@ -2594,7 +2614,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def inputFiles: Array[String] = {
-    val files: Seq[String] = logicalPlan.collect {
+    val files: Seq[String] = queryExecution.optimizedPlan.collect {
       case LogicalRelation(fsBasedRelation: FileRelation, _, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>

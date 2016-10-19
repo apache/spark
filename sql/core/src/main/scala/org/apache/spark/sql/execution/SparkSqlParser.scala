@@ -689,15 +689,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
-    val fromName = visitTableIdentifier(ctx.from)
-    val toName = visitTableIdentifier(ctx.to)
-    if (toName.database.isDefined) {
-      operationNotAllowed("Can not specify database in table/view name after RENAME TO", ctx)
-    }
-
     AlterTableRenameCommand(
-      fromName,
-      toName.table,
+      visitTableIdentifier(ctx.from),
+      visitTableIdentifier(ctx.to),
       ctx.VIEW != null)
   }
 
@@ -1010,9 +1004,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
         outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
           .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
-        // Note: Keep this unspecified because we use the presence of the serde to decide
-        // whether to convert a table created by CTAS to a datasource table.
-        serde = None,
+        serde = defaultHiveSerde.flatMap(_.serde),
         compressed = false,
         properties = Map())
     }

@@ -232,10 +232,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
     // connectionProperties should override settings in extraOptions.
-    val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
-    val options = new JDBCOptions(url, table, params)
-    val relation = JDBCRelation(parts, options)(sparkSession)
-    sparkSession.baseRelationToDataFrame(relation)
+    this.extraOptions = this.extraOptions ++ connectionProperties.asScala
+    // explicit url and dbtable should override all
+    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    format("jdbc").load()
   }
 
   /**
@@ -363,7 +363,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * type.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
    * the separator can be part of the value. If you would like to turn off quotations, you need to
-   * set not `null` but an empty string. This behaviour is different form
+   * set not `null` but an empty string. This behaviour is different from
    * `com.databricks.spark.csv`.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>

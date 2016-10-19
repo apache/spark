@@ -25,7 +25,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -63,7 +62,7 @@ class SessionCatalog(
       conf: CatalystConf) {
     this(
       externalCatalog,
-      new GlobalTempViewManager(GLOBAL_TEMP_DATABASE.defaultValueString),
+      new GlobalTempViewManager("global_temp"),
       DummyFunctionResourceLoader,
       functionRegistry,
       conf,
@@ -463,11 +462,20 @@ class SessionCatalog(
    * If a database is specified in `oldName`, this will rename the table in that database.
    * If no database is specified, this will first attempt to rename a temporary table with
    * the same name, then, if that does not exist, rename the table in the current database.
+   *
+   * This assumes the database specified in `newName` matches the one in `oldName`.
    */
-  def renameTable(oldName: TableIdentifier, newName: String): Unit = synchronized {
+  def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
     val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
+    newName.database.map(formatDatabaseName).foreach { newDb =>
+      if (db != newDb) {
+        throw new AnalysisException(
+          s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
+      }
+    }
+
     val oldTableName = formatTableName(oldName.table)
-    val newTableName = formatTableName(newName)
+    val newTableName = formatTableName(newName.table)
     if (db == globalTempViewManager.database) {
       globalTempViewManager.rename(oldTableName, newTableName)
     } else {
@@ -477,6 +485,11 @@ class SessionCatalog(
         requireTableNotExists(TableIdentifier(newTableName, Some(db)))
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
+        if (newName.database.isDefined) {
+          throw new AnalysisException(
+            s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
+              s"name '${newName.database.get}' in the destination table")
+        }
         if (tempTables.contains(newTableName)) {
           throw new AnalysisException(s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': " +
             "destination table already exists")
