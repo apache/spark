@@ -113,31 +113,31 @@ class HiveTablePerfStatsSuite extends QueryTest with TestHiveSingleton with SQLT
         withTempDir { dir =>
           setupPartitionedTable("test", dir)
           HiveCatalogMetrics.reset()
-          spark.sql("select * from test where partCol1 = 999").count()
+          assert(spark.sql("select * from test where partCol1 = 999").count() == 0)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
 
           HiveCatalogMetrics.reset()
-          spark.sql("select * from test where partCol1 < 2").count()
+          assert(spark.sql("select * from test where partCol1 < 2").count() == 2)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 2)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 2)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
 
           HiveCatalogMetrics.reset()
-          spark.sql("select * from test where partCol1 < 3").count()
+          assert(spark.sql("select * from test where partCol1 < 3").count() == 3)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 3)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 1)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 2)
 
           HiveCatalogMetrics.reset()
-          spark.sql("select * from test").count()
+          assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 2)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 3)
 
           HiveCatalogMetrics.reset()
-          spark.sql("select * from test").count()
+          assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 5)
@@ -154,20 +154,20 @@ class HiveTablePerfStatsSuite extends QueryTest with TestHiveSingleton with SQLT
         withTempDir { dir =>
           setupPartitionedTable("test", dir)
           HiveCatalogMetrics.reset()
-          spark.sql("select * from test").count()
+          assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
 
           HiveCatalogMetrics.reset()
           spark.sql("refresh table test")
-          spark.sql("select * from test").count()
+          assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
 
           spark.catalog.cacheTable("test")
           HiveCatalogMetrics.reset()
           spark.catalog.refreshByPath(dir.getAbsolutePath)
-          spark.sql("select * from test").count()
+          assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
         }
@@ -185,18 +185,18 @@ class HiveTablePerfStatsSuite extends QueryTest with TestHiveSingleton with SQLT
           // mode. This is kind of terrible, but is needed to preserve the legacy behavior
           // of doing plan cache validation based on the entire partition set.
           HiveCatalogMetrics.reset()
-          spark.sql("select * from test where partCol1 = 999").count()
+          assert(spark.sql("select * from test where partCol1 = 999").count() == 0)
           // 5 from table resolution, another 5 from ListingFileCatalog
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 10)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
 
           HiveCatalogMetrics.reset()
-          spark.sql("select * from test where partCol1 < 2").count()
+          assert(spark.sql("select * from test where partCol1 < 2").count() == 2)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
 
           HiveCatalogMetrics.reset()
-          spark.sql("select * from test").count()
+          assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
         }

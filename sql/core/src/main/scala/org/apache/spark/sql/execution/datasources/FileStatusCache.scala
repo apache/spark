@@ -53,7 +53,8 @@ abstract class FileStatusCache {
  * An implementation that caches all partition file statuses in memory forever.
  */
 class InMemoryCache extends FileStatusCache {
-  private val cache = new ConcurrentHashMap[Path, Array[FileStatus]]()
+  private val cache = CacheBuilder
+    .maximumSizenew ConcurrentHashMap[Path, Array[FileStatus]]()
 
   override def getLeafFiles(path: Path): Option[Array[FileStatus]] = {
     Option(cache.get(path))
@@ -71,12 +72,8 @@ class InMemoryCache extends FileStatusCache {
 /**
  * A non-caching implementation used when partition file status caching is disabled.
  */
-private class NoopCache extends FileStatusCache {
+object NoopCache extends FileStatusCache {
   override def getLeafFiles(path: Path): Option[Array[FileStatus]] = None
   override def putLeafFiles(path: Path, leafFiles: Array[FileStatus]): Unit = {}
   override def invalidateAll(): Unit = {}
-}
-
-object FileStatusCache {
-  val noop: FileStatusCache = new NoopCache
 }

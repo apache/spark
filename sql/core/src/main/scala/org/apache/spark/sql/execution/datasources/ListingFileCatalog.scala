@@ -39,7 +39,7 @@ class ListingFileCatalog(
     override val rootPaths: Seq[Path],
     parameters: Map[String, String],
     partitionSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = new NoopCache)
+    fileStatusCache: FileStatusCache = NoopCache)
   extends PartitioningAwareFileCatalog(
     sparkSession, parameters, partitionSchema, fileStatusCache) {
 

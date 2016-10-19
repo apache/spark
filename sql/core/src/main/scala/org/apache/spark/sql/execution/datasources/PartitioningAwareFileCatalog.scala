@@ -45,7 +45,7 @@ abstract class PartitioningAwareFileCatalog(
     sparkSession: SparkSession,
     parameters: Map[String, String],
     partitionSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = FileStatusCache.noop) extends FileCatalog with Logging {
+    fileStatusCache: FileStatusCache = NoopCache) extends FileCatalog with Logging {
   import PartitioningAwareFileCatalog.BASE_PATH_PARAM
 
   /** Returns the specification of the partitions inferred from the data. */
@@ -290,7 +290,7 @@ object PartitioningAwareFileCatalog extends Logging {
    */
   private def listLeafFilesInSerial(
       paths: Seq[Path],
-      hadoopConf: Configuration): Map[Path, Seq[FileStatus]] = {
+      hadoopConf: Configuration): Seq[(Path, Seq[FileStatus])] = {
     // Dummy jobconf to get to the pathFilter defined in configuration
     val jobConf = new JobConf(hadoopConf, this.getClass)
     val filter = FileInputFormat.getInputPathFilter(jobConf)
@@ -298,7 +298,7 @@ object PartitioningAwareFileCatalog extends Logging {
     paths.map { path =>
       val fs = path.getFileSystem(hadoopConf)
       (path, listLeafFiles0(fs, path, filter))
-    }.toMap
+    }
   }
 
   /**
