@@ -24,7 +24,19 @@ import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1,expr2,expr3) - If expr1 is TRUE then IF() returns expr2; otherwise it returns expr3.")
+  usage = "_FUNC_(expr1, expr2, expr3) - If expr1 is TRUE then IF() returns expr2; otherwise it returns expr3.",
+  extended = """
+    _FUNC_(expr1, expr2, expr3)
+
+      Arguments:
+        expr1 - boolean type expression.
+        expr2 - any type expression that represents the return value when expr1 is TRUE.
+        expr3 - any type expression that represents the return value when expr1 is FALSE.
+
+      Examples:
+        > SELECT _FUNC_(1 < 2, 'a', 'b');
+         a
+  """)
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends Expression {
