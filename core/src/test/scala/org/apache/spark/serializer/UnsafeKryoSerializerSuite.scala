@@ -22,9 +22,4 @@ class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
     super.beforeAll()
     conf.set("spark.kryo.unsafe", "true")
   }
-
-  override def afterAll(): Unit = {
-    conf.set("spark.kryo.unsafe", "false")
-    super.afterAll()
-  }
 }
