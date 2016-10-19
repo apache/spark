@@ -324,7 +324,10 @@ class KMeans private (
    * Initialize a set of cluster centers at random.
    */
   private def initRandom(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
-    data.takeSample(false, k, new XORShiftRandom(this.seed).nextInt()).map(_.toDense)
+    // Select without replacement; may still produce duplicates if the data has < k distinct
+    // points, so deduplicate the centroids to match the behavior of k-means|| in the same situation
+    data.takeSample(false, k, new XORShiftRandom(this.seed).nextInt()).
+      map(_.vector).distinct.map(new VectorWithNorm(_))
   }
 
   /**
