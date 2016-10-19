@@ -265,7 +265,7 @@ object WriteOutput extends Logging {
       HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
     }
 
-    // Expressions that given a partition key build a string like: col1=val/col2=val/...
+    /** Expressions that given a partition key build a string like: col1=val/col2=val/... */
     private def partitionStringExpression: Seq[Expression] = {
       description.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
         val escaped =
@@ -283,7 +283,7 @@ object WriteOutput extends Logging {
     private def getBucketIdFromKey(key: InternalRow): Option[Int] =
       description.bucketSpec.map { _ => key.getInt(description.partitionColumns.length) }
 
-    /*
+    /**
      * Open and returns a new OutputWriter given a partition key and optional bucket id.
      * If bucket id is specified, we will append it to the end of the file name, but before the
      * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
