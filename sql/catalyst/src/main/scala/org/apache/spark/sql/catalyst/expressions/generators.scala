@@ -112,8 +112,8 @@ case class UserDefinedGenerator(
 
       Examples:
         > SELECT _FUNC_(2, 1, 2, 3);
-         1	2
-         3	NULL
+         1  2
+         3  NULL
   """)
 case class Stack(children: Seq[Expression])
     extends Expression with Generator with CodegenFallback {
@@ -291,8 +291,8 @@ case class PosExplode(child: Expression) extends ExplodeBase(child, position = t
 
       Examples:
         > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
-         1	a
-         2	b
+         1  a
+         2  b
   """)
 case class Inline(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
 
