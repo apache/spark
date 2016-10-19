@@ -79,7 +79,7 @@ class KryoSerializer(conf: SparkConf)
     .filter(!_.isEmpty)
 
   private val avroSchemas = conf.getAvroSchema
-  private val useUnsafe = conf.getBoolean("spark.kryo.useUnsafe", false)
+  private val useUnsafe = conf.getBoolean("spark.kryo.unsafe", false)
 
   def newKryoOutput(): KryoOutput =
     if (useUnsafe) {
