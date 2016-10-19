@@ -86,8 +86,6 @@ private[spark] class Client(
   private val launcherServerSecret : String = sparkConf.get("spark.launcher.internal.secret", "")
   private val launcherServerStopFlag : Boolean = sparkConf.get("spark.launcher.internal.stop.flag",
     "false").toBoolean
-  private val launcherServerInThreadFlag: Boolean =
-    sparkConf.get("spark.launcher.internal.thread.enabled", "false").toBoolean
   // AM related configurations
   private val amMemory = if (isClusterMode) {
     sparkConf.get(DRIVER_MEMORY).toInt
@@ -1368,7 +1366,7 @@ private object Client extends SparkApp with Logging {
       sparkConf: SparkConf,
       env: HashMap[String, String],
       extraClassPath: Option[String] = None,
-      providedEnv: scala.collection.immutable.Map[scala.Predef.String, scala.Predef.String]
+      providedEnv: scala.collection.immutable.Map[String, String]
         = sys.env): Unit = {
     extraClassPath.foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
