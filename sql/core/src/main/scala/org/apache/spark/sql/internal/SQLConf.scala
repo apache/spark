@@ -278,12 +278,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val HIVE_FILESOURCE_PARTITION_FILE_CACHE_ENABLED =
-    SQLConfigBuilder("spark.sql.hive.filesourcePartitionFileCacheEnabled")
-      .doc("When true, enable caching of partition files in memory. This only takes effect " +
-           "if filesource partition pruning is also enabled.")
-      .booleanConf
-      .createWithDefault(true)
+  val HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE =
+    SQLConfigBuilder("spark.sql.hive.filesourcePartitionFileCacheSize")
+      .doc("When nonzero, enable caching of partition file metadata in memory. Each table may " +
+           "use up to the specified number of bytes for caching file metadata. This conf only " +
+           "applies if filesource partition pruning is also enabled.")
+      .longConf
+      .createWithDefault(50 * 1024 * 1024)
 
   val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
@@ -686,8 +687,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def filesourcePartitionPruning: Boolean = getConf(HIVE_FILESOURCE_PARTITION_PRUNING)
 
-  def filesourcePartitionFileCacheEnabled: Boolean =
-    getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_ENABLED)
+  def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 

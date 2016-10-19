@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
  * @param table the table's (unqualified) name
  * @param partitionSchema the schema of a partitioned table's partition columns
  * @param sizeInBytes the table's data size in bytes
- * @param enableFileStatusCache whether to enable file status caching
+ * @param fileStatusCacheSize if nonzero, enables and specifies the size of the file status cache
  */
 class TableFileCatalog(
     sparkSession: SparkSession,
@@ -40,10 +40,10 @@ class TableFileCatalog(
     table: String,
     partitionSchema: Option[StructType],
     override val sizeInBytes: Long,
-    enableFileStatusCache: Boolean) extends FileCatalog {
+    fileStatusCacheSize: Long) extends FileCatalog {
 
-  private val fileStatusCache = if (enableFileStatusCache)  {
-    new InMemoryCache
+  private val fileStatusCache = if (fileStatusCacheSize > 0) {
+    new InMemoryCache(fileStatusCacheSize)
   } else {
     NoopCache
   }

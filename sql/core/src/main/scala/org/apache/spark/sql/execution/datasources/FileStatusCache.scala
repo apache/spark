@@ -18,11 +18,14 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
+import com.google.common.cache._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, SizeEstimator}
 
 /**
  * A cache of the leaf files of partition directories. We cache these files in order to speed
@@ -52,11 +55,28 @@ abstract class FileStatusCache {
 /**
  * An implementation that caches all partition file statuses in memory forever.
  */
-class InMemoryCache extends FileStatusCache {
-  private val cache = new ConcurrentHashMap[Path, Array[FileStatus]]()
+class InMemoryCache(maxSizeInBytes: Long) extends FileStatusCache with Logging {
+  private val warnedAboutEviction = new AtomicBoolean(false)
+  private val cache: Cache[Path, Array[FileStatus]] = CacheBuilder.newBuilder()
+    .weigher(new Weigher[Path, Array[FileStatus]] {
+      override def weigh(key: Path, value: Array[FileStatus]): Int = {
+        (SizeEstimator.estimate(key) + SizeEstimator.estimate(value)).toInt
+      }})
+    .removalListener(new RemovalListener[Path, Array[FileStatus]]() {
+      override def onRemoval(removed: RemovalNotification[Path, Array[FileStatus]]) = {
+        if (removed.getCause() == RemovalCause.SIZE &&
+            warnedAboutEviction.compareAndSet(false, true)) {
+          logWarning(
+            "Evicting cached table partition metadata from memory due to size constraints " +
+            "(spark.sql.hive.filesourcePartitionFileCacheSize = " + maxSizeInBytes + " bytes). " +
+            "This may impact query planning performance.")
+        }
+      }})
+    .maximumWeight(maxSizeInBytes)
+    .build()
 
   override def getLeafFiles(path: Path): Option[Array[FileStatus]] = {
-    Option(cache.get(path))
+    Option(cache.getIfPresent(path))
   }
 
   override def putLeafFiles(path: Path, leafFiles: Array[FileStatus]): Unit = {
@@ -64,7 +84,7 @@ class InMemoryCache extends FileStatusCache {
   }
 
   override def invalidateAll(): Unit = {
-    cache.clear()
+    cache.invalidateAll()
   }
 }
 

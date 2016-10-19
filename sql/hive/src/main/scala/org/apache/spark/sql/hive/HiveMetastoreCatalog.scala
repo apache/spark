@@ -232,8 +232,11 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val fileCatalog = {
           val catalog = new TableFileCatalog(
             sparkSession, db, table, Some(partitionSchema), sizeInBytes,
-            enableFileStatusCache = lazyPruningEnabled &&
-              sparkSession.sqlContext.conf.filesourcePartitionFileCacheEnabled)
+            fileStatusCacheSize = if (lazyPruningEnabled) {
+              sparkSession.sqlContext.conf.filesourcePartitionFileCacheSize
+            } else {
+              0
+            })
           if (lazyPruningEnabled) {
             catalog
           } else {
