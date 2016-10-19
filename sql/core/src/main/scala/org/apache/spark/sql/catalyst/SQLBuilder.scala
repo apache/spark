@@ -138,8 +138,11 @@ class SQLBuilder private (
     case g: Generate =>
       generateToSQL(g)
 
-    case Limit(limitExpr, child) =>
+    case Limit(limitExpr, child: SubqueryAlias) =>
       s"${toSQL(child)} LIMIT ${limitExpr.sql}"
+
+    case Limit(limitExpr, child) =>
+      s"(${toSQL(child)} LIMIT ${limitExpr.sql})"
 
     case Filter(condition, child) =>
       val whereOrHaving = child match {
