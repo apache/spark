@@ -48,11 +48,11 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
  *                        task set will be aborted
  */
 private[spark] class TaskSetManager(
-    val sched: TaskSchedulerImpl,
+    sched: TaskSchedulerImpl,
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
-    val blacklistTracker: Option[BlacklistTracker] = None,
-    val clock: Clock = new SystemClock()) extends Schedulable with Logging {
+    blacklistTracker: Option[BlacklistTracker] = None,
+    clock: Clock = new SystemClock()) extends Schedulable with Logging {
 
   private val conf = sched.sc.conf
 

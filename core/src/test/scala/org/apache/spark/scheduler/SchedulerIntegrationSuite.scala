@@ -31,7 +31,6 @@ import org.scalatest.Assertions.AssertionsHelper
 
 import org.apache.spark._
 import org.apache.spark.TaskState._
-import org.apache.spark.internal.config.BLACKLIST_ENABLED
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
@@ -326,9 +325,6 @@ private[spark] abstract class MockBackend(
         executorIdToExecutor(task.executorId).freeCores += taskScheduler.CPUS_PER_TASK
         freeCores += taskScheduler.CPUS_PER_TASK
       }
-      // optimization (which is used by the actual backends too) -- don't revive offers on *all*
-      // executors when a task completes, just on the one which completed
-      val exec = executorIdToExecutor(task.executorId)
       reviveOffers()
     }
   }
@@ -593,7 +589,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    * (a) map output is available whenever we run stage 1
    * (b) we get a second attempt for stage 0 & stage 1
    */
-  testNoBlacklist("job with fetch failure") {
+  testScheduler("job with fetch failure") {
     val input = new MockRDD(sc, 2, Nil)
     val shuffledRdd = shuffle(10, input)
     val shuffleId = shuffledRdd.shuffleDeps.head.shuffleId
@@ -629,7 +625,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     assert(stageToAttempts === Map(0 -> Set(0, 1), 1 -> Set(0, 1)))
   }
 
-  testNoBlacklist("job failure after 4 attempts") {
+  testScheduler("job failure after 4 attempts") {
     def runBackend(): Unit = {
       val (taskDescription, _) = backend.beginTask()
       backend.taskFailed(taskDescription, new RuntimeException("test task failure"))
@@ -641,11 +637,5 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       assert(failure.getMessage.contains("test task failure"))
     }
     assertDataStructuresEmpty(noFailure = false)
-  }
-
-  def testNoBlacklist(name: String)(body: => Unit): Unit = {
-    // in these simple tests, we only have one executor, so it doens't make sense to turn on the
-    // blacklist.  Just an artifact of this simple test-framework still kinda acting like local-mode
-    testScheduler(name, extraConfs = Seq(BLACKLIST_ENABLED.key -> "false"))(body)
   }
 }

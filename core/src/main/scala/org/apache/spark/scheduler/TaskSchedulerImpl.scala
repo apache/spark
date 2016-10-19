@@ -54,14 +54,15 @@ import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
 private[spark] class TaskSchedulerImpl private[scheduler](
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    val blacklistTracker: Option[BlacklistTracker],
+    blacklistTracker: Option[BlacklistTracker],
     isLocal: Boolean = false)
   extends TaskScheduler with Logging
 {
+
   def this(sc: SparkContext) = {
     this(
       sc,
-      sc.conf.getInt("spark.task.maxFailures", 4),
+      sc.conf.get(config.MAX_TASK_FAILURES),
       TaskSchedulerImpl.createBlacklistTracker(sc.conf))
   }
 
@@ -221,7 +222,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTracker, new SystemClock)
+    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTracker)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -271,9 +272,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     // nodes and executors that are blacklisted for the entire application have already been
     // filtered out by this point
     for (i <- 0 until shuffledOffers.size) {
-      val offer = shuffledOffers(i)
-      val host = offer.host
-      val execId = offer.executorId
+      val execId = shuffledOffers(i).executorId
+      val host = shuffledOffers(i).host
       if (availableCpus(i) >= CPUS_PER_TASK) {
         try {
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {

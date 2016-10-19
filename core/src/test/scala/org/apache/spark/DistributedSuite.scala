@@ -21,7 +21,6 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
-import org.apache.spark.internal.config.BLACKLIST_ENABLED
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -109,9 +108,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("repeatedly failing task") {
-    val conf = new SparkConf().setAppName("test").setMaster(clusterUrl)
-      .set(BLACKLIST_ENABLED, false)
-    sc = new SparkContext(conf)
+    sc = new SparkContext(clusterUrl, "test")
     val thrown = intercept[SparkException] {
       // scalastyle:off println
       sc.parallelize(1 to 10, 10).foreach(x => println(x / 0))
@@ -126,9 +123,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     // than hanging due to retrying the failed task infinitely many times (eventually the
     // standalone scheduler will remove the application, causing the job to hang waiting to
     // reconnect to the master).
-    val conf = new SparkConf().setAppName("test").setMaster(clusterUrl)
-      .set(BLACKLIST_ENABLED, false)
-    sc = new SparkContext(conf)
+    sc = new SparkContext(clusterUrl, "test")
     failAfter(Span(100000, Millis)) {
       val thrown = intercept[SparkException] {
         // One of the tasks always fails.
@@ -142,9 +137,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("repeatedly failing task that crashes JVM with a zero exit code (SPARK-16925)") {
     // Ensures that if a task which causes the JVM to exit with a zero exit code will cause the
     // Spark job to eventually fail.
-    val conf = new SparkConf().setAppName("test").setMaster(clusterUrl)
-      .set(BLACKLIST_ENABLED, false)
-    sc = new SparkContext(conf)
+    sc = new SparkContext(clusterUrl, "test")
     failAfter(Span(100000, Millis)) {
       val thrown = intercept[SparkException] {
         sc.parallelize(1 to 1, 1).foreachPartition { _ => System.exit(0) }
@@ -262,9 +255,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("recover from repeated node failures during shuffle-reduce") {
     import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
     DistributedSuite.amMaster = true
-    val conf = new SparkConf().setAppName("test").setMaster(clusterUrl)
-      .set(BLACKLIST_ENABLED, false)
-    sc = new SparkContext(conf)
+    sc = new SparkContext(clusterUrl, "test")
     for (i <- 1 to 3) {
       val data = sc.parallelize(Seq(true, true), 2)
       assert(data.count === 2)

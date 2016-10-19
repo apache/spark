@@ -312,7 +312,6 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   }
 
   test("blacklist still respects legacy configs") {
-    val legacyKey = config.BLACKLIST_LEGACY_TIMEOUT_CONF.key
     val conf = new SparkConf().setMaster("local")
     assert(!BlacklistTracker.isBlacklistEnabled(conf))
     conf.set(config.BLACKLIST_LEGACY_TIMEOUT_CONF, 5000L)

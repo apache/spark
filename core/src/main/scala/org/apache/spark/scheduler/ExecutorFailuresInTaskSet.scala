@@ -22,7 +22,7 @@ import scala.collection.mutable.HashMap
  * Small helper for tracking failed tasks for blacklisting purposes.  Info on all failures on one
  * executor, within one task set.
  */
-class ExecutorFailuresInTaskSet(val node: String) {
+private[scheduler] class ExecutorFailuresInTaskSet(val node: String) {
   /**
    * Mapping from index of the tasks in the taskset, to the number of times it has failed on this
    * executor and the expiry time.
@@ -39,6 +39,13 @@ class ExecutorFailuresInTaskSet(val node: String) {
   }
 
   def numUniqueTasksWithFailures: Int = taskToFailureCountAndExpiryTime.size
+
+  /**
+   * Return the number of times this executor has failed on the given task index.
+   */
+  def getNumTaskFailures(index: Int): Int = {
+    taskToFailureCountAndExpiryTime.getOrElse(index, (0, 0))._1
+  }
 
   override def toString(): String = {
     s"numUniqueTasksWithFailures = $numUniqueTasksWithFailures; " +

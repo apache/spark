@@ -50,16 +50,17 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
    * within this taskset, and it is also relayed onto [[BlacklistTracker]] for app-level
    * blacklisting if this taskset completes successfully.
    */
-  val execToFailures: HashMap[String, ExecutorFailuresInTaskSet] = new HashMap()
+  val execToFailures = new HashMap[String, ExecutorFailuresInTaskSet]()
 
   /**
    * Map from node to all executors on it with failures.  Needed because we want to know about
-   * executors on a node even after they have died.
+   * executors on a node even after they have died. (We don't want to bother tracking the
+   * node -> execs mapping in the usual case when there aren't any failures).
    */
-  private val nodeToExecsWithFailures: HashMap[String, HashSet[String]] = new HashMap()
-  private val nodeToBlacklistedTasks: HashMap[String, HashSet[Int]] = new HashMap()
-  private val blacklistedExecs: HashSet[String] = new HashSet()
-  private val blacklistedNodes: HashSet[String] = new HashSet()
+  private val nodeToExecsWithFailures = new HashMap[String, HashSet[String]]()
+  private val nodeToBlacklistedTaskIndexes = new HashMap[String, HashSet[Int]]()
+  private val blacklistedExecs = new HashSet[String]()
+  private val blacklistedNodes = new HashSet[String]()
 
   /**
    * Return true if this executor is blacklisted for the given task.  This does *not*
@@ -67,23 +68,14 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
    * altogether.  That is to keep this method as fast as possible in the inner-loop of the
    * scheduler, where those filters will have already been applied.
    */
-  def isExecutorBlacklistedForTask(
-      executorId: String,
-      index: Int): Boolean = {
-    execToFailures.get(executorId)
-      .map { execFailures =>
-        val count = execFailures.taskToFailureCountAndExpiryTime.get(index).map(_._1).getOrElse(0)
-        count >= MAX_TASK_ATTEMPTS_PER_EXECUTOR
-      }
-      .getOrElse(false)
+  def isExecutorBlacklistedForTask(executorId: String, index: Int): Boolean = {
+    execToFailures.get(executorId).exists { execFailures =>
+      execFailures.getNumTaskFailures(index) >= MAX_TASK_ATTEMPTS_PER_EXECUTOR
+    }
   }
 
-  def isNodeBlacklistedForTask(
-      node: String,
-      index: Int): Boolean = {
-    nodeToBlacklistedTasks.get(node)
-      .map(_.contains(index))
-      .getOrElse(false)
+  def isNodeBlacklistedForTask(node: String, index: Int): Boolean = {
+    nodeToBlacklistedTaskIndexes.get(node).exists(_.contains(index))
   }
 
   /**
@@ -108,7 +100,7 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
     execFailures.updateWithFailure(index, clock.getTimeMillis() + TIMEOUT_MILLIS)
 
     // check if this task has also failed on other executors on the same host -- if its gone
-    // over the limit, blacklist it from the entire host
+    // over the limit, blacklist this task from the entire host.
     val execsWithFailuresOnNode = nodeToExecsWithFailures.getOrElseUpdate(host, new HashSet())
     execsWithFailuresOnNode += exec
     val failuresOnHost = execsWithFailuresOnNode.toIterator.flatMap { exec =>
@@ -117,13 +109,14 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
         // because jobs are aborted based on the number task attempts; if we counted unique
         // executors, it would be hard to config to ensure that you try another
         // node before hitting the max number of task failures.
-        failures.taskToFailureCountAndExpiryTime.getOrElse(index, (0, 0))._1
+        failures.getNumTaskFailures(index)
       }
     }.sum
     if (failuresOnHost >= MAX_TASK_ATTEMPTS_PER_NODE) {
-      nodeToBlacklistedTasks.getOrElseUpdate(host, new HashSet()) += index
+      nodeToBlacklistedTaskIndexes.getOrElseUpdate(host, new HashSet()) += index
     }
 
+    // Check if enough tasks have failed on the executor to blacklist it for the entire stage.
     if (execFailures.numUniqueTasksWithFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
       if (blacklistedExecs.add(exec)) {
         logInfo(s"Blacklisting executor ${exec} for stage $stageId")

@@ -217,9 +217,9 @@ private[scheduler] class BlacklistTracker (
     private var failures = ArrayBuffer[(TaskId, Long)]()
 
     def addFailures(
-      stage: Int,
-      stageAttempt: Int,
-      failuresInTaskSet: ExecutorFailuresInTaskSet): Unit = {
+        stage: Int,
+        stageAttempt: Int,
+        failuresInTaskSet: ExecutorFailuresInTaskSet): Unit = {
       // The new failures may interleave with the old ones, so rebuild the failures in sorted order.
       // This shouldn't be expensive because if there were a lot of failures, the executor would
       // have been blacklisted.
