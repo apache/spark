@@ -658,16 +658,12 @@ case class ShowColumnsCommand(
     AttributeReference("col_name", StringType, nullable = false)() :: Nil
   }
 
-  private def nameEqual(name1: String, name2: String, caseSensitive: Boolean): Boolean = {
-    if (caseSensitive) name1 == name2 else name1.equalsIgnoreCase(name2)
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val resolver = sparkSession.sessionState.conf.resolver
     val lookupTable = databaseName match {
       case None => tableName
-      case Some(db) if tableName.database.exists(!nameEqual(_, db, caseSensitive)) =>
+      case Some(db) if tableName.database.exists(!resolver(_, db)) =>
         throw new AnalysisException(
           s"SHOW COLUMNS with conflicting databases: '$db' != '${tableName.database.get}'")
       case Some(db) => TableIdentifier(tableName.identifier, Some(db))
