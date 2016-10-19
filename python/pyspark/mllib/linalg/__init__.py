@@ -793,9 +793,13 @@ class SparseVector(Vector):
                 return False
             return Vectors._equals(self.indices, self.values, list(xrange(len(other))), other.array)
         return False
-    
-    def __getattr__(self, item):
-        return getattr(self.toArray(), item)
+
+    def __getattr__(self, item):        
+        if _have_scipy:
+            csr = scipy.sparse.csr_matrix((self.values, self.indices, [0, 2]))
+            return getattr(csr, item)
+        else:
+            return self
     
     def __getitem__(self, index):
         inds = self.indices
