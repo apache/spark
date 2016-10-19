@@ -58,7 +58,7 @@ private[spark] class TaskSchedulerImpl(
   def this(sc: SparkContext) = this(sc, sc.conf.get(config.MAX_TASK_FAILURES))
 
   val conf = sc.conf
-  private  val taskAssigner: TaskAssigner = TaskAssigner.init(conf)
+  private val taskAssigner: TaskAssigner = TaskAssigner.init(conf)
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
 
@@ -93,6 +93,9 @@ private[spark] class TaskSchedulerImpl(
 
   // Number of tasks running on each executor
   private val executorIdToTaskCount = new HashMap[String, Int]
+
+  // For testing to verify the right TaskAssigner is picked up.
+  def getTaskAssigner(): TaskAssigner = taskAssigner
 
   def runningTasksByExecutors(): Map[String, Int] = executorIdToTaskCount.toMap
 
@@ -251,9 +254,9 @@ private[spark] class TaskSchedulerImpl(
       taskAssigner: TaskAssigner) : Boolean = {
     var launchedTask = false
     taskAssigner.init()
-    while(taskAssigner.hasNext) {
+    while (taskAssigner.hasNext) {
       var assigned = false
-      val currentOffer = taskAssigner.getNext()
+      val currentOffer = taskAssigner.next()
       val execId = currentOffer.workOffer.executorId
       val host = currentOffer.workOffer.host
       if (currentOffer.coresAvailable >= CPUS_PER_TASK) {
@@ -335,7 +338,6 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     val tasks = taskAssigner.tasks
-    taskAssigner.reset()
     if (tasks.size > 0) {
       hasLaunchedTask = true
     }

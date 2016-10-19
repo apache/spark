@@ -86,6 +86,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   private def roundrobin(taskScheduler: TaskSchedulerImpl): Unit = {
+    assert(taskScheduler.getTaskAssigner().isInstanceOf[RoundRobinAssigner])
     val numFreeCores = 1
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores),
       new WorkerOffer("executor1", "host1", numFreeCores))
@@ -95,6 +96,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // probability of that happening is 2^-1000 (so sufficiently small to be considered
     // negligible).
     val numTrials = 1000
+    Seq(1, 2, 3).toIterator.next()
     val selectedExecutorIds = 1.to(numTrials).map { _ =>
       val taskSet = FakeTask.createTaskSet(1)
       taskScheduler.submitTasks(taskSet)
@@ -113,18 +115,19 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     roundrobin(taskScheduler)
   }
 
-  test("User can specify the roundrobin task assigner") {
+  test("Roundrobin - User can specify the roundrobin task assigner") {
     val taskScheduler = setupScheduler(("spark.scheduler.taskAssigner", "RoUndrObin"))
     roundrobin(taskScheduler)
   }
 
-  test("Fallback to roundrobin when the task assigner provided is not valid") {
+  test("Roundrobin Fallback - fallbacks to default if the provided is invalid") {
     val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "invalid")
     roundrobin(taskScheduler)
   }
 
-  test("Scheduler balance the assignment to the worker with more free cores") {
+  test("Balanced - Assigner balances the tasks to the worker with more free cores") {
     val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "BaLanceD")
+    assert(taskScheduler.getTaskAssigner().isInstanceOf[BalancedAssigner])
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 2),
       new WorkerOffer("executor1", "host1", 4))
     val selectedExecutorIds = {
@@ -139,8 +142,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
-  test("Scheduler balance the assignment across workers with same free cores") {
+  test("Balanced - Assigner balances the tasks across workers with same free cores") {
     val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "balanced")
+    assert(taskScheduler.getTaskAssigner().isInstanceOf[BalancedAssigner])
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 2),
       new WorkerOffer("executor1", "host1", 2))
     val selectedExecutorIds = {
@@ -155,8 +159,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
-  test("Scheduler packs the assignment to workers with less free cores") {
+  test("Packed - Assigner packs the tasks to workers with less free cores") {
     val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "paCkeD")
+    assert(taskScheduler.getTaskAssigner().isInstanceOf[PackedAssigner])
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 2),
       new WorkerOffer("executor1", "host1", 4))
     val selectedExecutorIds = {
@@ -171,8 +176,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
-  test("Scheduler keeps packing the assignment to the same worker") {
+  test("Packed - Assigner keeps packing the assignment to the same worker") {
     val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "packed")
+    assert(taskScheduler.getTaskAssigner().isInstanceOf[PackedAssigner])
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 4),
       new WorkerOffer("executor1", "host1", 4))
     val selectedExecutorIds = {

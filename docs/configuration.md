@@ -1378,13 +1378,14 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.scheduler.taskAssigner</code></td>
   <td>roundrobin</td>
   <td>
-    The strategy of how to allocate tasks among workers with free cores. By default, roundrobin
+    The strategy of how to allocate tasks among workers with free cores. There are three task
+    assigners (roundrobin, packed, and balanced) are supported currently. By default, roundrobin
     with randomness is used, which tries to allocate task to workers with available cores in
-    roundrobin manner. In addition, packed and balanced is provided. The former tries to
-    allocate tasks to workers with the least free cores, resulting in tasks assigned to few
-    workers, which may help driver to release the reserved idle workers when dynamic
-    (spark.dynamicAllocation.enabled) is enabled. The latter tries to assign tasks across workers
-    in a balance way (allocating tasks to workers with most free cores).
+    roundrobin manner.The packed task assigner tries to allocate tasks to workers with the least
+    free cores, resulting in tasks assigned to few workers, which may help driver to release the
+    reserved idle workers when dynamic allocation(spark.dynamicAllocation.enabled) is enabled.
+    The balanced task assigner tries to assign tasks across workers in a balance way (allocating
+    tasks to workers with most free cores).
   </td>
 </tr>
 </table>
