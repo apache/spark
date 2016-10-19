@@ -125,7 +125,7 @@ class KryoBenchmark extends SparkFunSuite {
     val conf = new SparkConf()
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
-    conf.set("spark.kryo.useUnsafe", useUnsafe.toString)
+    conf.set("spark.kryo.unsafe", useUnsafe.toString)
 
     new KryoSerializer(conf).newInstance()
   }

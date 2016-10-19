@@ -411,7 +411,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
   private def testBothUnsafeAndSafe(conf: SparkConf)(f: SparkConf => Unit): Unit = {
     Seq(true, false).foreach { useUnsafe =>
-      f(conf.clone.set("spark.kryo.useUnsafe", useUnsafe.toString))
+      f(conf.clone.set("spark.kryo.unsafe", useUnsafe.toString))
     }
   }
 
