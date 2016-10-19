@@ -74,7 +74,7 @@ setMethod("head",
           signature = "Column",
           function(x, num = 6L) {
             if (is.null(x@df)) {
-              collect(x)
+              character(0)
             } else {
               head(select(x@df, x), num)[, 1]
             }

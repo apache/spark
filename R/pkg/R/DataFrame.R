@@ -1178,21 +1178,21 @@ setMethod("take",
 #'
 #' @family SparkDataFrame functions
 #' @aliases head,SparkDataFrame-method
+#' @rdname head
 #' @name head
 #' @export
 #' @examples
 #'\dontrun{
-#' # Initialize Spark context and SQL context
 #' sparkR.session()
 #' 
 #' # Create a DataFrame from the Iris dataset
-#' irisDF <- as.DataFrame(iris)
+#' df <- as.DataFrame(airquality)
 #' 
 #' # Get the first 6 elements of the DataFrame
-#' head(irisDF)
+#' head(df)
 #' 
 #' # Get the first 20 elements of a Column
-#' head(irisDF$Sepal_Length, 20)
+#' head(df$Ozone, 20)
 #' }
 #' @note head since 1.4.0
 setMethod("head",
@@ -3334,5 +3334,5 @@ getEmptySparkRDataFrame <- function() {
   if (is.null(.sparkREnv$EMPTY_DF)) {
     .sparkREnv$EMPTY_DF <- as.DataFrame(data.frame(0))
   }
-  return(.sparkREnv$EMPTY_DF)
+  .sparkREnv$EMPTY_DF
 }
