@@ -665,6 +665,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param tol convergence tolerance of iterations.
 #' @param stepSize stepSize parameter.
 #' @param seed seed parameter for weights initialization.
+#' @param initialWeights initialWeights parameter for weights initialization.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
@@ -695,7 +696,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @note spark.mlp since 2.1.0
 setMethod("spark.mlp", signature(data = "SparkDataFrame"),
           function(data, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
-                   tol = 1E-6, stepSize = 0.03, seed = NULL) {
+                   tol = 1E-6, stepSize = 0.03, seed = NULL, initialWeights = NULL) {
             if (is.null(layers)) {
               stop ("layers must be a integer vector with length > 1.")
             }
@@ -706,10 +707,13 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
             if (!is.null(seed)) {
               seed <- as.character(as.integer(seed))
             }
+            if (!is.null(initialWeights)) {
+              initialWeights <- as.array(as.numeric(na.omit(initialWeights)))
+            }
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
                                 "fit", data@sdf, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
-                                as.numeric(stepSize), seed)
+                                as.numeric(stepSize), seed, initialWeights)
             new("MultilayerPerceptronClassificationModel", jobj = jobj)
           })
 

@@ -24,6 +24,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.{MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
 import org.apache.spark.sql.{DataFrame, Dataset}
 
@@ -58,7 +59,8 @@ private[r] object MultilayerPerceptronClassifierWrapper
       maxIter: Int,
       tol: Double,
       stepSize: Double,
-      seed: String
+      seed: String,
+      initialWeights: Array[Double]
      ): MultilayerPerceptronClassifierWrapper = {
     // get labels and feature names from output schema
     val schema = data.schema
@@ -73,6 +75,8 @@ private[r] object MultilayerPerceptronClassifierWrapper
       .setStepSize(stepSize)
       .setPredictionCol(PREDICTED_LABEL_COL)
     if (seed != null && seed.length > 0) mlp.setSeed(seed.toInt)
+    if (initialWeights != null) mlp.setInitialWeights(Vectors.dense(initialWeights))
+
     val pipeline = new Pipeline()
       .setStages(Array(mlp))
       .fit(data)
