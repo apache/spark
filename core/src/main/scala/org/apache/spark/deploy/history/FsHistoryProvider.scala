@@ -81,10 +81,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val SPARK_HISTORY_FS_NUM_REPLAY_THREADS = "spark.history.fs.numReplayThreads"
 
-  private val AppStartEvent = "{\"Event\":\"SparkListenerApplicationStart\""
-
-  private val AppEndEvent = "{\"Event\":\"SparkListenerApplicationEnd\""
-
   // Interval between safemode checks.
   private val SAFEMODE_CHECK_INTERVAL_S = conf.getTimeAsSeconds(
     "spark.history.fs.safemodeCheck.interval", "5s")
@@ -247,7 +243,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val appListener = new ApplicationEventListener()
           replayBus.addListener(appListener)
           val appAttemptInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
-            replayBus)
+                                      replayBus, ReplayListenerBus.SELECT_ALL_FILTER)
           appAttemptInfo.map { info =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
@@ -409,8 +405,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def mergeApplicationListing(fileStatus: FileStatus): Unit = {
     val newAttempts = try {
         val bus = new ReplayListenerBus()
-        val res = replay(fileStatus, bus, (eventString => eventString.startsWith(AppStartEvent)
-          || eventString.startsWith(AppEndEvent)))
+        val res = replay(fileStatus, bus,
+                         { eventString =>
+          eventString.startsWith (APPL_START_EVENT_PREFIX) ||
+          eventString.startsWith (APPL_END_EVENT_PREFIX)
+                         })
+
         res match {
           case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully: $r")
           case None => logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
@@ -562,7 +562,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def replay(
       eventLog: FileStatus,
       bus: ReplayListenerBus,
-      eventsFilter: (String) => Boolean = (s: String) => true): Option[FsApplicationAttemptInfo] = {
+      eventsFilter: (String) => Boolean): Option[FsApplicationAttemptInfo] = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
     // Note that the eventLog may have *increased* in size since when we grabbed the filestatus,
@@ -682,6 +682,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
 private[history] object FsHistoryProvider {
   val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
+
+  val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
+
+  val APPL_END_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationEnd\""
 }
 
 /**
