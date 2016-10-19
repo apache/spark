@@ -63,14 +63,14 @@ private[scheduler] class BlacklistTracker (
    * to do so.  But it will not grow too large, because as soon as an executor gets too many
    * failures, we blacklist the executor and remove its entry here.
    */
-  private val executorIdToFailureList: HashMap[String, ExecutorFailureList] = new HashMap()
-  val executorIdToBlacklistStatus: HashMap[String, BlacklistedExecutor] = new HashMap()
-  val nodeIdToBlacklistExpiryTime: HashMap[String, Long] = new HashMap()
+  private val executorIdToFailureList = new  HashMap[String, ExecutorFailureList]()
+  val executorIdToBlacklistStatus = new HashMap[String, BlacklistedExecutor]()
+  val nodeIdToBlacklistExpiryTime = new HashMap[String, Long]()
   /**
    * An immutable copy of the set of nodes that are currently blacklisted.  Kept in an
    * AtomicReference to make [[nodeBlacklist()]] thread-safe.
    */
-  private val _nodeBlacklist: AtomicReference[Set[String]] = new AtomicReference(Set())
+  private val _nodeBlacklist = new AtomicReference[Set[String]](Set())
   /**
    * Time when the next blacklist will expire.  Used as a
    * shortcut to avoid iterating over all entries in the blacklist when none will have expired.
@@ -85,6 +85,10 @@ private[scheduler] class BlacklistTracker (
    */
   val nodeToFailedExecs: HashMap[String, HashSet[String]] = new HashMap()
 
+  /**
+   * Un-blacklists executors and nodes that have been blacklisted for at least
+   * BLACKLIST_TIMEOUT_MILLIS
+   */
   def applyBlacklistTimeout(): Unit = {
     val now = clock.getTimeMillis()
     // quickly check if we've got anything to expire from blacklist -- if not, avoid doing any work
@@ -94,7 +98,7 @@ private[scheduler] class BlacklistTracker (
       if (execsToUnblacklist.nonEmpty) {
         // Un-blacklist any executors that have been blacklisted longer than the blacklist timeout.
         logInfo(s"Removing executors $execsToUnblacklist from blacklist because the blacklist " +
-          s"has timed out")
+          s"for those executors has timed out")
         execsToUnblacklist.foreach { exec =>
           val status = executorIdToBlacklistStatus.remove(exec).get
           val failedExecsOnNode = nodeToFailedExecs(status.node)
@@ -117,6 +121,9 @@ private[scheduler] class BlacklistTracker (
   }
 
   private def updateNextExpiryTime(): Unit = {
+    // we don't need to check nodeIdToBlacklistExpiryTime because that will always share an
+    // expiry time with some blacklisted executor.  In other words, the next node expiry time
+    // will never be before the next executor blacklist time.
     if (executorIdToBlacklistStatus.nonEmpty) {
       nextExpiryTime = executorIdToBlacklistStatus.map{_._2.expiryTime}.min
     } else {

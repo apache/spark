@@ -24,7 +24,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.util.Clock
 
 /**
- * Handles balcklisting executors and nodes within a taskset.  This includes blacklisting specific
+ * Handles blacklisting executors and nodes within a taskset.  This includes blacklisting specific
  * (task, executor) / (task, nodes) pairs, and also completely blacklisting executors and nodes
  * for the entire taskset.
  *
@@ -32,9 +32,9 @@ import org.apache.spark.util.Clock
  * which is handled by [[BlacklistTracker]].  Note that BlacklistTracker does not know anything
  * about task failures until a taskset completes successfully.
  *
- * THREADING:  As a helper to [[TaskSetManager]], this class is designed to only be called from code
- * with a lock on the TaskScheduler (e.g. its event handlers). It should not be called from other
- * threads.
+ * THREADING:  This class is a helper to [[TaskSetManager]]; as with the methods in
+ * [[TaskSetManager]] this class is designed only to be called from code with a lock on the
+ * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
  */
 private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int, val clock: Clock)
     extends Logging {
