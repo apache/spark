@@ -368,7 +368,7 @@ object WriteOutput extends Logging {
       bucketId: Option[Int] = None): OutputWriter = {
     try {
       description.outputWriterFactory.newInstance(
-        description.path.toString,
+        getWorkPath(committer, description.path.toString),
         bucketId,
         description.nonPartitionColumns.toStructType,
         taskAttemptContext)
