@@ -45,7 +45,7 @@ class TableFileCatalog(
   private val fileStatusCache = if (enableFileStatusCache)  {
     new InMemoryCache
   } else {
-    new NoopCache
+    FileStatusCache.noop
   }
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf

@@ -45,7 +45,7 @@ abstract class PartitioningAwareFileCatalog(
     sparkSession: SparkSession,
     parameters: Map[String, String],
     partitionSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = new NoopCache) extends FileCatalog with Logging {
+    fileStatusCache: FileStatusCache = FileStatusCache.noop) extends FileCatalog with Logging {
   import PartitioningAwareFileCatalog.BASE_PATH_PARAM
 
   /** Returns the specification of the partitions inferred from the data. */

@@ -71,8 +71,12 @@ class InMemoryCache extends FileStatusCache {
 /**
  * A non-caching implementation used when partition file status caching is disabled.
  */
-class NoopCache extends FileStatusCache {
+private class NoopCache extends FileStatusCache {
   override def getLeafFiles(path: Path): Option[Array[FileStatus]] = None
   override def putLeafFiles(path: Path, leafFiles: Array[FileStatus]): Unit = {}
   override def invalidateAll(): Unit = {}
+}
+
+object FileStatusCache {
+  val noop: FileStatusCache = new NoopCache
 }
