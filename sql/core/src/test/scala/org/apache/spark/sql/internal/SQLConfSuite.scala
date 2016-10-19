@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.internal
 
-import java.io.File
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.util.Utils
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -219,7 +219,8 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     try {
       // to get the default value, always unset it
       spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      assert(new File("spark-warehouse").toURI.toString === spark.sessionState.conf.warehousePath)
+      assert(new Path(Utils.resolveURI("spark-warehouse")).toString ===
+        spark.sessionState.conf.warehousePath + "/")
     } finally {
       sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
     }

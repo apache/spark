@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
-import java.net.URI
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -121,16 +120,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(!path.startsWith("file:/"))
       val uri = tmpDir.toURI
       sql(s"CREATE DATABASE db1 LOCATION '$uri'")
-      val pathInCatalog = URI.create(catalog.getDatabaseMetadata("db1").locationUri)
+      val pathInCatalog = new Path(catalog.getDatabaseMetadata("db1").locationUri).toUri
       assert("file" === pathInCatalog.getScheme)
-      val expectedPath = URI.create(path)
+      val expectedPath = new Path(path).toUri
       assert(expectedPath.getPath === pathInCatalog.getPath)
 
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
         sql(s"CREATE DATABASE db2")
-        val pathInCatalog2 = URI.create(catalog.getDatabaseMetadata("db2").locationUri)
+        val pathInCatalog2 = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
         assert("file" === pathInCatalog2.getScheme)
-        val expectedPath2 = URI.create(spark.sessionState.conf.warehousePath + "db2.db")
+        val expectedPath2 = new Path(spark.sessionState.conf.warehousePath + "/" + "db2.db").toUri
         assert(expectedPath2.getPath === pathInCatalog2.getPath)
       }
 
@@ -139,11 +138,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def stripTrailingSeparator(path: String): String = {
-    // Resolved local directory URIs may or may not end with a backslash depending on if
-    // the directory exists or not when resolved. In several instances, normalize by
-    // removing the separators
-    if (path.endsWith("/")) path.init else path
+  private def makeQualifiedPath(path: String): String = {
+    // copy-paste from SessionCatalog
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
+    fs.makeQualified(hadoopPath).toString
   }
 
   test("Create/Drop Database") {
@@ -159,8 +158,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
             sql(s"CREATE DATABASE $dbName")
             val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation =
-              stripTrailingSeparator(Utils.resolveURI(s"$path/$dbNameWithoutBackTicks.db").toString)
+            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
             assert(db1 == CatalogDatabase(
               dbNameWithoutBackTicks,
               "",
@@ -185,8 +183,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       try {
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbName)
-        val expectedLocation =
-          stripTrailingSeparator(Utils.resolveURI(s"spark-warehouse/$dbName.db").toString)
+        val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbName.db")
         assert(db1 == CatalogDatabase(
           dbName,
           "",
@@ -204,13 +201,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val catalog = spark.sessionState.catalog
     val databaseNames = Seq("db1", "`database`")
     withTempDir { tmpDir =>
-      val path = Utils.resolveURI(tmpDir.getCanonicalPath).toString
+      val path = new Path(tmpDir.getCanonicalPath).toUri
       databaseNames.foreach { dbName =>
         try {
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-          val expPath = stripTrailingSeparator(path)
+          val expPath = makeQualifiedPath(tmpDir.toString)
           assert(db1 == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
@@ -237,8 +234,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             val dbNameWithoutBackTicks = cleanIdentifier(dbName)
             sql(s"CREATE DATABASE $dbName")
             val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation =
-              stripTrailingSeparator(Utils.resolveURI(s"$path/$dbNameWithoutBackTicks.db").toString)
+            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
             assert(db1 == CatalogDatabase(
               dbNameWithoutBackTicks,
               "",
@@ -485,7 +481,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         databaseNames.foreach { dbName =>
           try {
             val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-            val location = Utils.resolveURI(s"$path/$dbNameWithoutBackTicks.db").toString
+            val location = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
 
             sql(s"CREATE DATABASE $dbName")
 
