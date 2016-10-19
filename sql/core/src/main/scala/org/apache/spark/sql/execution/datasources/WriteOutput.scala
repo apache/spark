@@ -148,11 +148,12 @@ object WriteOutput extends Logging {
       sparkAttemptNumber: Int,
       iterator: Iterator[InternalRow]): Unit = {
 
+    val jobId = SparkHadoopWriter.createJobID(new Date, sparkStageId)
+    val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
+    val taskAttemptId = new TaskAttemptID(taskId, sparkAttemptNumber)
+
     // Set up the attempt context required to use in the output committers.
     val taskAttemptContext: TaskAttemptContext = {
-      val jobId = SparkHadoopWriter.createJobID(new Date, sparkStageId)
-      val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
-      val taskAttemptId = new TaskAttemptID(taskId, sparkAttemptNumber)
 
       // Set up the configuration object
       val hadoopConf = description.serializableHadoopConf.value
@@ -168,9 +169,6 @@ object WriteOutput extends Logging {
     val committer = newOutputCommitter(
       description.outputFormatClass, taskAttemptContext, description.path, description.isAppend)
     committer.setupTask(taskAttemptContext)
-
-    val jobId = taskAttemptContext.getJobID
-    val taskId = taskAttemptContext.getTaskAttemptID.getTaskID
 
     val writeTask =
       if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
@@ -406,7 +404,7 @@ object WriteOutput extends Logging {
       bucketId: Option[Int] = None): OutputWriter = {
     try {
       outputWriterFactory.newInstance(
-        getWorkPath(committer, path.toString),
+        path,
         bucketId,
         nonPartitionColumns.toStructType,
         taskAttemptContext)
