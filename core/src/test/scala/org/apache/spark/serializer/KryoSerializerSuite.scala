@@ -75,11 +75,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("basic types") {
+    val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
-      testBothUnsafeAndSafe(conf) { sparkConf =>
-        val ser = new KryoSerializer(sparkConf).newInstance()
-        assert(ser.deserialize[T](ser.serialize(t)) === t)
-      }
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(1)
     check(1L)
@@ -107,11 +105,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("pairs") {
+    val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
-      testBothUnsafeAndSafe(conf) { sparkConf =>
-        val ser = new KryoSerializer(sparkConf).newInstance()
-        assert(ser.deserialize[T](ser.serialize(t)) === t)
-      }
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check((1, 1))
     check((1, 1L))
@@ -133,11 +129,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("Scala data structures") {
+    val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
-      testBothUnsafeAndSafe(conf) { sparkConf =>
-        val ser = new KryoSerializer(sparkConf).newInstance()
-        assert(ser.deserialize[T](ser.serialize(t)) === t)
-      }
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check(List[Int]())
     check(List[Int](1, 2, 3))
@@ -160,12 +154,10 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("Bug: SPARK-10251") {
+    val ser = new KryoSerializer(conf.clone.set("spark.kryo.registrationRequired", "true"))
+      .newInstance()
     def check[T: ClassTag](t: T) {
-      testBothUnsafeAndSafe(conf) { sparkConf =>
-        val ser = new KryoSerializer(sparkConf.clone.set("spark.kryo.registrationRequired", "true"))
-          .newInstance()
-        assert(ser.deserialize[T](ser.serialize(t)) === t)
-      }
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
     }
     check((1, 3))
     check(Array((1, 3)))
@@ -192,13 +184,11 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("ranges") {
+    val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
-      testBothUnsafeAndSafe(conf) { sparkConf =>
-        val ser = new KryoSerializer(sparkConf).newInstance()
-        assert(ser.deserialize[T](ser.serialize(t)) === t)
-        // Check that very long ranges don't get written one element at a time
-        assert(ser.serialize(t).limit < 100)
-      }
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+      // Check that very long ranges don't get written one element at a time
+      assert(ser.serialize(t).limit < 100)
     }
     check(1 to 1000000)
     check(1 to 1000000 by 2)
@@ -407,12 +397,6 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       classOf[RegistratorWithoutAutoReset].getName)
     val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
     assert(!ser2.getAutoReset)
-  }
-
-  private def testBothUnsafeAndSafe(conf: SparkConf)(f: SparkConf => Unit): Unit = {
-    Seq(true, false).foreach { useUnsafe =>
-      f(conf.clone.set("spark.kryo.unsafe", useUnsafe.toString))
-    }
   }
 
   private def testSerializerInstanceReuse(autoReset: Boolean, referenceTracking: Boolean): Unit = {
