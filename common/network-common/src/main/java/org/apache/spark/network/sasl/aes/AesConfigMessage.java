@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
 
@@ -47,10 +48,11 @@ public class AesConfigMessage implements Encodable {
 
   /**
    * Set key and input vector for cipher option
-   * @param inKey The decrypt key of one side
-   * @param inIv The input vector of one side
-   * @param outKey The decrypt key of another side
-   * @param outIv The input vector of another side
+   * @param keySize the size of key in byte.
+   * @param inKey The decrypt key of one side.
+   * @param inIv The input vector of one side.
+   * @param outKey The decrypt key of another side.
+   * @param outIv The input vector of another side.
    */
   public void setParameters(int keySize, byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
     this.keySize = keySize;
@@ -69,7 +71,6 @@ public class AesConfigMessage implements Encodable {
 
   @Override
   public void encode(ByteBuf buf) {
-    buf.clear();
     buf.writeByte(TAG_BYTE);
     buf.writeInt(keySize);
     if (inKey != null && inIv != null && outKey != null && outIv != null) {
@@ -80,11 +81,23 @@ public class AesConfigMessage implements Encodable {
     }
   }
 
-  public void encodeMessage(ByteBuffer buf){
-    encode(Unpooled.wrappedBuffer(buf));
+  /**
+   * Encode the config message.
+   * @return ByteBuffer which contains encoded config message.
+   */
+  public ByteBuffer encodeMessage(){
+    ByteBuffer buf = ByteBuffer.allocate(encodedLength());
+
+    ByteBuf wrappedBuf = Unpooled.wrappedBuffer(buf);
+    wrappedBuf.clear();
+    encode(wrappedBuf);
+
+    return buf;
   }
 
-  public static AesConfigMessage decode(ByteBuf buf) {
+  public static AesConfigMessage decodeMessage(ByteBuffer buffer) {
+    ByteBuf buf = Unpooled.wrappedBuffer(buffer);
+
     if (buf.readByte() != TAG_BYTE) {
       throw new IllegalStateException("Expected SaslMessage, received something else"
         + " (maybe your client does not have SASL enabled?)");
@@ -101,10 +114,6 @@ public class AesConfigMessage implements Encodable {
     } else {
       return new AesConfigMessage(keySize, null, null, null, null);
     }
-  }
-
-  public static AesConfigMessage decodeMessage(ByteBuffer buf){
-    return decode(Unpooled.wrappedBuffer(buf));
   }
 
 }

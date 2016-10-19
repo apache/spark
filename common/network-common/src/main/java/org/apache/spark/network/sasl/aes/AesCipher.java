@@ -37,13 +37,12 @@ import org.apache.commons.crypto.random.CryptoRandom;
 import org.apache.commons.crypto.random.CryptoRandomFactory;
 import org.apache.commons.crypto.stream.CryptoInputStream;
 import org.apache.commons.crypto.stream.CryptoOutputStream;
-import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.sasl.SparkSaslServer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.network.util.ByteArrayReadableChannel;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.TransportConf;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * AES cipher for encryption and decryption.
@@ -128,6 +127,11 @@ public class AesCipher {
       .addFirst(DECRYPTION_HANDLER_NAME, new AesDecryptHandler(this));
   }
 
+  /**
+   * Generate a request config message which send to remote peer.
+   * @param conf is the local transport configuration.
+   * @return Config message for sending.
+   */
   public static AesConfigMessage requestConfigMessage(TransportConf conf) {
     int keySize = conf.saslEncryptionAesCipherKeySizeBits();
     if (keySize % 8 != 0) {
@@ -137,6 +141,11 @@ public class AesCipher {
     return new AesConfigMessage(keySize/8, null, null, null, null);
   }
 
+  /**
+   * Generate the configuration message according to request config message.
+   * @param configMessage The request config message comes from remote.
+   * @return Configuration message for sending.
+   */
   public static AesConfigMessage responseConfigMessage(AesConfigMessage configMessage){
 
     Properties properties = new Properties();
