@@ -85,8 +85,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler
   }
 
-  test("Scheduler does not always schedule tasks on the same workers") {
-    val taskScheduler = setupScheduler()
+  private def roundrobin(taskScheduler: TaskSchedulerImpl): Unit = {
     val numFreeCores = 1
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores),
       new WorkerOffer("executor1", "host1", numFreeCores))
@@ -106,6 +105,85 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
     assert(count > 0)
     assert(count < numTrials)
+    assert(!failedTaskSet)
+  }
+
+  test("Scheduler does not always schedule tasks on the same workers") {
+    val taskScheduler = setupScheduler()
+    roundrobin(taskScheduler)
+  }
+
+  test("User can specify the roundrobin task assigner") {
+    val taskScheduler = setupScheduler(("spark.scheduler.taskAssigner", "RoUndrObin"))
+    roundrobin(taskScheduler)
+  }
+
+  test("Fallback to roundrobin when the task assigner provided is not valid") {
+    val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "invalid")
+    roundrobin(taskScheduler)
+  }
+
+  test("Scheduler balance the assignment to the worker with more free cores") {
+    val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "BaLanceD")
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 2),
+      new WorkerOffer("executor1", "host1", 4))
+    val selectedExecutorIds = {
+      val taskSet = FakeTask.createTaskSet(2)
+      taskScheduler.submitTasks(taskSet)
+      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+      assert(2 === taskDescriptions.length)
+      taskDescriptions.map(_.executorId)
+    }
+    val count = selectedExecutorIds.count(_ == workerOffers(1).executorId)
+    assert(count == 2)
+    assert(!failedTaskSet)
+  }
+
+  test("Scheduler balance the assignment across workers with same free cores") {
+    val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "balanced")
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 2),
+      new WorkerOffer("executor1", "host1", 2))
+    val selectedExecutorIds = {
+      val taskSet = FakeTask.createTaskSet(2)
+      taskScheduler.submitTasks(taskSet)
+      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+      assert(2 === taskDescriptions.length)
+      taskDescriptions.map(_.executorId)
+    }
+    val count = selectedExecutorIds.count(_ == workerOffers(1).executorId)
+    assert(count == 1)
+    assert(!failedTaskSet)
+  }
+
+  test("Scheduler packs the assignment to workers with less free cores") {
+    val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "paCkeD")
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 2),
+      new WorkerOffer("executor1", "host1", 4))
+    val selectedExecutorIds = {
+      val taskSet = FakeTask.createTaskSet(2)
+      taskScheduler.submitTasks(taskSet)
+      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+      assert(2 === taskDescriptions.length)
+      taskDescriptions.map(_.executorId)
+    }
+    val count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
+    assert(count == 2)
+    assert(!failedTaskSet)
+  }
+
+  test("Scheduler keeps packing the assignment to the same worker") {
+    val taskScheduler = setupScheduler("spark.scheduler.taskAssigner" -> "packed")
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 4),
+      new WorkerOffer("executor1", "host1", 4))
+    val selectedExecutorIds = {
+      val taskSet = FakeTask.createTaskSet(4)
+      taskScheduler.submitTasks(taskSet)
+      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+      assert(4 === taskDescriptions.length)
+      taskDescriptions.map(_.executorId)
+    }
+    val count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
+    assert(count == 4)
     assert(!failedTaskSet)
   }
 

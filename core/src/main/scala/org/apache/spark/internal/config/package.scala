@@ -223,4 +223,9 @@ package object config {
       " bigger files.")
     .longConf
     .createWithDefault(4 * 1024 * 1024)
+
+  private[spark] val SPARK_SCHEDULER_TASK_ASSIGNER = ConfigBuilder("spark.scheduler.taskAssigner")
+    .doc("The task assigner (roundrobin, packed, balanced) to schedule tasks on workers.")
+    .stringConf
+    .createWithDefault("roundrobin")
 }

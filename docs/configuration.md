@@ -1374,6 +1374,19 @@ Apart from these, the following properties are also available, and may be useful
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
+<tr>
+  <td><code>spark.scheduler.taskAssigner</code></td>
+  <td>roundrobin</td>
+  <td>
+    The strategy of how to allocate tasks among workers with free cores. By default, roundrobin
+    with randomness is used, which tries to allocate task to workers with available cores in
+    roundrobin manner. In addition, packed and balanced is provided. The former tries to
+    allocate tasks to workers with the least free cores, resulting in tasks assigned to few
+    workers, which may help driver to release the reserved idle workers when dynamic
+    (spark.dynamicAllocation.enabled) is enabled. The latter tries to assign tasks across workers
+    in a balance way (allocating tasks to workers with most free cores).
+  </td>
+</tr>
 </table>
 
 #### Dynamic Allocation

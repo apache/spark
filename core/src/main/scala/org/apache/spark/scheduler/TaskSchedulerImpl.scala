@@ -22,9 +22,7 @@ import java.util.{Timer, TimerTask}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.Set
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -60,7 +58,7 @@ private[spark] class TaskSchedulerImpl(
   def this(sc: SparkContext) = this(sc, sc.conf.get(config.MAX_TASK_FAILURES))
 
   val conf = sc.conf
-
+  private  val taskAssigner: TaskAssigner = TaskAssigner.init(conf)
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
 
@@ -250,24 +248,26 @@ private[spark] class TaskSchedulerImpl(
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
-      shuffledOffers: Seq[WorkerOffer],
-      availableCpus: Array[Int],
-      tasks: IndexedSeq[ArrayBuffer[TaskDescription]]) : Boolean = {
+      taskAssigner: TaskAssigner) : Boolean = {
     var launchedTask = false
-    for (i <- 0 until shuffledOffers.size) {
-      val execId = shuffledOffers(i).executorId
-      val host = shuffledOffers(i).host
-      if (availableCpus(i) >= CPUS_PER_TASK) {
+    taskAssigner.init()
+    while(taskAssigner.hasNext) {
+      var assigned = false
+      val currentOffer = taskAssigner.getNext()
+      val execId = currentOffer.workOffer.executorId
+      val host = currentOffer.workOffer.host
+      if (currentOffer.coresAvailable >= CPUS_PER_TASK) {
         try {
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
-            tasks(i) += task
+            currentOffer.tasks += task
             val tid = task.taskId
             taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
             executorIdToTaskCount(execId) += 1
-            availableCpus(i) -= CPUS_PER_TASK
-            assert(availableCpus(i) >= 0)
+            currentOffer.coresAvailable -= CPUS_PER_TASK
+            assert(currentOffer.coresAvailable >= 0)
             launchedTask = true
+            assigned = true
           }
         } catch {
           case e: TaskNotSerializableException =>
@@ -277,6 +277,7 @@ private[spark] class TaskSchedulerImpl(
             return launchedTask
         }
       }
+      taskAssigner.offerAccepted(assigned)
     }
     return launchedTask
   }
@@ -305,12 +306,8 @@ private[spark] class TaskSchedulerImpl(
         hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
     }
+    taskAssigner.construct(offers)
 
-    // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
-    val shuffledOffers = Random.shuffle(offers)
-    // Build a list of tasks to assign to each worker.
-    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
-    val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -329,7 +326,7 @@ private[spark] class TaskSchedulerImpl(
       for (currentMaxLocality <- taskSet.myLocalityLevels) {
         do {
           launchedTaskAtCurrentMaxLocality = resourceOfferSingleTaskSet(
-            taskSet, currentMaxLocality, shuffledOffers, availableCpus, tasks)
+            taskSet, currentMaxLocality, taskAssigner)
           launchedAnyTask |= launchedTaskAtCurrentMaxLocality
         } while (launchedTaskAtCurrentMaxLocality)
       }
@@ -337,10 +334,12 @@ private[spark] class TaskSchedulerImpl(
         taskSet.abortIfCompletelyBlacklisted(hostToExecutors)
       }
     }
-
+    val tasks = taskAssigner.tasks
+    taskAssigner.reset()
     if (tasks.size > 0) {
       hasLaunchedTask = true
     }
+
     return tasks
   }
 
