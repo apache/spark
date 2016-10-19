@@ -535,17 +535,11 @@ object Expand {
     attrMap: Map[Attribute, Int]): Int = {
     val numAttributes = attrMap.size
     val mask = (1 << numAttributes) - 1
-
-    groupingSetAttrs.foldLeft(mask) {
-      case (bitmap, attr) =>
-        // Find the index of the attribute in sequence.
-        val index = attrMap.get(attr).getOrElse(
-          throw new AnalysisException(s"$attr doesn't show up in the GROUP BY list")
-        )
-        // 0 means that the column at the given index is a grouping column, 1 means it is not,
-        // so we unset the bit in bitmap.
-        bitmap & ~(1 << (numAttributes - 1 - index))
-    }
+    groupingSetAttrs.map(attrMap).map(index =>
+      // 0 means that the column at the given index is a grouping column, 1 means it is not,
+      // so we unset the bit in bitmap.
+      ~(1 << (numAttributes - 1 - index))
+    ).reduce(_ & _) & mask
   }
 
   /**

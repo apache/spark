@@ -219,14 +219,14 @@ class Analyzer(
      *  We need to get all of its subsets for the rule described above, the subset is
      *  represented as sequence of expressions.
      */
-    def selectGroupExprsRollup(exprs: Seq[Expression]): Seq[Seq[Expression]] = {
-      if (exprs.length == 0) {
-        Seq(Seq.empty[Expression])
-      } else {
-        selectGroupExprsRollup(exprs.drop(1)).map { expandExprs =>
-          exprs.take(1) ++ expandExprs
-        } ++ Seq(Seq.empty[Expression])
+    def rollupExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = {
+      val buffer = ArrayBuffer.empty[Seq[Expression]]
+      var current = exprs
+      while (current.nonEmpty) {
+        buffer += current
+        current = current.init
       }
+      buffer
     }
 
     /*
@@ -238,15 +238,12 @@ class Analyzer(
      *  We need to get all of its subsets for a given GROUPBY expression, the subsets are
      *  represented as sequence of expressions.
      */
-    def selectGroupExprsCube(exprs: Seq[Expression]): Seq[Seq[Expression]] = {
-      if (exprs.length == 0) {
-        Seq(Seq.empty[Expression])
-      } else {
-        val expandExprsList = selectGroupExprsCube(exprs.drop(1))
-        expandExprsList.map { expandExprs =>
-          exprs.take(1) ++ expandExprs
-        } ++ expandExprsList
-      }
+    def cubeExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs match {
+      case x :: xs =>
+        val initial = cubeExprs(xs)
+        initial.map(x +: _) ++ initial
+      case Nil =>
+        Seq(Seq.empty)
     }
 
     private def hasGroupingAttribute(expr: Expression): Boolean = {
@@ -296,10 +293,10 @@ class Analyzer(
 
       case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(
-          selectGroupExprsCube(c.groupByExprs), groupByExprs, child, aggregateExpressions)
+          cubeExprs(c.groupByExprs), groupByExprs, child, aggregateExpressions)
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(
-          selectGroupExprsRollup(r.groupByExprs), groupByExprs, child, aggregateExpressions)
+          rollupExprs(r.groupByExprs), groupByExprs, child, aggregateExpressions)
 
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
