@@ -71,7 +71,7 @@ setMethod("show", signature = "Column", function(object) {
 
 #' @rdname head
 setMethod("head",
-          signature = "Column",
+          signature(x = "Column"),
           function(x, num = 6L) {
             if (is.null(x@df)) {
               character(0)
