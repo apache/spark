@@ -53,7 +53,9 @@ abstract class FileStatusCache {
 }
 
 /**
- * An implementation that caches all partition file statuses in memory forever.
+ * An implementation that caches partition file statuses in memory.
+ *
+ * @param maxSizeInBytes max allowable cache size before entries start getting evicted
  */
 class InMemoryCache(maxSizeInBytes: Long) extends FileStatusCache with Logging {
   private val warnedAboutEviction = new AtomicBoolean(false)
