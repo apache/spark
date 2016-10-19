@@ -49,6 +49,38 @@
  * </pre>
  *
  * <p>
+ * Currently, for currently while launching spark application with
+ * {@link org.apache.spark.launcher.SparkLauncher#startApplication(
+ * org.apache.spark.launcher.SparkAppHandle.Listener...)}, there are two options available
+ * for YARN manager in cluster deploy mode:
+ *  - to launch Spark Application as a Thread inside current JVM using
+ *    the {@link org.apache.spark.launcher.SparkLauncher#launchSparkSubmitAsThread(boolean)}
+ *  - to request application be killed if launcher process exits using
+ *    the {@link org.apache.spark.launcher.SparkLauncher#stopIfInterrupted()}.
+ * </p>
+ *
+ * <pre>
+ * {@code
+ *   import org.apache.spark.launcher.SparkAppHandle;
+ *   import org.apache.spark.launcher.SparkLauncher;
+ *
+ *   public class MyLauncher {
+ *     public static void main(String[] args) throws Exception {
+ *       SparkAppHandle handle = new SparkLauncher()
+ *         .setAppResource("/my/app.jar")
+ *         .setMainClass("my.spark.app.Main")
+ *         .setMaster("yarn")
+ *         .stopIfInterrupted()
+ *         .launchSparkSubmitAsThread(true)
+ *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
+ *         .startApplication();
+ *       // Use handle API to monitor / control application.
+ *     }
+ *   }
+ * }
+ * </pre>
+ *
+ * <p>
  * It's also possible to launch a raw child process, using the
  * {@link org.apache.spark.launcher.SparkLauncher#launch()} method:
  * </p>
