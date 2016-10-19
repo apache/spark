@@ -1903,6 +1903,13 @@
                 <goal>testCompile</goal>
               </goals>
             </execution>
+            <execution>
+              <id>attach-scaladocs</id>
+              <phase>verify</phase>
+              <goals>
+                <goal>doc-jar</goal>
+              </goals>
+            </execution>
           </executions>
           <configuration>
             <scalaVersion>${scala.version}</scalaVersion>
@@ -2389,36 +2396,6 @@
   </build>
 
   <profiles>
-    <profile>
-      <id>docBuild</id>
-      <activation>
-        <property>
-          <name>maven.javadoc.skip</name>
-          <value>!true</value>
-        </property>
-      </activation>
-      <build>
-        <pluginManagement>
-          <plugins>
-            <plugin>
-              <groupId>net.alchim31.maven</groupId>
-              <artifactId>scala-maven-plugin</artifactId>
-              <version>3.2.2</version>
-              <executions>
-                <execution>
-                  <id>attach-scaladocs</id>
-                  <phase>verify</phase>
-                  <goals>
-                    <goal>doc-jar</goal>
-                  </goals>
-                </execution>
-              </executions>
-            </plugin>
-          </plugins>
-        </pluginManagement>
-      </build>
-    </profile>
-
     <profile>
       <id>testCompilation</id>
       <activation>
