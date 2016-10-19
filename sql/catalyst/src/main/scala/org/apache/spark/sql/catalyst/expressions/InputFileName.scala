@@ -27,8 +27,14 @@ import org.apache.spark.unsafe.types.UTF8String
  * Expression that returns the name of the current file being read.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the name of the current file being read if available",
-  extended = "> SELECT _FUNC_();\n ''")
+  usage = "_FUNC_() - Returns the name of the current file being read if available.",
+  extended = """
+    _FUNC_(expr)
+
+      Examples:
+        > SELECT _FUNC_();
+
+  """)
 case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def nullable: Boolean = true
