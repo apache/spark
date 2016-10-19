@@ -974,18 +974,20 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.isZombie)
   }
 
-  test("check uniqueness of TaskSetManager name") {
+  test("SPARK-17894: Verify TaskSetManagers for different stage attempts have unique names") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
-    val taskSet = FakeTask.createTaskSet(1, 0, 0)
+    val taskSet = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, new ManualClock)
     assert(manager.name === "TaskSet_0.0")
 
-    val taskSet2 = FakeTask.createTaskSet(1, 0, 1)
+    // Make sure a task set with the same stage ID but different attempt ID also has a unique name
+    val taskSet2 = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 1)
     val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES, new ManualClock)
     assert(manager2.name === "TaskSet_0.1")
 
-    val taskSet3 = FakeTask.createTaskSet(1, 1, 1)
+    // Make sure a task set with the same attempt ID but different stage ID also has a unique name
+    val taskSet3 = FakeTask.createTaskSet(numTasks = 1, stageId = 1, stageAttemptId = 1)
     val manager3 = new TaskSetManager(sched, taskSet3, MAX_TASK_FAILURES, new ManualClock)
     assert(manager3.name === "TaskSet_1.1")
   }
