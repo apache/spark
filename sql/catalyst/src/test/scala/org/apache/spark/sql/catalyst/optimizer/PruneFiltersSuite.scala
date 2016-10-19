@@ -133,4 +133,17 @@ class PruneFiltersSuite extends PlanTest {
     val correctAnswer = testRelation.where(Rand(10) > 5).where(Rand(10) > 5).select('a).analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("Pruning useless IsNotNull") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = testRelation.subquery('z)
+
+    val outerJoined = x.join(y, FullOuter).subquery('x)
+    val query = outerJoined.join(z, Inner).where("x.a = z.a").where("x.a".isNotNull)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = outerJoined.where("x.a = z.a").join(z, Inner).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }

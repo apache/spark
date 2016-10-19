@@ -649,6 +649,24 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
+  // A helper function used to prune predicates for [[Filter]]. It will partition conjunctive
+  // predicates according to the given partition function. The positive part of predicates will
+  // be pruned.
+  private def prunedPredicates(f: Filter, func: (Expression) => Boolean): LogicalPlan = {
+    val (prunedPredicates, remainingPredicates) =
+      splitConjunctivePredicates(f.condition).partition { cond =>
+        func(cond)
+      }
+    if (prunedPredicates.isEmpty) {
+      f
+    } else if (remainingPredicates.isEmpty) {
+      f.child
+    } else {
+      val newCond = remainingPredicates.reduce(And)
+      Filter(newCond, f.child)
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // If the filter condition always evaluate to true, remove the filter.
     case Filter(Literal(true, BooleanType), child) => child
@@ -659,17 +677,18 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>
-      val (prunedPredicates, remainingPredicates) =
-        splitConjunctivePredicates(fc).partition { cond =>
-          cond.deterministic && p.constraints.contains(cond)
-        }
-      if (prunedPredicates.isEmpty) {
-        f
-      } else if (remainingPredicates.isEmpty) {
-        p
+      val pruned = prunedPredicates(f, (cond) => {
+        cond.deterministic && p.constraints.contains(cond)
+      })
+      if (pruned.isInstanceOf[Filter]) {
+        prunedPredicates(pruned.asInstanceOf[Filter], (cond) => {
+          cond match {
+            case IsNotNull(a) if !a.nullable => true
+            case _ => false
+          }
+        })
       } else {
-        val newCond = remainingPredicates.reduce(And)
-        Filter(newCond, p)
+        pruned
       }
   }
 }
