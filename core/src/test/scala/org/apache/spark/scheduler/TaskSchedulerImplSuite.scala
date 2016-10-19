@@ -92,7 +92,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   def setupSchedulerWithMockTsm(blacklist: BlacklistTracker): TaskSchedulerImpl = {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
+    conf.set(config.BLACKLIST_ENABLED, true)
+    sc = new SparkContext(conf)
     taskScheduler =
       new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4), Some(blacklist)) {
         override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
