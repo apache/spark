@@ -26,7 +26,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SaveMode}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -113,8 +113,8 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     (-1 to 0).foreach { size =>
       val properties = new Properties()
-      properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
-      val e = intercept[SparkException] {
+      properties.setProperty(JDBCOptions.JDBC_BATCH_INSERT_SIZE, size.toString)
+      val e = intercept[IllegalArgumentException] {
         df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
       }.getMessage
       assert(e.contains(s"Invalid value `$size` for parameter `batchsize`"))
@@ -126,7 +126,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     (1 to 3).foreach { size =>
       val properties = new Properties()
-      properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
+      properties.setProperty(JDBCOptions.JDBC_BATCH_INSERT_SIZE, size.toString)
       df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
       assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).count())
     }

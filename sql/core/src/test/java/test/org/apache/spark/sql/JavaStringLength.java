@@ -15,23 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package test.org.apache.spark.sql;
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.api.java.UDF1;
 
 /**
- * :: Experimental ::
- * A class used to report information about the progress of a [[StreamingQuery]].
- *
- * @param name The [[StreamingQuery]] name. This name is unique across all active queries.
- * @param id The [[StreamingQuery]] id. This id is unique across
-  *          all queries that have been started in the current process.
- * @param sourceStatuses The current statuses of the [[StreamingQuery]]'s sources.
- * @param sinkStatus The current status of the [[StreamingQuery]]'s sink.
+ * It is used for register Java UDF from PySpark
  */
-@Experimental
-class StreamingQueryInfo private[sql](
-  val name: String,
-  val id: Long,
-  val sourceStatuses: Seq[SourceStatus],
-  val sinkStatus: SinkStatus)
+public class JavaStringLength implements UDF1<String, Integer> {
+  @Override
+  public Integer call(String str) throws Exception {
+    return new Integer(str.length());
+  }
+}
