@@ -145,6 +145,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
         }
+
+      case RemoveExecutor(executorId, reason) =>
+        removeExecutor(executorId, reason)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -386,13 +389,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Reset the state of CoarseGrainedSchedulerBackend to the initial state. Currently it will only
    * be called in the yarn-client mode when AM re-registers after a failure.
    * */
-  protected def reset(): Unit = synchronized {
-    numPendingExecutors = 0
-    executorsPendingToRemove.clear()
+  protected def reset(): Unit = {
+    val executors = synchronized {
+      numPendingExecutors = 0
+      executorsPendingToRemove.clear()
+      Set() ++ executorDataMap.keys
+    }
 
     // Remove all the lingering executors that should be removed but not yet. The reason might be
     // because (1) disconnected event is not yet received; (2) executors die silently.
-    executorDataMap.toMap.foreach { case (eid, _) =>
+    executors.foreach { eid =>
       driverEndpoint.send(
         RemoveExecutor(eid, SlaveLost("Stale executor after cluster manager re-registered.")))
     }
