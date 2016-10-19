@@ -40,7 +40,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
    */
   def post(event: StreamingQueryListener.Event) {
     event match {
-      case s: QueryStarted =>
+      case s: QueryStartedEvent =>
         postToAll(s)
       case _ =>
         sparkListenerBus.post(event)
@@ -59,11 +59,11 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
       listener: StreamingQueryListener,
       event: StreamingQueryListener.Event): Unit = {
     event match {
-      case queryStarted: QueryStarted =>
+      case queryStarted: QueryStartedEvent =>
         listener.onQueryStarted(queryStarted)
-      case queryProgress: QueryProgress =>
+      case queryProgress: QueryProgressEvent =>
         listener.onQueryProgress(queryProgress)
-      case queryTerminated: QueryTerminated =>
+      case queryTerminated: QueryTerminatedEvent =>
         listener.onQueryTerminated(queryTerminated)
       case _ =>
     }

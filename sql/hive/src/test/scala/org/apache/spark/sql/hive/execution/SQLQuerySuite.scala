@@ -66,13 +66,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import spark.implicits._
 
   test("script") {
+    val scriptFilePath = getTestResourcePath("test_script.sh")
     if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
       val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
       df.createOrReplaceTempView("script_table")
       val query1 = sql(
-        """
+        s"""
           |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
-          |REDUCE c1, c2, c3 USING 'bash src/test/resources/test_script.sh' AS
+          |REDUCE c1, c2, c3 USING 'bash $scriptFilePath' AS
           |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
       checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
     }
@@ -491,7 +492,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   def checkRelation(
       tableName: String,
-      isDataSourceParquet: Boolean,
+      isDataSourceTable: Boolean,
       format: String,
       userSpecifiedLocation: Option[String] = None): Unit = {
     val relation = EliminateSubqueryAliases(
@@ -500,7 +501,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
       case LogicalRelation(r: HadoopFsRelation, _, _) =>
-        if (!isDataSourceParquet) {
+        if (!isDataSourceTable) {
           fail(
             s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
               s"${HadoopFsRelation.getClass.getCanonicalName}.")
@@ -513,7 +514,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         assert(catalogTable.provider.get === format)
 
       case r: MetastoreRelation =>
-        if (isDataSourceParquet) {
+        if (isDataSourceTable) {
           fail(
             s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
               s"${classOf[MetastoreRelation].getCanonicalName}.")
@@ -523,8 +524,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             assert(r.catalogTable.storage.locationUri.get === location)
           case None => // OK.
         }
-        // Also make sure that the format is the desired format.
+        // Also make sure that the format and serde are as desired.
         assert(catalogTable.storage.inputFormat.get.toLowerCase.contains(format))
+        assert(catalogTable.storage.outputFormat.get.toLowerCase.contains(format))
+        val serde = catalogTable.storage.serde.get
+        format match {
+          case "sequence" | "text" => assert(serde.contains("LazySimpleSerDe"))
+          case "rcfile" => assert(serde.contains("LazyBinaryColumnarSerDe"))
+          case _ => assert(serde.toLowerCase.contains(format))
+        }
     }
 
     // When a user-specified location is defined, the table type needs to be EXTERNAL.
@@ -583,6 +591,30 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     } finally {
       setConf(SQLConf.CONVERT_CTAS, originalConf)
       sql("DROP TABLE IF EXISTS ctas1")
+    }
+  }
+
+  test("CTAS with default fileformat") {
+    val table = "ctas1"
+    val ctas = s"CREATE TABLE IF NOT EXISTS $table SELECT key k, value FROM src"
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
+      withSQLConf("hive.default.fileformat" -> "textfile") {
+        withTable(table) {
+          sql(ctas)
+          // We should use parquet here as that is the default datasource fileformat. The default
+          // datasource file format is controlled by `spark.sql.sources.default` configuration.
+          // This testcase verifies that setting `hive.default.fileformat` has no impact on
+          // the target table's fileformat in case of CTAS.
+          assert(sessionState.conf.defaultDataSourceName === "parquet")
+          checkRelation(tableName = table, isDataSourceTable = true, format = "parquet")
+        }
+      }
+      withSQLConf("spark.sql.sources.default" -> "orc") {
+        withTable(table) {
+          sql(ctas)
+          checkRelation(tableName = table, isDataSourceTable = true, format = "orc")
+         }
+      }
     }
   }
 
@@ -1290,11 +1322,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .selectExpr("id AS a", "id AS b")
       .createOrReplaceTempView("test")
 
+    val scriptFilePath = getTestResourcePath("data")
     checkAnswer(
       sql(
-        """FROM(
+        s"""FROM(
           |  FROM test SELECT TRANSFORM(a, b)
-          |  USING 'python src/test/resources/data/scripts/test_transform.py "\t"'
+          |  USING 'python $scriptFilePath/scripts/test_transform.py "\t"'
           |  AS (c STRING, d STRING)
           |) t
           |SELECT c
@@ -1308,12 +1341,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       .selectExpr("id AS a", "id AS b")
       .createOrReplaceTempView("test")
 
+    val scriptFilePath = getTestResourcePath("data")
     val df = sql(
-      """FROM test
+      s"""FROM test
         |SELECT TRANSFORM(a, b)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |WITH SERDEPROPERTIES('field.delim' = '|')
-        |USING 'python src/test/resources/data/scripts/test_transform.py "|"'
+        |USING 'python $scriptFilePath/scripts/test_transform.py "|"'
         |AS (c STRING, d STRING)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |WITH SERDEPROPERTIES('field.delim' = '|')

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedAttribu
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, CreateArray, DecimalLiteral, GenericMutableRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, CreateArray, DecimalLiteral, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.{PercentileDigest, PercentileDigestSerializer}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
@@ -144,7 +144,8 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       .withNewInputAggBufferOffset(inputAggregationBufferOffset)
       .withNewMutableAggBufferOffset(mutableAggregationBufferOffset)
 
-    val mutableAggBuffer = new GenericMutableRow(new Array[Any](mutableAggregationBufferOffset + 1))
+    val mutableAggBuffer = new GenericInternalRow(
+      new Array[Any](mutableAggregationBufferOffset + 1))
     agg.initialize(mutableAggBuffer)
     val dataCount = 10
     (1 to dataCount).foreach { data =>
@@ -154,7 +155,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
     // Serialize the aggregation buffer
     val serialized = mutableAggBuffer.getBinary(mutableAggregationBufferOffset)
-    val inputAggBuffer = new GenericMutableRow(Array[Any](null, serialized))
+    val inputAggBuffer = new GenericInternalRow(Array[Any](null, serialized))
 
     // Phase 2: final mode aggregation
     // Re-initialize the aggregation buffer
@@ -311,7 +312,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
   test("class ApproximatePercentile, null handling") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
     val agg = new ApproximatePercentile(childExpression, Literal(0.5D))
-    val buffer = new GenericMutableRow(new Array[Any](1))
+    val buffer = new GenericInternalRow(new Array[Any](1))
     agg.initialize(buffer)
     // Empty aggregation buffer
     assert(agg.eval(buffer) == null)
