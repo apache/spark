@@ -685,7 +685,7 @@ object SparkSubmit {
         System.setProperty(key, value)
       }
     } else {
-      for ( (key, value) <- sys.props ++ sys.env) {
+      for ( (key, value) <- sys.env) {
         if (!sysProps.contains(key)) {
           sysProps.put(key, value)
         }
@@ -724,7 +724,7 @@ object SparkSubmit {
     }
 
     val mainMethod = if (threadEnabled ) {
-      mainClass.getMethods().filter(i => i.getName() == "mainWithEnv")(0)
+      mainClass.getMethods().filter(i => i.getName() == "sparkMain")(0)
     } else {
       mainClass.getMethod("main", new Array[String](0).getClass)
     }

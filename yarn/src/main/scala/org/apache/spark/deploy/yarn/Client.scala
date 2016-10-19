@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, URI, UnknownHostException}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.{Properties, UUID}
@@ -28,7 +28,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
-
 import com.google.common.base.Objects
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -46,8 +45,7 @@ import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
-
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SecurityManager, SparkApp, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
@@ -55,6 +53,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.util.Utils
+
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -1210,13 +1209,13 @@ private[spark] class Client(
 
 }
 
-private object Client extends Logging {
+private object Client extends SparkApp with Logging {
 
   def main(argStrings: Array[String]) {
-    mainWithEnv(argStrings, Map() ++ sys.env)
+    sparkMain(argStrings, Map() ++ sys.env)
   }
 
-  def mainWithEnv(argStrings: Array[String], env: Map[String, String]): Unit = {
+  override def sparkMain(args: Array[String], conf: Map[String, String]): Unit = {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
@@ -1226,18 +1225,18 @@ private object Client extends Logging {
     // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
     System.setProperty("SPARK_YARN_MODE", "true")
 
-    val threadEnabled: Boolean = env.get("spark.launcher.internal.thread.enabled").
+    val threadEnabled: Boolean = conf.get("spark.launcher.internal.thread.enabled").
       getOrElse("false").toBoolean
 
     val sparkConf = new SparkConf
     if (threadEnabled) {
-      for ((key, value) <- env if key.startsWith("spark.")) {
+      for ((key, value) <- conf if key.startsWith("spark.")) {
         sparkConf.set(key, value, true)
       }
     }
 
-    val args = new ClientArguments(argStrings)
-    new Client(args, sparkConf, env).run()
+    val argsForClient = new ClientArguments(args)
+    new Client(argsForClient, sparkConf, conf).run()
   }
 
   // Alias for the user jar
@@ -1574,5 +1573,4 @@ private object Client extends Logging {
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
   }
-
 }
