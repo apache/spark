@@ -103,7 +103,18 @@ case class UserDefinedGenerator(
  */
 @ExpressionDescription(
   usage = "_FUNC_(n, v1, ..., vk) - Separate v1, ..., vk into n rows.",
-  extended = "> SELECT _FUNC_(2, 1, 2, 3);\n  [1,2]\n  [3,null]")
+  extended = """
+    _FUNC_(n, v1, ..., vk)
+
+      Arguments:
+        n - integer type literal that represents the number of output rows.
+        v - any type expression.
+
+      Examples:
+        > SELECT _FUNC_(2, 1, 2, 3);
+         1	2
+         3	NULL
+  """)
 case class Stack(children: Seq[Expression])
     extends Expression with Generator with CodegenFallback {
 
@@ -226,8 +237,18 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of map a into multiple rows and columns.",
-  extended = "> SELECT _FUNC_(array(10,20));\n  10\n  20")
+  usage = "_FUNC_(expr) - Separates the elements of array a into multiple rows, or the elements of map a into multiple rows and columns.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - array type expression that contains map type or struct type expression as the element.
+
+      Examples:
+        > SELECT _FUNC_(array(10, 20));
+         10
+         20
+  """)
 // scalastyle:on line.size.limit
 case class Explode(child: Expression) extends ExplodeBase(child, position = false)
 
@@ -242,8 +263,18 @@ case class Explode(child: Expression) extends ExplodeBase(child, position = fals
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows with positions, or the elements of a map into multiple rows and columns with positions.",
-  extended = "> SELECT _FUNC_(array(10,20));\n  0\t10\n  1\t20")
+  usage = "_FUNC_(expr) - Separates the elements of array a into multiple rows with positions, or the elements of a map into multiple rows and columns with positions.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - array type expression that contains map type  or struct type expression as the element.
+
+      Examples:
+        > SELECT _FUNC_(array(10,20));
+         0  10
+         1  20
+  """)
 // scalastyle:on line.size.limit
 case class PosExplode(child: Expression) extends ExplodeBase(child, position = true)
 
@@ -251,8 +282,18 @@ case class PosExplode(child: Expression) extends ExplodeBase(child, position = t
  * Explodes an array of structs into a table.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Explodes an array of structs into a table.",
-  extended = "> SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));\n  [1,a]\n  [2,b]")
+  usage = "_FUNC_(expr) - Explodes an array of structs into a table.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - array type expression that contains struct type expression as the element.
+
+      Examples:
+        > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
+         1	a
+         2	b
+  """)
 case class Inline(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
