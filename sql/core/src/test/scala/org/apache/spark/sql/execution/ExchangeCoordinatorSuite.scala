@@ -72,13 +72,6 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       coordinator.skewPartitionIdx(mapOutputStatistics,
         preStageNum,
         Some(estimatedPartitionStartIndices))
-    // scalastyle:off println println(...)
-   println("-------estimatedPartitionStartIndices---------")
-   estimatedPartitionStartIndices.foreach(println)
-   println(estimatedPartitionStartIndices)
-   println("----------------------")
-   skewPartitionIndices.foreach(m => {println(m._1);m._2.foreach(println)})
-
     assert(skewPartitionIndices.length === 2)
     assert(skewPartitionIndices(0)._1 === expectedSkewPartitionIndices(0)._1)
     assert(skewPartitionIndices(1)._1 === expectedSkewPartitionIndices(1)._1)
@@ -327,6 +320,31 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
           )),
           (18, Array(
             (-1, 0L, 0, 1),
+            (2, 5001L, 1, 40),
+            (1, 2000L, 2, 30),
+            (-1, 0L, 3, 1)
+          ))
+        )
+      checkSkewPartition(
+        coordinator,
+        Array(bytesByPartitionId1, bytesByPartitionId2),
+        Array[Int](40, 30),
+        expectedPartitionStartIndices)
+    }
+
+    {
+      val bytesByPartitionId1 = Array[Long](1, 5001, 2, 1, 1)
+      val bytesByPartitionId2 = Array[Long](2000, 5, 2000, 1, 1)
+      val expectedPartitionStartIndices =
+        Array[(Int, Array[(Int, Long, Int, Int)])](
+          (22, Array(
+            (2, 2000L, 0, 30),
+            (1, 5001L, 1, 40),
+            (2, 2000L, 2, 30),
+            (-1, 0L, 3, 1)
+          )),
+          (22, Array(
+            (1, 2000L, 0, 30),
             (2, 5001L, 1, 40),
             (1, 2000L, 2, 30),
             (-1, 0L, 3, 1)
@@ -801,6 +819,23 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     val test = { spark: SparkSession =>
       spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_SKEW_JOIN.key, 1000)
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 50)
+      import spark.implicits._
+      val df1 = spark.sparkContext.makeRDD(1 to 1000).map(i => {
+        ((if (i < 100) 9999 else 500 + i), "b" + i, "skew test")
+      }).toDF("sid", "sname", "scomment")
+      val df2 = spark.sparkContext.makeRDD(1 to 1000).map(i => {
+        ((if (i < 50) 9999 else if (i < 500) 555 else i), "a" + i, "test skew")
+      }).toDF("rid", "rname", "rcomment")
+      val join = df1.join(df2, $"sid"===$"rid")
+      assert(join.collect().length === 5252)
+    }
+    withSparkSession(test, 300, Some(3))
+  }
+
+  test(s"test skew join 4") {
+    val test = { spark: SparkSession =>
+      spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_SKEW_JOIN.key, 900)
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 5)
       import spark.implicits._
       val df1 = spark.sparkContext.makeRDD(1 to 1000).map(i => {
         ((if (i < 100) 9999 else 500 + i), "b" + i, "skew test")

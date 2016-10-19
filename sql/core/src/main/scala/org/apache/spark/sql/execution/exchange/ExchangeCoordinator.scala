@@ -260,7 +260,9 @@ class ExchangeCoordinator(
      return (0 until numExchanges).map(_ =>
        (0, Array[(Int, Long, Int, Int)]((-1, 0, 0, 0)))).toArray
    }
-   val flatSkewPartition = skewPartition.zipWithIndex.flatMap(m => m._1.map(x => (m._2, x)))
+   val flatSkewPartition = skewPartition.zipWithIndex.
+     flatMap(m => m._1.map(x => (m._2, x))).
+     sortBy(s => s._2._2)
    val retIndices = new Array[ArrayBuffer[(Int, Long, Int, Int)]](numExchanges)
    for (i <- 0 until numExchanges) retIndices(i) = new ArrayBuffer[(Int, Long, Int, Int)]
    val partStartIndices: Array[Int] = partitionStartIndices match {

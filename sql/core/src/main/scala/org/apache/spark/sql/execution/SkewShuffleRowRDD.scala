@@ -118,11 +118,21 @@ class SkewShuffleRowRDD(
           num
         }
         val step = partitionStartIndices(i).perPartitionNum / genPartNum
+        var residue = partitionStartIndices(i).perPartitionNum % genPartNum
+        var startMapIdx = 0
         for (x <- 0 until genPartNum) {
           partitionIndex += 1
           val part: Partition = if (partitionStartIndices(i).isSkew == 1) {
-            new SkewShuffledRowRDDPartition(partitionIndex, Some(x * step), Some((x + 1) * step),
-              partitionStartIndices(i).partitionIdx, partitionStartIndices(i).partitionIdx + 1)
+            val extraStep = if (residue > 0) 1 else 0
+            residue -= 1
+            val endMapIdx = startMapIdx + step + extraStep
+            val ret = new SkewShuffledRowRDDPartition(partitionIndex,
+              Some(startMapIdx),
+              Some(endMapIdx),
+              partitionStartIndices(i).partitionIdx,
+              partitionStartIndices(i).partitionIdx + 1)
+            startMapIdx = endMapIdx
+            ret
           } else {
             new SkewShuffledRowRDDPartition(partitionIndex, None, None,
               partitionStartIndices(i).partitionIdx, partitionStartIndices(i).partitionIdx + 1)
