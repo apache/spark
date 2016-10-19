@@ -17,7 +17,10 @@
 
 package org.apache.spark.network.sasl.aes;
 
+import java.nio.ByteBuffer;
+
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
 
@@ -28,12 +31,14 @@ public class AesConfigMessage implements Encodable {
   /** Serialization tag used to catch incorrect payloads. */
   private static final byte TAG_BYTE = (byte) 0xEB;
 
+  public int keySize;
   public byte[] inKey;
   public byte[] outKey;
   public byte[] inIv;
   public byte[] outIv;
 
-  public AesConfigMessage(byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
+  public AesConfigMessage(int keySize, byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
+    this.keySize = keySize;
     this.inKey = inKey;
     this.inIv = inIv;
     this.outKey = outKey;
@@ -47,7 +52,8 @@ public class AesConfigMessage implements Encodable {
    * @param outKey The decrypt key of another side
    * @param outIv The input vector of another side
    */
-  public void setParameters(byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
+  public void setParameters(int keySize, byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
+    this.keySize = keySize;
     this.inKey = inKey;
     this.inIv = inIv;
     this.outKey = outKey;
@@ -56,14 +62,16 @@ public class AesConfigMessage implements Encodable {
 
   @Override
   public int encodedLength() {
-    return 1 + ((inKey != null && inIv != null && outKey != null && outIv != null) ?
+    return 1 + 4 + ((inKey != null && inIv != null && outKey != null && outIv != null) ?
       Encoders.ByteArrays.encodedLength(inKey) + Encoders.ByteArrays.encodedLength(inKey) +
       Encoders.ByteArrays.encodedLength(inIv) + Encoders.ByteArrays.encodedLength(outIv) : 0);
   }
 
   @Override
   public void encode(ByteBuf buf) {
+    buf.clear();
     buf.writeByte(TAG_BYTE);
+    buf.writeInt(keySize);
     if (inKey != null && inIv != null && outKey != null && outIv != null) {
       Encoders.ByteArrays.encode(buf, inKey);
       Encoders.ByteArrays.encode(buf, inIv);
@@ -72,21 +80,31 @@ public class AesConfigMessage implements Encodable {
     }
   }
 
+  public void encodeMessage(ByteBuffer buf){
+    encode(Unpooled.wrappedBuffer(buf));
+  }
+
   public static AesConfigMessage decode(ByteBuf buf) {
     if (buf.readByte() != TAG_BYTE) {
       throw new IllegalStateException("Expected SaslMessage, received something else"
         + " (maybe your client does not have SASL enabled?)");
     }
 
+    int keySize = buf.readInt();
+
     if (buf.readableBytes() > 0) {
       byte[] inKey = Encoders.ByteArrays.decode(buf);
       byte[] inIv = Encoders.ByteArrays.decode(buf);
       byte[] outKey = Encoders.ByteArrays.decode(buf);
       byte[] outIv = Encoders.ByteArrays.decode(buf);
-      return new AesConfigMessage(inKey, inIv, outKey, outIv);
+      return new AesConfigMessage(keySize, inKey, inIv, outKey, outIv);
     } else {
-      return new AesConfigMessage(null, null, null, null);
+      return new AesConfigMessage(keySize, null, null, null, null);
     }
+  }
+
+  public static AesConfigMessage decodeMessage(ByteBuffer buf){
+    return decode(Unpooled.wrappedBuffer(buf));
   }
 
 }

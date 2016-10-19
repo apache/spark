@@ -41,6 +41,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
+import org.apache.spark.network.sasl.aes.AesCipher;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -54,8 +55,6 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.sasl.aes.AesCipher;
-import org.apache.spark.network.sasl.aes.AesEncryption;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
@@ -400,7 +399,7 @@ public class SparkSaslSuite {
       RpcHandler rpcHandler = mock(RpcHandler.class);
       when(rpcHandler.getStreamManager()).thenReturn(sm);
 
-      byte[] data = new byte[ 8 * 1024 * 1024];
+      byte[] data = new byte[ 256 * 1024 * 1024];
       new Random().nextBytes(data);
       Files.write(data, file);
 
@@ -468,7 +467,7 @@ public class SparkSaslSuite {
 
       TransportContext ctx = new TransportContext(conf, rpcHandler);
 
-      String encryptHandlerName = aesEnable ? AesEncryption.ENCRYPTION_HANDLER_NAME :
+      String encryptHandlerName = aesEnable ? AesCipher.ENCRYPTION_HANDLER_NAME :
         SaslEncryption.ENCRYPTION_HANDLER_NAME;
 
       this.checker = new EncryptionCheckerBootstrap(encryptHandlerName);

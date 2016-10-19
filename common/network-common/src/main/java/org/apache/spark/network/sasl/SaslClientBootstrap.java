@@ -25,12 +25,12 @@ import javax.security.sasl.SaslException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import org.apache.spark.network.sasl.aes.AesConfigMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
-import org.apache.spark.network.sasl.aes.AesEncryption;
 import org.apache.spark.network.sasl.aes.AesCipher;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
@@ -92,9 +92,32 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         }
 
         if (conf.saslEncryptionAesEnabled()) {
-          AesCipher cipher = saslClient.negotiateAesSessionKey(client, conf);
+          // Generate a request config message to send to server.
+          AesConfigMessage reqConfigMessage = AesCipher.requestConfigMessage(conf);
+          ByteBuffer buf = ByteBuffer.allocate(reqConfigMessage.encodedLength());
+          reqConfigMessage.encodeMessage(buf);
+
+          ByteBuffer response = client.sendRpcSync(buf, conf.saslRTTimeoutMs());
+
+          // Receive negotiated config message from server.
+          AesConfigMessage configMessage = AesConfigMessage.decodeMessage(response);
+
+          // Decrypt key in order of inKey then outKey.
+          byte[] inKey = saslClient.unwrap(configMessage.inKey, 0, configMessage.inKey.length);
+          byte[] outKey = saslClient.unwrap(configMessage.outKey, 0, configMessage.outKey.length);
+
+          // Server's outKey and outIv are client inKey and inIv
+          configMessage.setParameters(
+            configMessage.keySize,
+            outKey,
+            configMessage.outIv,
+            inKey,
+            configMessage.inIv
+          );
+
+          AesCipher cipher = new AesCipher(configMessage);
           logger.info("Enabling AES cipher for client channel {}", client);
-          AesEncryption.addToChannel(channel, cipher);
+          cipher.addToChannel(channel);
         } else {
           SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
         }

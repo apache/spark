@@ -24,12 +24,12 @@ import javax.security.sasl.Sasl;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import org.apache.spark.network.sasl.aes.AesConfigMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.sasl.aes.AesEncryption;
 import org.apache.spark.network.sasl.aes.AesCipher;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
@@ -136,9 +136,28 @@ class SaslRpcHandler extends RpcHandler {
           return;
         } else {
           try {
-            AesCipher cipher = saslServer.negotiateAesSessionKey(message, callback, conf);
+            AesConfigMessage configMessage = AesConfigMessage.decodeMessage(message);
+            configMessage = AesCipher.responseConfigMessage(configMessage);
+            AesCipher cipher = new AesCipher(configMessage);
+
+            // Encrypt the config message and send to client.
+            byte[] inKey = saslServer.wrap(configMessage.inKey, 0, configMessage.inKey.length);
+            byte[] outKey = saslServer.wrap(configMessage.outKey, 0, configMessage.outKey.length);
+
+            configMessage.setParameters(
+              configMessage.keySize,
+              inKey,
+              configMessage.inIv,
+              outKey,
+              configMessage.outIv
+            );
+
+            ByteBuffer buf = ByteBuffer.allocate(configMessage.encodedLength());
+            configMessage.encodeMessage(buf);
+            callback.onSuccess(buf);
+
             logger.info("Enabling AES cipher for Server channel {}", client);
-            AesEncryption.addToChannel(channel, cipher);
+            cipher.addToChannel(channel);
           } catch (IOException ioe) {
             throw new RuntimeException(ioe);
           }
