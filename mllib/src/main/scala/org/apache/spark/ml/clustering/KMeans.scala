@@ -354,21 +354,41 @@ object KMeans extends DefaultParamsReadable[KMeans] {
 @Since("2.0.0")
 @Experimental
 class KMeansSummary private[clustering] (
-    @Since("2.0.0") @transient val predictions: DataFrame,
-    @Since("2.0.0") val predictionCol: String,
-    @Since("2.0.0") val featuresCol: String,
-    @Since("2.0.0") val k: Int) extends Serializable {
+    predictions: DataFrame,
+    predictionCol: String,
+    featuresCol: String,
+    k: Int)
+  extends ClusteringSummary (
+    predictions,
+    predictionCol,
+    featuresCol,
+    k
+  )
+
+/**
+ * :: Experimental ::
+ * Summary of clustering.
+ *
+ * @param predictions  [[DataFrame]] produced by model.transform()
+ * @param predictionCol  Name for column of predicted clusters in `predictions`
+ * @param featuresCol  Name for column of features in `predictions`
+ * @param k  Number of clusters
+ */
+@Experimental
+class ClusteringSummary private[clustering] (
+    @transient val predictions: DataFrame,
+    val predictionCol: String,
+    val featuresCol: String,
+    val k: Int) extends Serializable {
 
   /**
    * Cluster centers of the transformed data.
    */
-  @Since("2.0.0")
   @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
 
   /**
    * Size of (number of data points in) each cluster.
    */
-  @Since("2.0.0")
   lazy val clusterSizes: Array[Long] = {
     val sizes = Array.fill[Long](k)(0)
     cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {

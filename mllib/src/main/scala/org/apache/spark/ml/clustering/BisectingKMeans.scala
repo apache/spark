@@ -297,27 +297,13 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
 @Since("2.1.0")
 @Experimental
 class BisectingKMeansSummary private[clustering] (
-    @Since("2.1.0") @transient val predictions: DataFrame,
-    @Since("2.1.0") val predictionCol: String,
-    @Since("2.1.0") val featuresCol: String,
-    @Since("2.1.0") val k: Int) extends Serializable {
-
-  /**
-   * Cluster centers of the transformed data.
-   */
-  @Since("2.1.0")
-  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
-
-  /**
-   * Size of (number of data points in) each cluster.
-   */
-  @Since("2.1.0")
-  lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
-      case Row(cluster: Int, count: Long) => sizes(cluster) = count
-    }
-    sizes
-  }
-
-}
+    predictions: DataFrame,
+    predictionCol: String,
+    featuresCol: String,
+    k: Int)
+  extends ClusteringSummary (
+    predictions,
+    predictionCol,
+    featuresCol,
+    k
+  )

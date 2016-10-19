@@ -365,33 +365,20 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
 @Since("2.0.0")
 @Experimental
 class GaussianMixtureSummary private[clustering] (
-    @Since("2.0.0") @transient val predictions: DataFrame,
-    @Since("2.0.0") val predictionCol: String,
-    @Since("2.0.0") val probabilityCol: String,
-    @Since("2.0.0") val featuresCol: String,
-    @Since("2.0.0") val k: Int) extends Serializable {
-
-  /**
-   * Cluster centers of the transformed data.
-   */
-  @Since("2.0.0")
-  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
+    predictions: DataFrame,
+    predictionCol: String,
+    val probabilityCol: String,
+    featuresCol: String,
+    k: Int)
+  extends ClusteringSummary (
+    predictions,
+    predictionCol,
+    featuresCol,
+    k) {
 
   /**
    * Probability of each cluster.
    */
   @Since("2.0.0")
   @transient lazy val probability: DataFrame = predictions.select(probabilityCol)
-
-  /**
-   * Size of (number of data points in) each cluster.
-   */
-  @Since("2.0.0")
-  lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
-      case Row(cluster: Int, count: Long) => sizes(cluster) = count
-    }
-    sizes
-  }
 }
