@@ -18,9 +18,9 @@
 package org.apache.spark
 
 /**
-  * A client that SparkSubmit uses to launch spark Application.
-  * This is currently supported only in YARN mode.
-  */
+ * A client that SparkSubmit uses to launch spark Application.
+ * This is currently supported only in YARN mode.
+ */
 trait SparkApp {
 
   def sparkMain(args: Array[String], conf: scala.collection.mutable.Map[String, String]): Unit
