@@ -235,7 +235,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           if (lazyPruningEnabled) {
             catalog
           } else {
-            catalog.cachedAllPartitions
+            catalog.allPartitions
           }
         }
         val partitionSchemaColumnNames = partitionSchema.map(_.name.toLowerCase).toSet
