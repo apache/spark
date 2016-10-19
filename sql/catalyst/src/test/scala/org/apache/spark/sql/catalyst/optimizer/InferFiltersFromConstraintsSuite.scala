@@ -170,15 +170,20 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .analyze
     val correctAnswer = t1.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
       && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
+      && Coalesce(Seq('a, 'a)) <=> 'b && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))
       && 'a === 'b && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === Coalesce(Seq('a, 'b))
+      && Coalesce(Seq('a, 'b)) <=> Coalesce(Seq('b, 'b)) && Coalesce(Seq('a, 'b)) === 'b
       && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b)))
-      && 'b === Coalesce(Seq('b, 'b)) && 'b <=> Coalesce(Seq('b, 'b)) && 'b <=> 'b)
+      && 'b === Coalesce(Seq('b, 'b)) && 'b <=> Coalesce(Seq('b, 'b))
+      && Coalesce(Seq('b, 'b)) <=> Coalesce(Seq('b, 'b)) && 'b <=> 'b)
       .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
       .join(t2.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-      && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a), Inner,
+      && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
+      && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))), Inner,
         Some("t.a".attr === "t2.a".attr
           && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr))
+          && "t.int_col".attr === "t2.a".attr
+          && Coalesce(Seq("t.d".attr, "t.d".attr)) <=> "t.int_col".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
