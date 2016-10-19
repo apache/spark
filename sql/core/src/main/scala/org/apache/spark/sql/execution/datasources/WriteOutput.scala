@@ -22,7 +22,7 @@ import java.util.{Date, UUID}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
@@ -46,6 +46,30 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
  */
 object WriteOutput extends Logging {
 
+  /** A shared job description for all the write tasks. */
+  private class WriteJobDescription(
+      val serializableHadoopConf: SerializableConfiguration,
+      val outputWriterFactory: OutputWriterFactory,
+      val allColumns: Seq[Attribute],
+      val partitionColumns: Seq[Attribute],
+      val nonPartitionColumns: Seq[Attribute],
+      val bucketSpec: Option[BucketSpec],
+      val isAppend: Boolean,
+      val path: String,
+      val outputFormatClass: Class[_ <: OutputFormat[_, _]])
+    extends Serializable
+
+  /**
+   * Basic work flow of this command is:
+   * 1. Driver side setup, including output committer initialization and data source specific
+   *    preparation work for the write job to be issued.
+   * 2. Issues a write job consists of one or more executor side tasks, each of which writes all
+   *    rows within an RDD partition.
+   * 3. If no exception is thrown in a task, commits that task, otherwise aborts that task;  If any
+   *    exception is thrown during task commitment, also aborts that task.
+   * 4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
+   *    thrown during job commitment, also aborts the job.
+   */
   def write(
       sparkSession: SparkSession,
       plan: LogicalPlan,
@@ -61,6 +85,7 @@ object WriteOutput extends Logging {
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
     job.setOutputValueClass(classOf[InternalRow])
+    FileOutputFormat.setOutputPath(job, outputPath)
 
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = plan.output.filterNot(partitionSet.contains)
@@ -70,28 +95,31 @@ object WriteOutput extends Logging {
     val outputWriterFactory =
       fileFormat.prepareWrite(sparkSession, job, options, dataColumns.toStructType)
 
-    val context = new WriteJobDescription(
+    val description = new WriteJobDescription(
+      serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
       allColumns = plan.output,
       partitionColumns = partitionColumns,
       nonPartitionColumns = dataColumns,
+      bucketSpec = bucketSpec,
       isAppend = isAppend,
-      path = outputPath,
-      outputFormatClass = job.getOutputFormatClass,
-      bucketSpec = bucketSpec)
-
-    val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
+      path = outputPath.toString,
+      outputFormatClass = job.getOutputFormatClass)
 
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
-
       // This call shouldn't be put into the `try` block below because it only initializes and
       // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-      val committer = setupDriverCommitter(hadoopConf, job, outputPath, isAppend)
+      val committer = setupDriverCommitter(job, outputPath.toString, isAppend)
 
       try {
         sparkSession.sparkContext.runJob(queryExecution.toRdd,
           (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
-            executeTask(context, serializableHadoopConf.value, taskContext, iter)
+            executeTask(
+              description = description,
+              sparkStageId = taskContext.stageId(),
+              sparkPartitionId = taskContext.partitionId(),
+              sparkAttemptNumber = taskContext.attemptNumber(),
+              iterator = iter)
           })
 
         committer.commitJob(job)
@@ -107,35 +135,33 @@ object WriteOutput extends Logging {
     }
   }
 
-  class WriteJobDescription(
-      val outputWriterFactory: OutputWriterFactory,
-      val allColumns: Seq[Attribute],
-      val partitionColumns: Seq[Attribute],
-      val nonPartitionColumns: Seq[Attribute],
-      val isAppend: Boolean,
-      val path: Path,
-      val outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      val bucketSpec: Option[BucketSpec])
-    extends Serializable
-
+  /**
+   * Writes data out in a single Spark task.
+   */
   def executeTask(
       description: WriteJobDescription,
-      hadoopConf: Configuration,
-      taskContext: TaskContext,
+      sparkStageId: Int,
+      sparkPartitionId: Int,
+      sparkAttemptNumber: Int,
       iterator: Iterator[InternalRow]): Unit = {
-    // Setup IDs
-    val jobId = SparkHadoopWriter.createJobID(new Date, taskContext.stageId())
-    val taskId = new TaskID(jobId, TaskType.MAP, taskContext.partitionId())
-    val taskAttemptId = new TaskAttemptID(taskId, taskContext.attemptNumber())
 
-    // Set up the configuration object
-    hadoopConf.set("mapred.job.id", jobId.toString)
-    hadoopConf.set("mapred.tip.id", taskAttemptId.getTaskID.toString)
-    hadoopConf.set("mapred.task.id", taskAttemptId.toString)
-    hadoopConf.setBoolean("mapred.task.is.map", true)
-    hadoopConf.setInt("mapred.task.partition", 0)
+    // Set up the attempt context required to use in the output committers.
+    val taskAttemptContext: TaskAttemptContext = {
+      val jobId = SparkHadoopWriter.createJobID(new Date, sparkStageId)
+      val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
+      val taskAttemptId = new TaskAttemptID(taskId, sparkAttemptNumber)
 
-    val taskAttemptContext = new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
+      // Set up the configuration object
+      val hadoopConf = description.serializableHadoopConf.value
+      hadoopConf.set("mapred.job.id", jobId.toString)
+      hadoopConf.set("mapred.tip.id", taskAttemptId.getTaskID.toString)
+      hadoopConf.set("mapred.task.id", taskAttemptId.toString)
+      hadoopConf.setBoolean("mapred.task.is.map", true)
+      hadoopConf.setInt("mapred.task.partition", 0)
+
+      new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
+    }
+
     val committer = newOutputCommitter(
       description.outputFormatClass, taskAttemptContext, description.path, description.isAppend)
     committer.setupTask(taskAttemptContext)
@@ -155,6 +181,7 @@ object WriteOutput extends Logging {
     }
   }
 
+  /** Writes data to a single directory (used for non-dynamic-partition writes). */
   def executeSingleDirectoryWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
@@ -164,7 +191,12 @@ object WriteOutput extends Logging {
     val jobId = taskAttemptContext.getJobID
     val taskId = taskAttemptContext.getTaskAttemptID.getTaskID
     val schema = description.nonPartitionColumns.toStructType
-    var writer = createOutputWriter(description, taskAttemptContext, committer)
+    var writer = createOutputWriter(
+      description.outputWriterFactory,
+      getWorkPath(committer, description.path),
+      description.nonPartitionColumns,
+      taskAttemptContext,
+      committer)
     writer.initConverter(schema)
 
     // If anything below fails, we should abort the task.
@@ -203,6 +235,10 @@ object WriteOutput extends Logging {
     }
   }
 
+  /**
+   * Writes data to using dynamic partition writes, meaning this single function can write to
+   * multiple directories (partitions) or files (bucketing).
+   */
   def executeDynamicPartitionWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
@@ -249,8 +285,8 @@ object WriteOutput extends Logging {
      * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
      */
     def newOutputWriter(
-      key: InternalRow,
-      getPartitionString: UnsafeProjection): OutputWriter = {
+        key: InternalRow,
+        getPartitionString: UnsafeProjection): OutputWriter = {
       val basePath = getWorkPath(committer, description.path.toString)
       val path =
         if (description.partitionColumns.nonEmpty) {
@@ -260,7 +296,13 @@ object WriteOutput extends Logging {
           basePath
         }
       val bucketId = getBucketIdFromKey(key)
-      val newWriter = createOutputWriter(description, taskAttemptContext, committer, bucketId)
+      val newWriter = createOutputWriter(
+        description.outputWriterFactory,
+        path.toString,
+        description.nonPartitionColumns,
+        taskAttemptContext,
+        committer,
+        bucketId)
       newWriter.initConverter(description.nonPartitionColumns.toStructType)
       newWriter
     }
@@ -355,21 +397,23 @@ object WriteOutput extends Logging {
   def getWorkPath(committer: OutputCommitter, defaultPath: String): String = {
     committer match {
       // FileOutputCommitter writes to a temporary location returned by `getWorkPath`.
-      case f: MapReduceFileOutputCommitter => f.getWorkPath.toString
+      case f: FileOutputCommitter => f.getWorkPath.toString
       case _ => defaultPath
     }
   }
 
   def createOutputWriter(
-      description: WriteJobDescription,
+      outputWriterFactory: OutputWriterFactory,
+      path: String,
+      nonPartitionColumns: Seq[Attribute],
       taskAttemptContext: TaskAttemptContext,
       committer: OutputCommitter,
       bucketId: Option[Int] = None): OutputWriter = {
     try {
-      description.outputWriterFactory.newInstance(
-        getWorkPath(committer, description.path.toString),
+      outputWriterFactory.newInstance(
+        getWorkPath(committer, path.toString),
         bucketId,
-        description.nonPartitionColumns.toStructType,
+        nonPartitionColumns.toStructType,
         taskAttemptContext)
     } catch {
       case e: org.apache.hadoop.fs.FileAlreadyExistsException =>
@@ -387,19 +431,18 @@ object WriteOutput extends Logging {
     }
   }
 
-  def setupDriverCommitter(hadoopConf: Configuration, job: Job, path: Path, isAppend: Boolean)
-    : OutputCommitter = {
+  def setupDriverCommitter(job: Job, path: String, isAppend: Boolean): OutputCommitter = {
     // Setup IDs
     val jobId = SparkHadoopWriter.createJobID(new Date, 0)
     val taskId = new TaskID(jobId, TaskType.MAP, 0)
     val taskAttemptId = new TaskAttemptID(taskId, 0)
 
     // Set up the configuration object
-    hadoopConf.set("mapred.job.id", jobId.toString)
-    hadoopConf.set("mapred.tip.id", taskAttemptId.getTaskID.toString)
-    hadoopConf.set("mapred.task.id", taskAttemptId.toString)
-    hadoopConf.setBoolean("mapred.task.is.map", true)
-    hadoopConf.setInt("mapred.task.partition", 0)
+    job.getConfiguration.set("mapred.job.id", jobId.toString)
+    job.getConfiguration.set("mapred.tip.id", taskAttemptId.getTaskID.toString)
+    job.getConfiguration.set("mapred.task.id", taskAttemptId.toString)
+    job.getConfiguration.setBoolean("mapred.task.is.map", true)
+    job.getConfiguration.setInt("mapred.task.partition", 0)
 
     // This UUID is sent to executor side together with the serialized `Configuration` object within
     // the `Job` instance.  `OutputWriters` on the executor side should use this UUID to generate
@@ -412,7 +455,7 @@ object WriteOutput extends Logging {
     // output file name as the original task.
     job.getConfiguration.set(WriterContainer.DATASOURCE_WRITEJOBUUID, UUID.randomUUID().toString)
 
-    val taskAttemptContext = new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
+    val taskAttemptContext = new TaskAttemptContextImpl(job.getConfiguration, taskAttemptId)
     val outputCommitter = newOutputCommitter(
       job.getOutputFormatClass, taskAttemptContext, path, isAppend)
     outputCommitter.setupJob(job)
@@ -422,7 +465,7 @@ object WriteOutput extends Logging {
   private def newOutputCommitter(
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       context: TaskAttemptContext,
-      outputPath: Path,
+      path: String,
       isAppend: Boolean): OutputCommitter = {
     val defaultOutputCommitter = outputFormatClass.newInstance().getOutputCommitter(context)
 
@@ -449,11 +492,11 @@ object WriteOutput extends Logging {
         // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
         // If a data source needs to override the output committer, it needs to set the
         // output committer in prepareForWrite method.
-        if (classOf[MapReduceFileOutputCommitter].isAssignableFrom(clazz)) {
+        if (classOf[FileOutputCommitter].isAssignableFrom(clazz)) {
           // The specified output committer is a FileOutputCommitter.
           // So, we will use the FileOutputCommitter-specified constructor.
           val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-          ctor.newInstance(outputPath, context)
+          ctor.newInstance(new Path(path), context)
         } else {
           // The specified output committer is just an OutputCommitter.
           // So, we will use the no-argument constructor.

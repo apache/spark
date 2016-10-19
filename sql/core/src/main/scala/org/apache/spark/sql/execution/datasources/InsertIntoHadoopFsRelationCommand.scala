@@ -34,20 +34,6 @@ import org.apache.spark.sql.execution.command.RunnableCommand
  * implementation of [[HadoopFsRelation]] should use this UUID together with task id to generate
  * unique file path for each task output file.  This UUID is passed to executor side via a
  * property named `spark.sql.sources.writeJobUUID`.
- *
- * Different writer containers, [[DefaultWriterContainer]] and [[DynamicPartitionWriterContainer]]
- * are used to write to normal tables and tables with dynamic partitions.
- *
- * Basic work flow of this command is:
- *
- *   1. Driver side setup, including output committer initialization and data source specific
- *      preparation work for the write job to be issued.
- *   2. Issues a write job consists of one or more executor side tasks, each of which writes all
- *      rows within an RDD partition.
- *   3. If no exception is thrown in a task, commits that task, otherwise aborts that task;  If any
- *      exception is thrown during task commitment, also aborts that task.
- *   4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
- *      thrown during job commitment, also aborts the job.
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
@@ -101,7 +87,7 @@ case class InsertIntoHadoopFsRelationCommand(
         sparkSession,
         query,
         fileFormat,
-        outputPath,
+        qualifiedOutputPath,
         hadoopConf,
         partitionColumns,
         bucketSpec,
