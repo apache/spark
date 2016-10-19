@@ -113,7 +113,7 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
 
   # Backend will send -1 as keep alive value to prevent various connection timeouts
   # on very long running jobs. See spark.r.heartBeatInterval
-  while (returnStatus == -1) {
+  while (returnStatus == 1) {
     returnStatus <- readInt(conn)
     handleErrors(returnStatus, conn)
   }
@@ -127,8 +127,8 @@ handleErrors <- function(returnStatus, conn) {
     stop("No status is returned. Java SparkR backend might have failed.")
   }
 
-  # 0 is success and -1 is reserved for heartbeats. Positive values indicate errors.
-  if (returnStatus > 0) {
+  # 0 is success and +1 is reserved for heartbeats. Other negative values indicate errors.
+  if (returnStatus < 0) {
     stop(readString(conn))
   }
 }

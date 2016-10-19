@@ -94,7 +94,7 @@ private[r] class RBackendHandler(server: RBackend)
         override def run(): Unit = {
           val pingBaos = new ByteArrayOutputStream()
           val pingDaos = new DataOutputStream(pingBaos)
-          writeInt(pingDaos, -1)
+          writeInt(pingDaos, +1)
           ctx.write(pingBaos.toByteArray)
         }
       }

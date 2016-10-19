@@ -54,7 +54,6 @@ private[spark] class RBackend {
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(classOf[NioServerSocketChannel])
-      .childOption[java.lang.Integer](ChannelOption.SO_TIMEOUT, backendConnectionTimeout * 1000)
 
     bootstrap.childHandler(new ChannelInitializer[SocketChannel]() {
       def initChannel(ch: SocketChannel): Unit = {
