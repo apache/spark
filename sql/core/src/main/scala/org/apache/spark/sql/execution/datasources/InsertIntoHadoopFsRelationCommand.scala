@@ -20,18 +20,12 @@ package org.apache.spark.sql.execution.datasources
 import java.io.IOException
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
-import org.apache.spark._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
@@ -103,52 +97,17 @@ case class InsertIntoHadoopFsRelationCommand(
     val isAppend = pathExists && (mode == SaveMode.Append)
 
     if (doInsertion) {
-      val job = Job.getInstance(hadoopConf)
-      job.setOutputKeyClass(classOf[Void])
-      job.setOutputValueClass(classOf[InternalRow])
-      FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
-
-      val partitionSet = AttributeSet(partitionColumns)
-      val dataColumns = query.output.filterNot(partitionSet.contains)
-
-      val queryExecution = Dataset.ofRows(sparkSession, query).queryExecution
-      SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
-        val relation =
-          WriteRelation(
-            sparkSession,
-            dataColumns.toStructType,
-            qualifiedOutputPath.toString,
-            fileFormat.prepareWrite(sparkSession, _, options, dataColumns.toStructType),
-            bucketSpec)
-
-        val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {
-          new DefaultWriterContainer(relation, job, isAppend)
-        } else {
-          new DynamicPartitionWriterContainer(
-            relation,
-            job,
-            partitionColumns = partitionColumns,
-            dataColumns = dataColumns,
-            inputSchema = query.output,
-            PartitioningUtils.DEFAULT_PARTITION_NAME,
-            sparkSession.sessionState.conf.partitionMaxFiles,
-            isAppend)
-        }
-
-        // This call shouldn't be put into the `try` block below because it only initializes and
-        // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-        writerContainer.driverSideSetup()
-
-        try {
-          sparkSession.sparkContext.runJob(queryExecution.toRdd, writerContainer.writeRows _)
-          writerContainer.commitJob()
-          refreshFunction()
-        } catch { case cause: Throwable =>
-          logError("Aborting job.", cause)
-          writerContainer.abortJob()
-          throw new SparkException("Job aborted.", cause)
-        }
-      }
+      WriteOutput.write(
+        sparkSession,
+        query,
+        fileFormat,
+        outputPath,
+        hadoopConf,
+        partitionColumns,
+        bucketSpec,
+        refreshFunction,
+        options,
+        isAppend)
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }
