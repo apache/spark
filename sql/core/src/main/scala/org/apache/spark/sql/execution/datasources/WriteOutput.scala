@@ -42,8 +42,7 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 
 /**
- * A helper object for writing data out to an existing partition. This is a work-in-progress
- * refactoring. The goal is to eventually remove the class hierarchy in WriterContainer.
+ * A helper object for writing data out to an existing partition.
  */
 object WriteOutput extends Logging {
 
@@ -432,7 +431,6 @@ object WriteOutput extends Logging {
       // associated with the file output format since it is not safe to use a custom
       // committer for appending. For example, in S3, direct parquet output committer may
       // leave partial data in the destination dir when the appending job fails.
-      //
       // See SPARK-8578 for more details
       logInfo(
         s"Using default output committer ${defaultOutputCommitter.getClass.getCanonicalName} " +
@@ -440,10 +438,10 @@ object WriteOutput extends Logging {
       defaultOutputCommitter
     } else {
       val configuration = context.getConfiguration
-      val committerClass = configuration.getClass(
-        SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
+      val clazz =
+        configuration.getClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
 
-      Option(committerClass).map { clazz =>
+      if (clazz != null) {
         logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
 
         // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
@@ -462,7 +460,7 @@ object WriteOutput extends Logging {
           val ctor = clazz.getDeclaredConstructor()
           ctor.newInstance()
         }
-      }.getOrElse {
+      } else {
         // If output committer class is not set, we will use the one associated with the
         // file output format.
         logInfo(
