@@ -241,12 +241,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         }
       }
 
-      // converts the table metadata to Spark SQL specific format, i.e. set schema, partition column
-      // names and bucket specification to empty.
+      // converts the table metadata to Spark SQL specific format, i.e. set data schema, names and
+      // bucket specification to empty. Note that partition columns are retained, so that we can
+      // call partition-related Hive API later.
       def newSparkSQLSpecificMetastoreTable(): CatalogTable = {
         tableDefinition.copy(
-          schema = new StructType,
-          partitionColumnNames = Nil,
+          schema = tableDefinition.partitionSchema,
           bucketSpec = None,
           properties = tableDefinition.properties ++ tableProperties)
       }
@@ -649,7 +649,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val catalogTable = client.getTable(db, table)
     val partitionColumnNames = catalogTable.partitionColumnNames.toSet
     val nonPartitionPruningPredicates = predicates.filterNot {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+      // Hive metastore is not case-preserving, so the `partitionColumnNames` are always lower
+      // cased, here we also lower case the attribute names in partition spec.
+      _.references.map(_.name.toLowerCase).toSet.subsetOf(partitionColumnNames)
     }
 
     if (nonPartitionPruningPredicates.nonEmpty) {
@@ -665,7 +667,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val boundPredicate =
         InterpretedPredicate.create(predicates.reduce(And).transform {
           case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
+            val index = partitionSchema.indexWhere(_.name == att.name.toLowerCase)
             BoundReference(index, partitionSchema(index).dataType, nullable = true)
         })
       clientPrunedPartitions.filter { case p: CatalogTablePartition =>

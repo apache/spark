@@ -89,9 +89,10 @@ case class CatalogTablePartition(
     parameters: Map[String, String] = Map.empty) {
 
   override def toString: String = {
+    val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
     val output =
       Seq(
-        s"Partition Values: [${spec.values.mkString(", ")}]",
+        s"Partition Values: [$specString]",
         s"$storage",
         s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
 
@@ -102,8 +103,9 @@ case class CatalogTablePartition(
    * Given the partition schema, returns a row with that schema holding the partition values.
    */
   def toRow(partitionSchema: StructType): InternalRow = {
-    InternalRow.fromSeq(partitionSchema.map { case StructField(name, dataType, _, _) =>
-      Cast(Literal(spec(name)), dataType).eval()
+    InternalRow.fromSeq(partitionSchema.map { field =>
+      // The partition columns in partition specification are always lower cased.
+      Cast(Literal(spec(field.name.toLowerCase)), field.dataType).eval()
     })
   }
 }

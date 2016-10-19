@@ -762,7 +762,8 @@ class SessionCatalog(
   private def requireExactMatchedPartitionSpec(
       specs: Seq[TablePartitionSpec],
       table: CatalogTable): Unit = {
-    val defined = table.partitionColumnNames.sorted
+    // The partition columns in partition specification are always lower cased.
+    val defined = table.partitionColumnNames.map(_.toLowerCase).sorted
     specs.foreach { s =>
       if (s.keys.toSeq.sorted != defined) {
         throw new AnalysisException(

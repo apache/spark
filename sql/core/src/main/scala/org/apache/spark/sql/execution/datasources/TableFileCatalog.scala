@@ -35,8 +35,8 @@ import org.apache.spark.sql.types.StructType
  */
 class TableFileCatalog(
     sparkSession: SparkSession,
-    db: String,
-    table: String,
+    val db: String,
+    val table: String,
     partitionSchema: Option[StructType],
     override val sizeInBytes: Long) extends FileCatalog {
 
@@ -46,7 +46,11 @@ class TableFileCatalog(
 
   private val catalogTable = externalCatalog.getTable(db, table)
 
-  private val baseLocation = catalogTable.storage.locationUri
+  private val baseLocation = if (catalogTable.provider == Some("hive")) {
+    catalogTable.storage.locationUri
+  } else {
+    new CaseInsensitiveMap(catalogTable.storage.properties).get("path")
+  }
 
   // Populated on-demand by calls to cachedAllPartitions
   private var cachedAllPartitions: ListingFileCatalog = null
@@ -76,11 +80,8 @@ class TableFileCatalog(
   }
 
   private def filterPartitions0(filters: Seq[Expression]): ListingFileCatalog = {
-    val parameters = baseLocation
-      .map(loc => Map(PartitioningAwareFileCatalog.BASE_PATH_PARAM -> loc))
-      .getOrElse(Map.empty)
     partitionSchema match {
-      case Some(schema) =>
+      case Some(schema) if schema.nonEmpty =>
         val selectedPartitions = externalCatalog.listPartitionsByFilter(db, table, filters)
         val partitions = selectedPartitions.map { p =>
           PartitionPath(p.toRow(schema), p.storage.locationUri.get)
@@ -88,8 +89,8 @@ class TableFileCatalog(
         val partitionSpec = PartitionSpec(schema, partitions)
         new PrunedTableFileCatalog(
           sparkSession, new Path(baseLocation.get), partitionSpec)
-      case None =>
-        new ListingFileCatalog(sparkSession, rootPaths, parameters, None)
+      case _ =>
+        new ListingFileCatalog(sparkSession, rootPaths, catalogTable.storage.properties, None)
     }
   }
 
@@ -102,6 +103,13 @@ class TableFileCatalog(
   }
 
   override def inputFiles: Array[String] = allPartitions.inputFiles
+
+  override def equals(o: Any): Boolean = o match {
+    case other: TableFileCatalog => this.db == other.db && this.table == other.table
+    case _ => false
+  }
+
+  override def hashCode(): Int = 31 * db.hashCode + table.hashCode
 }
 
 /**

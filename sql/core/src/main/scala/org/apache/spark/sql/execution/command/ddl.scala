@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
@@ -346,10 +346,6 @@ case class AlterTableAddPartitionCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
-    if (DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        "ALTER TABLE ADD PARTITION is not allowed for tables defined using the datasource API")
-    }
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(spec, table.storage.copy(locationUri = location))
@@ -377,10 +373,6 @@ case class AlterTableRenamePartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    if (DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        "ALTER TABLE RENAME PARTITION is not allowed for tables defined using the datasource API")
-    }
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     catalog.renamePartitions(
       tableName, Seq(oldPartition), Seq(newPartition))
@@ -414,10 +406,6 @@ case class AlterTableDropPartitionCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
-    if (DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
-    }
     catalog.dropPartitions(table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
@@ -465,25 +453,31 @@ case class AlterTableRecoverPartitionsCommand(
     }
   }
 
+  private def getPath(table: CatalogTable): Option[String] = {
+    if (table.provider == Some("hive")) {
+      table.storage.locationUri
+    } else {
+      new CaseInsensitiveMap(table.storage.properties).get("path")
+    }
+  }
+
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
-    if (DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        s"Operation not allowed: $cmd on datasource tables: $tableIdentWithDB")
-    }
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
     }
-    if (table.storage.locationUri.isEmpty) {
+
+    val tablePath = getPath(table)
+    if (tablePath.isEmpty) {
       throw new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
         s"location provided: $tableIdentWithDB")
     }
 
-    val root = new Path(table.storage.locationUri.get)
+    val root = new Path(tablePath.get)
     logInfo(s"Recover all the partitions in $root")
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
 

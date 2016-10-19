@@ -98,6 +98,16 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+
+    dataSource match {
+      case fs: HadoopFsRelation =>
+        if (table.tableType == CatalogTableType.EXTERNAL && partitionColumnNames.nonEmpty) {
+          sparkSession.sessionState.executePlan(
+            AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+        }
+      case _ =>
+    }
+
     Seq.empty[Row]
   }
 }
@@ -230,6 +240,13 @@ case class CreateDataSourceTableAsSelectCommand(
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
       sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    }
+
+    result match {
+      case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty =>
+        sparkSession.sessionState.executePlan(
+          AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+      case _ =>
     }
 
     // Refresh the cache of the table in the catalog.

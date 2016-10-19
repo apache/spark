@@ -78,9 +78,19 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             className = table.provider.get,
             options = table.storage.properties)
 
-        LogicalRelation(
-          dataSource.resolveRelation(),
-          catalogTable = Some(table))
+        val relation = dataSource.resolveRelation() match {
+          case r: HadoopFsRelation =>
+            val fileCatalog = new TableFileCatalog(
+              r.sparkSession,
+              in.database,
+              in.name,
+              Some(table.partitionSchema),
+              r.sizeInBytes)
+            r.copy(location = fileCatalog)(r.sparkSession)
+          case other => other
+        }
+
+        LogicalRelation(relation, catalogTable = Some(table))
       }
     }
 
