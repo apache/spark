@@ -80,9 +80,13 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
             val df = spark.sql("select * from test")
             assert(sql("select * from test").count() == 5)
 
+            def deleteRandomFile(): Unit = {
+              val p = new Path(spark.table("test").inputFiles.head)
+              assert(p.getFileSystem(hiveContext.sessionState.newHadoopConf()).delete(p, true))
+            }
+
             // Delete a file, then assert that we tried to read it. This means the table was cached.
-            val p = new Path(spark.table("test").inputFiles.head)
-            assert(p.getFileSystem(hiveContext.sessionState.newHadoopConf()).delete(p, true))
+            deleteRandomFile()
             val e = intercept[SparkException] {
               sql("select * from test").count()
             }
@@ -91,6 +95,19 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
             // Test refreshing the cache.
             spark.catalog.refreshTable("test")
             assert(sql("select * from test").count() == 4)
+            assert(spark.table("test").inputFiles.length == 4)
+
+            // Test refresh by path separately since it goes through different code paths than
+            // refreshTable does.
+            deleteRandomFile()
+            spark.catalog.cacheTable("test")
+            spark.catalog.refreshByPath("/some-invalid-path")  // no-op
+            val e2 = intercept[SparkException] {
+              sql("select * from test").count()
+            }
+            assert(e2.getMessage.contains("FileNotFoundException"))
+            spark.catalog.refreshByPath(dir.getAbsolutePath)
+            assert(sql("select * from test").count() == 3)
           }
         }
       }
