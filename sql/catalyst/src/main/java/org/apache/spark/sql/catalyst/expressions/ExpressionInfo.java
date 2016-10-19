@@ -25,6 +25,7 @@ public class ExpressionInfo {
     private String usage;
     private String name;
     private String extended;
+    private String db;
 
     public String getClassName() {
         return className;
@@ -42,14 +43,23 @@ public class ExpressionInfo {
         return extended;
     }
 
-    public ExpressionInfo(String className, String name, String usage, String extended) {
+    public String getDb() {
+        return db;
+    }
+
+    public ExpressionInfo(String className, String name, String usage, String extended, String db) {
         this.className = className;
         this.name = name;
         this.usage = usage;
         this.extended = extended;
+        this.db = db;
     }
 
     public ExpressionInfo(String className, String name) {
-        this(className, name, null, null);
+        this(className, name, null, null, null);
+    }
+
+    public ExpressionInfo(String className, String db, String name) {
+        this(className, name, null, null, db);
     }
 }

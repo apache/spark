@@ -495,7 +495,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended())
+      new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended(), null)
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }

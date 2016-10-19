@@ -915,7 +915,10 @@ class SessionCatalog(
         requireDbExists(db)
         if (externalCatalog.functionExists(db, name.funcName)) {
           val metadata = externalCatalog.getFunction(db, name.funcName)
-          new ExpressionInfo(metadata.className, qualifiedName.unquotedString)
+          new ExpressionInfo(
+            metadata.className,
+            qualifiedName.database.orNull,
+            qualifiedName.identifier)
         } else {
           failFunctionLookup(name.funcName)
         }
@@ -972,7 +975,10 @@ class SessionCatalog(
     // catalog. So, it is possible that qualifiedName is not exactly the same as
     // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
     // At here, we preserve the input from the user.
-    val info = new ExpressionInfo(catalogFunction.className, qualifiedName.unquotedString)
+    val info = new ExpressionInfo(
+      catalogFunction.className,
+      qualifiedName.database.orNull,
+      qualifiedName.funcName)
     val builder = makeFunctionBuilder(qualifiedName.unquotedString, catalogFunction.className)
     createTempFunction(qualifiedName.unquotedString, info, builder, ignoreIfExists = false)
     // Now, we need to create the Expression.
