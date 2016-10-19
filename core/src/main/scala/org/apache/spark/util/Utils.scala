@@ -42,7 +42,6 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
-import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -1494,10 +1493,10 @@ private[spark] object Utils extends Logging {
       val gzInputStream = new GZIPInputStream(new FileInputStream(file))
       val bufSize = 1024
       val buf = new Array[Byte](bufSize)
-      var numBytes = IOUtils.read(gzInputStream, buf)
+      var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
       while (numBytes > 0) {
         fileSize += numBytes
-        numBytes = IOUtils.read(gzInputStream, buf)
+        numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
       }
       fileSize
     } catch {
