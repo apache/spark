@@ -43,11 +43,15 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
    * @param sourceName Filename (or other source identifier) from whence @logData is being read
    * @param maybeTruncated Indicate whether log file might be truncated (some abnormal situations
    *        encountered, log file might not finished writing) or not
+   * @param eventsFilter Filter function to select JSON event strings in the log data stream that
+   *        should be parsed and replayed. When not specified, all event strings in the log data
+   *        are parsed and replayed.
    */
   def replay(
       logData: InputStream,
       sourceName: String,
-      maybeTruncated: Boolean = false): Unit = {
+      maybeTruncated: Boolean = false,
+      eventsFilter: (String) => Boolean = (s: String) => true): Unit = {
     var currentLine: String = null
     var lineNumber: Int = 1
     try {
@@ -55,7 +59,9 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       while (lines.hasNext) {
         currentLine = lines.next()
         try {
-          postToAll(JsonProtocol.sparkEventFromJson(parse(currentLine)))
+          if (eventsFilter(currentLine)) {
+            postToAll(JsonProtocol.sparkEventFromJson(parse(currentLine)))
+          }
         } catch {
           case jpe: JsonParseException =>
             // We can only ignore exception from last line of the file that might be truncated

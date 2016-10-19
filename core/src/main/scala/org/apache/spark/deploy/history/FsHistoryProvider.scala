@@ -81,6 +81,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val SPARK_HISTORY_FS_NUM_REPLAY_THREADS = "spark.history.fs.numReplayThreads"
 
+  private val AppStartEvent = "{\"Event\":\"SparkListenerApplicationStart\""
+
+  private val AppEndEvent = "{\"Event\":\"SparkListenerApplicationEnd\""
+
   // Interval between safemode checks.
   private val SAFEMODE_CHECK_INTERVAL_S = conf.getTimeAsSeconds(
     "spark.history.fs.safemodeCheck.interval", "5s")
@@ -399,14 +403,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-
   /**
    * Replay the log files in the list and merge the list of old applications with new ones
    */
   private def mergeApplicationListing(fileStatus: FileStatus): Unit = {
     val newAttempts = try {
         val bus = new ReplayListenerBus()
-        val res = replay(fileStatus, bus)
+        val res = replay(fileStatus, bus, (eventString => eventString.startsWith(AppStartEvent)
+          || eventString.startsWith(AppEndEvent)))
         res match {
           case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully: $r")
           case None => logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
@@ -557,7 +561,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private def replay(
       eventLog: FileStatus,
-      bus: ReplayListenerBus): Option[FsApplicationAttemptInfo] = {
+      bus: ReplayListenerBus,
+      eventsFilter: (String) => Boolean = (s: String) => true): Option[FsApplicationAttemptInfo] = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
     // Note that the eventLog may have *increased* in size since when we grabbed the filestatus,
@@ -571,7 +576,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val appListener = new ApplicationEventListener
       val appCompleted = isApplicationCompleted(eventLog)
       bus.addListener(appListener)
-      bus.replay(logInput, logPath.toString, !appCompleted)
+      bus.replay(logInput, logPath.toString, !appCompleted, eventsFilter)
 
       // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
       // try to show their UI.
