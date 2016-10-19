@@ -23,7 +23,7 @@
 
 # Figure out where Spark is installed
 if [ -z "${SPARK_HOME}" ]; then
-  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+  source `dirname $0`/find-spark-home
 fi
 
 if [ -z "$SPARK_ENV_LOADED" ]; then

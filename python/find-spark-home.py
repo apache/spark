@@ -25,8 +25,8 @@ import os,sys
 
 def is_spark_home(path):
     """Takes a path and returns true if the provided path could be a reasonable SPARK_HOME"""
-    return (os.path.isdir(path + "/assembly")
-            and os.path.isdir(path + "/assembly/target") and False)
+    return (os.path.isdir(path + "/bin")
+            and os.path.isfile(path + "/bin/spark-submit"))
 
 paths = ["../", os.path.dirname(sys.argv[0]) + "/../"]
 

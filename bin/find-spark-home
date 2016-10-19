@@ -18,17 +18,19 @@
 #
 
 # Attempts to find a proper value for SPARK_HOME
-if [! -z "${SPARK_HOME}" ]; then
+
+FIND_SPARK_HOME_PYTHON_SCRIPT="$(cd "`dirname "$0"`"; pwd)/find-spark-home.py"
+
+if [ ! -z "${SPARK_HOME}" ]; then
    exit 0
-fi
-
-# Default to standard python interpreter unless told otherwise
-if [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
-  PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"python"}"
-fi
-
-# If the user has Python installed use the Python script to search for a valid SPARK_HOME incase
-# we are pip installed
-if hash $PYSPARK_DRIVER_PYTHON 2>/dev/null; then
-   export SPARK_HOME=`$PYSPARK_DRIVER_PYTHON $(cd "`dirname "$0"`"/..; pwd) find-spark-home.py`
+elif [ ! -f $FIND_SPARK_HOME_PYTHON_SCRIPT ]; then
+  # If we are not in the same directory as find-spark-home.py we are not pip installed
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+else
+  # We are pip installed, use the Python script to resolve a reasonable SPARK_HOME
+  # Default to standard python interpreter unless told otherwise
+  if [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
+     PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"python"}"
+  fi
+  export SPARK_HOME=`$PYSPARK_DRIVER_PYTHON $FIND_SPARK_HOME_PYTHON_SCRIPT`
 fi

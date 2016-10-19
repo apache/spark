@@ -1,2 +1,3 @@
 recursive-include deps/jars *.jar
 recursive-include deps/bin *
+include find-spark-home.py

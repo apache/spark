@@ -28,6 +28,10 @@ try:
     if (in_spark):
         os.symlink(JARS_PATH, JARS_TARGET)
         os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
+    else:
+        # We add find-spark-home.py to the bin directory we install so that pip installed PySpark
+        # will search for SPARK_HOME with Python
+        os.synlink("find-spark-home.py", SCRIPTS_TARGET + "/")
 
     if not os.path.isdir(SCRIPTS_TARGET):
         print("For packaging reasons you must first create a source dist and install that source dist.", file=sys.stderr)
@@ -36,6 +40,7 @@ try:
     # Scripts directive requires a list of each script path and does not take wild cards.
     script_names = os.listdir(SCRIPTS_TARGET)
     scripts = map(lambda script: SCRIPTS_TARGET + "/" + script, script_names)
+    scripts.append("find-spark-home.py")
 
     setup(
         name='pyspark',
@@ -48,10 +53,12 @@ try:
                   'pyspark.mllib',
                   'pyspark.ml',
                   'pyspark.sql',
-                  'pyspark.streaming'],
+                  'pyspark.streaming',
+                  'pyspark.bin',
+                  'pyspark.jars'],
         include_package_data=True,
-        package_data={
-            'pyspark': [JARS_TARGET + "/*"]},
+        package_dir={'pyspark.jars': 'deps/jars', 'pyspark.bin': 'deps/bin'},
+        package_data={'pyspark.jars': ['*.jar'], 'pyspark.bin': ['*']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
         install_requires=['py4j==0.10.3'],
