@@ -186,6 +186,18 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     // k is not ignored after initialModel is cleared
     assert(kmeans.setK(k - 1).getK === k - 1)
   }
+
+  test("Eliminate possible initialModels of the direct initialModel") {
+    val randomModel = KMeansSuite.generateRandomKMeansModel(dim, k)
+    val kmeans = new KMeans().setK(k).setMaxIter(1).setInitialModel(randomModel)
+    val firstLevelModel = kmeans.fit(dataset)
+    val secondLevelModel = kmeans.setInitialModel(firstLevelModel).fit(dataset)
+    assert(secondLevelModel.getInitialModel
+      .isSet(secondLevelModel.getInitialModel.getParam("initialModel")))
+    val savedThenLoadedModel = testDefaultReadWrite(secondLevelModel, testParams = false)
+    assert(!savedThenLoadedModel.getInitialModel
+      .isSet(savedThenLoadedModel.getInitialModel.getParam("initialModel")))
+  }
 }
 
 object KMeansSuite {

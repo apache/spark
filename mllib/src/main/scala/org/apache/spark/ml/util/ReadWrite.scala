@@ -324,10 +324,16 @@ private[ml] object DefaultParamsWriter {
     metadataJson
   }
 
-  def saveInitialModel[T <: HasInitialModel[_ <: MLWritable]](instance: T, path: String): Unit = {
+  def saveInitialModel[T <: HasInitialModel[_ <: MLWritable with Params]](
+      instance: T, path: String): Unit = {
     if (instance.isDefined(instance.initialModel)) {
       val initialModelPath = new Path(path, "initialModel").toString
       val initialModel = instance.getOrDefault(instance.initialModel)
+      // When saving, only keep the direct initialModel by eliminating possible initialModels of the
+      // direct initialModel, to avoid unnecessary deep recursion of initialModel.
+      if (initialModel.hasParam("initialModel")) {
+        initialModel.clear(initialModel.getParam("initialModel"))
+      }
       initialModel.save(initialModelPath)
     }
   }
