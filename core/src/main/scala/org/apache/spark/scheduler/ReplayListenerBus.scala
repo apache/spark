@@ -48,43 +48,38 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
    *        are parsed and replayed.
    */
   def replay(
-      logData: InputStream,
-      sourceName: String,
-      maybeTruncated: Boolean = false,
-      eventsFilter: (String) => Boolean = ReplayListenerBus.SELECT_ALL_FILTER): Unit = {
+    logData: InputStream,
+    sourceName: String,
+    maybeTruncated: Boolean = false,
+    eventsFilter: (String) => Boolean = ReplayListenerBus.SELECT_ALL_FILTER): Unit = {
+    var currentLine: String = null
+    var lineNumber: Int = 1
     try {
-      val lineEntries = Source.fromInputStream(logData)
-        .getLines()
-        .zipWithIndex
-        .filter(entry => eventsFilter(entry._1))
-
-      var entry: (String, Int) = ("", 0)
-
-      while (lineEntries.hasNext) {
+      val lines = Source.fromInputStream(logData).getLines()
+      while (lines.hasNext) {
+        currentLine = lines.next()
         try {
-          entry = lineEntries.next()
-          postToAll(JsonProtocol.sparkEventFromJson(parse(entry._1)))
+          if (eventsFilter(currentLine)) {
+            postToAll(JsonProtocol.sparkEventFromJson(parse(currentLine)))
+          }
         } catch {
           case jpe: JsonParseException =>
             // We can only ignore exception from last line of the file that might be truncated
-            if (!maybeTruncated || lineEntries.hasNext) {
+            if (!maybeTruncated || lines.hasNext) {
               throw jpe
             } else {
               logWarning(s"Got JsonParseException from log file $sourceName" +
-                s" at line number ${entry._2}, the file might not have finished writing cleanly.")
+                           s" at line $lineNumber, the file might not have finished writing cleanly.")
             }
-          case ioe: IOException =>
-            throw ioe
-          case e: Exception =>
-            logError (s"Exception parsing Spark event log $sourceName" +
-              s" at line number: ${entry._2}", e)
         }
+        lineNumber += 1
       }
     } catch {
       case ioe: IOException =>
         throw ioe
       case e: Exception =>
         logError(s"Exception parsing Spark event log: $sourceName", e)
+        logError(s"Malformed line #$lineNumber: $currentLine\n")
     }
   }
 }
