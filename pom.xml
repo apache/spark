@@ -266,25 +266,6 @@
       <artifactId>unused</artifactId>
       <version>1.0.0</version>
     </dependency>
-    <!--
-         This is needed by the scalatest plugin, and so is declared here to be available in
-         all child modules, just as scalatest is run in all children
-    -->
-    <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.novocode</groupId>
-      <artifactId>junit-interface</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
   <dependencyManagement>
     <dependencies>
@@ -1922,13 +1903,6 @@
                 <goal>testCompile</goal>
               </goals>
             </execution>
-            <execution>
-              <id>attach-scaladocs</id>
-              <phase>verify</phase>
-              <goals>
-                <goal>doc-jar</goal>
-              </goals>
-            </execution>
           </executions>
           <configuration>
             <scalaVersion>${scala.version}</scalaVersion>
@@ -2415,6 +2389,67 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>docBuild</id>
+      <activation>
+        <property>
+          <name>maven.javadoc.skip</name>
+          <value>!true</value>
+        </property>
+      </activation>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>net.alchim31.maven</groupId>
+              <artifactId>scala-maven-plugin</artifactId>
+              <version>3.2.2</version>
+              <executions>
+                <execution>
+                  <id>attach-scaladocs</id>
+                  <phase>verify</phase>
+                  <goals>
+                    <goal>doc-jar</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
+
+    <profile>
+      <id>testCompilation</id>
+      <activation>
+        <property>
+          <name>maven.test.skip</name>
+          <value>!true</value>
+        </property>
+      </activation>
+      <dependencies>
+
+        <!--
+             This is needed by the scalatest plugin, and so is declared here to be available in
+             all child modules, just as scalatest is run in all children
+        -->
+        <dependency>
+          <groupId>org.scalatest</groupId>
+          <artifactId>scalatest_${scala.binary.version}</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>junit</groupId>
+          <artifactId>junit</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>com.novocode</groupId>
+          <artifactId>junit-interface</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
 
     <!--
       This profile is enabled automatically by the sbt built. It changes the scope for the guava

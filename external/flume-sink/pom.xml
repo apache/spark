@@ -72,28 +72,44 @@
       <artifactId>scala-library</artifactId>
     </dependency>
     <dependency>
-      <!-- Add Guava in test scope since flume actually needs it. -->
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <!--
-        Netty explicitly added in test as it has been excluded from
-        Flume dependency (to avoid runtime problems when running with
-        Spark) but unit tests need it. Version of Netty on which
-        Flume 1.4.0 depends on is "3.4.0.Final" .
-      -->
-      <groupId>io.netty</groupId>
-      <artifactId>netty</artifactId>
-      <version>3.4.0.Final</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
   </dependencies>
+
+  <!-- Test dependencies -->
+  <profiles>
+    <profile>
+      <id>testCompilation</id>
+      <activation>
+        <property>
+          <name>maven.test.skip</name>
+          <value>!true</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <!-- Add Guava in test scope since flume actually needs it. -->
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <!--
+            Netty explicitly added in test as it has been excluded from
+            Flume dependency (to avoid runtime problems when running with
+            Spark) but unit tests need it. Version of Netty on which
+            Flume 1.4.0 depends on is "3.4.0.Final" .
+          -->
+          <groupId>io.netty</groupId>
+          <artifactId>netty</artifactId>
+          <version>3.4.0.Final</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
