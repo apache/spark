@@ -28,7 +28,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -189,7 +189,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
   }
 
   override def serialize(obj: Matrix): InternalRow = {
-    val row = new GenericMutableRow(7)
+    val row = new GenericInternalRow(7)
     obj match {
       case sm: SparseMatrix =>
         row.setByte(0, 0)
@@ -572,10 +572,13 @@ class SparseMatrix @Since("1.3.0") (
 
   require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
-  // The Or statement is for the case when the matrix is transposed
-  require(colPtrs.length == numCols + 1 || colPtrs.length == numRows + 1, "The length of the " +
-    "column indices should be the number of columns + 1. Currently, colPointers.length: " +
-    s"${colPtrs.length}, numCols: $numCols")
+  if (isTransposed) {
+    require(colPtrs.length == numRows + 1,
+      s"Expecting ${numRows + 1} colPtrs when numRows = $numRows but got ${colPtrs.length}")
+  } else {
+    require(colPtrs.length == numCols + 1,
+      s"Expecting ${numCols + 1} colPtrs when numCols = $numCols but got ${colPtrs.length}")
+  }
   require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of " +
     s"elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
 
@@ -839,7 +842,7 @@ object SparseMatrix {
       "The expected number of nonzeros cannot be greater than Int.MaxValue.")
     val nnz = math.ceil(expected).toInt
     if (density == 0.0) {
-      new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array[Int](), Array[Double]())
+      new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array.empty, Array.empty)
     } else if (density == 1.0) {
       val colPtrs = Array.tabulate(numCols + 1)(j => j * numRows)
       val rowIndices = Array.tabulate(size.toInt)(idx => idx % numRows)
@@ -980,16 +983,8 @@ object Matrices {
       case dm: BDM[Double] =>
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
-        // Spark-11507. work around breeze issue 479.
-        val mat = if (sm.colPtrs.last != sm.data.length) {
-          val matCopy = sm.copy
-          matCopy.compact()
-          matCopy
-        } else {
-          sm
-        }
         // There is no isTranspose flag for sparse matrices in Breeze
-        new SparseMatrix(mat.rows, mat.cols, mat.colPtrs, mat.rowIndices, mat.data)
+        new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
@@ -1095,7 +1090,7 @@ object Matrices {
   @Since("1.3.0")
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array[Double]())
+      return new DenseMatrix(0, 0, Array.empty)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1133,7 +1128,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i, j + startCol, v))
+                data += Tuple3(i, j + startCol, v)
               }
             }
             startCol += nCols
@@ -1154,7 +1149,7 @@ object Matrices {
   @Since("1.3.0")
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array[Double]())
+      return new DenseMatrix(0, 0, Array.empty[Double])
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1203,7 +1198,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i + startRow, j, v))
+                data += Tuple3(i + startRow, j, v)
               }
             }
             startRow += nRows

@@ -70,10 +70,11 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
       maxIter: Int,
       initMode: String): KMeansWrapper = {
 
-    val rFormulaModel = new RFormula()
+    val rFormula = new RFormula()
       .setFormula(formula)
       .setFeaturesCol("features")
-      .fit(data)
+    RWrapperUtils.checkDataColumns(rFormula, data)
+    val rFormulaModel = rFormula.fit(data)
 
     // get feature names from output schema
     val schema = rFormulaModel.transform(data).schema
@@ -85,6 +86,7 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
       .setK(k)
       .setMaxIter(maxIter)
       .setInitMode(initMode)
+      .setFeaturesCol(rFormula.getFeaturesCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, kMeans))

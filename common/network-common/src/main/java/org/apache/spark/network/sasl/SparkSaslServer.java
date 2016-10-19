@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
  * connections on some socket.)
  */
 public class SparkSaslServer implements SaslEncryptionBackend {
-  private final Logger logger = LoggerFactory.getLogger(SparkSaslServer.class);
+  private static final Logger logger = LoggerFactory.getLogger(SparkSaslServer.class);
 
   /**
    * This is passed as the server name when creating the sasl client/server.

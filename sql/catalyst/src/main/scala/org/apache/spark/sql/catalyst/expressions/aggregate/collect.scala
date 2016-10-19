@@ -54,17 +54,26 @@ abstract class Collect extends ImperativeAggregate {
 
   override def inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
+  // Both `CollectList` and `CollectSet` are non-deterministic since their results depend on the
+  // actual order of input rows.
+  override def deterministic: Boolean = false
+
   protected[this] val buffer: Growable[Any] with Iterable[Any]
 
-  override def initialize(b: MutableRow): Unit = {
+  override def initialize(b: InternalRow): Unit = {
     buffer.clear()
   }
 
-  override def update(b: MutableRow, input: InternalRow): Unit = {
-    buffer += child.eval(input)
+  override def update(b: InternalRow, input: InternalRow): Unit = {
+    // Do not allow null values. We follow the semantics of Hive's collect_list/collect_set here.
+    // See: org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMkCollectionEvaluator
+    val value = child.eval(input)
+    if (value != null) {
+      buffer += value
+    }
   }
 
-  override def merge(buffer: MutableRow, input: InternalRow): Unit = {
+  override def merge(buffer: InternalRow, input: InternalRow): Unit = {
     sys.error("Collect cannot be used in partial aggregations.")
   }
 

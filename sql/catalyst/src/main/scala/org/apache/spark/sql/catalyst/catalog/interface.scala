@@ -20,12 +20,11 @@ package org.apache.spark.sql.catalyst.catalog
 import java.util.Date
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
@@ -82,10 +81,32 @@ object CatalogStorageFormat {
  *
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
+ * @param parameters some parameters for the partition, for example, stats.
  */
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
-    storage: CatalogStorageFormat)
+    storage: CatalogStorageFormat,
+    parameters: Map[String, String] = Map.empty) {
+
+  override def toString: String = {
+    val output =
+      Seq(
+        s"Partition Values: [${spec.values.mkString(", ")}]",
+        s"$storage",
+        s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+
+    output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+  }
+
+  /**
+   * Given the partition schema, returns a row with that schema holding the partition values.
+   */
+  def toRow(partitionSchema: StructType): InternalRow = {
+    InternalRow.fromSeq(partitionSchema.map { case StructField(name, dataType, _, _) =>
+      Cast(Literal(spec(name)), dataType).eval()
+    })
+  }
+}
 
 
 /**
@@ -112,6 +133,8 @@ case class BucketSpec(
  * Note that Hive's metastore also tracks skewed columns. We should consider adding that in the
  * future once we have a better understanding of how we want to handle skewed columns.
  *
+ * @param provider the name of the data source provider for this table, e.g. parquet, json, etc.
+ *                 Can be None if this table is a View, should be "hive" for hive serde tables.
  * @param unsupportedFeatures is a list of string descriptions of features that are used by the
  *        underlying table but not supported by Spark SQL yet.
  */
@@ -120,26 +143,18 @@ case class CatalogTable(
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: StructType,
+    provider: Option[String] = None,
     partitionColumnNames: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
+    stats: Option[Statistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty) {
-
-  // Verify that the provided columns are part of the schema
-  private val colNames = schema.map(_.name).toSet
-  private def requireSubsetOfSchema(cols: Seq[String], colType: String): Unit = {
-    require(cols.toSet.subsetOf(colNames), s"$colType columns (${cols.mkString(", ")}) " +
-      s"must be a subset of schema (${colNames.mkString(", ")}) in table '$identifier'")
-  }
-  requireSubsetOfSchema(partitionColumnNames, "partition")
-  requireSubsetOfSchema(bucketSpec.map(_.sortColumnNames).getOrElse(Nil), "sort")
-  requireSubsetOfSchema(bucketSpec.map(_.bucketColumnNames).getOrElse(Nil), "bucket")
 
   /** schema of this table's partition columns */
   def partitionSchema: StructType = StructType(schema.filter {
@@ -161,9 +176,9 @@ case class CatalogTable(
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
       serde: Option[String] = storage.serde,
-      serdeProperties: Map[String, String] = storage.properties): CatalogTable = {
+      properties: Map[String, String] = storage.properties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
+      locationUri, inputFormat, outputFormat, serde, compressed, properties))
   }
 
   override def toString: String = {
@@ -189,12 +204,14 @@ case class CatalogTable(
         s"Last Access: ${new Date(lastAccessTime).toString}",
         s"Type: ${tableType.name}",
         if (schema.nonEmpty) s"Schema: ${schema.mkString("[", ", ", "]")}" else "",
+        if (provider.isDefined) s"Provider: ${provider.get}" else "",
         if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
       ) ++ bucketStrings ++ Seq(
         viewOriginalText.map("Original View: " + _).getOrElse(""),
         viewText.map("View: " + _).getOrElse(""),
         comment.map("Comment: " + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
+        if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
         s"$storage")
 
     output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
@@ -207,7 +224,6 @@ case class CatalogTableType private(name: String)
 object CatalogTableType {
   val EXTERNAL = new CatalogTableType("EXTERNAL")
   val MANAGED = new CatalogTableType("MANAGED")
-  val INDEX = new CatalogTableType("INDEX")
   val VIEW = new CatalogTableType("VIEW")
 }
 

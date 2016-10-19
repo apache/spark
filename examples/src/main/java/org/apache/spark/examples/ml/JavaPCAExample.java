@@ -62,7 +62,7 @@ public class JavaPCAExample {
       .fit(df);
 
     Dataset<Row> result = pca.transform(df).select("pcaFeatures");
-    result.show();
+    result.show(false);
     // $example off$
     spark.stop();
   }

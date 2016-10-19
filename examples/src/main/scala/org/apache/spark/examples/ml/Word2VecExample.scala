@@ -20,6 +20,8 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.feature.Word2Vec
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.sql.Row
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -47,7 +49,8 @@ object Word2VecExample {
     val model = word2Vec.fit(documentDF)
 
     val result = model.transform(documentDF)
-    result.select("result").take(3).foreach(println)
+    result.collect().foreach { case Row(text: Seq[_], features: Vector) =>
+      println(s"Text: [${text.mkString(", ")}] => \nVector: $features\n") }
     // $example off$
 
     spark.stop()

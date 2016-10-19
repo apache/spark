@@ -18,12 +18,12 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
+import java.net.URI
 import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 
 import com.google.common.io.Files
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
@@ -32,7 +32,7 @@ import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
@@ -53,9 +53,11 @@ private[deploy] class DriverRunner(
   @volatile private var killed = false
 
   // Populated once finished
-  private[worker] var finalState: Option[DriverState] = None
-  private[worker] var finalException: Option[Exception] = None
-  private var finalExitCode: Option[Int] = None
+  @volatile private[worker] var finalState: Option[DriverState] = None
+  @volatile private[worker] var finalException: Option[Exception] = None
+
+  // Timeout to wait for when trying to terminate a driver.
+  private val DRIVER_TERMINATE_TIMEOUT_MS = 10 * 1000
 
   // Decoupled for testing
   def setClock(_clock: Clock): Unit = {
@@ -78,49 +80,53 @@ private[deploy] class DriverRunner(
   private[worker] def start() = {
     new Thread("DriverRunner for " + driverId) {
       override def run() {
+        var shutdownHook: AnyRef = null
         try {
-          val driverDir = createWorkingDirectory()
-          val localJarFilename = downloadUserJar(driverDir)
-
-          def substituteVariables(argument: String): String = argument match {
-            case "{{WORKER_URL}}" => workerUrl
-            case "{{USER_JAR}}" => localJarFilename
-            case other => other
+          shutdownHook = ShutdownHookManager.addShutdownHook { () =>
+            logInfo(s"Worker shutting down, killing driver $driverId")
+            kill()
           }
 
-          // TODO: If we add ability to submit multiple jars they should also be added here
-          val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
-            driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
-          launchDriver(builder, driverDir, driverDesc.supervise)
-        }
-        catch {
-          case e: Exception => finalException = Some(e)
-        }
+          // prepare driver jars and run driver
+          val exitCode = prepareAndRunDriver()
 
-        val state =
-          if (killed) {
-            DriverState.KILLED
-          } else if (finalException.isDefined) {
-            DriverState.ERROR
+          // set final state depending on if forcibly killed and process exit code
+          finalState = if (exitCode == 0) {
+            Some(DriverState.FINISHED)
+          } else if (killed) {
+            Some(DriverState.KILLED)
           } else {
-            finalExitCode match {
-              case Some(0) => DriverState.FINISHED
-              case _ => DriverState.FAILED
-            }
+            Some(DriverState.FAILED)
           }
+        } catch {
+          case e: Exception =>
+            kill()
+            finalState = Some(DriverState.ERROR)
+            finalException = Some(e)
+        } finally {
+          if (shutdownHook != null) {
+            ShutdownHookManager.removeShutdownHook(shutdownHook)
+          }
+        }
 
-        finalState = Some(state)
-
-        worker.send(DriverStateChanged(driverId, state, finalException))
+        // notify worker of final driver state, possible exception
+        worker.send(DriverStateChanged(driverId, finalState.get, finalException))
       }
     }.start()
   }
 
   /** Terminate this driver (or prevent it from ever starting if not yet started) */
-  private[worker] def kill() {
+  private[worker] def kill(): Unit = {
+    logInfo("Killing driver process!")
+    killed = true
     synchronized {
-      process.foreach(_.destroy())
-      killed = true
+      process.foreach { p =>
+        val exitCode = Utils.terminateProcess(p, DRIVER_TERMINATE_TIMEOUT_MS)
+        if (exitCode.isEmpty) {
+          logWarning("Failed to terminate driver process: " + p +
+              ". This process will likely be orphaned.")
+        }
+      }
     }
   }
 
@@ -141,34 +147,44 @@ private[deploy] class DriverRunner(
    * Will throw an exception if there are errors downloading the jar.
    */
   private def downloadUserJar(driverDir: File): String = {
-    val jarPath = new Path(driverDesc.jarUrl)
-
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
-    val jarFileName = jarPath.getName
+    val jarFileName = new URI(driverDesc.jarUrl).getPath.split("/").last
     val localJarFile = new File(driverDir, jarFileName)
-    val localJarFilename = localJarFile.getAbsolutePath
-
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
-      logInfo(s"Copying user jar $jarPath to $destPath")
+      logInfo(s"Copying user jar ${driverDesc.jarUrl} to $localJarFile")
       Utils.fetchFile(
         driverDesc.jarUrl,
         driverDir,
         conf,
         securityManager,
-        hadoopConf,
+        SparkHadoopUtil.get.newConfiguration(conf),
         System.currentTimeMillis(),
         useCache = false)
+      if (!localJarFile.exists()) { // Verify copy succeeded
+        throw new IOException(
+          s"Can not find expected jar $jarFileName which should have been loaded in $driverDir")
+      }
     }
-
-    if (!localJarFile.exists()) { // Verify copy succeeded
-      throw new Exception(s"Did not see expected jar $jarFileName in $driverDir")
-    }
-
-    localJarFilename
+    localJarFile.getAbsolutePath
   }
 
-  private def launchDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean) {
+  private[worker] def prepareAndRunDriver(): Int = {
+    val driverDir = createWorkingDirectory()
+    val localJarFilename = downloadUserJar(driverDir)
+
+    def substituteVariables(argument: String): String = argument match {
+      case "{{WORKER_URL}}" => workerUrl
+      case "{{USER_JAR}}" => localJarFilename
+      case other => other
+    }
+
+    // TODO: If we add ability to submit multiple jars they should also be added here
+    val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
+      driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
+
+    runDriver(builder, driverDir, driverDesc.supervise)
+  }
+
+  private def runDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean): Int = {
     builder.directory(baseDir)
     def initialize(process: Process): Unit = {
       // Redirect stdout and stderr to files
@@ -184,39 +200,40 @@ private[deploy] class DriverRunner(
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
   }
 
-  def runCommandWithRetry(
-      command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean): Unit = {
+  private[worker] def runCommandWithRetry(
+      command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean): Int = {
+    var exitCode = -1
     // Time to wait between submission retries.
     var waitSeconds = 1
     // A run of this many seconds resets the exponential back-off.
     val successfulRunDuration = 5
-
     var keepTrying = !killed
 
     while (keepTrying) {
       logInfo("Launch Command: " + command.command.mkString("\"", "\" \"", "\""))
 
       synchronized {
-        if (killed) { return }
+        if (killed) { return exitCode }
         process = Some(command.start())
         initialize(process.get)
       }
 
       val processStart = clock.getTimeMillis()
-      val exitCode = process.get.waitFor()
-      if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000) {
-        waitSeconds = 1
-      }
+      exitCode = process.get.waitFor()
 
-      if (supervise && exitCode != 0 && !killed) {
+      // check if attempting another run
+      keepTrying = supervise && exitCode != 0 && !killed
+      if (keepTrying) {
+        if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000) {
+          waitSeconds = 1
+        }
         logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")
         sleeper.sleep(waitSeconds)
         waitSeconds = waitSeconds * 2 // exponential back-off
       }
-
-      keepTrying = supervise && exitCode != 0 && !killed
-      finalExitCode = Some(exitCode)
     }
+
+    exitCode
   }
 }
 

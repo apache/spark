@@ -15,6 +15,12 @@
  * limitations under the License.
  */
 
+var appLimit = -1;
+
+function setAppLimit(val) {
+    appLimit = val;
+}
+
 function makeIdNumeric(id) {
   var strs = id.split("_");
   if (strs.length < 3) {
@@ -89,7 +95,7 @@ $(document).ready(function() {
     requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    $.getJSON("api/v1/applications", function(response,status,jqXHR) {
+    $.getJSON("api/v1/applications?limit=" + appLimit, function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
       for (i in response) {
@@ -127,6 +133,7 @@ $(document).ready(function() {
                         {name: 'sixth', type: "title-numeric"},
                         {name: 'seventh'},
                         {name: 'eighth'},
+                        {name: 'ninth'},
                     ],
                     "autoWidth": false,
                     "order": [[ 4, "desc" ]]

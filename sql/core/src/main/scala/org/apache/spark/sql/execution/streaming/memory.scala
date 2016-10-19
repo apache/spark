@@ -77,7 +77,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     logDebug(s"Adding ds: $ds")
     this.synchronized {
       currentOffset = currentOffset + 1
-      batches.append(ds)
+      batches += ds
       currentOffset
     }
   }
@@ -112,6 +112,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def stop() {}
+
+  def reset(): Unit = synchronized {
+    batches.clear()
+    currentOffset = new LongOffset(-1)
+  }
 }
 
 /**
@@ -155,7 +160,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
 
         case InternalOutputModes.Complete =>
           batches.clear()
-          batches.append(AddedData(batchId, data.collect()))
+          batches += AddedData(batchId, data.collect())
 
         case _ =>
           throw new IllegalArgumentException(
@@ -165,6 +170,8 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
       logDebug(s"Skipping already committed batch: $batchId")
     }
   }
+
+  override def toString(): String = "MemorySink"
 }
 
 /**

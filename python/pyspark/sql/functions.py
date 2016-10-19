@@ -112,11 +112,8 @@ _functions_1_4 = {
     'sinh': 'Computes the hyperbolic sine of the given value.',
     'tan': 'Computes the tangent of the given value.',
     'tanh': 'Computes the hyperbolic tangent of the given value.',
-    'toDegrees': 'Converts an angle measured in radians to an approximately equivalent angle ' +
-                 'measured in degrees.',
-    'toRadians': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
-                 'measured in radians.',
-
+    'toDegrees': '.. note:: Deprecated in 2.1, use degrees instead.',
+    'toRadians': '.. note:: Deprecated in 2.1, use radians instead.',
     'bitwiseNOT': 'Computes bitwise not.',
 }
 
@@ -135,7 +132,15 @@ _functions_1_6 = {
     'kurtosis': 'Aggregate function: returns the kurtosis of the values in a group.',
     'collect_list': 'Aggregate function: returns a list of objects with duplicates.',
     'collect_set': 'Aggregate function: returns a set of objects with duplicate elements' +
-                   ' eliminated.'
+                   ' eliminated.',
+}
+
+_functions_2_1 = {
+    # unary math functions
+    'degrees': 'Converts an angle measured in radians to an approximately equivalent angle ' +
+               'measured in degrees.',
+    'radians': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
+               'measured in radians.',
 }
 
 # math functions that take two arguments as input
@@ -182,21 +187,31 @@ for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
 for _name, _doc in _functions_1_6.items():
     globals()[_name] = since(1.6)(_create_function(_name, _doc))
+for _name, _doc in _functions_2_1.items():
+    globals()[_name] = since(2.1)(_create_function(_name, _doc))
 del _name, _doc
 
 
 @since(1.3)
 def approxCountDistinct(col, rsd=None):
+    """
+    .. note:: Deprecated in 2.1, use approx_count_distinct instead.
+    """
+    return approx_count_distinct(col, rsd)
+
+
+@since(2.1)
+def approx_count_distinct(col, rsd=None):
     """Returns a new :class:`Column` for approximate distinct count of ``col``.
 
-    >>> df.agg(approxCountDistinct(df.age).alias('c')).collect()
+    >>> df.agg(approx_count_distinct(df.age).alias('c')).collect()
     [Row(c=2)]
     """
     sc = SparkContext._active_spark_context
     if rsd is None:
-        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col))
+        jc = sc._jvm.functions.approx_count_distinct(_to_java_column(col))
     else:
-        jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
+        jc = sc._jvm.functions.approx_count_distinct(_to_java_column(col), rsd)
     return Column(jc)
 
 
@@ -1440,11 +1455,18 @@ def split(str, pattern):
 @ignore_unicode_prefix
 @since(1.5)
 def regexp_extract(str, pattern, idx):
-    """Extract a specific(idx) group identified by a java regex, from the specified string column.
+    """Extract a specific group matched by a Java regex, from the specified string column.
+    If the regex did not match, or the specified group did not match, an empty string is returned.
 
     >>> df = spark.createDataFrame([('100-200',)], ['str'])
     >>> df.select(regexp_extract('str', '(\d+)-(\d+)', 1).alias('d')).collect()
     [Row(d=u'100')]
+    >>> df = spark.createDataFrame([('foo',)], ['str'])
+    >>> df.select(regexp_extract('str', '(\d+)', 1).alias('d')).collect()
+    [Row(d=u'')]
+    >>> df = spark.createDataFrame([('aaaac',)], ['str'])
+    >>> df.select(regexp_extract('str', '(a+)(b)?(c)', 2).alias('d')).collect()
+    [Row(d=u'')]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.regexp_extract(_to_java_column(str), pattern, idx)
@@ -1699,6 +1721,29 @@ def json_tuple(col, *fields):
     return Column(jc)
 
 
+@since(2.1)
+def from_json(col, schema, options={}):
+    """
+    Parses a column containing a JSON string into a [[StructType]] with the
+    specified schema. Returns `null`, in the case of an unparseable string.
+
+    :param col: string column in json format
+    :param schema: a StructType to use when parsing the json column
+    :param options: options to control parsing. accepts the same options as the json datasource
+
+    >>> from pyspark.sql.types import *
+    >>> data = [(1, '''{"a": 1}''')]
+    >>> schema = StructType([StructField("a", IntegerType())])
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.from_json(_to_java_column(col), schema.json(), options)
+    return Column(jc)
+
+
 @since(1.5)
 def size(col):
     """
@@ -1753,11 +1798,11 @@ class UserDefinedFunction(object):
         self._judf = self._create_judf(name)
 
     def _create_judf(self, name):
-        from pyspark.sql import SQLContext
+        from pyspark.sql import SparkSession
         sc = SparkContext.getOrCreate()
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
-        ctx = SQLContext.getOrCreate(sc)
-        jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
+        spark = SparkSession.builder.getOrCreate()
+        jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         if name is None:
             f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__

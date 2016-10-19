@@ -48,23 +48,19 @@ public class JavaPolynomialExpansionExample {
       .setDegree(3);
 
     List<Row> data = Arrays.asList(
-      RowFactory.create(Vectors.dense(-2.0, 2.3)),
+      RowFactory.create(Vectors.dense(2.0, 1.0)),
       RowFactory.create(Vectors.dense(0.0, 0.0)),
-      RowFactory.create(Vectors.dense(0.6, -1.1))
+      RowFactory.create(Vectors.dense(3.0, -1.0))
     );
-
     StructType schema = new StructType(new StructField[]{
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
     });
-
     Dataset<Row> df = spark.createDataFrame(data, schema);
-    Dataset<Row> polyDF = polyExpansion.transform(df);
 
-    List<Row> rows = polyDF.select("polyFeatures").takeAsList(3);
-    for (Row r : rows) {
-      System.out.println(r.get(0));
-    }
+    Dataset<Row> polyDF = polyExpansion.transform(df);
+    polyDF.show(false);
     // $example off$
+
     spark.stop();
   }
 }

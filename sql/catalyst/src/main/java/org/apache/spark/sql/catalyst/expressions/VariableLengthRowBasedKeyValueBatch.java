@@ -39,7 +39,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
    * Returns an UnsafeRow pointing to the value if succeeds, otherwise returns null.
    */
   @Override
-  public final UnsafeRow appendRow(Object kbase, long koff, int klen,
+  public UnsafeRow appendRow(Object kbase, long koff, int klen,
                              Object vbase, long voff, int vlen) {
     final long recordLength = 8 + klen + vlen + 8;
     // if run out of max supported rows or page size, return null
@@ -94,7 +94,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
    * In most times, 1) is skipped because `getKeyRow(id)` is often called before `getValueRow(id)`.
    */
   @Override
-  public final UnsafeRow getValueFromKey(int rowId) {
+  public UnsafeRow getValueFromKey(int rowId) {
     if (keyRowId != rowId) {
       getKeyRow(rowId);
     }
@@ -110,7 +110,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
    * Returns an iterator to go through all rows
    */
   @Override
-  public final org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> rowIterator() {
+  public org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> rowIterator() {
     return new org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow>() {
       private final UnsafeRow key = new UnsafeRow(keySchema.length());
       private final UnsafeRow value = new UnsafeRow(valueSchema.length());

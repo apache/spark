@@ -207,6 +207,16 @@ The scheduler will start executors round-robin on the offers Mesos
 gives it, but there are no spread guarantees, as Mesos does not
 provide such guarantees on the offer stream.
 
+In this mode spark executors will honor port allocation if such is
+provided from the user. Specifically if the user defines
+`spark.executor.port` or `spark.blockManager.port` in Spark configuration,
+the mesos scheduler will check the available offers for a valid port
+range containing the port numbers. If no such range is available it will
+not launch any task. If no restriction is imposed on port numbers by the
+user, ephemeral ports are used as usual. This port honouring implementation
+implies one task per host if the user defines a port. In the future network
+isolation shall be supported.
+
 The benefit of coarse-grained mode is much lower startup overhead, but
 at the cost of reserving Mesos resources for the complete duration of
 the application.  To configure your job to dynamically adjust to its
@@ -467,7 +477,37 @@ See the [configuration page](configuration.html) for information on Spark config
     Set the Spark Mesos dispatcher webui_url for interacting with the framework.
     If unset it will point to Spark's internal web UI.
   </td>
+  </tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.driverDefault.[PropertyName]</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set default properties for drivers submitted through the
+    dispatcher.  For example,
+    spark.mesos.dispatcher.driverProperty.spark.executor.memory=32g
+    results in the executors for all drivers submitted in cluster mode
+    to run in 32g containers.
+</td>
 </tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.historyServer.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the URL of the <a href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
+    server</a>.  The dispatcher will then link each driver to its entry
+    in the history server.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.gpus.max</code></td>
+  <td><code>0</code></td>
+  <td>
+    Set the maximum number GPU resources to acquire for this job. Note that executors will still launch when no GPU resources are found
+    since this configuration is just a upper limit and not a guaranteed amount.
+  </td>
+</tr>
+
+
 </table>
 
 # Troubleshooting and Debugging

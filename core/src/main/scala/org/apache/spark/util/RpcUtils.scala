@@ -17,8 +17,6 @@
 
 package org.apache.spark.util
 
-import scala.language.postfixOps
-
 import org.apache.spark.SparkConf
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 

@@ -225,8 +225,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
             Row(2, 2, 1, null) ::
             Row(2, 2, 2, 2) :: Nil)
       }
-      assert(e.getMessage.contains("Cartesian joins could be prohibitively expensive and are " +
-        "disabled by default"))
+      assert(e.getMessage.contains("Detected cartesian product for INNER join " +
+        "between logical plans"))
     }
   }
 
@@ -482,7 +482,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     // we set the threshold is greater than statistic of the cached table testData
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> (sizeInByteOfTestData + 1).toString()) {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> (sizeInByteOfTestData + 1).toString(),
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
 
       assert(statisticSizeInByte(spark.table("testData2")) >
         spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
@@ -572,5 +573,35 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(2, 2) ::
         Row(3, 1) ::
         Row(3, 2) :: Nil)
+  }
+
+  test("cross join detection") {
+    testData.createOrReplaceTempView("A")
+    testData.createOrReplaceTempView("B")
+    testData2.createOrReplaceTempView("C")
+    testData3.createOrReplaceTempView("D")
+    upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+    val cartesianQueries = Seq(
+      /** The following should error out since there is no explicit cross join */
+      "SELECT * FROM testData inner join testData2",
+      "SELECT * FROM testData left outer join testData2",
+      "SELECT * FROM testData right outer join testData2",
+      "SELECT * FROM testData full outer join testData2",
+      "SELECT * FROM testData, testData2",
+      "SELECT * FROM testData, testData2 where testData.key = 1 and testData2.a = 22",
+      /** The following should fail because after reordering there are cartesian products */
+      "select * from (A join B on (A.key = B.key)) join D on (A.key=D.a) join C",
+      "select * from ((A join B on (A.key = B.key)) join C) join D on (A.key = D.a)",
+      /** Cartesian product involving C, which is not involved in a CROSS join */
+      "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
+
+     def checkCartesianDetection(query: String): Unit = {
+      val e = intercept[Exception] {
+        checkAnswer(sql(query), Nil);
+      }
+      assert(e.getMessage.contains("Detected cartesian product"))
+    }
+
+    cartesianQueries.foreach(checkCartesianDetection)
   }
 }

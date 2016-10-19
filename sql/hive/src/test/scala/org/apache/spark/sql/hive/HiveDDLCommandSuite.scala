@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -28,16 +29,18 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-class HiveDDLCommandSuite extends PlanTest {
+class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingleton {
   val parser = TestHive.sessionState.sqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
-      case c: CreateTableCommand => (c.table, c.ifNotExists)
-      case c: CreateHiveTableAsSelectLogicalPlan => (c.tableDesc, c.allowExisting)
+      case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
     }.head
   }
 
@@ -242,7 +245,7 @@ class HiveDDLCommandSuite extends PlanTest {
       .asInstanceOf[ScriptTransformation].copy(ioschema = null)
     val plan2 = parser.parsePlan("map a, b using 'func' as c, d from e")
       .asInstanceOf[ScriptTransformation].copy(ioschema = null)
-    val plan3 = parser.parsePlan("reduce a, b using 'func' as (c: int, d decimal(10, 0)) from e")
+    val plan3 = parser.parsePlan("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e")
       .asInstanceOf[ScriptTransformation].copy(ioschema = null)
 
     val p = ScriptTransformation(
@@ -499,8 +502,13 @@ class HiveDDLCommandSuite extends PlanTest {
     }
   }
 
-  test("MSCK repair table (not supported)") {
-    assertUnsupported("MSCK REPAIR TABLE tab1")
+  test("MSCK REPAIR table") {
+    val sql = "MSCK REPAIR TABLE tab1"
+    val parsed = parser.parsePlan(sql)
+    val expected = AlterTableRecoverPartitionsCommand(
+      TableIdentifier("tab1", None),
+      "MSCK REPAIR TABLE")
+    comparePlans(parsed, expected)
   }
 
   test("create table like") {
@@ -550,4 +558,24 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(partition2.get.apply("c") == "1" && partition2.get.apply("d") == "2")
   }
 
+  test("Test the default fileformat for Hive-serde tables") {
+    withSQLConf("hive.default.fileformat" -> "orc") {
+      val (desc, exists) = extractTableDesc("CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
+      assert(exists)
+      assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
+      assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
+      assert(desc.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+    }
+
+    withSQLConf("hive.default.fileformat" -> "parquet") {
+      val (desc, exists) = extractTableDesc("CREATE TABLE IF NOT EXISTS fileformat_test (id int)")
+      assert(exists)
+      val input = desc.storage.inputFormat
+      val output = desc.storage.outputFormat
+      val serde = desc.storage.serde
+      assert(input == Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+      assert(output == Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      assert(serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+    }
+   }
 }
