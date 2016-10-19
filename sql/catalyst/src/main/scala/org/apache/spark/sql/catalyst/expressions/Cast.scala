@@ -120,7 +120,7 @@ object Cast {
 
       Arguments:
         expr - any type expression.
-        type - data types.
+        type - data type.
 
       Examples:
         > SELECT _FUNC_('10' as int);

@@ -28,7 +28,17 @@ import org.apache.spark.unsafe.types.UTF8String
  * Returns an Array containing the evaluation of all children expressions.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n0, ...) - Returns an array with the given elements.")
+  usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
+  extended = """
+    _FUNC_(expr, ...)
+
+      Arguments:
+        expr - any type expression.
+
+      Examples:
+        > SELECT _FUNC_(1, 2, 3);
+         [1,2,3]
+  """)
 case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -82,7 +92,18 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
  * The children are a flatted sequence of kv pairs, e.g. (key1, value1, key2, value2, ...)
  */
 @ExpressionDescription(
-  usage = "_FUNC_(key0, value0, key1, value1...) - Creates a map with the given key/value pairs.")
+  usage = "_FUNC_(key0, value0, key1, value1...) - Creates a map with the given key/value pairs.",
+  extended = """
+    _FUNC_(key0, value0, key1, value1...)
+
+      Arguments:
+        key - any type expression.
+        value - any type expression.
+
+      Examples:
+        > SELECT _FUNC_(1.0, '2', 3.0, '4');
+         {1.0:"2",3.0:"4"}
+  """)
 case class CreateMap(children: Seq[Expression]) extends Expression {
   lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
   lazy val values = children.indices.filter(_ % 2 != 0).map(children)
@@ -175,7 +196,17 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
  * Returns a Row containing the evaluation of all children expressions.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
+  usage = "_FUNC_(expr1, expr2, expr2 ...) - Creates a struct with the given field values.",
+  extended = """
+    _FUNC_(expr1, expr2, expr2 ...)
+
+      Arguments:
+        expr - any type expression.
+
+      Examples:
+        > SELECT _FUNC_(1, 2, 3);
+         {"col1":1,"col2":2,"col3":3}
+  """)
 case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -234,7 +265,18 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.")
+  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
+  extended = """
+    _FUNC_(name1, val1, name2, val2, ...)
+
+      Arguments:
+        name - string type expression that allows constant folding and represents the field name.
+        val - any type expression.
+
+      Examples:
+        > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
+         {"a":1,"b":2,"c":3}
+  """)
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
@@ -400,7 +442,18 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
-  extended = """ > SELECT _FUNC_('a:1,b:2,c:3',',',':');\n map("a":"1","b":"2","c":"3") """)
+  extended = """
+    _FUNC_(text[, pairDelim, keyValueDelim])
+
+      Arguments:
+        text - string type expression that represents data to convert into map.
+        pairDelim - string type expression that allows constant folding.
+        keyValueDelim - string type expression that allows constant folding.
+
+      Examples:
+       > SELECT _FUNC_('a:1,b:2,c:3',',',':');
+        map("a":"1","b":"2","c":"3")
+  """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with CodegenFallback with ExpectsInputTypes {
