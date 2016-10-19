@@ -109,7 +109,7 @@ class SkewShuffleRowRDD(
   override def getPartitions: Array[Partition] = {
     val partitions = ArrayBuffer[Partition]()
     var partitionIndex = -1
-    for(i <- 0 until partitionStartIndices.length ) {
+    for(i <- partitionStartIndices.indices ) {
       if (partitionStartIndices(i).isSkew > 0) {
         val num = (partitionStartIndices(i).partitionSize / skewThreshold + 1).asInstanceOf[Int]
         val genPartNum = if (num >=  partitionStartIndices(i).perPartitionNum) {

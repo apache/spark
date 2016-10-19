@@ -270,7 +270,7 @@ class ExchangeCoordinator(
      case None => Array[Int]()
    }
    var pos = 0
-   for (i <- 0 until partStartIndices.length) {
+   for (i <- partStartIndices.indices) {
      val (side, thisPartitionSkew) = if (flatSkewPartition.isDefinedAt(pos)) {
        flatSkewPartition(pos)
      } else {
