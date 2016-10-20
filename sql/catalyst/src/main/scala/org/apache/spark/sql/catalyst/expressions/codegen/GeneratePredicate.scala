@@ -25,6 +25,13 @@ import org.apache.spark.sql.catalyst.expressions._
  */
 abstract class Predicate {
   def eval(r: InternalRow): Boolean
+
+  /**
+   * Initialize internal states given the current partition index.
+   * This is used by non-deterministic expressions to set initial states.
+   * The default implementation does nothing.
+   */
+  def initializeStatesForPartition(partitionIndex: Int): Unit = {}
 }
 
 /**
@@ -53,6 +60,10 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
         public SpecificPredicate(Object[] references) {
           this.references = references;
           ${ctx.initMutableStates()}
+        }
+
+        public void initializeStatesForPartition(int partitionIndex) {
+          ${ctx.initPartition()}
         }
 
         ${ctx.declareAddedFunctions()}
