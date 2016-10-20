@@ -152,9 +152,8 @@ object WriteOutput extends Logging {
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
     val taskAttemptId = new TaskAttemptID(taskId, sparkAttemptNumber)
 
-    // Set up the attempt context required to use in the output committers.
+    // Set up the attempt context required to use in the output committer.
     val taskAttemptContext: TaskAttemptContext = {
-
       // Set up the configuration object
       val hadoopConf = description.serializableHadoopConf.value
       hadoopConf.set("mapred.job.id", jobId.toString)
@@ -170,11 +169,18 @@ object WriteOutput extends Logging {
       description.outputFormatClass, taskAttemptContext, description.path, description.isAppend)
     committer.setupTask(taskAttemptContext)
 
+    // Figure out where we need to write data to for staging.
+    // For FileOutputCommitter it has its own staging path called "work path".
+    val stagingPath = committer match {
+      case f: FileOutputCommitter => f.getWorkPath.toString
+      case _ => description.path
+    }
+
     val writeTask =
       if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
-        new SingleDirectoryWriteTask(description, taskAttemptContext, committer)
+        new SingleDirectoryWriteTask(description, taskAttemptContext, stagingPath)
       } else {
-        new DynamicPartitionWriteTask(description, taskAttemptContext, committer)
+        new DynamicPartitionWriteTask(description, taskAttemptContext, stagingPath)
       }
 
     try {
@@ -210,15 +216,14 @@ object WriteOutput extends Logging {
   private class SingleDirectoryWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
-      committer: OutputCommitter) extends ExecuteWriteTask {
+      stagingPath: String) extends ExecuteWriteTask {
 
     private[this] var outputWriter: OutputWriter = {
-      outputWriter = createOutputWriter(
-        description.outputWriterFactory,
-        getWorkPath(committer, description.path),
-        description.nonPartitionColumns,
-        taskAttemptContext,
-        committer)
+      val outputWriter = description.outputWriterFactory.newInstance(
+        path = stagingPath,
+        bucketId = None,
+        dataSchema = description.nonPartitionColumns.toStructType,
+        context = taskAttemptContext)
       outputWriter.initConverter(dataSchema = description.nonPartitionColumns.toStructType)
       outputWriter
     }
@@ -246,7 +251,7 @@ object WriteOutput extends Logging {
   private class DynamicPartitionWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
-      committer: OutputCommitter) extends ExecuteWriteTask {
+      stagingPath: String) extends ExecuteWriteTask {
 
     private var currentWriter: OutputWriter = _
 
@@ -291,22 +296,20 @@ object WriteOutput extends Logging {
     private def newOutputWriter(
         key: InternalRow,
         getPartitionString: UnsafeProjection): OutputWriter = {
-      val basePath = getWorkPath(committer, description.path.toString)
       val path =
         if (description.partitionColumns.nonEmpty) {
           val partitionPath = getPartitionString(key).getString(0)
-          new Path(basePath, partitionPath).toString
+          new Path(stagingPath, partitionPath).toString
         } else {
-          basePath
+          stagingPath
         }
       val bucketId = getBucketIdFromKey(key)
-      val newWriter = createOutputWriter(
-        description.outputWriterFactory,
-        path.toString,
-        description.nonPartitionColumns,
-        taskAttemptContext,
-        committer,
-        bucketId)
+
+      val newWriter = description.outputWriterFactory.newInstance(
+        path = path,
+        bucketId = bucketId,
+        dataSchema = description.nonPartitionColumns.toStructType,
+        context = taskAttemptContext)
       newWriter.initConverter(description.nonPartitionColumns.toStructType)
       newWriter
     }
@@ -324,8 +327,8 @@ object WriteOutput extends Logging {
       })
 
       // Returns the data columns to be written given an input row
-      val getOutputRow =
-      UnsafeProjection.create(description.nonPartitionColumns, description.allColumns)
+      val getOutputRow = UnsafeProjection.create(
+        description.nonPartitionColumns, description.allColumns)
 
       // Returns the partition path given a partition key.
       val getPartitionString =
@@ -384,43 +387,6 @@ object WriteOutput extends Logging {
         currentWriter.close()
         currentWriter = null
       }
-    }
-  }
-
-  def getWorkPath(committer: OutputCommitter, defaultPath: String): String = {
-    committer match {
-      // FileOutputCommitter writes to a temporary location returned by `getWorkPath`.
-      case f: FileOutputCommitter => f.getWorkPath.toString
-      case _ => defaultPath
-    }
-  }
-
-  def createOutputWriter(
-      outputWriterFactory: OutputWriterFactory,
-      path: String,
-      nonPartitionColumns: Seq[Attribute],
-      taskAttemptContext: TaskAttemptContext,
-      committer: OutputCommitter,
-      bucketId: Option[Int] = None): OutputWriter = {
-    try {
-      outputWriterFactory.newInstance(
-        path,
-        bucketId,
-        nonPartitionColumns.toStructType,
-        taskAttemptContext)
-    } catch {
-      case e: org.apache.hadoop.fs.FileAlreadyExistsException =>
-        if (committer.getClass.getName.contains("Direct")) {
-          // SPARK-11382: DirectParquetOutputCommitter is not idempotent, meaning on retry
-          // attempts, the task will fail because the output file is created from a prior attempt.
-          // This often means the most visible error to the user is misleading. Augment the error
-          // to tell the user to look for the actual error.
-          throw new SparkException("The output file already exists but this could be due to a " +
-            "failure from an earlier attempt. Look through the earlier logs or stage page for " +
-            "the first error.\n  File exists error: " + e, e)
-        } else {
-          throw e
-        }
     }
   }
 
