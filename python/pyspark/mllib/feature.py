@@ -274,12 +274,12 @@ class ChiSqSelectorModel(JavaVectorTransformer):
 class ChiSqSelector(object):
     """
     Creates a ChiSquared feature selector.
-    The selector supports three selection methods: `KBest`, `Percentile` and `FPR`.
+    The selector supports five selection methods: `KBest`, `Percentile`, `FPR`, `FDR` and `FWE`.
     `kbest` chooses the `k` top features according to a chi-squared test.
     `percentile` is similar but chooses a fraction of all features instead of a fixed number.
-    `fpr` select features based on a false positive rate test.
-    `fdr` select features based on an estimated false discovery rate.
-    `fwe` select features based on family-wise error rate.
+    `fpr` chooses all features whose false positive rate meets some threshold.
+    `fdr` chooses all features whose false discovery rate meets some threshold.
+    `fwe` chooses all features whose family-wise error rate meets some threshold.
     By default, the selection method is `kbest`, the default number of top features is 50.
 
     >>> data = [

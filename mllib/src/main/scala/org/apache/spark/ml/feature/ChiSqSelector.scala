@@ -72,14 +72,15 @@ private[feature] trait ChiSqSelectorParams extends Params
   def getPercentile: Double = $(percentile)
 
   /**
-   * alpha means the highest p-value for features to be kept when select type is "fpr".
-   * alpha means the highest uncorrected p-value for features to be kept when select type
+   * Only applicable when selectorType = "fpr", "fdr", or "fwe"
+   * alpha means the highest p-value for features to be kept when select type is "fpr",
+   * or the highest uncorrected p-value for features to be kept when select type
    * is "fdr" and "fwe".
    * Default value is 0.05.
    */
   final val alpha = new DoubleParam(this, "alpha",
     "alpha means the highest p-value for features to be kept when select type is fpr, " +
-      "alpha means the highest uncorrected p-value for features to be kept when select type " +
+      "or the highest uncorrected p-value for features to be kept when select type " +
       "is fdr and fwe.",
     ParamValidators.inRange(0, 1))
   setDefault(alpha -> 0.05)
@@ -104,13 +105,12 @@ private[feature] trait ChiSqSelectorParams extends Params
 /**
  * Chi-Squared feature selection, which selects categorical features to use for predicting a
  * categorical label.
- * The selector supports three selection methods: `kbest`, `percentile` and `fpr`.
+ * The selector supports five selection methods: `kbest`, `percentile`, `fpr`, `fdr` and `fwe`.
  * `kbest` chooses the `k` top features according to a chi-squared test.
  * `percentile` is similar but chooses a fraction of all features instead of a fixed number.
  * `fpr` chooses all features whose false positive rate meets some threshold.
- * `fpr` select features based on a false positive rate test.
- * `fdr` select features based on an estimated false discovery rate.
- * `fwe` select features based on family-wise error rate.
+ * `fdr` chooses all features whose false discovery rate meets some threshold.
+ * `fwe` chooses all features whose family-wise error rate meets some threshold.
  * By default, the selection method is `kbest`, the default number of top features is 50.
  */
 @Since("1.6.0")
@@ -134,9 +134,7 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
 
   /** @group setParam */
   @Since("2.1.0")
-  def setAlpha(value: Double): this.type = {
-    set(alpha, value)
-  }
+  def setAlpha(value: Double): this.type = set(alpha, value)
 
   /** @group setParam */
   @Since("1.6.0")

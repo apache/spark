@@ -2580,8 +2580,15 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     """
     .. note:: Experimental
 
-    Chi-Squared feature selection, which selects categorical features to use for predicting a
-    categorical label.
+    Creates a ChiSquared feature selector.
+    The selector supports five selection methods: `KBest`, `Percentile`, `FPR`, `FDR` and `FWE`.
+    `kbest` chooses the `k` top features according to a chi-squared test.
+    `percentile` is similar but chooses a fraction of all features instead of a fixed number.
+    `fpr` chooses all features whose false positive rate meets some threshold.
+    `fdr` chooses all features whose false discovery rate meets some threshold.
+    `fwe` chooses all features whose family-wise error rate meets some threshold.
+    By default, the selection method is `kbest`, the default number of top features is 50.
+
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame(
@@ -2625,7 +2632,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
                        typeConverter=TypeConverters.toFloat)
 
     alpha = Param(Params._dummy(), "alpha", "alpha means the highest p-value for features " +
-                  "to be kept when select type is fpr, alpha means the highest uncorrected " +
+                  "to be kept when select type is fpr, or the highest uncorrected " +
                   "p-value for features to to kept when select type is fdr and fwe.",
                   typeConverter=TypeConverters.toFloat)
 
@@ -2701,6 +2708,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     @since("2.1.0")
     def setAlpha(self, value):
         """
+        Only applicable when selectorType = "fpr", "fdr" or "fwe"
         Sets the value of :py:attr:`alpha`.
         """
         return self._set(alpha=value)
