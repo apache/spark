@@ -99,14 +99,14 @@
     <module>sql/hive</module>
     <module>unsafe</module>
     <module>assembly</module>
-    <module>external/twitter</module>
-    <module>external/flume</module>
-    <module>external/flume-sink</module>
-    <module>external/flume-assembly</module>
-    <module>external/mqtt</module>
-    <module>external/mqtt-assembly</module>
-    <module>external/zeromq</module>
-    <module>examples</module>
+    <!--<module>external/twitter</module>-->
+    <!--<module>external/flume</module>-->
+    <!--<module>external/flume-sink</module>-->
+    <!--<module>external/flume-assembly</module>-->
+    <!--<module>external/mqtt</module>-->
+    <!--<module>external/mqtt-assembly</module>-->
+    <!--<module>external/zeromq</module>-->
+    <!--<module>examples</module>-->
     <module>repl</module>
     <module>launcher</module>
     <module>external/kafka</module>
@@ -2187,6 +2187,7 @@
                 <exclude>com/google/common/base/Optional*</exclude>
                 <exclude>com/google/common/base/Present*</exclude>
                 <exclude>com/google/common/base/Supplier</exclude>
+                <exclude>com/google/common/base/AbstractIterator</exclude>
               </excludes>
             </relocation>
           </relocations>
