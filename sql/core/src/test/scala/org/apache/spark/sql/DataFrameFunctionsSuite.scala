@@ -406,4 +406,20 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(true), Row(true))
     )
   }
+
+  test("SPARK-14393: monotonically_increasing_id shouldn't change after coalesce") {
+    val df = spark.range(0, 4, 1, 4).withColumn("long_id", monotonically_increasing_id())
+    val rows = df.collect()
+    val rowsAfterCoalesce = df.coalesce(2).collect()
+    assert(rows === rowsAfterCoalesce)
+  }
+
+  test("SPARK-14393: monotonically_increasing_id shouldn't change after union") {
+    val df1 = spark.range(0, 2, 1, 2).withColumn("long_id", monotonically_increasing_id())
+    val rows1 = df1.collect()
+    val df2 = spark.range(2, 4, 1, 2).withColumn("long_id", monotonically_increasing_id())
+    val rows2 = df2.collect()
+    val rowsAfterUnion = df1.union(df2).collect()
+    assert(rowsAfterUnion === rows1 ++ rows2)
+  }
 }
