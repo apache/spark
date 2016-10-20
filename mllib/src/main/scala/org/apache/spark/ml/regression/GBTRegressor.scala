@@ -123,9 +123,17 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+    instr.logNumFeatures(numFeatures)
+    instr.logNumClasses(0)
+
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
       $(seed))
-    new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
+    val m = new GBTRegressionModel(uid, baseLearners, learnerWeights, numFeatures)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.4.0")
