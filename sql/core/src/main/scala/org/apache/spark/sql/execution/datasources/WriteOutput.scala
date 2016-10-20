@@ -41,9 +41,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 
-/**
- * A helper object for writing data out to an existing partition.
- */
+/** A helper object for writing data out to a location. */
 object WriteOutput extends Logging {
 
   /** A shared job description for all the write tasks. */
@@ -59,7 +57,12 @@ object WriteOutput extends Logging {
       val outputFormatClass: Class[_ <: OutputFormat[_, _]])
     extends Serializable {
 
-    assert(allColumns.toSet == (partitionColumns ++ nonPartitionColumns).toSet)
+    assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ nonPartitionColumns),
+      s"""
+         |All columns: ${allColumns.mkString(", ")}
+         |Partition columns: ${partitionColumns.mkString(", ")}
+         |Non-partition columns: ${nonPartitionColumns.mkString(", ")}
+       """.stripMargin)
   }
 
   /**
@@ -127,21 +130,17 @@ object WriteOutput extends Logging {
 
         committer.commitJob(job)
         logInfo(s"Job ${job.getJobID} committed.")
-
         refreshFunction()
       } catch { case cause: Throwable =>
         logError(s"Aborting job ${job.getJobID}.", cause)
         committer.abortJob(job, JobStatus.State.FAILED)
-
         throw new SparkException("Job aborted.", cause)
       }
     }
   }
 
-  /**
-   * Writes data out in a single Spark task.
-   */
-  def executeTask(
+  /** Writes data out in a single Spark task. */
+  private def executeTask(
       description: WriteJobDescription,
       sparkStageId: Int,
       sparkPartitionId: Int,
@@ -206,9 +205,13 @@ object WriteOutput extends Logging {
     }
   }
 
-  trait ExecuteWriteTask {
+  /**
+   * A simple trait for writing out data in a single Spark task, without any concerns about how
+   * to commit or abort tasks. Exceptions thrown by the implementation of this trait will
+   * automatically trigger task aborts.
+   */
+  private trait ExecuteWriteTask {
     def execute(iterator: Iterator[InternalRow]): Unit
-
     def releaseResources(): Unit
   }
 
@@ -229,7 +232,6 @@ object WriteOutput extends Logging {
     }
 
     override def execute(iter: Iterator[InternalRow]): Unit = {
-
       while (iter.hasNext) {
         val internalRow = iter.next()
         outputWriter.writeInternal(internalRow)
@@ -253,6 +255,7 @@ object WriteOutput extends Logging {
       taskAttemptContext: TaskAttemptContext,
       stagingPath: String) extends ExecuteWriteTask {
 
+    // currentWriter is initialized whenever we see a new key
     private var currentWriter: OutputWriter = _
 
     private val bucketColumns: Seq[Attribute] = description.bucketSpec.toSeq.flatMap {
@@ -273,12 +276,11 @@ object WriteOutput extends Logging {
     /** Expressions that given a partition key build a string like: col1=val/col2=val/... */
     private def partitionStringExpression: Seq[Expression] = {
       description.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
-        val escaped =
-          ScalaUDF(
-            PartitioningUtils.escapePathName _,
-            StringType,
-            Seq(Cast(c, StringType)),
-            Seq(StringType))
+        val escaped = ScalaUDF(
+          PartitioningUtils.escapePathName _,
+          StringType,
+          Seq(Cast(c, StringType)),
+          Seq(StringType))
         val str = If(IsNull(c), Literal(PartitioningUtils.DEFAULT_PARTITION_NAME), escaped)
         val partitionName = Literal(c.name + "=") :: str :: Nil
         if (i == 0) partitionName else Literal(Path.SEPARATOR) :: partitionName
@@ -390,7 +392,7 @@ object WriteOutput extends Logging {
     }
   }
 
-  def setupDriverCommitter(job: Job, path: String, isAppend: Boolean): OutputCommitter = {
+  private def setupDriverCommitter(job: Job, path: String, isAppend: Boolean): OutputCommitter = {
     // Setup IDs
     val jobId = SparkHadoopWriter.createJobID(new Date, 0)
     val taskId = new TaskID(jobId, TaskType.MAP, 0)
