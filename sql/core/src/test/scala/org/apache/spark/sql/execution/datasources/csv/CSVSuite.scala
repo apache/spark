@@ -52,7 +52,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val numbersFile = "test-data/numbers.csv"
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
-  private val emptyStringValuesFile = "test-data/emptystring-values.csv"
+  private val emptyStringValuesFile = "test-data/emptystring.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -891,77 +891,66 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("load data with empty quoted string fields.") {
-    val results = sqlContext
-      .read
+  test("SPARK-17916 load data with empty strings and null values") {
+    val rows = spark.read
       .format("csv")
-      .options(Map(
-        "header" -> "true",
-        "nullValue" -> null,
-        "inferSchema" -> "true"))
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .option("nullValue", "-")
       .load(testFile(emptyStringValuesFile))
-      .collect()
 
-    assert(results(0).toSeq === Array(2017, "Tesla", "Mode 3", "looks nice.", 35000.99d))
-    assert(results(1).toSeq === Array(2016, "Chevy", "Bolt", null, 29000.00d))
-    assert(results(2).toSeq === Array(2015, "Porsche", null, null, null))
+    val expectedRows = Seq(Row(1, null), Row(2, ""), Row(3, null), Row(4, "A"))
+    checkAnswer(rows, expectedRows)
   }
 
-  test("load data with empty quoted string fields using user specified empty value option.") {
-    val results = sqlContext
-      .read
-      .format("csv")
-      .options(Map(
-        "header" -> "true",
-        "inferSchema" -> "true",
-        "nullValue" -> null,
-        "emptyAsNull" -> "false"))
-      .load(testFile(emptyStringValuesFile))
-      .collect()
-
-    assert(results(0).toSeq === Array(2017, "Tesla", "Mode 3", "looks nice.", 35000.99d))
-    assert(results(1).toSeq === Array(2016, "Chevy", "Bolt", "", 29000.00d))
-    assert(results(2).toSeq === Array(2015, "Porsche", "", null, null))
-  }
-
-  test("save empty string fields.") {
+  test("save and load data with empty strings using all quotes option") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
-      val data = Seq((2015, "Tesla", "Model X", "", 129000.00d))
-      val df = data.toDF("year", "make", "model", "comment", "price")
-      df.coalesce(1).write.format("csv").save(csvDir)
-      val results = sqlContext
-        .read
+      val data = Seq((1, "", "abcd"), (2, null, "xyz"))
+      val df = spark.createDataFrame(data)
+      df.coalesce(1).write
         .format("csv")
-        .schema(df.schema)
-        .load(csvDir)
-        .collect()
+        .option("quoteAll", "true")
+        .option("nullValue", "NUL")
+        .save(csvDir)
+      val results = spark.read.format("text").load(csvDir).collect()
+      val expected = Seq(Seq("\"1\",\"\",\"abcd\""), Seq("\"2\",\"NUL\",\"xyz\""))
+      assert(results.toSeq.map(_.toSeq) === expected)
 
-      assert(results(0).toSeq === Array(2015, "Tesla", "Model X", "", 129000.00d))
+      val rows = spark.read
+        .format("csv")
+        .option("nullValue", "NUL")
+        .option("inferSchema", "true")
+        .load(csvDir)
+
+      val expectedRows = Seq(Row(1, "", "abcd"), Row(2, null, "xyz"))
+      checkAnswer(rows, expectedRows)
     }
   }
 
-  test("save empty string fields with user specified emptyValue option.") {
+  test("save and load data using the user specified emptyValue option") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
-      val data = Seq((2015, "Tesla", "Model X", "", 129000.00d))
-      val df = data.toDF("year", "make", "model", "comment", "price")
-      df.coalesce(1)
-        .write.format("csv")
-        .option("nullValue", "\\N")
-        .option("emptyAsNull", "false")
-        .save(csvDir)
-      val results = sqlContext
-        .read
+      val data = Seq((1, "", "abcd"), (2, null, "xyz"))
+      val df = spark.createDataFrame(data)
+      df.coalesce(1).write
         .format("csv")
-        .schema(df.schema)
-        .option("nullValue", "\\N")
-        .option("emptyAsNull", "false")
+        .option("nullValue", "NUL")
+        .option("emptyValue", "<EMPTY>")
+        .save(csvDir)
+      val results = spark.read.format("text").load(csvDir).collect()
+      val expected = Seq(Seq("1,<EMPTY>,abcd"), Seq("2,NUL,xyz"))
+      assert(results.toSeq.map(_.toSeq) === expected)
+
+      val rows = spark.read
+        .format("csv")
+        .option("nullValue", "NUL")
+        .option("emptyValue", "<EMPTY>")
+        .option("inferSchema", "true")
         .load(csvDir)
-        .collect()
-      // CSV writer does not seem to distinguish between empty string value vs null value,
-      // null value (\\N) gets written in both the cases.
-      assert(results(0).toSeq === Array(2015, "Tesla", "Model X", "\\N", 129000.00d))
+
+      val expectedRows = Seq(Row(1, "", "abcd"), Row(2, null, "xyz"))
+      checkAnswer(rows, expectedRows)
     }
   }
 }

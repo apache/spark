@@ -90,7 +90,7 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
   val permissive = ParseModes.isPermissiveMode(parseMode)
 
   val nullValue = parameters.getOrElse("nullValue", "")
-  val emptyAsNull = getBool("emptyAsNull", true)
+  val emptyValue = parameters.getOrElse("emptyValue", "")
 
   val nanValue = parameters.getOrElse("nanValue", "NaN")
 
