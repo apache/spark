@@ -684,22 +684,21 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'                        of models will be always returned on the original scale, so it will be transparent for
 #'                        users. Note that with/without standardization, the models should be always converged
 #'                        to the same solution when no regularization is applied. Default is TRUE, same as glmnet.
-#' @param threshold in binary classification, in range [0, 1]. If the estimated probability of class label 1
+#' @param thresholds in binary classification, in range [0, 1]. If the estimated probability of class label 1
 #'                  is > threshold, then predict 1, else 0. A high threshold encourages the model to predict 0
 #'                  more often; a low threshold encourages the model to predict 1 more often. Note: Setting this with
 #'                  threshold p is equivalent to setting thresholds c(1-p, p). When threshold is set, any user-set
 #'                  value for thresholds will be cleared. If both threshold and thresholds are set, then they must be
-#'                  equivalent. Default is 0.5.
-#' @param thresholds in multiclass (or binary) classification to adjust the probability of predicting each class.
-#'                   Array must have length equal to the number of classes, with values > 0, excepting that at most one
-#'                   value may be 0. The class with largest value p/t is predicted, where p is the original probability
-#'                   of that class and t is the class's threshold. Note: When thresholds is set, any user-set
-#'                   value for threshold will be cleared. If both threshold and thresholds are set, then they must be
-#'                   equivalent. Default is NULL.
+#'                  equivalent. In multiclass (or binary) classification to adjust the probability of
+#'                  predicting each class. Array must have length equal to the number of classes, with values > 0,
+#'                  excepting that at most one value may be 0. The class with largest value p/t is predicted, where p
+#'                  is the original probability of that class and t is the class's threshold. Note: When thresholds
+#'                  is set, any user-set value for threshold will be cleared. If both threshold and thresholds are
+#'                  set, then they must be equivalent. Default is 0.5.
 #' @param weightCol The weight column name.
 #' @param aggregationDepth depth for treeAggregate (>= 2). If the dimensions of features or the number of partitions
 #'                         are large, this param could be adjusted to a larger size. Default is 2.
-#' @param probability column name for predicted class conditional probabilities. Default is "probability".
+#' @param probabilityCol column name for predicted class conditional probabilities. Default is "probability".
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.logit} returns a fitted logistic regression model
 #' @rdname spark.logit
@@ -745,16 +744,12 @@ setMethod("predict", signature(object = "KMeansModel"),
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
                    tol = 1E-6, fitIntercept = TRUE, family = "auto", standardization = TRUE,
-                   threshold = 0.5, thresholds = NULL, weightCol = NULL, aggregationDepth = 2,
-                   probability = "probability") {
+                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
+                   probabilityCol = "probability") {
             formula <- paste0(deparse(formula), collapse = "")
 
             if (is.null(weightCol)) {
               weightCol <- ""
-            }
-
-            if (!is.null(thresholds)) {
-              thresholds <- as.array(thresholds)
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
@@ -762,9 +757,8 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                                 as.numeric(elasticNetParam), as.integer(maxIter),
                                 as.numeric(tol), as.logical(fitIntercept),
                                 as.character(family), as.logical(standardization),
-                                as.numeric(threshold), thresholds,
-                                as.character(weightCol), as.integer(aggregationDepth),
-                                as.character(probability))
+                                as.array(thresholds), as.character(weightCol),
+                                as.integer(aggregationDepth), as.character(probabilityCol))
             new("LogisticRegressionModel", jobj = jobj)
           })
 

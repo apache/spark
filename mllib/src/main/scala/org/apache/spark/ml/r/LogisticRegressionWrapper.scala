@@ -82,7 +82,6 @@ private[r] object LogisticRegressionWrapper
       fitIntercept: Boolean,
       family: String,
       standardization: Boolean,
-      threshold: Double,
       thresholds: Array[Double],
       weightCol: String,
       aggregationDepth: Int,
@@ -109,14 +108,15 @@ private[r] object LogisticRegressionWrapper
       .setFitIntercept(fitIntercept)
       .setFamily(family)
       .setStandardization(standardization)
-      .setThreshold(threshold)
       .setWeightCol(weightCol)
       .setAggregationDepth(aggregationDepth)
       .setFeaturesCol(rFormula.getFeaturesCol)
       .setProbabilityCol(probability)
 
-    if (thresholds != null) {
+    if (thresholds.length > 1) {
       logisticRegression.setThresholds(thresholds)
+    } else {
+      logisticRegression.setThreshold(thresholds(0))
     }
 
     val pipeline = new Pipeline()
