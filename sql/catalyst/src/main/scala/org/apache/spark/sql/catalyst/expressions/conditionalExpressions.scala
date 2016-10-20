@@ -174,7 +174,7 @@ abstract class CaseWhenBase(
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END - When a = true, returns b; when c = true, return d; else return e.")
+  usage = "CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END - When expr1 = true, returns expr2; when expr3 = true, return expr4; else return expr5.")
 // scalastyle:on line.size.limit
 case class CaseWhen(
     val branches: Seq[(Expression, Expression)],

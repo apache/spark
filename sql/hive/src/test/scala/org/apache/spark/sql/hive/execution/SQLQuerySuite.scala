@@ -248,14 +248,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  ignore("describe functions - built-in functions") {
+  test("describe functions - built-in functions") {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase",
       "Extended Usage:",
-      "> SELECT upper('SparkSql')",
-      "'SPARKSQL'")
+      "upper(str)",
+      "Arguments:",
+      "str - string type or any type expression that can be implicitly converted",
+      "to string type.",
+      "Examples:",
+      "> SELECT upper('SparkSql');",
+      "SPARKSQL")
 
     checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
@@ -271,25 +276,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkKeywordsExist(sql("describe functioN  `~`"),
       "Function: ~",
       "Class: org.apache.spark.sql.catalyst.expressions.BitwiseNot",
-      "Usage: ~ b - Bitwise NOT.")
+      "Usage: ~ expr - Bitwise NOT.")
 
     // Hard coded describe functions
     checkKeywordsExist(sql("describe function  `<>`"),
       "Function: <>",
-      "Usage: a <> b - Returns TRUE if a is not equal to b")
+      "Usage: expr1 <> expr2 - Returns TRUE if expr1 is not equal to expr2")
 
     checkKeywordsExist(sql("describe function  `!=`"),
       "Function: !=",
-      "Usage: a != b - Returns TRUE if a is not equal to b")
+      "Usage: expr1 != expr2 - Returns TRUE if expr1 is not equal to expr2")
 
     checkKeywordsExist(sql("describe function  `between`"),
       "Function: between",
-      "Usage: a [NOT] BETWEEN b AND c - evaluate if a is [not] in between b and c")
+      "Usage: expr1 [NOT] BETWEEN expr2 AND expr3 - " +
+        "evaluate if expr1 is [not] in between expr2 and expr3")
 
     checkKeywordsExist(sql("describe function  `case`"),
       "Function: case",
-      "Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
-        "When a = b, returns c; when a = d, return e; else return f")
+      "Usage: CASE expr1 WHEN expr2 THEN expr3 " +
+        "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
+        "When expr1 = expr2, returns expr3; " +
+        "when expr1 = expr4, return expr5; else return expr6")
   }
 
   test("describe functions - user defined functions") {
