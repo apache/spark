@@ -37,6 +37,22 @@ function makeIdNumeric(id) {
   return resl;
 }
 
+function makeIdNumeric(id) {
+  var strs = id.split("_");
+  if (strs.length < 3) {
+    return id;
+  }
+  var appSeqNum = strs[2];
+  var resl = strs[0] + "_" + strs[1] + "_";
+  var diff = 10 - appSeqNum.length;
+  while (diff > 0) {
+      resl += "0"; // padding 0 before the app sequence number to make sure it has 10 characters
+      diff--;
+  }
+  resl += appSeqNum;
+  return resl;
+}
+
 function formatDate(date) {
   if (date <= 0) return "-";
   else return date.split(".")[0].replace("T", " ");
