@@ -2387,6 +2387,11 @@ class Dataset[T] private[sql](
    */
   def cache(): this.type = persist()
 
+  def cached: Dataset[T] = {
+    sparkSession.sharedState.cacheManager.cacheQuery(this)
+    Dataset(sparkSession, sparkSession.sharedState.cacheManager.useCachedData(this.logicalPlan))
+  }
+
   /**
    * Persist this Dataset with the given storage level.
    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
