@@ -405,8 +405,7 @@ case class DataSource(
             })
         }
 
-        val enableDatasourceHivePartitionProvider = true  // TODO(ekl) conf
-        val fileCatalog = if (enableDatasourceHivePartitionProvider &&
+        val fileCatalog = if (sparkSession.sqlContext.conf.filesourcePartitionManagement &&
             catalogTable.isDefined && catalogTable.get.partitionProviderIsHive) {
           new TableFileCatalog(
             sparkSession,
