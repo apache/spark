@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.{NullType, StructField, StructType}
 
-/**
- * :: Experimental ::
- * A class used to report information about the progress of a [[StreamingQuery]].
- *
- * @param name The [[StreamingQuery]] name. This name is unique across all active queries.
- * @param id The [[StreamingQuery]] id. This id is unique across
-  *          all queries that have been started in the current process.
- * @param sourceStatuses The current statuses of the [[StreamingQuery]]'s sources.
- * @param sinkStatus The current status of the [[StreamingQuery]]'s sink.
- */
-@Experimental
-class StreamingQueryInfo private[sql](
-  val name: String,
-  val id: Long,
-  val sourceStatuses: Seq[SourceStatus],
-  val sinkStatus: SinkStatus)
+class SparkExecuteStatementOperationSuite extends SparkFunSuite {
+  test("SPARK-17112 `select null` via JDBC triggers IllegalArgumentException in ThriftServer") {
+    val field1 = StructField("NULL", NullType)
+    val field2 = StructField("(IF(true, NULL, NULL))", NullType)
+    val tableSchema = StructType(Seq(field1, field2))
+    val columns = SparkExecuteStatementOperation.getTableSchema(tableSchema).getColumnDescriptors()
+    assert(columns.size() == 2)
+    assert(columns.get(0).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
+    assert(columns.get(1).getType() == org.apache.hive.service.cli.Type.NULL_TYPE)
+  }
+}

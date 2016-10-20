@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
@@ -94,15 +95,15 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("CREATE TABLE show2b(c2 int)")
       checkAnswer(
         sql("SHOW TABLES IN default 'show1*'"),
-        Row("show1a", false) :: Nil)
+        Row("default", "show1a", false) :: Nil)
       checkAnswer(
         sql("SHOW TABLES IN default 'show1*|show2*'"),
-        Row("show1a", false) ::
-          Row("show2b", false) :: Nil)
+        Row("default", "show1a", false) ::
+          Row("default", "show2b", false) :: Nil)
       checkAnswer(
         sql("SHOW TABLES 'show1*|show2*'"),
-        Row("show1a", false) ::
-          Row("show2b", false) :: Nil)
+        Row("default", "show1a", false) ::
+          Row("default", "show2b", false) :: Nil)
       assert(
         sql("SHOW TABLES").count() >= 2)
       assert(
@@ -336,28 +337,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show columns") {
-    checkAnswer(
-      sql("SHOW COLUMNS IN parquet_tab3"),
-      Row("col1") :: Row("col 2") :: Nil)
-
-    checkAnswer(
-      sql("SHOW COLUMNS IN default.parquet_tab3"),
-      Row("col1") :: Row("col 2") :: Nil)
-
-    checkAnswer(
-      sql("SHOW COLUMNS IN parquet_tab3 FROM default"),
-      Row("col1") :: Row("col 2") :: Nil)
-
-    checkAnswer(
-      sql("SHOW COLUMNS IN parquet_tab4 IN default"),
-      Row("price") :: Row("qty") :: Row("year") :: Row("month") :: Nil)
-
-    val message = intercept[NoSuchTableException] {
-      sql("SHOW COLUMNS IN badtable FROM default")
-    }.getMessage
-    assert(message.contains("'badtable' not found in database"))
-  }
 
   test("show partitions - show everything") {
     checkAnswer(

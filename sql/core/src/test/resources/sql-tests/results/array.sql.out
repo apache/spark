@@ -124,8 +124,23 @@ struct<sort_array(boolean_array, true):array<boolean>,sort_array(tinyint_array, 
 -- !query 8 output
 [true]	[1,2]	[1,2]	[1,2]	[1,2]	[9223372036854775808,9223372036854775809]	[1.0,2.0]	[1.0,2.0]	[2016-03-13,2016-03-14]	[2016-11-12 20:54:00.0,2016-11-15 20:54:00.0]
 
-
 -- !query 9
+select sort_array(array('b', 'd'), '1')
+-- !query 9 schema
+struct<>
+-- !query 9 output
+org.apache.spark.sql.AnalysisException
+cannot resolve 'sort_array(array('b', 'd'), '1')' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7
+
+-- !query 10
+select sort_array(array('b', 'd'), cast(NULL as boolean))
+-- !query 10 schema
+struct<>
+-- !query 10 output
+org.apache.spark.sql.AnalysisException
+cannot resolve 'sort_array(array('b', 'd'), CAST(NULL AS BOOLEAN))' due to data type mismatch: Sort order in second argument requires a boolean literal.; line 1 pos 7
+
+-- !query 11
 select
   size(boolean_array),
   size(tinyint_array),
@@ -138,7 +153,7 @@ select
   size(date_array),
   size(timestamp_array)
 from primitive_arrays
--- !query 9 schema
+-- !query 11 schema
 struct<size(boolean_array):int,size(tinyint_array):int,size(smallint_array):int,size(int_array):int,size(bigint_array):int,size(decimal_array):int,size(double_array):int,size(float_array):int,size(date_array):int,size(timestamp_array):int>
--- !query 9 output
+-- !query 11 output
 1	2	2	2	2	2	2	2	2	2

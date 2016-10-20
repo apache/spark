@@ -19,6 +19,8 @@ package org.apache.spark.deploy.history
 
 import java.util.zip.ZipOutputStream
 
+import scala.xml.Node
+
 import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
 
@@ -77,7 +79,7 @@ private[history] abstract class ApplicationHistoryProvider {
    *
    * @return List of all know applications.
    */
-  def getListing(): Iterable[ApplicationHistoryInfo]
+  def getListing(): Iterator[ApplicationHistoryInfo]
 
   /**
    * Returns the Spark UI for a specific application.
@@ -114,4 +116,8 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo]
 
+  /**
+   * @return html text to display when the application list is empty
+   */
+  def getEmptyListingHtml(): Seq[Node] = Seq.empty
 }

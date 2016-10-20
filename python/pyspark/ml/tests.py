@@ -477,6 +477,22 @@ class FeatureTests(SparkSessionTestCase):
             feature, expected = r
             self.assertEqual(feature, expected)
 
+    def test_rformula_force_index_label(self):
+        df = self.spark.createDataFrame([
+            (1.0, 1.0, "a"),
+            (0.0, 2.0, "b"),
+            (1.0, 0.0, "a")], ["y", "x", "s"])
+        # Does not index label by default since it's numeric type.
+        rf = RFormula(formula="y ~ x + s")
+        model = rf.fit(df)
+        transformedDF = model.transform(df)
+        self.assertEqual(transformedDF.head().label, 1.0)
+        # Force to index label.
+        rf2 = RFormula(formula="y ~ x + s").setForceIndexLabel(True)
+        model2 = rf2.fit(df)
+        transformedDF2 = model2.transform(df)
+        self.assertEqual(transformedDF2.head().label, 0.0)
+
 
 class HasInducedError(Params):
 
@@ -1316,7 +1332,7 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(sv[-3], 0.)
         self.assertEqual(sv[-5], 0.)
         for ind in [5, -6]:
-            self.assertRaises(ValueError, sv.__getitem__, ind)
+            self.assertRaises(IndexError, sv.__getitem__, ind)
         for ind in [7.8, '1']:
             self.assertRaises(TypeError, sv.__getitem__, ind)
 
@@ -1324,11 +1340,15 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(zeros[0], 0.0)
         self.assertEqual(zeros[3], 0.0)
         for ind in [4, -5]:
-            self.assertRaises(ValueError, zeros.__getitem__, ind)
+            self.assertRaises(IndexError, zeros.__getitem__, ind)
 
         empty = SparseVector(0, {})
         for ind in [-1, 0, 1]:
-            self.assertRaises(ValueError, empty.__getitem__, ind)
+            self.assertRaises(IndexError, empty.__getitem__, ind)
+
+    def test_sparse_vector_iteration(self):
+        self.assertListEqual(list(SparseVector(3, [], [])), [0.0, 0.0, 0.0])
+        self.assertListEqual(list(SparseVector(5, [0, 3], [1.0, 2.0])), [1.0, 0.0, 0.0, 2.0, 0.0])
 
     def test_matrix_indexing(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
@@ -1336,6 +1356,9 @@ class VectorTests(MLlibTestCase):
         for i in range(3):
             for j in range(2):
                 self.assertEqual(mat[i, j], expected[i][j])
+
+        for i, j in [(-1, 0), (4, 1), (3, 4)]:
+            self.assertRaises(IndexError, mat.__getitem__, (i, j))
 
     def test_repr_dense_matrix(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
@@ -1407,6 +1430,9 @@ class VectorTests(MLlibTestCase):
             for j in range(4):
                 self.assertEqual(expected[i][j], sm1[i, j])
         self.assertTrue(array_equal(sm1.toArray(), expected))
+
+        for i, j in [(-1, 1), (4, 3), (3, 5)]:
+            self.assertRaises(IndexError, sm1.__getitem__, (i, j))
 
         # Test conversion to dense and sparse.
         smnew = sm1.toDense().toSparse()
