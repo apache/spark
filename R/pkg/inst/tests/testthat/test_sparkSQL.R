@@ -1572,7 +1572,7 @@ test_that("filter() on a DataFrame", {
   #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint
 })
 
-test_that("join() and merge() on a DataFrame", {
+test_that("join(), crossJoin() and merge() on a DataFrame", {
   df <- read.json(jsonPath)
 
   mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
@@ -1583,7 +1583,10 @@ test_that("join() and merge() on a DataFrame", {
   writeLines(mockLines2, jsonPath2)
   df2 <- read.json(jsonPath2)
 
-  expect_error(tryCatch(head(join(df, df2)), error = function(e) { stop(e) }),
+  # inner join, not cartesian join
+  expect_equal(count(where(join(df, df2), df$name == df2$name)), 4)
+  # cartesian join
+  expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
                paste0(".*(org.apache.spark.sql.AnalysisException: Detected cartesian product for",
                       " INNER join between logical plans).*"))
 
