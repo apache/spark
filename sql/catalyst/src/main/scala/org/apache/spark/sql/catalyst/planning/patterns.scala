@@ -112,6 +112,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // as join keys.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
       val joinKeys = predicates.flatMap {
+        case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => None
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
         // Replace null with default value for joining key, then those rows with null in it could
@@ -125,6 +126,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case other => None
       }
       val otherPredicates = predicates.filterNot {
+        case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case EqualTo(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
