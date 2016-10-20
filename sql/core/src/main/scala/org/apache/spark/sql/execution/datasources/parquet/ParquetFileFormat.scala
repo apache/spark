@@ -56,7 +56,13 @@ class ParquetFileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
-  ParquetFileFormat.redirectParquetLogs
+  // Poor man's "static initializer". Scala doesn't have language support for static initializers,
+  // and it's important that we initialize `ParquetFileFormat.redirectParquetLogsViaSLF4J` before
+  // doing anything with the Parquet libraries. Rather than expect clients to initialize the
+  // `ParquetFileFormat` singleton object at the right time, we put that initialization in the
+  // constructor of this class. This method is idempotent, and essentially a no-op after its first
+  // call.
+  ParquetFileFormat.ensureParquetLogRedirection
 
   override def shortName(): String = "parquet"
 
@@ -709,8 +715,9 @@ object ParquetFileFormat extends Logging {
   }
 
   /**
-   * The ParquetFileFormat constructor calls this function to initialize
-   * `redirectParquetLogsViaSLF4J`.
+   * The `ParquetFileFormat` constructor calls this method to ensure that Parquet library log
+   * output is redirected through the SLF4J JUL bridge handler. This method is a no-op because we
+   * only require that `redirectParquetLogsViaSLF4J` is initialized. This accomplishes that task.
    */
-  private def redirectParquetLogs(): Unit = {}
+  private def ensureParquetLogRedirection(): Unit = {}
 }
