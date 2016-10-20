@@ -40,7 +40,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 private[libsvm] class LibSVMOutputWriter(
-    path: String,
+    stagingDir: String,
+    fileNamePrefix: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
@@ -50,11 +51,7 @@ private[libsvm] class LibSVMOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        new Path(stagingDir, fileNamePrefix + extension)
       }
     }.getRecordWriter(context)
   }
@@ -132,12 +129,11 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       dataSchema: StructType): OutputWriterFactory = {
     new OutputWriterFactory {
       override def newInstance(
-          path: String,
-          bucketId: Option[Int],
+          stagingDir: String,
+          fileNamePrefix: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        if (bucketId.isDefined) { sys.error("LibSVM doesn't support bucketing") }
-        new LibSVMOutputWriter(path, dataSchema, context)
+        new LibSVMOutputWriter(stagingDir, fileNamePrefix, dataSchema, context)
       }
     }
   }
