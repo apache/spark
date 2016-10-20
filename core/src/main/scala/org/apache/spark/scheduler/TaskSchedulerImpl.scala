@@ -370,12 +370,14 @@ private[spark] class TaskSchedulerImpl(
                 }
               }
             }
-            if (state == TaskState.FINISHED) {
-              taskSet.removeRunningTask(tid)
-              taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
-            } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
-              taskSet.removeRunningTask(tid)
-              taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+            state match {
+              case TaskState.FINISHED =>
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              case s if TaskState.isFinished(s) =>
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+              case ignored =>
             }
           case None =>
             logError(
