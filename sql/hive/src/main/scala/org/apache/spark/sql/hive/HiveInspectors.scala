@@ -474,19 +474,7 @@ private[hive] trait HiveInspectors {
         val keyUnwrapper = unwrapperFor(mi.getMapKeyObjectInspector)
         val valueUnwrapper = unwrapperFor(mi.getMapValueObjectInspector)
         val keyValues = mi.getWritableConstantValue
-        val keys: Array[Any] = new Array[Any](keyValues.size())
-        val values: Array[Any] = new Array[Any](keyValues.size())
-
-        var i: Int = 0
-        keyValues.asScala.foreach(
-          kv => {
-            keys(i) = keyUnwrapper(kv._1)
-            values(i) = valueUnwrapper(kv._2)
-            i += 1
-          }
-        )
-
-        val constant = ArrayBasedMapData(keys, values)
+        val constant = ArrayBasedMapData(keyValues, keyUnwrapper, valueUnwrapper)
         _ => constant
       case li: StandardConstantListObjectInspector =>
         val unwrapper = unwrapperFor(li.getListElementObjectInspector)
@@ -665,19 +653,7 @@ private[hive] trait HiveInspectors {
             if (map == null) {
               null
             } else {
-              val keys: Array[Any] = new Array[Any](map.size())
-              val values: Array[Any] = new Array[Any](map.size())
-
-              var i: Int = 0
-              map.asScala.foreach(
-                kv => {
-                  keys(i) = keyUnwrapper(kv._1)
-                  values(i) = valueUnwrapper(kv._2)
-                  i += 1
-                }
-              )
-
-              ArrayBasedMapData(keys, values)
+              ArrayBasedMapData(map, keyUnwrapper, valueUnwrapper)
             }
           } else {
             null

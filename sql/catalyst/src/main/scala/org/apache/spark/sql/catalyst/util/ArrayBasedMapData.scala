@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.{Map => JMap}
+
+import scala.collection.JavaConverters._
+
 class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) extends MapData {
   require(keyArray.numElements() == valueArray.numElements())
 
@@ -33,6 +37,23 @@ object ArrayBasedMapData {
   def apply(map: Map[Any, Any]): ArrayBasedMapData = {
     val array = map.toArray
     ArrayBasedMapData(array.map(_._1), array.map(_._2))
+  }
+
+  def apply(map: JMap[_, _],
+            keyUnwrapper: (Any) => Any,
+            valueUnwrapper: (Any) => Any): ArrayBasedMapData = {
+    val keys: Array[Any] = new Array[Any](map.size())
+    val values: Array[Any] = new Array[Any](map.size())
+
+    var i: Int = 0
+    map.asScala.foreach(
+      kv => {
+        keys(i) = keyUnwrapper(kv._1)
+        values(i) = valueUnwrapper(kv._2)
+        i += 1
+      }
+    )
+    ArrayBasedMapData(keys, values)
   }
 
   def apply(keys: Array[Any], values: Array[Any]): ArrayBasedMapData = {
