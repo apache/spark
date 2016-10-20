@@ -387,6 +387,14 @@ private object YarnClusterDriver extends Logging with Matchers {
       sc.stop()
     }
 
+    // Verify that the config archive is correctly placed in the classpath of all containers.
+    val confFile = "/" + Client.SPARK_CONF_FILE
+    assert(getClass().getResource(confFile) != null)
+    val configFromExecutors = sc.parallelize(1 to 4, 4)
+      .map { _ => Option(getClass().getResource(confFile)).map(_.toString).orNull }
+      .collect()
+    assert(configFromExecutors.find(_ == null) === None)
+
     // verify log urls are present
     val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
     assert(listeners.size === 1)
