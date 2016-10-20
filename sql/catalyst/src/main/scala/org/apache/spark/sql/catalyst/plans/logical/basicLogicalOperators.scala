@@ -366,26 +366,10 @@ case class InsertIntoTable(
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
 
-  lazy val expectedColumns = {
-    if (table.output.isEmpty) {
-      None
-    } else {
-      // Note: The parser (visitPartitionSpec in AstBuilder) already turns
-      // keys in partition to their lowercase forms.
-      val staticPartCols = partition.filter(_._2.isDefined).keySet
-      Some(table.output.filterNot(a => staticPartCols.contains(a.name)))
-    }
-  }
-
   assert(overwrite || !ifNotExists)
   assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
-  override lazy val resolved: Boolean =
-    childrenResolved && table.resolved && expectedColumns.forall { expected =>
-    child.output.size == expected.size && child.output.zip(expected).forall {
-      case (childAttr, tableAttr) =>
-        DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
-    }
-  }
+
+  override lazy val resolved: Boolean = childrenResolved && table.resolved
 }
 
 /**

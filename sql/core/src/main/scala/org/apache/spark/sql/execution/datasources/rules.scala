@@ -187,8 +187,8 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       colName: String,
       colType: String): String = {
     val tableCols = schema.map(_.name)
-    val conf = sparkSession.sessionState.conf
-    tableCols.find(conf.resolver(_, colName)).getOrElse {
+    val resolver = sparkSession.sessionState.conf.resolver
+    tableCols.find(resolver(_, colName)).getOrElse {
       failAnalysis(s"$colType column $colName is not defined in table $tableIdent, " +
         s"defined table columns are: ${tableCols.mkString(", ")}")
     }
@@ -209,42 +209,64 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       tblName: String,
       partColNames: Seq[String]): InsertIntoTable = {
 
-    val expectedColumns = insert.expectedColumns
-    if (expectedColumns.isDefined && expectedColumns.get.length != insert.child.schema.length) {
+    val normalizedPartSpec = normalizePartitionSpec(insert.partition, partColNames, tblName)
+
+    val expectedColumns = {
+      val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
+      insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+    }
+
+    if (expectedColumns.length != insert.child.schema.length) {
       throw new AnalysisException(
         s"Cannot insert into table $tblName because the number of columns are different: " +
-          s"need ${expectedColumns.get.length} columns, " +
+          s"need ${expectedColumns.length} columns, " +
           s"but query has ${insert.child.schema.length} columns.")
     }
 
-    if (insert.partition.nonEmpty) {
-      // the query's partitioning must match the table's partitioning
-      // this is set for queries like: insert into ... partition (one = "a", two = <expr>)
-      val samePartitionColumns =
-        if (conf.caseSensitiveAnalysis) {
-          insert.partition.keySet == partColNames.toSet
-        } else {
-          insert.partition.keySet.map(_.toLowerCase) == partColNames.map(_.toLowerCase).toSet
-        }
-      if (!samePartitionColumns) {
+    if (normalizedPartSpec.nonEmpty) {
+      if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
           s"""
              |Requested partitioning does not match the table $tblName:
-             |Requested partitions: ${insert.partition.keys.mkString(",")}
+             |Requested partitions: ${normalizedPartSpec.keys.mkString(",")}
              |Table partitions: ${partColNames.mkString(",")}
            """.stripMargin)
       }
-      expectedColumns.map(castAndRenameChildOutput(insert, _)).getOrElse(insert)
+
+      castAndRenameChildOutput(insert.copy(partition = normalizedPartSpec), expectedColumns)
     } else {
-      // All partition columns are dynamic because because the InsertIntoTable command does
+      // All partition columns are dynamic because the InsertIntoTable command does
       // not explicitly specify partitioning columns.
-      expectedColumns.map(castAndRenameChildOutput(insert, _)).getOrElse(insert)
+      castAndRenameChildOutput(insert, expectedColumns)
         .copy(partition = partColNames.map(_ -> None).toMap)
     }
   }
 
-  // TODO: do we really need to rename?
-  def castAndRenameChildOutput(
+  private def normalizePartitionSpec(
+      partitionSpec: Map[String, Option[String]],
+      partColNames: Seq[String],
+      tblName: String): Map[String, Option[String]] = {
+    val resolver = conf.resolver
+    val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
+      val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
+        throw new AnalysisException(s"Cannot insert into table $tblName because $key is not a " +
+          "valid partition column")
+      }
+      normalizedKey -> value
+    }
+
+    if (normalizedPartSpec.map(_._1).distinct.length != normalizedPartSpec.length) {
+      val duplicateColumns = normalizedPartSpec.map(_._1).groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => x
+      }
+      throw new AnalysisException(s"Cannot insert into table $tblName because there are " +
+        "duplicated columns in partition specification: " + duplicateColumns.mkString(", "))
+    }
+
+    normalizedPartSpec.toMap
+  }
+
+  private def castAndRenameChildOutput(
       insert: InsertIntoTable,
       expectedOutput: Seq[Attribute]): InsertIntoTable = {
     val newChildOutput = expectedOutput.zip(insert.child.output).map {
