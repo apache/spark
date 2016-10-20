@@ -170,6 +170,9 @@ private[spark] class TaskSetManager(
   var currentLocalityIndex = 0    // Index of our current locality level in validLocalityLevels
   var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
 
+  // Time we submitted this taskSet
+  val taskSetSubmittedTime = clock.getTimeMillis()
+
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
   override def schedulingMode: SchedulingMode = SchedulingMode.NONE
@@ -549,6 +552,12 @@ private[spark] class TaskSetManager(
         logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1
+      } else if (curTime - taskSetSubmittedTime >=
+        getTaskSetLocalityWait(myLocalityLevels(currentLocalityIndex))) {
+        // Jump to the next locality level
+        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
+          s"${getTaskSetLocalityWait(myLocalityLevels(currentLocalityIndex))}ms")
+        currentLocalityIndex += 1
       } else {
         return myLocalityLevels(currentLocalityIndex)
       }
@@ -924,6 +933,22 @@ private[spark] class TaskSetManager(
       case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
       case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
       case TaskLocality.RACK_LOCAL => "spark.locality.wait.rack"
+      case _ => null
+    }
+
+    if (localityWaitKey != null) {
+      conf.getTimeAsMs(localityWaitKey, defaultWait)
+    } else {
+      0L
+    }
+  }
+
+  private def getTaskSetLocalityWait(level: TaskLocality.TaskLocality): Long = {
+    val defaultWait = conf.get("spark.taskset.locality.wait", "5s")
+    val localityWaitKey = level match {
+      case TaskLocality.PROCESS_LOCAL => "spark.taskset.locality.wait.process"
+      case TaskLocality.NODE_LOCAL => "spark.taskset.locality.wait.node"
+      case TaskLocality.RACK_LOCAL => "spark.taskset.locality.wait.rack"
       case _ => null
     }
 
