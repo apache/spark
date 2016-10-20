@@ -45,7 +45,7 @@ allprojects {
   apply plugin: 'idea'
 
   group = 'io.snappydata'
-  version = '2.0.1-2'
+  version = '2.0.1-3'
 
   ext {
     scalaBinaryVersion = '2.11'
