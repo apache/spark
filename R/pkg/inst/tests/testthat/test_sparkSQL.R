@@ -1584,7 +1584,7 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   df2 <- read.json(jsonPath2)
 
   # inner join, not cartesian join
-  expect_equal(count(where(join(df, df2), df$name == df2$name)), 4)
+  expect_equal(count(where(join(df, df2), df$name == df2$name)), 3)
   # cartesian join
   expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
                paste0(".*(org.apache.spark.sql.AnalysisException: Detected cartesian product for",
