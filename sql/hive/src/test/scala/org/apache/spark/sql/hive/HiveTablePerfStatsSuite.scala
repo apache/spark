@@ -19,12 +19,26 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.execution.datasources.FileStatusCache
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.QueryTest
 
-class HiveTablePerfStatsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
+class HiveTablePerfStatsSuite
+  extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterEach {
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    FileStatusCache.resetForTesting()
+  }
+
+  override def afterEach(): Unit = {
+    super.afterEach()
+    FileStatusCache.resetForTesting()
+  }
 
   private def setupPartitionedTable(tableName: String, dir: File): Unit = {
     spark.range(5).selectExpr("id", "id as partCol1", "id as partCol2").write

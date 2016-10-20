@@ -280,11 +280,11 @@ object SQLConf {
 
   val HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE =
     SQLConfigBuilder("spark.sql.hive.filesourcePartitionFileCacheSize")
-      .doc("When nonzero, enable caching of partition file metadata in memory. Each table may " +
-           "use up to the specified number of bytes for caching file metadata. This conf only " +
+      .doc("When nonzero, enable caching of partition file metadata in memory. All table share " +
+           "a cache that can use up to specified num bytes for file metadata. This conf only " +
            "applies if filesource partition pruning is also enabled.")
       .longConf
-      .createWithDefault(50 * 1024 * 1024)
+      .createWithDefault(250 * 1024 * 1024)
 
   val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
