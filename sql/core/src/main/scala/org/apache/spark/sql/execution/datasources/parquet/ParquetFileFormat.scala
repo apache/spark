@@ -47,7 +47,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -139,10 +138,10 @@ class ParquetFileFormat
     new OutputWriterFactory {
       override def newInstance(
           path: String,
-          bucketId: Option[Int],
+          fileNamePrefix: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new ParquetOutputWriter(path, bucketId, context)
+        new ParquetOutputWriter(path, fileNamePrefix, context)
       }
     }
   }
