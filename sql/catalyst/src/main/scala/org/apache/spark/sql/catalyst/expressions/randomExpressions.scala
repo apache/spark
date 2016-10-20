@@ -55,8 +55,22 @@ abstract class RDG extends LeafExpression with Nondeterministic {
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns a random column with i.i.d. uniformly distributed values in [0, 1).")
+  usage = "_FUNC_([seed]) - Returns a random column with i.i.d. uniformly distributed values in [0, 1].",
+  extended = """
+    _FUNC_([seed])
+
+      Arguments:
+        seed - numeric type literal.
+
+      Examples:
+        > SELECT _FUNC_();
+         0.9629742951434543
+        > SELECT _FUNC_(0);
+         0.8446490682263027
+  """)
+// scalastyle:on line.size.limit
 case class Rand(seed: Long) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -77,9 +91,23 @@ case class Rand(seed: Long) extends RDG {
   }
 }
 
-/** Generate a random column with i.i.d. gaussian random distribution. */
+/** Generate a random column with i.i.d. values drawn from the standard normal distribution. */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns a random column with i.i.d. gaussian random distribution.")
+  usage = "_FUNC_([seed]) - Returns a random column with i.i.d. values drawn from the standard normal distribution.",
+  extended = """
+    _FUNC_([seed])
+
+      Arguments:
+        seed - numeric type literal.
+
+      Examples:
+        > SELECT _FUNC_();
+         -0.3254147983080288
+        > SELECT _FUNC_(0);
+         1.1164209726833079
+  """)
+// scalastyle:on line.size.limit
 case class Randn(seed: Long) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
