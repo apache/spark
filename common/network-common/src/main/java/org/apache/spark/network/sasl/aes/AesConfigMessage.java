@@ -95,6 +95,11 @@ public class AesConfigMessage implements Encodable {
     return buf;
   }
 
+  /**
+   * Decode the config message from buffer
+   * @param buffer the buffer contain encoded config message
+   * @return config message
+   */
   public static AesConfigMessage decodeMessage(ByteBuffer buffer) {
     ByteBuf buf = Unpooled.wrappedBuffer(buffer);
 

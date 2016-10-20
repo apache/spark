@@ -152,7 +152,8 @@ public class AesCipher {
     int keyLen = configMessage.keySize;
 
     try {
-      int paramLen = CryptoCipherFactory.getCryptoCipher(AesCipher.TRANSFORM, properties).getBlockSize();
+      int paramLen = CryptoCipherFactory.getCryptoCipher(AesCipher.TRANSFORM, properties)
+        .getBlockSize();
       byte[] inKey = new byte[keyLen];
       byte[] outKey = new byte[keyLen];
       byte[] inIv = new byte[paramLen];
@@ -166,7 +167,7 @@ public class AesCipher {
 
       configMessage.setParameters(keyLen, inKey, inIv, outKey, outIv);
     } catch (Exception e) {
-      logger.error("AES negotiation exception ", e);
+      logger.error("AES negotiation exception", e);
       throw Throwables.propagate(e);
     }
 
@@ -288,14 +289,15 @@ public class AesCipher {
       Preconditions.checkArgument(position == transfered(), "Invalid position.");
 
       do {
-        if(currentEncrypted == null) {
+        if (currentEncrypted == null) {
           encryptMore();
         }
+
         int byteWritten = currentEncrypted.remaining();
         target.write(currentEncrypted);
         byteWritten -= currentEncrypted.remaining();
         transferred += byteWritten;
-        if(!currentEncrypted.hasRemaining()) {
+        if (!currentEncrypted.hasRemaining()) {
           currentEncrypted = null;
           byteEncChannel.reset();
         }
@@ -307,8 +309,8 @@ public class AesCipher {
     }
 
     public void encryptMore() throws IOException {
-
       byteRawChannel.reset();
+
       if (isByteBuf) {
         int copied = byteRawChannel.write(buf.nioBuffer());
         buf.skipBytes(copied);
