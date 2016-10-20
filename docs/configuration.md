@@ -1881,6 +1881,13 @@ showDF(properties, numRows = 200, truncate = FALSE)
     Connection timeout set by R process on its connection to RBackend in seconds.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.heartBeatInterval</code></td>
+  <td>100</td>
+  <td>
+    Interval for heartbeats sents from SparkR backend to R process to prevent connection timeout.
+  </td>
+</tr>
 
 </table>
 

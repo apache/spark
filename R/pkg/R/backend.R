@@ -111,7 +111,7 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   returnStatus <- readInt(conn)
   handleErrors(returnStatus, conn)
 
-  # Backend will send -1 as keep alive value to prevent various connection timeouts
+  # Backend will send +1 as keep alive value to prevent various connection timeouts
   # on very long running jobs. See spark.r.heartBeatInterval
   while (returnStatus == 1) {
     returnStatus <- readInt(conn)

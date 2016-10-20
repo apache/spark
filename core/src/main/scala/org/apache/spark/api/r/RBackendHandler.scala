@@ -87,7 +87,7 @@ private[r] class RBackendHandler(server: RBackend)
       }
     } else {
       // To avoid timeouts when reading results in SparkR driver, we will be regularly sending
-      // heartbeat responses. We use special character -1 to signal the client that backend is
+      // heartbeat responses. We use special code +1 to signal the client that backend is
       // alive and it should continue blocking for result.
       val execService = ThreadUtils.newDaemonSingleThreadScheduledExecutor("SparkRKeepAliveThread")
       val pingRunner = new Runnable {
@@ -123,7 +123,7 @@ private[r] class RBackendHandler(server: RBackend)
     cause match {
       case timeout: ReadTimeoutException =>
         // Do nothing. We don't want to timeout on read
-        logInfo("Ignoring read timeout in RBackendHandler")
+        logWarning("Ignoring read timeout in RBackendHandler")
       case _ =>
         // Close the connection when an exception is raised.
         cause.printStackTrace()
