@@ -68,12 +68,12 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
  * Returns an unordered array containing the keys of the map.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns an unordered array containing the keys of the map.",
+  usage = "_FUNC_(map) - Returns an unordered array containing the keys of the map.",
   extended = """
-    _FUNC_(expr)
+    _FUNC_(map)
 
       Arguments:
-        expr - map type expression.
+        map - map type expression.
 
       Examples:
         > SELECT _FUNC_(map(1, 'a', 2, 'b'));
@@ -103,10 +103,10 @@ case class MapKeys(child: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(map) - Returns an unordered array containing the values of the map.",
   extended = """
-    _FUNC_(expr)
+    _FUNC_(map)
 
       Arguments:
-        expr - map type expression.
+        map - map type expression.
 
       Examples:
         > SELECT _FUNC_(map(1, 'a', 2, 'b'));
@@ -136,12 +136,12 @@ case class MapValues(child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, ascendingOrder) - Sorts the input array in ascending order according to the natural ordering of the array elements.",
+  usage = "_FUNC_(array, ascendingOrder) - Sorts the input array in ascending order according to the natural ordering of the array elements.",
   extended = """
-    _FUNC_(expr, ascendingOrder)
+    _FUNC_(array, ascendingOrder)
 
       Arguments:
-        expr - array type expression.
+        array - array type expression.
         ascendingOrder - boolean type literal.
 
       Examples:
@@ -231,13 +231,13 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
  * Checks if the array (left) has the element (right)
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, value) - Returns TRUE if the array contains the value.",
+  usage = "_FUNC_(array, value) - Returns TRUE if the array contains the value.",
   extended = """
-    _FUNC_(expr1, expr2)
+    _FUNC_(array, value)
 
       Arguments:
-        expr1 - array type expression.
-        expr2 - expression in the element type of expr1 or any type that can be implicitly
+        array - array type expression.
+        value - expression in the element type of expr1 or any type that can be implicitly
           converted to the element type of expr1.
 
       Examples:

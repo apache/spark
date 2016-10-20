@@ -884,12 +884,12 @@ case class TimeAdd(start: Expression, interval: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, timezone) - Assumes given timestamp is UTC and converts to given timezone.",
+  usage = "_FUNC_(expr, timezone) - Assumes given timestamp is UTC and converts to given timezone.",
   extended = """
-    _FUNC_(timestamp, timezone)
+    _FUNC_(expr, timezone)
 
       Arguments:
-        timestamp - timestamp type or any type expression that can be implicitly converted to timestamp type.
+        expr - timestamp type or any type expression that can be implicitly converted to timestamp type.
         timezone - string type expression that represents time zone (e.g., 'Asia/Seoul').
 
       Examples:
@@ -1058,9 +1058,9 @@ case class MonthsBetween(date1: Expression, date2: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, timezone) - Assumes given timestamp is in given timezone and converts to UTC.",
+  usage = "_FUNC_(expr, timezone) - Assumes given timestamp is in given timezone and converts to UTC.",
   extended = """
-    _FUNC_(timestamp, timezone)
+    _FUNC_(expr, timezone)
 
       Arguments:
         timestamp - timestamp type or any type expression that can be implicitly converted to timestamp type.
@@ -1153,9 +1153,9 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date, fmt) - Returns returns date with the time portion of the day truncated to the unit specified by the format model fmt.",
+  usage = "_FUNC_(expr, fmt) - Returns returns date with the time portion of the day truncated to the unit specified by the format model fmt.",
   extended = """
-    _FUNC_(date, fmt)
+    _FUNC_(expr, fmt)
 
       Arguments:
         expr - date type or any type expression that can be implicitly converted to date type.
