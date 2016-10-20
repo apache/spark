@@ -124,7 +124,13 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
-      TypeCheckResult.TypeCheckSuccess
+      ascendingOrder match {
+        case Literal(_: Boolean, BooleanType) =>
+          TypeCheckResult.TypeCheckSuccess
+        case _ =>
+          TypeCheckResult.TypeCheckFailure(
+            "Sort order in second argument requires a boolean literal.")
+      }
     case ArrayType(dt, _) =>
       TypeCheckResult.TypeCheckFailure(
         s"$prettyName does not support sorting array of type ${dt.simpleString}")
