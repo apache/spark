@@ -36,6 +36,30 @@ Public classes:
       Finer-grained cache persistence levels.
 
 """
+import os, re
+
+
+def get_spark_version():
+    """
+    Detect version of Spark located under SPARK_HOME.
+    """
+    libs_path = os.path.join(os.environ['SPARK_HOME'], 'lib')
+    for jar_file in os.listdir(libs_path):
+        if jar_file.startswith('spark-assembly'):
+            try:
+                return re.match('^spark-assembly-(.*)-', jar_file).group(1)
+            except IndexError:
+                raise ImportError("Can't detect Spark version by the assembly file")
+
+    raise ImportError("Can't find file with Spark version")
+
+
+__version__ = '2.0.0'
+if __version__ != get_spark_version():
+    raise ImportError("Incompatible versions of PySpark ({}) and Spark ({})".format(
+        __version__, get_spark_version()
+    ))
+
 
 from functools import wraps
 import types
