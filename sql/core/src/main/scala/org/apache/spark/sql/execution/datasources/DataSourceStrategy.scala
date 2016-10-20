@@ -189,7 +189,8 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         query,
         mode)
 
-      if (l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty) {
+      if (l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
+          t.sparkSession.sqlContext.conf.filesourcePartitionManagement) {
         val recoverPartitionCmd = AlterTableRecoverPartitionsCommand(l.catalogTable.get.identifier)
         Union(insertCmd, recoverPartitionCmd)
       } else {

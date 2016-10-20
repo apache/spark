@@ -37,7 +37,7 @@ class TableFileCatalog(
     sparkSession: SparkSession,
     val db: String,
     val table: String,
-    partitionSchema: Option[StructType],
+    override val partitionSchema: StructType,
     override val sizeInBytes: Long) extends FileCatalog {
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf
@@ -81,7 +81,7 @@ class TableFileCatalog(
 
   private def filterPartitions0(filters: Seq[Expression]): ListingFileCatalog = {
     partitionSchema match {
-      case Some(schema) if schema.nonEmpty =>
+      case schema if schema.nonEmpty =>
         val selectedPartitions = externalCatalog.listPartitionsByFilter(db, table, filters)
         val partitions = selectedPartitions.map { p =>
           PartitionPath(p.toRow(schema), p.storage.locationUri.get)

@@ -21,6 +21,7 @@ import org.apache.hadoop.fs._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.StructType
 
 /**
  * A collection of data files from a partitioned relation, along with the partition values in the
@@ -63,4 +64,7 @@ trait FileCatalog {
 
   /** Sum of table file sizes, in bytes */
   def sizeInBytes: Long
+
+  /** Schema of the partitioning columns, or the empty schema. */
+  def partitionSchema: StructType
 }

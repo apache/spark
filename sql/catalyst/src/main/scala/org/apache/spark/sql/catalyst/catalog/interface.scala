@@ -158,6 +158,8 @@ case class CatalogTable(
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty) {
 
+  import CatalogTable._
+
   /** schema of this table's partition columns */
   def partitionSchema: StructType = StructType(schema.filter {
     c => partitionColumnNames.contains(c.name)
@@ -219,8 +221,19 @@ case class CatalogTable(
     output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
   }
 
+  /**
+   * @return whether this table's partition metadata is stored in the Hive metastore.
+   */
+  def partitionProviderIsHive: Boolean = {
+    provider == Some("hive") ||
+      properties.get(PARTITION_PROVIDER_KEY) == Some(PARTITION_PROVIDER_HIVE)
+  }
 }
 
+object CatalogTable {
+  val PARTITION_PROVIDER_KEY = "partitionProvider"
+  val PARTITION_PROVIDER_HIVE = "hive"
+}
 
 case class CatalogTableType private(name: String)
 object CatalogTableType {

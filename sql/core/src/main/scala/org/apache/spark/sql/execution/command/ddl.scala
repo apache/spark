@@ -346,6 +346,7 @@ case class AlterTableAddPartitionCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+    DDLUtils.verifyPartitionProviderIsHive(table, "ALTER TABLE ADD PARTITION")
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(spec, table.storage.copy(locationUri = location))
@@ -374,6 +375,7 @@ case class AlterTableRenamePartitionCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+    DDLUtils.verifyPartitionProviderIsHive(table, "ALTER TABLE RENAME PARTITION")
     catalog.renamePartitions(
       tableName, Seq(oldPartition), Seq(newPartition))
     Seq.empty[Row]
@@ -406,6 +408,7 @@ case class AlterTableDropPartitionCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+    DDLUtils.verifyPartitionProviderIsHive(table, "ALTER TABLE DROP PARTITION")
     catalog.dropPartitions(table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
@@ -497,6 +500,8 @@ case class AlterTableRecoverPartitionsCommand(
     logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
     addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
+    DDLUtils.setPartitionProviderHive(spark, table)
+    catalog.refreshTable(tableName)
     logInfo(s"Recovered all partitions ($total).")
     Seq.empty[Row]
   }
@@ -537,7 +542,8 @@ case class AlterTableRecoverPartitionsCommand(
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(columnName -> value),
             partitionNames.drop(1), threshold)
         } else {
-          logWarning(s"expect partition column ${partitionNames.head}, but got ${ps(0)}, ignore it")
+          logWarning(
+            s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
           Seq()
         }
       } else {
@@ -673,6 +679,30 @@ case class AlterTableSetLocationCommand(
 object DDLUtils {
   def isDatasourceTable(table: CatalogTable): Boolean = {
     table.provider.isDefined && table.provider.get != "hive"
+  }
+
+  /**
+   * Updates a table to indicate that its partition metadata is stored in the Hive metastore.
+   * This is always the case for Hive format tables, but is not true for Datasource tables created
+   * before Spark 2.1 unless they are converted via `msck repair table`.
+   */
+  def setPartitionProviderHive(spark: SparkSession, table: CatalogTable): Unit = {
+    spark.sessionState.catalog.alterTable(
+      table.copy(properties = table.properties ++
+        Map(CatalogTable.PARTITION_PROVIDER_KEY -> CatalogTable.PARTITION_PROVIDER_HIVE)))
+  }
+
+  /**
+   * Throws a standard error for actions that require partitionProvider = hive.
+   */
+  def verifyPartitionProviderIsHive(table: CatalogTable, action: String): Unit = {
+    if (!table.partitionProviderIsHive) {
+      val tableName = table.identifier.table
+      throw new AnalysisException(
+        s"$action is not allowed on $tableName since its partition metadata is not stored in " +
+          s"the Hive metastore. To import this information into the metastore, run " +
+          s"`msck repair table $tableName`")
+    }
   }
 
   /**

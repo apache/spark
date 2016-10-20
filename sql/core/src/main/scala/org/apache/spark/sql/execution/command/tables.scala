@@ -338,10 +338,8 @@ case class TruncateTableCommand(
         s"Operation not allowed: TRUNCATE TABLE on views: $tableIdentwithDB")
     }
     val isDatasourceTable = DDLUtils.isDatasourceTable(table)
-    if (isDatasourceTable && partitionSpec.isDefined) {
-      throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
-        s"for tables created using the data sources API: $tableIdentwithDB")
+    if (partitionSpec.isDefined) {
+      DDLUtils.verifyPartitionProviderIsHive(table, "TRUNCATE TABLE ... PARTITION")
     }
     if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
       throw new AnalysisException(
@@ -349,7 +347,7 @@ case class TruncateTableCommand(
         s"for tables that are not partitioned: $tableIdentwithDB")
     }
     val locations =
-      if (isDatasourceTable) {
+      if (DDLUtils.isDatasourceTable(table)) {
         Seq(table.storage.properties.get("path"))
       } else if (table.partitionColumnNames.isEmpty) {
         Seq(table.storage.locationUri)
@@ -514,10 +512,7 @@ case class DescribeTableCommand(
       throw new AnalysisException(
         s"DESC PARTITION is not allowed on a view: ${table.identifier}")
     }
-    if (DDLUtils.isDatasourceTable(metadata)) {
-      throw new AnalysisException(
-        s"DESC PARTITION is not allowed on a datasource table: ${table.identifier}")
-    }
+    DDLUtils.verifyPartitionProviderIsHive(metadata, "DESC PARTITION")
     val partition = catalog.getPartition(table, partitionSpec)
     if (isExtended) {
       describeExtendedDetailedPartitionInfo(table, metadata, partition, result)
@@ -712,10 +707,7 @@ case class ShowPartitionsCommand(
         s"SHOW PARTITIONS is not allowed on a table that is not partitioned: $tableIdentWithDB")
     }
 
-    if (DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a datasource table: $tableIdentWithDB")
-    }
+    DDLUtils.verifyPartitionProviderIsHive(table, "SHOW PARTITIONS")
 
     /**
      * Validate the partitioning spec by making sure all the referenced columns are

@@ -101,7 +101,8 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     dataSource match {
       case fs: HadoopFsRelation =>
-        if (table.tableType == CatalogTableType.EXTERNAL && partitionColumnNames.nonEmpty) {
+        if (table.tableType == CatalogTableType.EXTERNAL && partitionColumnNames.nonEmpty &&
+            sparkSession.sqlContext.conf.filesourcePartitionManagement) {
           sparkSession.sessionState.executePlan(
             AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
         }
@@ -243,7 +244,8 @@ case class CreateDataSourceTableAsSelectCommand(
     }
 
     result match {
-      case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty =>
+      case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
+          sparkSession.sqlContext.conf.filesourcePartitionManagement =>
         sparkSession.sessionState.executePlan(
           AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
       case _ =>
