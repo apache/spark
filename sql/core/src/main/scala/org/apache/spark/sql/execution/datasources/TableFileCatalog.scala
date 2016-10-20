@@ -32,6 +32,7 @@ import org.apache.spark.sql.types.StructType
  * @param table the table's (unqualified) name
  * @param partitionSchema the schema of a partitioned table's partition columns
  * @param sizeInBytes the table's data size in bytes
+ * @param fileStatusCacheSize if nonzero, enables and specifies the size of the file status cache
  */
 class TableFileCatalog(
     sparkSession: SparkSession,
@@ -39,6 +40,15 @@ class TableFileCatalog(
     val table: String,
     override val partitionSchema: StructType,
     override val sizeInBytes: Long) extends FileCatalog {
+
+  private val fileStatusCache = {
+    if (sparkSession.sqlContext.conf.filesourcePartitionPruning &&
+        sparkSession.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
+      new InMemoryCache(sparkSession.sqlContext.conf.filesourcePartitionFileCacheSize)
+    } else {
+      NoopCache
+    }
+  }
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf
 
@@ -52,18 +62,13 @@ class TableFileCatalog(
     new CaseInsensitiveMap(catalogTable.storage.properties).get("path")
   }
 
-  // Populated on-demand by calls to cachedAllPartitions
-  private var cachedAllPartitions: ListingFileCatalog = null
-
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
   override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
     filterPartitions(filters).listFiles(Nil)
   }
 
-  override def refresh(): Unit = synchronized {
-    cachedAllPartitions = null
-  }
+  override def refresh(): Unit = fileStatusCache.invalidateAll()
 
   /**
    * Returns a [[ListingFileCatalog]] for this table restricted to the subset of partitions
@@ -72,14 +77,9 @@ class TableFileCatalog(
    * @param filters partition-pruning filters
    */
   def filterPartitions(filters: Seq[Expression]): ListingFileCatalog = {
-    if (filters.isEmpty) {
-      allPartitions
-    } else {
-      filterPartitions0(filters)
-    }
-  }
-
-  private def filterPartitions0(filters: Seq[Expression]): ListingFileCatalog = {
+    val parameters = baseLocation
+      .map(loc => Map(PartitioningAwareFileCatalog.BASE_PATH_PARAM -> loc))
+      .getOrElse(Map.empty)
     partitionSchema match {
       case schema if schema.nonEmpty =>
         val selectedPartitions = externalCatalog.listPartitionsByFilter(db, table, filters)
@@ -88,21 +88,11 @@ class TableFileCatalog(
         }
         val partitionSpec = PartitionSpec(schema, partitions)
         new PrunedTableFileCatalog(
-          sparkSession, new Path(baseLocation.get), partitionSpec)
-      case _ =>
-        new ListingFileCatalog(sparkSession, rootPaths, catalogTable.storage.properties, None)
+          sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
+      case None =>
+        new ListingFileCatalog(sparkSession, rootPaths, parameters, None, fileStatusCache)
     }
   }
-
-  // Not used in the hot path of queries when metastore partition pruning is enabled
-  def allPartitions: ListingFileCatalog = synchronized {
-    if (cachedAllPartitions == null) {
-      cachedAllPartitions = filterPartitions0(Nil)
-    }
-    cachedAllPartitions
-  }
-
-  override def inputFiles: Array[String] = allPartitions.inputFiles
 
   override def equals(o: Any): Boolean = o match {
     case other: TableFileCatalog => this.db == other.db && this.table == other.table
@@ -110,6 +100,8 @@ class TableFileCatalog(
   }
 
   override def hashCode(): Int = 31 * db.hashCode + table.hashCode
+
+  override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
 }
 
 /**
@@ -122,9 +114,11 @@ class TableFileCatalog(
 private class PrunedTableFileCatalog(
     sparkSession: SparkSession,
     tableBasePath: Path,
+    fileStatusCache: FileStatusCache,
     override val partitionSpec: PartitionSpec)
   extends ListingFileCatalog(
     sparkSession,
     partitionSpec.partitions.map(_.path),
     Map.empty,
-    Some(partitionSpec.partitionColumns))
+    Some(partitionSpec.partitionColumns),
+    fileStatusCache)
