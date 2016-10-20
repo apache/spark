@@ -381,13 +381,24 @@ abstract class OffsetWindowFunction
  * @param offset rows to jump ahead in the partition.
  * @param default to use when the offset is larger than the window. The default value is null.
  */
-@ExpressionDescription(usage =
-  """_FUNC_(input, offset, default) - LEAD returns the value of 'x' at the 'offset'th row
-     after the current row in the window.
-     The default value of 'offset' is 1 and the default value of 'default' is null.
-     If the value of 'x' at the 'offset'th row is null, null is returned.
-     If there is no such offset row (e.g. when the offset is 1, the last row of the window
-     does not have any subsequent row), 'default' is returned.""")
+@ExpressionDescription(
+  usage = """
+    _FUNC_(input[, offset[, default]]) - LEAD returns the value of 'x' at the 'offset'th row
+      after the current row in the window.
+      The default value of 'offset' is 1 and the default value of 'default' is null.
+      If the value of 'x' at the 'offset'th row is null, null is returned.
+      If there is no such offset row (e.g. when the offset is 1, the last row of the window
+      does not have any subsequent row), 'default' is returned.
+  """,
+  extended = """
+    _FUNC_(input[, offset[, default]])
+
+      Arguments:
+        input - any type expression.
+        offset - any numeric type or any nonnumeric type expression that can be implicitly
+          converted to numeric type. Default is 1.
+        default - any type expression. Defualt is NULL.
+  """)
 case class Lead(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -410,13 +421,24 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
  * @param offset rows to jump back in the partition.
  * @param default to use when the offset row does not exist.
  */
-@ExpressionDescription(usage =
-  """_FUNC_(input, offset, default) - LAG returns the value of 'x' at the 'offset'th row
-     before the current row in the window.
-     The default value of 'offset' is 1 and the default value of 'default' is null.
-     If the value of 'x' at the 'offset'th row is null, null is returned.
-     If there is no such offset row (e.g. when the offset is 1, the first row of the window
-     does not have any previous row), 'default' is returned.""")
+@ExpressionDescription(
+  usage = """
+    _FUNC_(input[, offset[, default]]) - LAG returns the value of 'x' at the 'offset'th row
+      before the current row in the window.
+      The default value of 'offset' is 1 and the default value of 'default' is null.
+      If the value of 'x' at the 'offset'th row is null, null is returned.
+      If there is no such offset row (e.g. when the offset is 1, the first row of the window
+      does not have any previous row), 'default' is returned.
+  """,
+  extended = """
+    _FUNC_(input[, offset[, default]])
+
+      Arguments:
+        input - any type expression.
+        offset - any numeric type or any nonnumeric type expression that can be implicitly
+          converted to numeric type. Default is 1.
+        default - any type expression. Defualt is NULL.
+  """)
 case class Lag(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
 
@@ -471,10 +493,12 @@ object SizeBasedWindowFunction {
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
-@ExpressionDescription(usage =
-  """_FUNC_() - The ROW_NUMBER() function assigns a unique, sequential number to
-     each row, starting with one, according to the ordering of rows within
-     the window partition.""")
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - The ROW_NUMBER() function assigns a unique, sequential number to
+      each row, starting with one, according to the ordering of rows within
+      the window partition.
+  """)
 case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = rowNumber
   override def prettyName: String = "row_number"
@@ -488,9 +512,11 @@ case class RowNumber() extends RowNumberLike {
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
-@ExpressionDescription(usage =
-  """_FUNC_() - The CUME_DIST() function computes the position of a value relative to
-     a all values in the partition.""")
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - The CUME_DIST() function computes the position of a value relative to
+      a all values in the partition.
+  """)
 case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override def dataType: DataType = DoubleType
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
@@ -521,9 +547,17 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  *
  * @param buckets number of buckets to divide the rows in. Default value is 1.
  */
-@ExpressionDescription(usage =
-  """_FUNC_(x) - The NTILE(n) function divides the rows for each window partition
-     into 'n' buckets ranging from 1 to at most 'n'.""")
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - The NTILE(n) function divides the rows for each window partition
+      into 'n' buckets ranging from 1 to at most 'n'.
+  """,
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - integer type expression that allows constant folding.
+  """)
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
 
@@ -644,10 +678,12 @@ abstract class RankLike extends AggregateWindowFunction {
  *                 change in rank. This is an internal parameter and will be assigned by the
  *                 Analyser.
  */
-@ExpressionDescription(usage =
-  """_FUNC_() -  RANK() computes the rank of a value in a group of values. The result
-     is one plus the number of rows preceding or equal to the current row in the
-     ordering of the partition. Tie values will produce gaps in the sequence.""")
+@ExpressionDescription(
+  usage = """
+    _FUNC_() -  RANK() computes the rank of a value in a group of values. The result
+      is one plus the number of rows preceding or equal to the current row in the
+      ordering of the partition. Tie values will produce gaps in the sequence.
+  """)
 case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
@@ -664,10 +700,12 @@ case class Rank(children: Seq[Expression]) extends RankLike {
  *                 change in rank. This is an internal parameter and will be assigned by the
  *                 Analyser.
  */
-@ExpressionDescription(usage =
-  """_FUNC_() - The DENSE_RANK() function computes the rank of a value in a group of
-     values. The result is one plus the previously assigned rank value. Unlike Rank,
-     DenseRank will not produce gaps in the ranking sequence.""")
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - The DENSE_RANK() function computes the rank of a value in a group of
+      values. The result is one plus the previously assigned rank value. Unlike Rank,
+      DenseRank will not produce gaps in the ranking sequence.
+  """)
 case class DenseRank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
@@ -692,9 +730,11 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
  *                 change in rank. This is an internal parameter and will be assigned by the
  *                 Analyser.
  */
-@ExpressionDescription(usage =
-  """_FUNC_() - PERCENT_RANK() The PercentRank function computes the percentage
-     ranking of a value in a group of values.""")
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - PERCENT_RANK() The PercentRank function computes the percentage
+      ranking of a value in a group of values.
+  """)
 case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBasedWindowFunction {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)
