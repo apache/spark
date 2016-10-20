@@ -55,6 +55,18 @@ if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
   SPARK_MASTER_WEBUI_PORT=8080
 fi
 
-"${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS 1 \
+case "$(basename $0 .sh)" in
+    (start-master)
+        execname=spark-daemon
+        ;;
+    (run-master)
+        execname=spark-daemon-run
+        ;;
+    (*)
+        echo "bad command $0"
+        exit 1
+esac
+
+"${SPARK_HOME}/sbin"/$execname.sh start $CLASS 1 \
   --host $SPARK_MASTER_HOST --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
   $ORIGINAL_ARGS

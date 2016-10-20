@@ -63,6 +63,19 @@ if [ "$SPARK_WORKER_WEBUI_PORT" = "" ]; then
   SPARK_WORKER_WEBUI_PORT=8081
 fi
 
+# decide which shell to call
+case "$(basename $0 .sh)" in
+    (start-slave)
+        execname=spark-daemon
+        ;;
+    (run-slave)
+        execname=spark-daemon-run
+        ;;
+    (*)
+        echo "bad command $0"
+        exit 1
+esac
+
 # Start up the appropriate number of workers on this machine.
 # quick local function to start a worker
 function start_instance {
@@ -78,7 +91,7 @@ function start_instance {
   fi
   WEBUI_PORT=$(( $SPARK_WORKER_WEBUI_PORT + $WORKER_NUM - 1 ))
 
-  "${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS $WORKER_NUM \
+  "${SPARK_HOME}/sbin"/$execname.sh start $CLASS $WORKER_NUM \
      --webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
 }
 
