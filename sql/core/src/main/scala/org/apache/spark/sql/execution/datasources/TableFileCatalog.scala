@@ -42,7 +42,7 @@ class TableFileCatalog(
     override val sizeInBytes: Long) extends FileCatalog {
 
   private val fileStatusCache = {
-    if (sparkSession.sqlContext.conf.filesourcePartitionPruning &&
+    if (sparkSession.sqlContext.conf.filesourcePartitionManagement &&
         sparkSession.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
       new InMemoryCache(sparkSession.sqlContext.conf.filesourcePartitionFileCacheSize)
     } else {
@@ -89,7 +89,7 @@ class TableFileCatalog(
         val partitionSpec = PartitionSpec(schema, partitions)
         new PrunedTableFileCatalog(
           sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
-      case None =>
+      case _ =>
         new ListingFileCatalog(sparkSession, rootPaths, parameters, None, fileStatusCache)
     }
   }
