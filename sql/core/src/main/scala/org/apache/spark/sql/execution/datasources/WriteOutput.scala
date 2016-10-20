@@ -44,10 +44,9 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 /** A helper object for writing data out to a location. */
 object WriteOutput extends Logging {
 
-  val DATASOURCE_WRITEJOBUUID = "spark.sql.sources.writeJobUUID"
-
   /** A shared job description for all the write tasks. */
   private class WriteJobDescription(
+      val uuid: String,  // prevent collision between different (appending) write jobs
       val serializableHadoopConf: SerializableConfiguration,
       val outputWriterFactory: OutputWriterFactory,
       val allColumns: Seq[Attribute],
@@ -104,6 +103,7 @@ object WriteOutput extends Logging {
       fileFormat.prepareWrite(sparkSession, job, options, dataColumns.toStructType)
 
     val description = new WriteJobDescription(
+      uuid = UUID.randomUUID().toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
       allColumns = plan.output,
@@ -215,6 +215,11 @@ object WriteOutput extends Logging {
   private trait ExecuteWriteTask {
     def execute(iterator: Iterator[InternalRow]): Unit
     def releaseResources(): Unit
+
+    final def filePrefix(split: Int, uuid: String, bucketId: Option[Int]): String = {
+      val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
+      f"part-r-$split%05d-$uuid$bucketString"
+    }
   }
 
   /** Writes data to a single directory (used for non-dynamic-partition writes). */
@@ -224,9 +229,11 @@ object WriteOutput extends Logging {
       stagingPath: String) extends ExecuteWriteTask {
 
     private[this] var outputWriter: OutputWriter = {
+      val split = taskAttemptContext.getTaskAttemptID.getTaskID.getId
+
       val outputWriter = description.outputWriterFactory.newInstance(
-        path = stagingPath,
-        bucketId = None,
+        stagingDir = stagingPath,
+        fileNamePrefix = filePrefix(split, description.uuid, None),
         dataSchema = description.nonPartitionColumns.toStructType,
         context = taskAttemptContext)
       outputWriter.initConverter(dataSchema = description.nonPartitionColumns.toStructType)
@@ -310,9 +317,10 @@ object WriteOutput extends Logging {
         None
       }
 
+      val split = taskAttemptContext.getTaskAttemptID.getTaskID.getId
       val newWriter = description.outputWriterFactory.newInstance(
-        path = path,
-        bucketId = bucketId,
+        stagingDir = path,
+        fileNamePrefix = filePrefix(split, description.uuid, bucketId),
         dataSchema = description.nonPartitionColumns.toStructType,
         context = taskAttemptContext)
       newWriter.initConverter(description.nonPartitionColumns.toStructType)
@@ -407,17 +415,6 @@ object WriteOutput extends Logging {
     job.getConfiguration.set("mapred.task.id", taskAttemptId.toString)
     job.getConfiguration.setBoolean("mapred.task.is.map", true)
     job.getConfiguration.setInt("mapred.task.partition", 0)
-
-    // This UUID is sent to executor side together with the serialized `Configuration` object within
-    // the `Job` instance.  `OutputWriters` on the executor side should use this UUID to generate
-    // unique task output files.
-    // This UUID is used to avoid output file name collision between different appending write jobs.
-    // These jobs may belong to different SparkContext instances. Concrete data source
-    // implementations may use this UUID to generate unique file names (e.g.,
-    // `part-r-<task-id>-<job-uuid>.parquet`). The reason why this ID is used to identify a job
-    // rather than a single task output file is that, speculative tasks must generate the same
-    // output file name as the original task.
-    job.getConfiguration.set(WriteOutput.DATASOURCE_WRITEJOBUUID, UUID.randomUUID().toString)
 
     val taskAttemptContext = new TaskAttemptContextImpl(job.getConfiguration, taskAttemptId)
     val outputCommitter = newOutputCommitter(

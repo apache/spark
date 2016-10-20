@@ -73,14 +73,11 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     new OutputWriterFactory {
       override def newInstance(
-          path: String,
-          bucketId: Option[Int],
+          stagingDir: String,
+          fileNamePrefix: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        if (bucketId.isDefined) {
-          throw new AnalysisException("Text doesn't support bucketing")
-        }
-        new TextOutputWriter(path, dataSchema, context)
+        new TextOutputWriter(stagingDir, fileNamePrefix, dataSchema, context)
       }
     }
   }
@@ -124,7 +121,11 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 }
 
-class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
+class TextOutputWriter(
+    stagingDir: String,
+    fileNamePrefix: String,
+    dataSchema: StructType,
+    context: TaskAttemptContext)
   extends OutputWriter {
 
   private[this] val buffer = new Text()
@@ -132,11 +133,7 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(WriteOutput.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.txt$extension")
+        new Path(stagingDir, s"$fileNamePrefix.txt$extension")
       }
     }.getRecordWriter(context)
   }
