@@ -358,6 +358,54 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     ))
   }
 
+  test("blockJoin") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (2, 2), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val joined = rdd1.blockJoin(rdd2, 5, 5).collect()
+
+    assert(joined.size === 6)
+    assert(joined.toSet === Set(
+      (1, (1, 'x')),
+      (1, (2, 'x')),
+      (2, (1, 'y')),
+      (2, (1, 'z')),
+      (2, (2, 'y')),
+      (2, (2, 'z'))
+    ))
+  }
+
+  test("blockLeftOuterJoin") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (2, 2), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val joined = rdd1.blockLeftOuterJoin(rdd2, 5).collect()
+    assert(joined.size === 7)
+    assert(joined.toSet === Set(
+      (1, (1, Some('x'))),
+      (1, (2, Some('x'))),
+      (2, (1, Some('y'))),
+      (2, (1, Some('z'))),
+      (2, (2, Some('y'))),
+      (2, (2, Some('z'))),
+      (3, (1, None))
+    ))
+  }
+
+  test("blockRightOuterJoin") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (2, 2), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val joined = rdd1.blockRightOuterJoin(rdd2, 5).collect()
+    assert(joined.size === 7)
+    assert(joined.toSet === Set(
+      (1, (Some(1), 'x')),
+      (1, (Some(2), 'x')),
+      (2, (Some(1), 'y')),
+      (2, (Some(1), 'z')),
+      (2, (Some(2), 'y')),
+      (2, (Some(2), 'z')),
+      (4, (None, 'w'))
+    ))
+  }
+
   test("groupWith") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))

@@ -515,6 +515,87 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   }
 
   /**
+   * Same as join, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input params leftReplication and rightReplication control the replication of the left
+   * (this rdd) and right (other rdd) respectively.
+   */
+  def blockJoin[W](
+    other: JavaPairRDD[K, W],
+    leftReplication: Int,
+    rightReplication: Int,
+    partitioner: Partitioner): JavaPairRDD[K, (V, W)] = {
+    fromRDD(rdd.blockJoin(other, leftReplication, rightReplication, partitioner))
+  }
+
+  /**
+   * Same as join, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input params leftReplication and rightReplication control the replication of the left
+   * (this rdd) and right (other rdd) respectively.
+   */
+  def blockJoin[W](
+    other: JavaPairRDD[K, W],
+    leftReplication: Int,
+    rightReplication: Int) : JavaPairRDD[K, (V, W)] = {
+    fromRDD(rdd.blockJoin(other, leftReplication, rightReplication))
+  }
+
+  /**
+   * Same as leftOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input param rightReplication controls the replication of the right (other rdd).
+   */
+  def blockLeftOuterJoin[W](
+    other: JavaPairRDD[K, W],
+    rightReplication: Int,
+    partitioner: Partitioner): JavaPairRDD[K, (V, Optional[W])] = {
+    fromRDD(rdd.blockLeftOuterJoin(other, rightReplication, partitioner).mapValues { case (v, w) =>
+      (v, JavaUtils.optionToOptional(w))
+    })
+  }
+
+  /**
+   * Same as leftOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input param rightReplication controls the replication of the right (other rdd).
+   */
+  def blockLeftOuterJoin[W](
+    other: JavaPairRDD[K, W],
+    rightReplication: Int): JavaPairRDD[K, (V, Optional[W])] = {
+    fromRDD(rdd.blockLeftOuterJoin(other, rightReplication).mapValues { case (v, w) =>
+      (v, JavaUtils.optionToOptional(w))
+    })
+  }
+
+  /**
+   * Same as rightOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input param leftReplication controls the replication of the left (this rdd).
+   */
+  def blockRightOuterJoin[W](
+    other: JavaPairRDD[K, W],
+    leftReplication: Int,
+    partitioner: Partitioner): JavaPairRDD[K, (Optional[V], W)] = {
+    fromRDD(rdd.blockRightOuterJoin(other, leftReplication, partitioner).mapValues { case (v, w) =>
+      (JavaUtils.optionToOptional(v), w)
+    })
+  }
+
+  /**
+   * Same as rightOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input param leftReplication controls the replication of the left (this rdd).
+   */
+  def blockRightOuterJoin[W](
+    other: JavaPairRDD[K, W],
+    leftReplication: Int): JavaPairRDD[K, (Optional[V], W)] = {
+    fromRDD(rdd.blockRightOuterJoin(other, leftReplication).mapValues { case (v, w) =>
+      (JavaUtils.optionToOptional(v), w)
+    })
+  }
+
+  /**
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the existing
    * partitioner/parallelism level and using map-side aggregation.
    */

@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
-import java.util.{Date, HashMap => JHashMap}
+import java.util.{Date, HashMap => JHashMap, Random => JRandom}
 
 import scala.collection.{mutable, Map}
 import scala.collection.JavaConverters._
@@ -600,6 +600,110 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       case (Seq(), ws) => ws.iterator.map(w => (None, Some(w)))
       case (vs, ws) => for (v <- vs.iterator; w <- ws.iterator) yield (Some(v), Some(w))
     }
+  }
+
+  // based on blockJoinWithSmaller in scalding. See com.twitter.scalding.JoinAlgorithms
+  private def blockCogroup[W](other: RDD[(K, W)], leftReplication: Int, rightReplication: Int,
+    partitioner: Partitioner): RDD[((K, (Int, Int)), (Iterable[V], Iterable[W]))] = self.withScope {
+    assert(leftReplication >= 1, "must specify a positive number for left replication")
+    assert(rightReplication >= 1, "must specify a positive number for right replication")
+
+    def getReplication(random: JRandom, replication: Int,
+      otherReplication: Int) : Seq[(Int, Int)] = {
+      val rand = random.nextInt(otherReplication)
+      (0 until replication).map{ rep => (rand, rep) }
+    }
+
+    val selfBlocked = self.mapPartitions{ it =>
+      val random = new JRandom
+      it.flatMap{ kv =>
+        getReplication(random, leftReplication, rightReplication).map{ rl =>
+          ((kv._1, rl.swap), kv._2)
+        }
+      }
+    }
+
+    val otherBlocked = other.mapPartitions{ it =>
+      val random = new JRandom
+      it.flatMap{ kv =>
+        getReplication(random, rightReplication, leftReplication).map{ lr =>
+          ((kv._1, lr), kv._2)
+        }
+      }
+    }
+
+    selfBlocked.cogroup(otherBlocked, partitioner)
+  }
+
+  /**
+   * Same as join, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input params leftReplication and rightReplication control the replication of the left
+   * (this rdd) and right (other rdd) respectively.
+   */
+  def blockJoin[W](other: RDD[(K, W)], leftReplication: Int, rightReplication: Int,
+    partitioner: Partitioner): RDD[(K, (V, W))] = self.withScope {
+    this.blockCogroup(other, leftReplication, rightReplication, partitioner).flatMap{ blockPair =>
+      for (v <- blockPair._2._1.iterator; w <- blockPair._2._2.iterator) yield
+        (blockPair._1._1, (v, w))
+    }
+  }
+
+  /**
+   * Same as join, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input params leftReplication and rightReplication control the replication of the left
+   * (this rdd) and right (other rdd) respectively.
+   */
+  def blockJoin[W](other: RDD[(K, W)], leftReplication: Int, rightReplication: Int)
+      : RDD[(K, (V, W))] = self.withScope {
+    blockJoin(other, leftReplication, rightReplication, defaultPartitioner(self, other))
+  }
+
+  /**
+   * Same as leftOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input param rightReplication controls the replication of the right (other rdd).
+   */
+  def blockLeftOuterJoin[W](other: RDD[(K, W)], rightReplication: Int,
+    partitioner: Partitioner): RDD[(K, (V, Option[W]))] = self.withScope {
+    this.blockCogroup(other, 1, rightReplication, partitioner).flatMap{
+      case ((k, _), (itv, Seq())) => itv.iterator.map(v => (k, (v, None)))
+      case ((k, _), (itv, itw)) => for (v <- itv; w <- itw) yield (k, (v, Some(w)))
+    }
+  }
+
+  /**
+   * Same as leftOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input param rightReplication controls the replication of the right (other rdd).
+   */
+  def blockLeftOuterJoin[W](other: RDD[(K, W)], rightReplication: Int)
+      : RDD[(K, (V, Option[W]))] = self.withScope {
+    blockLeftOuterJoin(other, rightReplication, defaultPartitioner(self, other))
+  }
+
+  /**
+   * Same as rightOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input param leftReplication controls the replication of the left (this rdd).
+   */
+  def blockRightOuterJoin[W](other: RDD[(K, W)], leftReplication: Int,
+    partitioner: Partitioner): RDD[(K, (Option[V], W))] = self.withScope {
+    this.blockCogroup(other, leftReplication, 1, partitioner).flatMap{
+      case ((k, _), (Seq(), itw)) => itw.iterator.map(w => (k, (None, w)))
+      case ((k, _), (itv, itw)) => for (v <- itv; w <- itw) yield (k, (Some(v), w))
+    }
+  }
+
+  /**
+   * Same as rightOuterJoin, but uses a block join, otherwise known as a replicate fragment join.
+   * This is useful in cases where the data has extreme skew.
+   * The input param leftReplication controls the replication of the left (this rdd).
+   */
+  def blockRightOuterJoin[W](other: RDD[(K, W)], leftReplication: Int)
+      : RDD[(K, (Option[V], W))] = self.withScope {
+    blockRightOuterJoin(other, leftReplication, defaultPartitioner(self, other))
   }
 
   /**
