@@ -333,11 +333,15 @@ private[spark] class ApplicationMaster(
       uiAddress: String,
       securityMgr: SecurityManager) = {
     val appId = client.getAttemptId().getApplicationId().toString()
-    val attemptId = client.getAttemptId().getAttemptId().toString()
+    val attemptIdOpt = if (isClusterMode) {
+      Some(client.getAttemptId().toString())
+    } else {
+      None
+    }
     val historyAddress =
       _sparkConf.get(HISTORY_SERVER_ADDRESS)
         .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
-        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
+        .map { address => address + HistoryServer.getAttemptURI(appId, attemptIdOpt) }
         .getOrElse("")
 
     val driverUrl = RpcEndpointAddress(
