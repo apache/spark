@@ -26,18 +26,7 @@ import org.apache.spark.mllib.linalg.CholeskyDecomposition
 private[ml] class NormalEquationSolution(
     val coefficients: Array[Double],
     val aaInv: Option[Array[Double]],
-    val objectiveHistory: Option[Array[Double]]) {
-
-//  def coefficients: Array[Double] = {
-//    if (fitIntercept) {
-//      _coefficients.slice(0, _coefficients.length - 1)
-//    } else {
-//      _coefficients
-//    }
-//  }
-//
-//  def intercept: Double = if (fitIntercept) _coefficients.last else 0.0
-}
+    val objectiveHistory: Option[Array[Double]])
 
 /**
  * Interface for classes that solve the normal equations locally.
