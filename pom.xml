@@ -222,6 +222,7 @@
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>
     <CodeCacheSize>512m</CodeCacheSize>
+    <scalastyle.path>scalastyle-config.xml</scalastyle.path>
   </properties>
   <repositories>
     <repository>
@@ -2326,7 +2327,7 @@
           <failOnWarning>false</failOnWarning>
           <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
           <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
-          <configLocation>scalastyle-config.xml</configLocation>
+          <configLocation>${scalastyle.path}</configLocation>
           <outputFile>${basedir}/target/scalastyle-output.xml</outputFile>
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
           <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
