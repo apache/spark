@@ -29,10 +29,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val requestedIncomplete =
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
-    val allApps = parent.getApplicationList()
-      .filter(_.completed != requestedIncomplete)
-    val allAppsSize = allApps.size
-
+    val allAppsSize = parent.getApplicationList().count(_.completed != requestedIncomplete)
     val providerConfig = parent.getProviderConfig()
     val content =
       <div>
@@ -50,13 +47,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
             } else {
-              <h4>No completed applications found!</h4> ++
-                <p>Did you specify the correct logging directory?
-                  Please verify your setting of <span style="font-style:italic">
-                  spark.history.fs.logDirectory</span> and whether you have the permissions to
-                  access it.<br /> It is also possible that your application did not run to
-                  completion or did not stop the SparkContext.
-                </p>
+              <h4>No completed applications found!</h4> ++ parent.emptyListingHtml
             }
             }
 

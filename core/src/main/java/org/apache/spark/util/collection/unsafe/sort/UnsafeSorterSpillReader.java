@@ -23,6 +23,7 @@ import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 
 import org.apache.spark.SparkEnv;
+import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
@@ -64,13 +65,13 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
       // fall back to a sane default value
       logger.warn("Value of config \"spark.unsafe.sorter.spill.reader.buffer.size\" = {} not in " +
-                      "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
-                  DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
+        "allowed range [{}, {}). Falling back to default value : {} bytes", bufferSizeBytes,
+        DEFAULT_BUFFER_SIZE_BYTES, MAX_BUFFER_SIZE_BYTES, DEFAULT_BUFFER_SIZE_BYTES);
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
     }
 
-    final BufferedInputStream bs =
-        new BufferedInputStream(new FileInputStream(file), (int) bufferSizeBytes);
+    final InputStream bs =
+        new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
     try {
       this.in = serializerManager.wrapStream(blockId, bs);
       this.din = new DataInputStream(this.in);

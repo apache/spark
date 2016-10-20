@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
@@ -35,89 +35,73 @@ import org.apache.spark.sql.types.StructType
 @Experimental
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
-   * :: Experimental ::
    * Specifies the input data source format.
    *
    * @since 2.0.0
    */
-  @Experimental
   def format(source: String): DataStreamReader = {
     this.source = source
     this
   }
 
   /**
-   * :: Experimental ::
    * Specifies the input schema. Some data sources (e.g. JSON) can infer the input schema
    * automatically from data. By specifying the schema here, the underlying data source can
    * skip the schema inference step, and thus speed up data loading.
    *
    * @since 2.0.0
    */
-  @Experimental
   def schema(schema: StructType): DataStreamReader = {
     this.userSpecifiedSchema = Option(schema)
     this
   }
 
   /**
-   * :: Experimental ::
    * Adds an input option for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def option(key: String, value: String): DataStreamReader = {
     this.extraOptions += (key -> value)
     this
   }
 
   /**
-   * :: Experimental ::
    * Adds an input option for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def option(key: String, value: Boolean): DataStreamReader = option(key, value.toString)
 
   /**
-   * :: Experimental ::
    * Adds an input option for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def option(key: String, value: Long): DataStreamReader = option(key, value.toString)
 
   /**
-   * :: Experimental ::
    * Adds an input option for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def option(key: String, value: Double): DataStreamReader = option(key, value.toString)
 
   /**
-   * :: Experimental ::
    * (Scala-specific) Adds input options for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def options(options: scala.collection.Map[String, String]): DataStreamReader = {
     this.extraOptions ++= options
     this
   }
 
   /**
-   * :: Experimental ::
    * Adds input options for the underlying data source.
    *
    * @since 2.0.0
    */
-  @Experimental
   def options(options: java.util.Map[String, String]): DataStreamReader = {
     this.options(options.asScala)
     this
@@ -125,13 +109,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
 
 
   /**
-   * :: Experimental ::
    * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
    * (e.g. external key-value stores).
    *
    * @since 2.0.0
    */
-  @Experimental
   def load(): DataFrame = {
     val dataSource =
       DataSource(
@@ -143,18 +125,15 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * :: Experimental ::
    * Loads input in as a [[DataFrame]], for data streams that read from some path.
    *
    * @since 2.0.0
    */
-  @Experimental
   def load(path: String): DataFrame = {
     option("path", path).load()
   }
 
   /**
-   * :: Experimental ::
    * Loads a JSON file stream (one object per line) and returns the result as a [[DataFrame]].
    *
    * This function goes through the input once to determine the input schema. If you know the
@@ -198,11 +177,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * @since 2.0.0
    */
-  @Experimental
   def json(path: String): DataFrame = format("json").load(path)
 
   /**
-   * :: Experimental ::
    * Loads a CSV file stream and returns the result as a [[DataFrame]].
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
@@ -247,8 +224,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
-   * <li>`maxCharsPerColumn` (default `1000000`): defines the maximum number of characters allowed
-   * for any given value being read.</li>
+   * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
+   * for any given value being read. By default, it is -1 meaning unlimited length</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing.
    *   <ul>
@@ -262,11 +239,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * @since 2.0.0
    */
-  @Experimental
   def csv(path: String): DataFrame = format("csv").load(path)
 
   /**
-   * :: Experimental ::
    * Loads a Parquet file stream, returning the result as a [[DataFrame]].
    *
    * You can set the following Parquet-specific option(s) for reading Parquet files:
@@ -281,13 +256,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * @since 2.0.0
    */
-  @Experimental
   def parquet(path: String): DataFrame = {
     format("parquet").load(path)
   }
 
   /**
-   * :: Experimental ::
    * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    *
@@ -308,9 +281,39 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * @since 2.0.0
    */
-  @Experimental
   def text(path: String): DataFrame = format("text").load(path)
 
+  /**
+   * Loads text file(s) and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * If the directory structure of the text files contains partitioning information, those are
+   * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
+   *
+   * Each line in the text file is a new element in the resulting Dataset. For example:
+   * {{{
+   *   // Scala:
+   *   spark.readStream.textFile("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   spark.readStream().textFile("/path/to/spark/README.md")
+   * }}}
+   *
+   * You can set the following text-specific options to deal with text files:
+   * <ul>
+   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
+   * considered in every trigger.</li>
+   * </ul>
+   *
+   * @param path input path
+   * @since 2.1.0
+   */
+  def textFile(path: String): Dataset[String] = {
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new AnalysisException("User specified schema not supported with `textFile`")
+    }
+    text(path).select("value").as[String](sparkSession.implicits.newStringEncoder)
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

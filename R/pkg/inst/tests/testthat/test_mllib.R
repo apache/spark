@@ -391,6 +391,25 @@ test_that("spark.mlp", {
 
   unlink(modelPath)
 
+  # Test default parameter
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3))
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 10), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 0))
+
+  # Test illegal parameter
+  expect_error(spark.mlp(df, layers = NULL), "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, layers = c()), "layers must be a integer vector with length > 1.")
+  expect_error(spark.mlp(df, layers = c(3)), "layers must be a integer vector with length > 1.")
+
+  # Test random seed
+  # default seed
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3), maxIter = 10)
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 0, 1, 2, 2, 1, 2, 0, 1))
+  # seed equals 10
+  model <- spark.mlp(df, layers = c(4, 5, 4, 3), maxIter = 10, seed = 10)
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 2, 1, 2, 2, 1, 0, 0, 1))
 })
 
 test_that("spark.naiveBayes", {
@@ -462,6 +481,16 @@ test_that("spark.naiveBayes", {
     expect_error(m <- e1071::naiveBayes(Survived ~ ., data = t1), NA)
     expect_equal(as.character(predict(m, t1[1, ])), "Yes")
   }
+
+  # Test numeric response variable
+  t1$NumericSurvived <- ifelse(t1$Survived == "No", 0, 1)
+  t2 <- t1[-4]
+  df <- suppressWarnings(createDataFrame(t2))
+  m <- spark.naiveBayes(df, NumericSurvived ~ ., smoothing = 0.0)
+  s <- summary(m)
+  expect_equal(as.double(s$apriori[1, 1]), 0.5833333, tolerance = 1e-6)
+  expect_equal(sum(s$apriori), 1)
+  expect_equal(as.double(s$tables[1, "Age_Adult"]), 0.5714286, tolerance = 1e-6)
 })
 
 test_that("spark.survreg", {
@@ -760,13 +789,7 @@ test_that("spark.kstest", {
 
   expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
   expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
-
-  printStr <- print.summary.KSTest(testResult)
-  expect_match(printStr, paste0("Kolmogorov-Smirnov test summary:\\n",
-                                "degrees of freedom = 0 \\n",
-                                "statistic = 0.38208[0-9]* \\n",
-                                "pValue = 0.19849[0-9]* \\n",
-                                ".*"), perl = TRUE)
+  expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
 
   testResult <- spark.kstest(df, "test", "norm", -0.5)
   stats <- summary(testResult)
@@ -775,13 +798,7 @@ test_that("spark.kstest", {
 
   expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
   expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
-
-  printStr <- print.summary.KSTest(testResult)
-  expect_match(printStr, paste0("Kolmogorov-Smirnov test summary:\\n",
-                                "degrees of freedom = 0 \\n",
-                                "statistic = 0.44003[0-9]* \\n",
-                                "pValue = 0.09470[0-9]* \\n",
-                                ".*"), perl = TRUE)
+  expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
 })
 
 sparkR.session.stop()
