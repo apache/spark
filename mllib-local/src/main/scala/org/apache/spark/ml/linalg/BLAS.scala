@@ -246,6 +246,7 @@ private[spark] object BLAS extends Serializable {
   /**
    * y := alpha*A*x + beta*y
    *
+   * @param n The order of the n by n matrix A.
    * @param A The upper triangular part of A in a [[DenseVector]] (column major).
    * @param x The [[DenseVector]] transformed by A.
    * @param y The [[DenseVector]] to be modified in place.

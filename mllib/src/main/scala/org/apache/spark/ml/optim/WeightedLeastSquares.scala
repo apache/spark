@@ -137,6 +137,7 @@ private[ml] class WeightedLeastSquares(
       }
     }
 
+    // scale aBar to standardized space in-place
     val aBarValues = aBar.values
     var j = 0
     while (j < numFeatures) {
@@ -148,6 +149,7 @@ private[ml] class WeightedLeastSquares(
       j += 1
     }
 
+    // scale abBar to standardized space in-place
     val abBarValues = abBar.values
     val aStdValues = aStd.values
     j = 0
@@ -160,6 +162,7 @@ private[ml] class WeightedLeastSquares(
       j += 1
     }
 
+    // scale aaBar to standardized space in-place
     val aaBarValues = aaBar.values
     j = 0
     var p = 0
@@ -219,7 +222,7 @@ private[ml] class WeightedLeastSquares(
               if (standardizeFeatures) {
                 effectiveL1RegParam
               } else {
-                if (aStd(index) != 0.0) effectiveL1RegParam / aStd(index) else 0.0
+                if (aStdValues(index) != 0.0) effectiveL1RegParam / aStdValues(index) else 0.0
               }
             }
           })
@@ -228,7 +231,7 @@ private[ml] class WeightedLeastSquares(
       }
       new QuasiNewtonSolver(fitIntercept, maxIter, tol, effectiveL1RegFun)
     } else {
-      new CholeskySolver(fitIntercept)
+      new CholeskySolver
     }
 
     val solution = solver match {
@@ -250,8 +253,12 @@ private[ml] class WeightedLeastSquares(
       case qn: QuasiNewtonSolver =>
         qn.solve(bBarStd, bbBarStd, ab, aa, aBar)
     }
-    val intercept = solution.intercept * bStd
-    val coefficientArray = solution.coefficients
+    val (coefficientArray, intercept) = if (fitIntercept) {
+      (solution.coefficients.slice(0, solution.coefficients.length - 1),
+        solution.coefficients.last * bStd)
+    } else {
+      (solution.coefficients, 0.0)
+    }
 
     // convert the coefficients from the scaled space to the original space
     var q = 0

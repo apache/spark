@@ -24,20 +24,19 @@ import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vectors}
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 
 private[ml] class NormalEquationSolution(
-    val fitIntercept: Boolean,
-    private val _coefficients: Array[Double],
+    val coefficients: Array[Double],
     val aaInv: Option[Array[Double]],
     val objectiveHistory: Option[Array[Double]]) {
 
-  def coefficients: Array[Double] = {
-    if (fitIntercept) {
-      _coefficients.slice(0, _coefficients.length - 1)
-    } else {
-      _coefficients
-    }
-  }
-
-  def intercept: Double = if (fitIntercept) _coefficients.last else 0.0
+//  def coefficients: Array[Double] = {
+//    if (fitIntercept) {
+//      _coefficients.slice(0, _coefficients.length - 1)
+//    } else {
+//      _coefficients
+//    }
+//  }
+//
+//  def intercept: Double = if (fitIntercept) _coefficients.last else 0.0
 }
 
 /**
@@ -57,7 +56,7 @@ private[ml] sealed trait NormalEquationSolver {
 /**
  * A class that solves the normal equations directly, using Cholesky decomposition.
  */
-private[ml] class CholeskySolver(val fitIntercept: Boolean) extends NormalEquationSolver {
+private[ml] class CholeskySolver extends NormalEquationSolver {
 
   def solve(
       bBar: Double,
@@ -69,7 +68,7 @@ private[ml] class CholeskySolver(val fitIntercept: Boolean) extends NormalEquati
     val x = CholeskyDecomposition.solve(aaBar.values, abBar.values)
     val aaInv = CholeskyDecomposition.inverse(aaBar.values, k)
 
-    new NormalEquationSolution(fitIntercept, x, Some(aaInv), None)
+    new NormalEquationSolution(x, Some(aaInv), None)
   }
 }
 
@@ -111,7 +110,7 @@ private[ml] class QuasiNewtonSolver(
       arrayBuilder += state.adjustedValue
     }
     val x = state.x.toArray.clone()
-    new NormalEquationSolution(fitIntercept, x, None, Some(arrayBuilder.result()))
+    new NormalEquationSolution(x, None, Some(arrayBuilder.result()))
   }
 
   /**
