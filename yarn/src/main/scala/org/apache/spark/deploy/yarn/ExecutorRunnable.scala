@@ -145,9 +145,6 @@ private[yarn] class ExecutorRunnable(
     sparkConf.get(EXECUTOR_JAVA_OPTIONS).foreach { opts =>
       javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
-    sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
-      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
-    }
     sparkConf.get(EXECUTOR_LIBRARY_PATH).foreach { p =>
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }

@@ -43,8 +43,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * Execute using
  * ./bin/spark-class org.apache.spark.deploy.FaultToleranceTest
  *
- * Make sure that that the environment includes the following properties in SPARK_DAEMON_JAVA_OPTS
- * *and* SPARK_JAVA_OPTS:
+ * Make sure that that the environment includes the following properties in SPARK_DAEMON_JAVA_OPTS:
  *   - spark.deploy.recoveryMode=ZOOKEEPER
  *   - spark.deploy.zookeeper.url=172.17.42.1:2181
  * Note that 172.17.42.1 is the default docker ip for the host and 2181 is the default ZK port.

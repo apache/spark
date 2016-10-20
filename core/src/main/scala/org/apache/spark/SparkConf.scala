@@ -452,7 +452,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
     val executorOptsKey = "spark.executor.extraJavaOptions"
     val executorClasspathKey = "spark.executor.extraClassPath"
-    val driverOptsKey = "spark.driver.extraJavaOptions"
     val driverClassPathKey = "spark.driver.extraClassPath"
     val driverLibraryPathKey = "spark.driver.extraLibraryPath"
     val sparkExecutorInstances = "spark.executor.instances"
@@ -513,31 +512,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
           "memory management are unified. All memory fractions used in the old model are " +
           "now deprecated and no longer read. If you wish to use the old memory management, " +
           s"you may explicitly enable `$legacyMemoryManagementKey` (not recommended).")
-      }
-    }
-
-    // Check for legacy configs
-    sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
-      val warning =
-        s"""
-          |SPARK_JAVA_OPTS was detected (set to '$value').
-          |This is deprecated in Spark 1.0+.
-          |
-          |Please instead use:
-          | - ./spark-submit with conf/spark-defaults.conf to set defaults for an application
-          | - ./spark-submit with --driver-java-options to set -X options for a driver
-          | - spark.executor.extraJavaOptions to set -X options for executors
-          | - SPARK_DAEMON_JAVA_OPTS to set java options for standalone daemons (master or worker)
-        """.stripMargin
-      logWarning(warning)
-
-      for (key <- Seq(executorOptsKey, driverOptsKey)) {
-        if (getOption(key).isDefined) {
-          throw new SparkException(s"Found both $key and SPARK_JAVA_OPTS. Use only the former.")
-        } else {
-          logWarning(s"Setting '$key' to '$value' as a work-around.")
-          set(key, value)
-        }
       }
     }
 
