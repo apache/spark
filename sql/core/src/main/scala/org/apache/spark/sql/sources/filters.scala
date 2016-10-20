@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.annotation.InterfaceStability
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the filters that we can push down to the data sources.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -26,6 +28,7 @@ package org.apache.spark.sql.sources
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 abstract class Filter {
   /**
    * List of columns that are referenced by this filter.
@@ -45,6 +48,7 @@ abstract class Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class EqualTo(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
@@ -56,6 +60,7 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
  *
  * @since 1.5.0
  */
+@InterfaceStability.Stable
 case class EqualNullSafe(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
@@ -66,6 +71,7 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class GreaterThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
@@ -76,6 +82,7 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
@@ -86,6 +93,7 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class LessThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
@@ -96,6 +104,7 @@ case class LessThan(attribute: String, value: Any) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
 }
@@ -105,6 +114,7 @@ case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class In(attribute: String, values: Array[Any]) extends Filter {
   override def hashCode(): Int = {
     var h = attribute.hashCode
@@ -131,6 +141,7 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class IsNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
 }
@@ -140,6 +151,7 @@ case class IsNull(attribute: String) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class IsNotNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
 }
@@ -149,6 +161,7 @@ case class IsNotNull(attribute: String) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class And(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
 }
@@ -158,6 +171,7 @@ case class And(left: Filter, right: Filter) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class Or(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
 }
@@ -167,6 +181,7 @@ case class Or(left: Filter, right: Filter) extends Filter {
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 case class Not(child: Filter) extends Filter {
   override def references: Array[String] = child.references
 }
@@ -177,6 +192,7 @@ case class Not(child: Filter) extends Filter {
  *
  * @since 1.3.1
  */
+@InterfaceStability.Stable
 case class StringStartsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
 }
@@ -187,6 +203,7 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
  *
  * @since 1.3.1
  */
+@InterfaceStability.Stable
 case class StringEndsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
 }
@@ -197,6 +214,7 @@ case class StringEndsWith(attribute: String, value: String) extends Filter {
  *
  * @since 1.3.1
  */
+@InterfaceStability.Stable
 case class StringContains(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
 }

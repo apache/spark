@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.execution.command.ShowColumnsCommand
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -220,6 +221,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
 
     } catch {
+      case a: AnalysisException if a.plan.nonEmpty =>
+        // Do not output the logical plan tree which contains expression IDs.
+        (StructType(Seq.empty), Seq(a.getClass.getName, a.getSimpleMessage))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))

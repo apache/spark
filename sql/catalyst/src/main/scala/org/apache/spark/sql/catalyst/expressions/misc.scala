@@ -618,6 +618,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def foldable: Boolean = true
   override def nullable: Boolean = false
+  override def prettyName: String = "current_database"
 }
 
 /**

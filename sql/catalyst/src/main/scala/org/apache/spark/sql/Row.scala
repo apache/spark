@@ -462,7 +462,7 @@ trait Row extends Serializable {
   def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
 
   /**
-   * Returns the value of a given fieldName.
+   * Returns the value at position i.
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws ClassCastException when data type does not match.

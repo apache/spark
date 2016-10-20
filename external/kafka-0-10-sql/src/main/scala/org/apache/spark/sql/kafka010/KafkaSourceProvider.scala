@@ -77,10 +77,15 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
     // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
 
-    val autoOffsetResetValue = caseInsensitiveParams.get(STARTING_OFFSET_OPTION_KEY) match {
-      case Some(value) => value.trim()  // same values as those supported by auto.offset.reset
-      case None => "latest"
-    }
+    val startFromEarliestOffset =
+      caseInsensitiveParams.get(STARTING_OFFSET_OPTION_KEY).map(_.trim.toLowerCase) match {
+        case Some("latest") => false
+        case Some("earliest") => true
+        case Some(pos) =>
+          // This should not happen since we have already checked the options.
+          throw new IllegalStateException(s"Invalid $STARTING_OFFSET_OPTION_KEY: $pos")
+        case None => false
+      }
 
     val kafkaParamsForStrategy =
       ConfigUpdater("source", specifiedKafkaParams)
@@ -90,8 +95,9 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
         // So that consumers in Kafka source do not mess with any existing group id
         .set(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-driver")
 
-        // So that consumers can start from earliest or latest
-        .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, autoOffsetResetValue)
+        // Set to "latest" to avoid exceptions. However, KafkaSource will fetch the initial offsets
+        // by itself instead of counting on KafkaConsumer.
+        .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
 
         // So that consumers in the driver does not commit offsets unnecessarily
         .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
@@ -147,6 +153,7 @@ private[kafka010] class KafkaSourceProvider extends StreamSourceProvider
       kafkaParamsForExecutors,
       parameters,
       metadataPath,
+      startFromEarliestOffset,
       failOnDataLoss)
   }
 

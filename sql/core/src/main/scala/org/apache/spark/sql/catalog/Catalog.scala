@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalog
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
@@ -27,6 +27,7 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 2.0.0
  */
+@InterfaceStability.Stable
 abstract class Catalog {
 
   /**
@@ -193,6 +194,7 @@ abstract class Catalog {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createExternalTable(tableName: String, path: String): DataFrame
 
   /**
@@ -203,6 +205,7 @@ abstract class Catalog {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createExternalTable(tableName: String, path: String, source: String): DataFrame
 
   /**
@@ -213,6 +216,7 @@ abstract class Catalog {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createExternalTable(
       tableName: String,
       source: String,
@@ -227,6 +231,7 @@ abstract class Catalog {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createExternalTable(
       tableName: String,
       source: String,
@@ -240,6 +245,7 @@ abstract class Catalog {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createExternalTable(
       tableName: String,
       source: String,
@@ -255,6 +261,7 @@ abstract class Catalog {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createExternalTable(
       tableName: String,
       source: String,
@@ -336,7 +343,8 @@ abstract class Catalog {
 
   /**
    * Invalidate and refresh all the cached data (and the associated metadata) for any dataframe that
-   * contains the given data source path.
+   * contains the given data source path. Path matching is by prefix, i.e. "/" would invalidate
+   * everything that is cached.
    *
    * @since 2.0.0
    */
