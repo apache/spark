@@ -1,6 +1,7 @@
 from __future__ import print_function
 import os, sys
 from setuptools import setup, find_packages
+from shutil import copyfile
 
 VERSION = '2.1.0-SNAPSHOT'
 # A temporary path so we can access above the Python project root and fetch scripts and jars we need
@@ -30,8 +31,8 @@ try:
         os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
     else:
         # We add find-spark-home.py to the bin directory we install so that pip installed PySpark
-        # will search for SPARK_HOME with Python
-        os.synlink("find-spark-home.py", SCRIPTS_TARGET + "/")
+        # will search for SPARK_HOME with Python.
+        copyfile("find-spark-home.py", SCRIPTS_TARGET + "/find-spark-home.py")
 
     if not os.path.isdir(SCRIPTS_TARGET):
         print("For packaging reasons you must first create a source dist and install that source dist.", file=sys.stderr)

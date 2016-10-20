@@ -21,12 +21,11 @@
 # that Spark may have been installed on the system with pip.
 
 from __future__ import print_function
-import os,sys
+import os, sys
 
 def is_spark_home(path):
     """Takes a path and returns true if the provided path could be a reasonable SPARK_HOME"""
-    return (os.path.isdir(path + "/bin")
-            and os.path.isfile(path + "/bin/spark-submit"))
+    return (os.path.isfile(path + "/bin/spark-submit") and os.path.isdir(path + "/jars"))
 
 paths = ["../", os.path.dirname(sys.argv[0]) + "/../"]
 
