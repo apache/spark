@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -39,15 +38,15 @@ case class SparkPartitionID() extends LeafExpression with Nondeterministic {
   override val prettyName = "SPARK_PARTITION_ID"
 
   override protected def initializeStatesForPartitionInternal(partitionIndex: Int): Unit = {
-    partitionId = TaskContext.getPartitionId()
+    partitionId = partitionIndex
   }
 
   override protected def evalInternal(input: InternalRow): Int = partitionId
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val idTerm = ctx.freshName("partitionId")
-    ctx.addMutableState(ctx.JAVA_INT, idTerm,
-      s"$idTerm = org.apache.spark.TaskContext.getPartitionId();")
+    ctx.addMutableState(ctx.JAVA_INT, idTerm, "")
+    ctx.addPartitionInitializationStatement(s"$idTerm = partitionIndex;")
     ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = $idTerm;", isNull = "false")
   }
 }

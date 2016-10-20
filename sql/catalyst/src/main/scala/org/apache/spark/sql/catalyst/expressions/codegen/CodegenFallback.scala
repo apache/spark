@@ -35,7 +35,7 @@ trait CodegenFallback extends Expression {
         // This might add the current expression twice, but it won't hurt.
         ctx.references += n
         childIndex += 1
-        ctx.addPartitionInitializationStatements(
+        ctx.addPartitionInitializationStatement(
           s"""
              |((Nondeterministic) references[$childIndex])
              |  .initializeStatesForPartition(partitionIndex);

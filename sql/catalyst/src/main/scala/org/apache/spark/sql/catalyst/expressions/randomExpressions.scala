@@ -43,7 +43,7 @@ abstract class RDG extends LeafExpression with Nondeterministic {
   @transient protected var rng: XORShiftRandom = _
 
   override protected def initializeStatesForPartitionInternal(partitionIndex: Int): Unit = {
-    rng = new XORShiftRandom(seed + TaskContext.getPartitionId)
+    rng = new XORShiftRandom(seed + partitionIndex)
   }
 
   override def nullable: Boolean = false
@@ -70,8 +70,9 @@ case class Rand(seed: Long) extends RDG {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    ctx.addMutableState(className, rngTerm,
-      s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
+    ctx.addMutableState(className, rngTerm, "")
+    ctx.addPartitionInitializationStatement(
+      s"$rngTerm = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""", isNull = "false")
   }
@@ -93,8 +94,9 @@ case class Randn(seed: Long) extends RDG {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    ctx.addMutableState(className, rngTerm,
-      s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
+    ctx.addMutableState(className, rngTerm, "")
+    ctx.addPartitionInitializationStatement(
+      s"$rngTerm = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""", isNull = "false")
   }

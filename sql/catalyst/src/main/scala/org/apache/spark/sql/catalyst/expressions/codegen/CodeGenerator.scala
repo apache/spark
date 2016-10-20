@@ -190,7 +190,7 @@ class CodegenContext {
    */
   val partitionInitializationStatements: mutable.ArrayBuffer[String] = mutable.ArrayBuffer.empty
 
-  def addPartitionInitializationStatements(statement: String): Unit = {
+  def addPartitionInitializationStatement(statement: String): Unit = {
     partitionInitializationStatements += statement
   }
 
