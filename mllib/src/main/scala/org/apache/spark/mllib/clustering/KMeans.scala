@@ -326,8 +326,8 @@ class KMeans private (
   private def initRandom(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
     // Select without replacement; may still produce duplicates if the data has < k distinct
     // points, so deduplicate the centroids to match the behavior of k-means|| in the same situation
-    data.takeSample(false, k, new XORShiftRandom(this.seed).nextInt()).
-      map(_.vector).distinct.map(new VectorWithNorm(_))
+    data.takeSample(false, k, new XORShiftRandom(this.seed).nextInt())
+      .map(_.vector).distinct.map(new VectorWithNorm(_))
   }
 
   /**

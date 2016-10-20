@@ -64,18 +64,34 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.clusterCenters.head ~== center absTol 1E-5)
   }
 
-  test("no distinct points") {
+  test("fewer distinct points than clusters") {
     val data = sc.parallelize(
       Array(
         Vectors.dense(1.0, 2.0, 3.0),
         Vectors.dense(1.0, 2.0, 3.0),
         Vectors.dense(1.0, 2.0, 3.0)),
       2)
-    val center = Vectors.dense(1.0, 2.0, 3.0)
 
-    // Make sure code runs.
-    var model = KMeans.train(data, k = 2, maxIterations = 1)
-    assert(model.clusterCenters.size === 1)
+    var model = KMeans.train(data, k = 2, maxIterations = 1, initializationMode = "random")
+    assert(model.clusterCenters.length === 1)
+
+    model = KMeans.train(data, k = 2, maxIterations = 1, initializationMode = "k-means||")
+    assert(model.clusterCenters.length === 1)
+  }
+
+
+  test("fewer clusters than points") {
+    val data = sc.parallelize(
+      Array(
+        Vectors.dense(1.0, 2.0, 3.0),
+        Vectors.dense(1.0, 3.0, 4.0)),
+      2)
+
+    var model = KMeans.train(data, k = 1, maxIterations = 1, initializationMode = "random")
+    assert(model.clusterCenters.length === 1)
+
+    model = KMeans.train(data, k = 1, maxIterations = 1, initializationMode = "k-means||")
+    assert(model.clusterCenters.length === 1)
   }
 
   test("more clusters than points") {
@@ -85,9 +101,11 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
         Vectors.dense(1.0, 3.0, 4.0)),
       2)
 
-    // Make sure code runs.
-    var model = KMeans.train(data, k = 3, maxIterations = 1)
-    assert(model.clusterCenters.size === 2)
+    var model = KMeans.train(data, k = 3, maxIterations = 1, initializationMode = "random")
+    assert(model.clusterCenters.length === 2)
+
+    model = KMeans.train(data, k = 3, maxIterations = 1, initializationMode = "k-means||")
+    assert(model.clusterCenters.length === 2)
   }
 
   test("deterministic initialization") {
