@@ -31,12 +31,14 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
     // Use an Add to wrap two of them together in case we only initialize the top level expressions.
     val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = UnsafeProjection.create(Seq(expr))
+    instance.initializeStatesForPartition(0)
     assert(instance.apply(null).getBoolean(0) === false)
   }
 
   test("GenerateMutableProjection should initialize expressions") {
     val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = GenerateMutableProjection.generate(Seq(expr))
+    instance.initializeStatesForPartition(0)
     assert(instance.apply(null).getBoolean(0) === false)
   }
 
