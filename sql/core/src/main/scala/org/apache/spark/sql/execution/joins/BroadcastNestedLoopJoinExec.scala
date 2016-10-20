@@ -52,7 +52,7 @@ case class BroadcastNestedLoopJoinExec(
       UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
   }
 
-  private[this] def genResultProjection: InternalRow => InternalRow = joinType match {
+  private[this] def genResultProjection: UnsafeProjection = joinType match {
     case LeftExistence(j) =>
       UnsafeProjection.create(output, output)
     case other =>
@@ -366,8 +366,9 @@ case class BroadcastNestedLoopJoinExec(
     }
 
     val numOutputRows = longMetric("numOutputRows")
-    resultRdd.mapPartitionsInternal { iter =>
+    resultRdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val resultProj = genResultProjection
+      resultProj.initializeStatesForPartition(index)
       iter.map { r =>
         numOutputRows += 1
         resultProj(r)

@@ -165,8 +165,9 @@ case class RDDScanExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    rdd.mapPartitionsInternal { iter =>
+    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(schema)
+      proj.initializeStatesForPartition(index)
       iter.map { r =>
         numOutputRows += 1
         proj(r)
