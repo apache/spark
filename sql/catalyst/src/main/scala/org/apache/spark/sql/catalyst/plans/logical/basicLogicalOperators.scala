@@ -535,11 +535,11 @@ object Expand {
     attrMap: Map[Attribute, Int]): Int = {
     val numAttributes = attrMap.size
     val mask = (1 << numAttributes) - 1
-    groupingSetAttrs.map(attrMap).map(index =>
+    (mask +: groupingSetAttrs.map(attrMap).map(index =>
       // 0 means that the column at the given index is a grouping column, 1 means it is not,
       // so we unset the bit in bitmap.
       ~(1 << (numAttributes - 1 - index))
-    ).reduce(_ & _) & mask
+    )).reduce(_ & _)
   }
 
   /**

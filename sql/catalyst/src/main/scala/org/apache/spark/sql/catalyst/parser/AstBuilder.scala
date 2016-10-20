@@ -494,16 +494,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val groupByExpressions = expressionList(ctx.groupingExpressions)
 
-    if (GROUPING != null) {
+    if (ctx.GROUPING != null) {
       // GROUP BY .... GROUPING SETS (...)
       val selectedGroupByExprs =
         ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)))
       GroupingSets(selectedGroupByExprs, groupByExpressions, query, selectExpressions)
     } else {
       // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
-      val mappedGroupByExpressions = if (CUBE != null) {
+      val mappedGroupByExpressions = if (ctx.CUBE != null) {
         Seq(Cube(groupByExpressions))
-      } else if (ROLLUP != null) {
+      } else if (ctx.ROLLUP != null) {
         Seq(Rollup(groupByExpressions))
       } else {
         groupByExpressions

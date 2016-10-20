@@ -226,7 +226,7 @@ class Analyzer(
         buffer += current
         current = current.init
       }
-      buffer
+      buffer += Seq.empty
     }
 
     /*
@@ -266,21 +266,139 @@ class Analyzer(
       expr transform {
         case e: GroupingID =>
           if (e.groupByExprs.isEmpty || e.groupByExprs == groupByExprs) {
-            gid
+            Alias(gid, toPrettySQL(e))()
           } else {
             throw new AnalysisException(
               s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
                 s"grouping columns (${groupByExprs.mkString(",")})")
           }
-        case Grouping(col: Expression) =>
+        case e @ Grouping(col: Expression) =>
           val idx = groupByExprs.indexOf(col)
           if (idx >= 0) {
-            Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
-              Literal(1)), ByteType)
+            Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
+              Literal(1)), ByteType), toPrettySQL(e))()
           } else {
             throw new AnalysisException(s"Column of grouping ($col) can't be found " +
               s"in grouping columns ${groupByExprs.mkString(",")}")
           }
+      }
+    }
+
+    /*
+     * Create new alias for all group by expressions for `Expand` operator.
+     */
+    private def constructGroupByAlias(groupByExprs: Seq[Expression]): Seq[Alias] = {
+      groupByExprs.map {
+        case e: NamedExpression => Alias(e, e.name)()
+        case other => Alias(other, other.toString)()
+      }
+    }
+
+    /*
+     * Construct [[Expand]] operator with grouping sets.
+     */
+    private def constructExpand(
+        selectedGroupByExprs: Seq[Seq[Expression]],
+        child: LogicalPlan,
+        groupByAliases: Seq[Alias],
+        gid: Attribute): LogicalPlan = {
+      // Change the nullability of group by aliases if necessary. For example, if we have
+      // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
+      // should change the nullabilty of b to be TRUE.
+      // TODO: For Cube/Rollup just set nullability to be `true`.
+      val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
+        if (selectedGroupByExprs.exists(!_.contains(a.child))) {
+          a.toAttribute.withNullability(true)
+        } else {
+          a.toAttribute
+        }
+      }
+
+      val groupingSetsAttributes = selectedGroupByExprs.map { groupingSetExprs =>
+        groupingSetExprs.map { expr =>
+          val alias = groupByAliases.find(_.child.semanticEquals(expr)).getOrElse(
+            failAnalysis(s"$expr doesn't show up in the GROUP BY list"))
+          // Map alias to expanded attribute.
+          expandedAttributes.find(_.semanticEquals(alias.toAttribute)).getOrElse(
+            alias.toAttribute)
+        }
+      }
+
+      Expand(groupingSetsAttributes, groupByAliases, expandedAttributes, gid, child)
+    }
+
+    /*
+     * Construct new aggregate expressions by replacing grouping functions.
+     */
+    private def constructAggregateExprs(
+        groupByExprs: Seq[Expression],
+        aggregations: Seq[NamedExpression],
+        groupByAliases: Seq[Alias],
+        groupingAttrs: Seq[Expression],
+        gid: Attribute): Seq[NamedExpression] = aggregations.map { case expr =>
+      // collect all the found AggregateExpression, so we can check an expression is part of
+      // any AggregateExpression or not.
+      val aggsBuffer = ArrayBuffer[Expression]()
+      // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
+      def isPartOfAggregation(e: Expression): Boolean = {
+        aggsBuffer.exists(a => a.find(_ eq e).isDefined)
+      }
+      replaceGroupingFunc(expr, groupByExprs, gid).transformDown {
+        // AggregateExpression should be computed on the unmodified value of its argument
+        // expressions, so we should not replace any references to grouping expression
+        // inside it.
+        case e: AggregateExpression =>
+          aggsBuffer += e
+          e
+        case e if isPartOfAggregation(e) => e
+        case e =>
+          // Replace expression by expand output attribute.
+          val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
+          if (index == -1) {
+            e
+          } else {
+            groupingAttrs(index)
+          }
+      }.asInstanceOf[NamedExpression]
+    }
+
+    /*
+     * Construct [[Aggregate]] operator from Cube/Rollup/GroupingSets.
+     */
+    private def constructAggregate(
+        selectedGroupByExprs: Seq[Seq[Expression]],
+        groupByExprs: Seq[Expression],
+        aggregationExprs: Seq[NamedExpression],
+        child: LogicalPlan): LogicalPlan = {
+      val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+
+      // Expand works by setting grouping expressions to null as determined by the
+      // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
+      // instead of the original value we need to create new aliases for all group by expressions
+      // that will only be used for the intended purpose.
+      val groupByAliases = constructGroupByAlias(groupByExprs)
+
+      val expand = constructExpand(selectedGroupByExprs, child, groupByAliases, gid)
+      val groupingAttrs = expand.output.drop(child.output.length)
+
+      val aggregations = constructAggregateExprs(
+        groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
+
+      Aggregate(groupingAttrs, aggregations, expand)
+    }
+
+    private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
+      plan.collectFirst {
+        case a: Aggregate =>
+          // this Aggregate should have grouping id as the last grouping key.
+          val gid = a.groupingExpressions.last
+          if (!gid.isInstanceOf[AttributeReference]
+            || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
+            failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+          }
+          a.groupingExpressions.take(a.groupingExpressions.length - 1)
+      }.getOrElse {
+        failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
       }
     }
 
@@ -292,77 +410,12 @@ class Analyzer(
           s"${VirtualColumn.hiveGroupingIdName} is deprecated; use grouping_id() instead")
 
       case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
-        GroupingSets(
-          cubeExprs(c.groupByExprs), groupByExprs, child, aggregateExpressions)
+        constructAggregate(cubeExprs(groupByExprs), groupByExprs, aggregateExpressions, child)
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
-        GroupingSets(
-          rollupExprs(r.groupByExprs), groupByExprs, child, aggregateExpressions)
-
+        constructAggregate(rollupExprs(groupByExprs), groupByExprs, aggregateExpressions, child)
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
-        val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
-
-        // Expand works by setting grouping expressions to null as determined by the bitmasks. To
-        // prevent these null values from being used in an aggregate instead of the original value
-        // we need to create new aliases for all group by expressions that will only be used for
-        // the intended purpose.
-        val groupByAliases: Seq[Alias] = x.groupByExprs.map {
-          case e: NamedExpression => Alias(e, e.name)()
-          case other => Alias(other, other.toString)()
-        }
-
-        // Change the nullability of group by aliases if necessary. For example, if we have
-        // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
-        // should change the nullabilty of b to be TRUE.
-        val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
-          if (x.selectedGroupByExprs.exists(!_.contains(a.child))) {
-            a.toAttribute.withNullability(true)
-          } else {
-            a.toAttribute
-          }
-        }
-
-        val groupingSetsAttributes = x.selectedGroupByExprs.map { groupingSetExprs =>
-          groupingSetExprs.map { expr =>
-            val alias = groupByAliases.find(_.child.semanticEquals(expr)).getOrElse(
-              failAnalysis(s"$expr doesn't show up in the GROUP BY list"))
-            // Map alias to expanded attribute.
-            expandedAttributes.find(_.semanticEquals(alias.toAttribute)).getOrElse(
-              alias.toAttribute)
-          }
-        }
-
-        val expand = Expand(
-          groupingSetsAttributes, groupByAliases, expandedAttributes, gid, x.child)
-        val groupingAttrs = expand.output.drop(x.child.output.length)
-
-        val aggregations: Seq[NamedExpression] = x.aggregations.map { case expr =>
-          // collect all the found AggregateExpression, so we can check an expression is part of
-          // any AggregateExpression or not.
-          val aggsBuffer = ArrayBuffer[Expression]()
-          // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
-          def isPartOfAggregation(e: Expression): Boolean = {
-            aggsBuffer.exists(a => a.find(_ eq e).isDefined)
-          }
-          replaceGroupingFunc(expr, x.groupByExprs, gid).transformDown {
-            // AggregateExpression should be computed on the unmodified value of its argument
-            // expressions, so we should not replace any references to grouping expression
-            // inside it.
-            case e: AggregateExpression =>
-              aggsBuffer += e
-              e
-            case e if isPartOfAggregation(e) => e
-            case e =>
-              val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
-              if (index == -1) {
-                e
-              } else {
-                groupingAttrs(index)
-              }
-          }.asInstanceOf[NamedExpression]
-        }
-
-        Aggregate(groupingAttrs, aggregations, expand)
+        constructAggregate(x.selectedGroupByExprs, x.groupByExprs, x.aggregations, x.child)
 
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
@@ -379,21 +432,6 @@ class Analyzer(
         // The unresolved grouping id will be resolved by ResolveMissingReferences
         val newOrder = order.map(replaceGroupingFunc(_, groupingExprs, gid).asInstanceOf[SortOrder])
         s.copy(order = newOrder)
-    }
-
-    private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
-      plan.collectFirst {
-        case a: Aggregate =>
-          // this Aggregate should have grouping id as the last grouping key.
-          val gid = a.groupingExpressions.last
-          if (!gid.isInstanceOf[AttributeReference]
-            || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
-            failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
-          }
-          a.groupingExpressions.take(a.groupingExpressions.length - 1)
-      }.getOrElse {
-        failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
-      }
     }
   }
 
