@@ -207,9 +207,9 @@ class HadoopRDD[K, V](
     array
   }
 
-  override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
-    val iter = new NextIterator[(K, V)] {
-
+  protected[spark] def constructIter(theSplit: Partition, context: TaskContext):
+      NextIterator[(K,V)] = {
+    new NextIterator[(K, V)] {
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
       val jobConf = getJobConf()
@@ -287,7 +287,7 @@ class HadoopRDD[K, V](
           if (getBytesReadCallback.isDefined) {
             updateBytesRead()
           } else if (split.inputSplit.value.isInstanceOf[FileSplit] ||
-                     split.inputSplit.value.isInstanceOf[CombineFileSplit]) {
+            split.inputSplit.value.isInstanceOf[CombineFileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
@@ -300,6 +300,10 @@ class HadoopRDD[K, V](
         }
       }
     }
+  }
+
+  override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
+    val iter: NextIterator[(K,V)] = constructIter(theSplit, context)
     new InterruptibleIterator[(K, V)](context, iter)
   }
 

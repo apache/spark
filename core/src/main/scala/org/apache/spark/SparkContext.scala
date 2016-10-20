@@ -60,6 +60,8 @@ import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util._
 
+import scala.util.Try
+
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
@@ -979,6 +981,32 @@ class SparkContext(config: SparkConf) extends Logging {
     // Add necessary security credentials to the JobConf before broadcasting it.
     SparkHadoopUtil.get.addCredentials(conf)
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minPartitions)
+  }
+
+  /**
+   * Get an RDD for a Hadoop file with an arbitrary InputFormat, but wrap all reads in a Try
+   * @return a RDD of Try elements, one Try per hadoop read
+   */
+  @Experimental
+  def hadoopReliableFile[K, V](
+                        path: String,
+                        inputFormatClass: Class[_ <: InputFormat[K, V]],
+                        keyClass: Class[K],
+                        valueClass: Class[V],
+                        minPartitions: Int = defaultMinPartitions
+                        ): RDD[Try[(K, V)]] = {
+    assertNotStopped()
+    // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
+    val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
+    val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
+    new HadoopReliableRDD(
+      this,
+      confBroadcast,
+      Some(setInputPathsFunc),
+      inputFormatClass,
+      keyClass,
+      valueClass,
+      minPartitions).setName(path)
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
