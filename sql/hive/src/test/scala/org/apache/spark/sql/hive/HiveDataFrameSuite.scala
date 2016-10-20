@@ -20,9 +20,10 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveDataFrameSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("table name with schema") {
@@ -78,7 +79,7 @@ class HiveDataFrameSuite extends QueryTest with TestHiveSingleton with SQLTestUt
   }
 
   test("lazy partition pruning reads only necessary partition data") {
-    withSQLConf("spark.sql.hive.filesourcePartitionPruning" -> "true") {
+    withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_PRUNING.key -> "true") {
       withTable("test") {
         withTempDir { dir =>
           setupPartitionedTable("test", dir)
@@ -114,7 +115,7 @@ class HiveDataFrameSuite extends QueryTest with TestHiveSingleton with SQLTestUt
   }
 
   test("all partitions read and cached when filesource partition pruning is off") {
-    withSQLConf("spark.sql.hive.filesourcePartitionPruning" -> "false") {
+    withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_PRUNING.key -> "false") {
       withTable("test") {
         withTempDir { dir =>
           setupPartitionedTable("test", dir)
