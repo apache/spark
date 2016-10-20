@@ -237,6 +237,8 @@ object AppendColumns {
       child: LogicalPlan): AppendColumns = {
     new AppendColumns(
       func.asInstanceOf[Any => Any],
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
       UnresolvedDeserializer(encoderFor[T].deserializer, inputAttributes),
       encoderFor[U].namedExpressions,
       child)
