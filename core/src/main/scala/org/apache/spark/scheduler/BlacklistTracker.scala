@@ -83,7 +83,7 @@ private[scheduler] class BlacklistTracker (
    * there cannot be many blacklisted executors on one node, before we stop requesting more
    * executors on that node, and we periodically clean up the list of blacklisted executors.
    */
-  val nodeToFailedExecs: HashMap[String, HashSet[String]] = new HashMap()
+  val nodeToFailedExecs = new HashMap[String, HashSet[String]]()
 
   /**
    * Un-blacklists executors and nodes that have been blacklisted for at least
