@@ -169,7 +169,7 @@ private[json] class JsonOutputWriter(
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
+        val uniqueWriteJobId = configuration.get(WriteOutput.DATASOURCE_WRITEJOBUUID)
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
         val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")

@@ -44,6 +44,8 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 /** A helper object for writing data out to a location. */
 object WriteOutput extends Logging {
 
+  val DATASOURCE_WRITEJOBUUID = "spark.sql.sources.writeJobUUID"
+
   /** A shared job description for all the write tasks. */
   private class WriteJobDescription(
       val serializableHadoopConf: SerializableConfiguration,
@@ -287,25 +289,26 @@ object WriteOutput extends Logging {
       }
     }
 
-    private def getBucketIdFromKey(key: InternalRow): Option[Int] =
-      description.bucketSpec.map { _ => key.getInt(description.partitionColumns.length) }
-
     /**
      * Open and returns a new OutputWriter given a partition key and optional bucket id.
      * If bucket id is specified, we will append it to the end of the file name, but before the
      * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
      */
-    private def newOutputWriter(
-        key: InternalRow,
-        getPartitionString: UnsafeProjection): OutputWriter = {
+    private def newOutputWriter(key: InternalRow, partString: UnsafeProjection): OutputWriter = {
       val path =
         if (description.partitionColumns.nonEmpty) {
-          val partitionPath = getPartitionString(key).getString(0)
+          val partitionPath = partString(key).getString(0)
           new Path(stagingPath, partitionPath).toString
         } else {
           stagingPath
         }
-      val bucketId = getBucketIdFromKey(key)
+
+      // If the bucket spec is defined, the bucket column is right after the partition columns
+      val bucketId = if (description.bucketSpec.isDefined) {
+        Some(key.getInt(description.partitionColumns.length))
+      } else {
+        None
+      }
 
       val newWriter = description.outputWriterFactory.newInstance(
         path = path,
@@ -319,7 +322,7 @@ object WriteOutput extends Logging {
     override def execute(iter: Iterator[InternalRow]): Unit = {
       // We should first sort by partition columns, then bucket id, and finally sorting columns.
       val sortingExpressions: Seq[Expression] =
-      description.partitionColumns ++ bucketIdExpression ++ sortColumns
+        description.partitionColumns ++ bucketIdExpression ++ sortColumns
       val getSortingKey = UnsafeProjection.create(sortingExpressions, description.allColumns)
 
       val sortingKeySchema = StructType(sortingExpressions.map {
@@ -333,8 +336,8 @@ object WriteOutput extends Logging {
         description.nonPartitionColumns, description.allColumns)
 
       // Returns the partition path given a partition key.
-      val getPartitionString =
-      UnsafeProjection.create(Seq(Concat(partitionStringExpression)), description.partitionColumns)
+      val getPartitionString = UnsafeProjection.create(
+        Seq(Concat(partitionStringExpression)), description.partitionColumns)
 
       // Sorts the data before write, so that we only need one writer at the same time.
       val sorter = new UnsafeKVExternalSorter(
@@ -414,7 +417,7 @@ object WriteOutput extends Logging {
     // `part-r-<task-id>-<job-uuid>.parquet`). The reason why this ID is used to identify a job
     // rather than a single task output file is that, speculative tasks must generate the same
     // output file name as the original task.
-    job.getConfiguration.set(WriterContainer.DATASOURCE_WRITEJOBUUID, UUID.randomUUID().toString)
+    job.getConfiguration.set(WriteOutput.DATASOURCE_WRITEJOBUUID, UUID.randomUUID().toString)
 
     val taskAttemptContext = new TaskAttemptContextImpl(job.getConfiguration, taskAttemptId)
     val outputCommitter = newOutputCommitter(
@@ -473,8 +476,4 @@ object WriteOutput extends Logging {
       }
     }
   }
-}
-
-object WriterContainer {
-  val DATASOURCE_WRITEJOBUUID = "spark.sql.sources.writeJobUUID"
 }
