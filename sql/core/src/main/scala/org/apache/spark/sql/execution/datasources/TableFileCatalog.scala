@@ -36,9 +36,9 @@ import org.apache.spark.sql.types.StructType
  */
 class TableFileCatalog(
     sparkSession: SparkSession,
-    db: String,
-    table: String,
-    partitionSchema: Option[StructType],
+    val db: String,
+    val table: String,
+    override val partitionSchema: StructType,
     override val sizeInBytes: Long,
     fileStatusCache: FileStatusCache = NoopCache) extends FileCatalog {
 
