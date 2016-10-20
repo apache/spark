@@ -2271,12 +2271,13 @@ setMethod("dropDuplicates",
 
 #' Join
 #'
-#' Join two SparkDataFrames based on the given join expression.
+#' Joins two SparkDataFrames based on the given join expression.
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
-#' @param joinExpr The expression used to perform the join. joinExpr must be a
-#' Column expression. For Cartesian join, use crossJoin instead
+#' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
+#' Column expression. If joinExpr is omitted, the default, inner join is attempted and an error is
+#' thrown if it would be a Cartesian Product. For Cartesian join, use crossJoin instead.
 #' @param joinType The type of join to perform. The following join types are available:
 #' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
 #' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
@@ -2294,14 +2295,14 @@ setMethod("dropDuplicates",
 #' df2 <- read.json(path2)
 #' join(df1, df2, df1$col1 == df2$col2) # Performs an inner join based on expression
 #' join(df1, df2, df1$col1 == df2$col2, "right_outer")
-#' crossJoin(df1, df2) # Performs a Cartesian
+#' join(df1, df2) # Attempts an inner join
 #' }
 #' @note join since 1.4.0
 setMethod("join",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, joinExpr = NULL, joinType = NULL) {
             if (is.null(joinExpr)) {
-              stop("use crossJoin for Cartesian join")
+              sdf <- handledCallJMethod(x@sdf, "join", y@sdf)
             } else {
               if (class(joinExpr) != "Column") stop("joinExpr must be a Column")
               if (is.null(joinType)) {
@@ -2322,10 +2323,26 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#' CrossJoin
+#'
+#' Returns Cartesian Product on two SparkDataFrames.
+#'
+#' @param x A SparkDataFrame
+#' @param y A SparkDataFrame
+#' @return A SparkDataFrame containing the result of the join operation.
+#' @family SparkDataFrame functions
 #' @aliases crossJoin,SparkDataFrame,SparkDataFrame-method
-#' @rdname join
+#' @rdname crossJoin
 #' @name crossJoin
+#' @seealso \link{merge} \link{join}
 #' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- read.json(path)
+#' df2 <- read.json(path2)
+#' crossJoin(df1, df2) # Performs a Cartesian
+#' }
 #' @note crossJoin since 2.1.0
 setMethod("crossJoin",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
@@ -2365,20 +2382,21 @@ setMethod("crossJoin",
 #' @family SparkDataFrame functions
 #' @aliases merge,SparkDataFrame,SparkDataFrame-method
 #' @rdname merge
-#' @seealso \link{join}
+#' @seealso \link{join} \link{crossJoin}
 #' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
-#' merge(df1, df2) # Performs a Cartesian
+#' merge(df1, df2) # Performs an inner join by common columns
 #' merge(df1, df2, by = "col1") # Performs an inner join based on expression
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.y = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE, all.y = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all = TRUE, sort = FALSE)
 #' merge(df1, df2, by = "col1", all = TRUE, suffixes = c("-X", "-Y"))
+#' merge(df1, df2, by = NULL) # Performs a Cartesian join
 #' }
 #' @note merge since 1.5.0
 setMethod("merge",

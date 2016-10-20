@@ -1583,7 +1583,7 @@ test_that("join() and merge() on a DataFrame", {
   writeLines(mockLines2, jsonPath2)
   df2 <- read.json(jsonPath2)
 
-  expect_error(join(df, df2), "use crossJoin for Cartesian join")
+  expect_error(head(join(df, df2)))
   joined <- crossJoin(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
   expect_equal(count(joined), 12)
