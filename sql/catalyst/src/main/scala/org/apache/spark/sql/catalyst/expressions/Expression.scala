@@ -274,12 +274,12 @@ trait Nondeterministic extends Expression {
 
   private[this] var initialized = false
 
-  final def setInitialValues(): Unit = {
-    initInternal()
+  final def initializeStatesForPartition(partitionIndex: Int): Unit = {
+    initializeStatesForPartitionInternal(partitionIndex)
     initialized = true
   }
 
-  protected def initInternal(): Unit
+  protected def initializeStatesForPartitionInternal(partitionIndex: Int): Unit
 
   final override def eval(input: InternalRow = null): Any = {
     require(initialized, "nondeterministic expression should be initialized before evaluate")

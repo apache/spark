@@ -37,7 +37,7 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def prettyName: String = "input_file_name"
 
-  override protected def initInternal(): Unit = {}
+  override protected def initializeStatesForPartitionInternal(partitionIndex: Int): Unit = {}
 
   override protected def evalInternal(input: InternalRow): UTF8String = {
     InputFileNameHolder.getInputFileName()
