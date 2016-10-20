@@ -33,7 +33,7 @@ class HistoryServerArgumentsSuite extends SparkFunSuite {
     .set("spark.testing", "true")
 
   test("No Arguments Parsing") {
-    val argStrings = Array[String]()
+    val argStrings = Array.empty[String]
     val hsa = new HistoryServerArguments(conf, argStrings)
     assert(conf.get("spark.history.fs.logDirectory") === logDir.getAbsolutePath)
     assert(conf.get("spark.history.fs.updateInterval") === "1")

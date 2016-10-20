@@ -51,7 +51,7 @@ class MultilayerPerceptronClassifierSuite
   test("Input Validation") {
     val mlpc = new MultilayerPerceptronClassifier()
     intercept[IllegalArgumentException] {
-      mlpc.setLayers(Array[Int]())
+      mlpc.setLayers(Array.empty[Int])
     }
     intercept[IllegalArgumentException] {
       mlpc.setLayers(Array[Int](1))

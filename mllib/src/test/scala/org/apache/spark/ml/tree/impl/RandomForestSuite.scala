@@ -154,10 +154,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       val featureSamples = Array(0, 0, 0).map(_.toDouble)
       val featureSamplesEmpty = Array.empty[Double]
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits === Array[Double]())
+      assert(splits === Array.empty[Double])
       val splitsEmpty =
         RandomForest.findSplitsForContinuousFeature(featureSamplesEmpty, fakeMetadata, 0)
-      assert(splitsEmpty === Array[Double]())
+      assert(splitsEmpty === Array.empty[Double])
     }
   }
 
