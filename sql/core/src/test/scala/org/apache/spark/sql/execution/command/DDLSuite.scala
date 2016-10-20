@@ -1723,7 +1723,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         withTable(tabName) {
           sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
           val message = intercept[AnalysisException] {
-          sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase}")
+            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase}")
           }.getMessage
           assert(message.contains("SHOW COLUMNS with conflicting databases"))
         }
