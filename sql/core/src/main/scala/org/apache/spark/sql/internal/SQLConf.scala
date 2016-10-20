@@ -339,13 +339,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val PARTITION_MAX_FILES =
-    SQLConfigBuilder("spark.sql.sources.maxConcurrentWrites")
-      .doc("The maximum number of concurrent files to open before falling back on sorting when " +
-            "writing out files using dynamic partitioning.")
-      .intConf
-      .createWithDefault(1)
-
   val BUCKETING_ENABLED = SQLConfigBuilder("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
     .booleanConf
@@ -732,8 +725,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def partitionColumnTypeInferenceEnabled: Boolean =
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
-
-  def partitionMaxFiles: Int = getConf(PARTITION_MAX_FILES)
 
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
