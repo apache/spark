@@ -62,7 +62,8 @@ object FileStatusCache {
   private var sharedCache: SharedInMemoryCache = null
 
   /**
-   * @return a cache for the specified client. Cache resources are shared across all clients.
+   * @return a cache for the specified client, sized based on session configuration. Cache
+   *         resources are shared across all clients.
    */
   def getOrInitializeShared(clientId: ClientId, session: SparkSession): FileStatusCache = {
     synchronized {
