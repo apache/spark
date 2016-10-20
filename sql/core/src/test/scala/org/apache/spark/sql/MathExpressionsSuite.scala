@@ -421,4 +421,9 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.selectExpr("positive(a)"), Row(1))
     checkAnswer(df.selectExpr("positive(b)"), Row(-1))
   }
+
+  test("SPARK-13145") {
+    val df = Seq((0.1 + 0.2, 0.3)).toDF("a", "b")
+    checkAnswer(df.select("a", "b"), Row(0.3, 0.3))
+  }
 }

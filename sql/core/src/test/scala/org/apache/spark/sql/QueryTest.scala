@@ -300,6 +300,9 @@ object QueryTest {
     Row.fromSeq(row.toSeq.map {
       case null => null
       case d: java.math.BigDecimal => BigDecimal(d)
+      // Round up the values to avoid approximate error
+      case f : Float => BigDecimal(f).setScale(8, BigDecimal.RoundingMode.HALF_UP).toFloat
+      case dd : Double => BigDecimal(dd).setScale(16, BigDecimal.RoundingMode.HALF_UP).toDouble
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
       case r: Row => prepareRow(r)
