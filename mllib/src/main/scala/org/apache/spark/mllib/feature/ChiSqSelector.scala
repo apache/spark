@@ -258,7 +258,7 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
         tempRes.take(maxIndex + 1)
       case ChiSqSelector.FWE =>
         chiSqTestResult
-          .filter { case (res, _) => res.pValue < alpha/chiSqTestResult.length }
+          .filter { case (res, _) => res.pValue < alpha / chiSqTestResult.length }
       case errorType =>
         throw new IllegalStateException(s"Unknown ChiSqSelector Type: $errorType")
     }
