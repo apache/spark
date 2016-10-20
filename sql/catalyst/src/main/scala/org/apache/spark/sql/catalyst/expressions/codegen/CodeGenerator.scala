@@ -185,6 +185,20 @@ class CodegenContext {
   }
 
   /**
+   * Code statements to initialize states that depends on the partition index.
+   * An integer `partitionIndex` will be available within the scope.
+   */
+  val partitionInitializationStatements: mutable.ArrayBuffer[String] = mutable.ArrayBuffer.empty
+
+  def addPartitionInitializationStatements(statement: String): Unit = {
+    partitionInitializationStatements += statement
+  }
+
+  def initPartition(): String = {
+    partitionInitializationStatements.mkString("\n")
+  }
+
+  /**
    * Holding all the functions those will be added into generated class.
    */
   val addedFunctions: mutable.Map[String, String] =
