@@ -202,6 +202,131 @@ case class IsNaN(child: Expression) extends UnaryExpression
 }
 
 /**
+ * An Expression accepts two parameters and returns null if both parameters are equal.
+ * If they are not equal, the first parameter value is returned.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a,b) - Returns null if a equals to b, or a otherwise.")
+case class NullIf(left: Expression, right: Expression) extends BinaryExpression {
+  override def nullable: Boolean = true
+  override def dataType: DataType = left.dataType
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    val valueRight = right.eval(input)
+    if (valueLeft != null && valueRight != null && valueLeft.equals(valueRight) ||
+      valueLeft == null && valueRight == null) {
+      null
+    } else {
+      valueLeft
+    }
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val leftGen = left.gen(ctx)
+    val rightGen = right.gen(ctx)
+    s"""
+      ${leftGen.code}
+      ${rightGen.code}
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${leftGen.isNull} && !${rightGen.isNull} &&
+        (${ctx.genEqual(dataType, leftGen.value, rightGen.value)}) ||
+        ${leftGen.isNull}) {
+        ${ev.isNull} = true;
+      } else {
+        ${ev.value} = ${leftGen.value};
+      }
+    """
+  }
+}
+
+/**
+ * An Expression accepts two parameters and returns the second parameter if the value
+ * in the first parameter is null; if the first parameter is any value other than null,
+ * it is returned unchanged.
+ *
+ * Compare to Coalesce(), the difference is NVL will evaluate both parameters while Coalesce
+ * may not.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
+case class Nvl(left: Expression, right: Expression) extends BinaryExpression {
+  override def nullable: Boolean = true
+  override def dataType: DataType = left.dataType
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    val valueRight = right.eval(input)
+    if (valueLeft == null) {
+      valueRight
+    } else {
+      valueLeft
+    }
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val leftGen = left.gen(ctx)
+    val rightGen = right.gen(ctx)
+
+    s"""
+      ${leftGen.code}
+      ${rightGen.code}
+      boolean ${ev.isNull} = ${leftGen.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${leftGen.value};
+      if (${ev.isNull} && !${rightGen.isNull}) {
+        ${ev.isNull} = false;
+        ${ev.value} = ${rightGen.value};
+      }
+    """
+  }
+}
+
+/**
+ * An Expression accepts three parameters and returns the second parameter if the first parameter
+ * value is not null; if the first parameter is null, it returns the third parameter.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a,b,c) - Returns b if a is not null, or c otherwise.")
+case class Nvl2(first: Expression, second: Expression, third: Expression)
+  extends TernaryExpression {
+  override def nullable: Boolean = true
+  override def dataType: DataType = first.dataType
+  override def children: Seq[Expression] = first :: second :: third :: Nil
+
+  override def eval(input: InternalRow): Any = {
+    val valueFirst = first.eval(input)
+    val valueSecond = second.eval(input)
+    val valueThird = third.eval(input)
+    if (valueFirst == null) {
+      valueThird
+    } else {
+      valueSecond
+    }
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val firstGen = first.gen(ctx)
+    val secondGen = second.gen(ctx)
+    val thirdGen = third.gen(ctx)
+    s"""
+      ${firstGen.code}
+      ${secondGen.code}
+      ${thirdGen.code}
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${firstGen.isNull} && !${secondGen.isNull}) {
+        ${ev.isNull} = false;
+        ${ev.value} = ${secondGen.value};
+      } else if (${firstGen.isNull} && !${thirdGen.isNull}) {
+        ${ev.isNull} = false;
+        ${ev.value} = ${thirdGen.value};
+      }
+    """
+  }
+}
+
+/**
  * An Expression evaluates to `left` iff it's not NaN, or evaluates to `right` otherwise.
  * This Expression is useful for mapping NaN values to null.
  */

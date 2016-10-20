@@ -272,6 +272,32 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("nullif") {
+    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
+      Row("a", "a") :: Row("a", "b") :: Nil),
+      StructType(Seq(StructField("c1", StringType), StructField("c2", StringType))))
+    testData.registerTempTable("t")
+    checkAnswer(sql("select nullif(c1, c2) from t"), Row(null) :: Row("a") :: Nil)
+  }
+
+  test("nvl") {
+    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
+      Row(null, "b") :: Row("a", "b") :: Nil),
+      StructType(Seq(StructField("c1", StringType), StructField("c2", StringType))))
+    testData.registerTempTable("t")
+    checkAnswer(sql("select nvl(c1, c2) from t"), Row("b") :: Row("a") :: Nil)
+    checkAnswer(sql("select ifnull(c1, c2) from t"), Row("b") :: Row("a") :: Nil)
+  }
+
+  test("nvl2") {
+    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
+      Row(null, "b", "c") :: Row("a", "b", "c") :: Nil),
+      StructType(Seq(StructField("c1", StringType), StructField("c2", StringType),
+        StructField("c3", StringType))))
+    testData.registerTempTable("t")
+    checkAnswer(sql("select nvl2(c1, c2, c3) from t"), Row("b") :: Row("c") :: Nil)
+  }
+
   test("===") {
     checkAnswer(
       testData2.filter($"a" === 1),

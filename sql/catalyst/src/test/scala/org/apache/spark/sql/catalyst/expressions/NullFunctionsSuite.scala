@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.{Date, Timestamp}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.types._
@@ -32,9 +34,23 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testFunc(1.0F, FloatType)
     testFunc(1.0, DoubleType)
     testFunc(Decimal(1.5), DecimalType(2, 1))
-    testFunc(new java.sql.Date(10), DateType)
-    testFunc(new java.sql.Timestamp(10), TimestampType)
+    testFunc(new Date(System.currentTimeMillis()), DateType)
+    testFunc(new Timestamp(System.currentTimeMillis()), TimestampType)
     testFunc("abcd", StringType)
+  }
+
+  def testAllTypes2Values(testFunc: (Any, Any, DataType) => Unit): Unit = {
+    testFunc(false, true, BooleanType)
+    testFunc(1.toByte, 2.toByte, ByteType)
+    testFunc(1.toShort, 2.toShort, ShortType)
+    testFunc(1, 2, IntegerType)
+    testFunc(1L, 2L, LongType)
+    testFunc(1.0F, 2.0F, FloatType)
+    testFunc(1.0, 2.0, DoubleType)
+    testFunc(Decimal(1.5), Decimal(2.5), DecimalType(2, 1))
+    testFunc(new Date(1460745262177L), new Date(1260745262177L), DateType)
+    testFunc(new Timestamp(10), new Timestamp(20), TimestampType)
+    testFunc("abcd", "xyz", StringType)
   }
 
   test("isnull and isnotnull") {
@@ -61,6 +77,41 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsNaN(Literal(Double.PositiveInfinity)), false)
     checkEvaluation(IsNaN(Literal(Float.MaxValue)), false)
     checkEvaluation(IsNaN(Literal(5.5f)), false)
+  }
+
+  test("NullIf") {
+    testAllTypes2Values { (value1: Any, value2: Any, tpe: DataType) =>
+      val lit1 = Literal.create(value1, tpe)
+      val lit2 = Literal.create(value2, tpe)
+      val nullLit = Literal.create(null, tpe)
+      checkEvaluation(NullIf(lit1, lit2), value1)
+      checkEvaluation(NullIf(lit1, lit1), null)
+      checkEvaluation(NullIf(nullLit, lit2), null)
+      checkEvaluation(NullIf(lit1, nullLit), value1)
+      checkEvaluation(NullIf(nullLit, nullLit), null)
+    }
+  }
+
+  test("Nvl / IfNull") {
+    testAllTypes2Values { (value1: Any, value2: Any, tpe: DataType) =>
+      val lit1 = Literal.create(value1, tpe)
+      val lit2 = Literal.create(value2, tpe)
+      val nullLit = Literal.create(null, tpe)
+      checkEvaluation(Nvl(lit1, lit2), value1)
+      checkEvaluation(Nvl(nullLit, lit2), value2)
+    }
+  }
+
+  test("Nvl2") {
+    testAllTypes2Values { (value1: Any, value2: Any, tpe: DataType) =>
+      val lit1 = Literal.create(value1, tpe)
+      val lit2 = Literal.create(value2, tpe)
+      val nullLit = Literal.create(null, tpe)
+      checkEvaluation(Nvl2(lit1, lit1, lit2), value1)
+      checkEvaluation(Nvl2(lit1, nullLit, lit2), null)
+      checkEvaluation(Nvl2(nullLit, lit1, lit2), value2)
+      checkEvaluation(Nvl2(nullLit, lit1, nullLit), null)
+    }
   }
 
   test("nanvl") {
