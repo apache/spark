@@ -1619,7 +1619,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   private def verifyNullabilityInFilterExec(
       df: DataFrame,
       expr: String,
-      expectedNullableColumns: Seq[String]): Unit = {
+      expectedNonNullableColumns: Seq[String]): Unit = {
     val dfWithFilter = df.where(s"isnotnull($expr)").selectExpr(expr)
     // In the logical plan, all the output columns of input dataframe are nullable
     dfWithFilter.queryExecution.optimizedPlan.collect {
@@ -1632,7 +1632,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       // otherwise, no change should be made.
       case e: FilterExec =>
         assert(e.output.forall { o =>
-          if (expectedNullableColumns.contains(o.name)) !o.nullable else o.nullable
+          if (expectedNonNullableColumns.contains(o.name)) !o.nullable else o.nullable
         })
     }
   }
@@ -1644,14 +1644,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF()
 
     verifyNullabilityInFilterExec(df,
-      expr = "Rand()", expectedNullableColumns = Seq.empty[String])
+      expr = "Rand()", expectedNonNullableColumns = Seq.empty[String])
     verifyNullabilityInFilterExec(df,
-      expr = "coalesce(_1, _2)", expectedNullableColumns = Seq.empty[String])
+      expr = "coalesce(_1, _2)", expectedNonNullableColumns = Seq.empty[String])
     verifyNullabilityInFilterExec(df,
-      expr = "coalesce(_1, 0) + Rand()", expectedNullableColumns = Seq.empty[String])
+      expr = "coalesce(_1, 0) + Rand()", expectedNonNullableColumns = Seq.empty[String])
     verifyNullabilityInFilterExec(df,
       expr = "cast(coalesce(cast(coalesce(_1, _2) as double), 0.0) as int)",
-      expectedNullableColumns = Seq.empty[String])
+      expectedNonNullableColumns = Seq.empty[String])
   }
 
   test("SPARK-17957: set nullability to false in FilterExec output") {
@@ -1661,17 +1661,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF()
 
     verifyNullabilityInFilterExec(df,
-      expr = "_1 + _2 * 3", expectedNullableColumns = Seq("_1", "_2"))
+      expr = "_1 + _2 * 3", expectedNonNullableColumns = Seq("_1", "_2"))
     verifyNullabilityInFilterExec(df,
-      expr = "_1 + _2", expectedNullableColumns = Seq("_1", "_2"))
+      expr = "_1 + _2", expectedNonNullableColumns = Seq("_1", "_2"))
     verifyNullabilityInFilterExec(df,
-      expr = "_1", expectedNullableColumns = Seq("_1"))
+      expr = "_1", expectedNonNullableColumns = Seq("_1"))
     verifyNullabilityInFilterExec(df,
-      expr = "_2 + Rand()", expectedNullableColumns = Seq("_2"))
+      expr = "_2 + Rand()", expectedNonNullableColumns = Seq("_2"))
     verifyNullabilityInFilterExec(df,
-      expr = "_2 * 3 + coalesce(_1, 0)", expectedNullableColumns = Seq("_2"))
+      expr = "_2 * 3 + coalesce(_1, 0)", expectedNonNullableColumns = Seq("_2"))
     verifyNullabilityInFilterExec(df,
-      expr = "cast((_1 + _2) as boolean)", expectedNullableColumns = Seq("_1", "_2"))
+      expr = "cast((_1 + _2) as boolean)", expectedNonNullableColumns = Seq("_1", "_2"))
   }
 
   test("SPARK-17957: outer join + na.fill") {
