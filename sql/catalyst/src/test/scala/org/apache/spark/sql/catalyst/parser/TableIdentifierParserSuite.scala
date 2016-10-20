@@ -68,6 +68,14 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     }
   }
 
+  test("quoted identifiers") {
+    assert(TableIdentifier("z", Some("x.y")) === parseTableIdentifier("`x.y`.z"))
+    assert(TableIdentifier("y.z", Some("x")) === parseTableIdentifier("x.`y.z`"))
+    assert(TableIdentifier("z", Some("`x.y`")) === parseTableIdentifier("```x.y```.z"))
+    assert(TableIdentifier("`y.z`", Some("x")) === parseTableIdentifier("x.```y.z```"))
+    assert(TableIdentifier("x.y.z", None) === parseTableIdentifier("`x.y.z`"))
+  }
+
   test("table identifier - strict keywords") {
     // SQL Keywords.
     hiveStrictNonReservedKeyword.foreach { keyword =>
@@ -82,5 +90,28 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     hiveNonReservedKeyword.foreach { nonReserved =>
       assert(TableIdentifier(nonReserved) === parseTableIdentifier(nonReserved))
     }
+  }
+
+  test("SPARK-17364 table identifier - contains number") {
+    assert(parseTableIdentifier("123_") == TableIdentifier("123_"))
+    assert(parseTableIdentifier("1a.123_") == TableIdentifier("123_", Some("1a")))
+    // ".123" should not be treated as token of type DECIMAL_VALUE
+    assert(parseTableIdentifier("a.123A") == TableIdentifier("123A", Some("a")))
+    // ".123E3" should not be treated as token of type SCIENTIFIC_DECIMAL_VALUE
+    assert(parseTableIdentifier("a.123E3_LIST") == TableIdentifier("123E3_LIST", Some("a")))
+    // ".123D" should not be treated as token of type DOUBLE_LITERAL
+    assert(parseTableIdentifier("a.123D_LIST") == TableIdentifier("123D_LIST", Some("a")))
+    // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
+    assert(parseTableIdentifier("a.123BD_LIST") == TableIdentifier("123BD_LIST", Some("a")))
+  }
+
+  test("SPARK-17832 table identifier - contains backtick") {
+    val complexName = TableIdentifier("`weird`table`name", Some("`d`b`1"))
+    assert(complexName === parseTableIdentifier("```d``b``1`.```weird``table``name`"))
+    assert(complexName === parseTableIdentifier(complexName.quotedString))
+    intercept[ParseException](parseTableIdentifier(complexName.unquotedString))
+    // Table identifier contains countious backticks should be treated correctly.
+    val complexName2 = TableIdentifier("x``y", Some("d``b"))
+    assert(complexName2 === parseTableIdentifier(complexName2.quotedString))
   }
 }

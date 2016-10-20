@@ -19,55 +19,91 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 
 
 /**
- * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
- * depending on Hive meta-store.
+ * ViewType is used to specify the expected view type when we want to create or replace a view in
+ * [[CreateViewCommand]].
+ */
+sealed trait ViewType
+
+/**
+ * LocalTempView means session-scoped local temporary views. Its lifetime is the lifetime of the
+ * session that created it, i.e. it will be automatically dropped when the session terminates. It's
+ * not tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
+ */
+object LocalTempView extends ViewType
+
+/**
+ * GlobalTempView means cross-session global temporary views. Its lifetime is the lifetime of the
+ * Spark application, i.e. it will be automatically dropped when the application terminates. It's
+ * tied to a system preserved database `_global_temp`, and we must use the qualified name to refer a
+ * global temp view, e.g. SELECT * FROM _global_temp.view1.
+ */
+object GlobalTempView extends ViewType
+
+/**
+ * PersistedView means cross-session persisted views. Persisted views stay until they are
+ * explicitly dropped by user command. It's always tied to a database, default to the current
+ * database if not specified.
  *
- * @param tableDesc the catalog table
+ * Note that, Existing persisted view with the same name are not visible to the current session
+ * while the local temporary view exists, unless the view name is qualified by database.
+ */
+object PersistedView extends ViewType
+
+
+/**
+ * Create or replace a view with given query plan. This command will convert the query plan to
+ * canonicalized SQL string, and store it as view text in metastore, if we need to create a
+ * permanent view.
+ *
+ * @param name the name of this view.
+ * @param userSpecifiedColumns the output column names and optional comments specified by users,
+ *                             can be Nil if not specified.
+ * @param comment the comment of this view.
+ * @param properties the properties of this view.
+ * @param originalText the original SQL text of this view, can be None if this view is created via
+ *                     Dataset API.
  * @param child the logical plan that represents the view; this is used to generate a canonicalized
  *              version of the SQL that can be saved in the catalog.
  * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
  *                already exists, throws analysis exception.
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
  *                already exists, throws analysis exception.
- * @param isTemporary if true, the view is created as a temporary view. Temporary views are dropped
- *                 at the end of current Spark session. Existing permanent relations with the same
- *                 name are not visible to the current session while the temporary view exists,
- *                 unless they are specified with full qualified table name with database prefix.
+ * @param viewType the expected view type to be created with this command.
  */
 case class CreateViewCommand(
-    tableDesc: CatalogTable,
+    name: TableIdentifier,
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: Option[String],
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    isTemporary: Boolean)
+    viewType: ViewType)
   extends RunnableCommand {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
-  // TODO: Note that this class can NOT canonicalize the view SQL string entirely, which is
-  // different from Hive and may not work for some cases like create view on self join.
-
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
-
-  require(tableDesc.tableType == CatalogTableType.VIEW,
-    "The type of the table to created with CREATE VIEW must be 'CatalogTableType.VIEW'.")
-  if (!isTemporary) {
-    require(tableDesc.viewText.isDefined,
-      "The table to created with CREATE VIEW must have 'viewText'.")
+  if (viewType == PersistedView) {
+    require(originalText.isDefined, "'originalText' must be provided to create permanent view")
   }
 
   if (allowExisting && replace) {
     throw new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
   }
+
+  private def isTemporary = viewType == LocalTempView || viewType == GlobalTempView
 
   // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
   if (allowExisting && isTemporary) {
@@ -76,8 +112,8 @@ case class CreateViewCommand(
   }
 
   // Temporary view names should NOT contain database prefix like "database.table"
-  if (isTemporary && tableDesc.identifier.database.isDefined) {
-    val database = tableDesc.identifier.database.get
+  if (isTemporary && name.database.isDefined) {
+    val database = name.database.get
     throw new AnalysisException(
       s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
   }
@@ -88,83 +124,60 @@ case class CreateViewCommand(
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
-    if (tableDesc.schema != Nil && tableDesc.schema.length != analyzedPlan.output.length) {
+    if (userSpecifiedColumns.nonEmpty &&
+        userSpecifiedColumns.length != analyzedPlan.output.length) {
       throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
         s"(num: `${analyzedPlan.output.length}`) does not match the number of column names " +
-        s"specified by CREATE VIEW (num: `${tableDesc.schema.length}`).")
+        s"specified by CREATE VIEW (num: `${userSpecifiedColumns.length}`).")
     }
-    val sessionState = sparkSession.sessionState
 
-    if (isTemporary) {
-      createTemporaryView(tableDesc.identifier, sparkSession, analyzedPlan)
+    val aliasedPlan = if (userSpecifiedColumns.isEmpty) {
+      analyzedPlan
     } else {
-      // Adds default database for permanent table if it doesn't exist, so that tableExists()
-      // only check permanent tables.
-      val database = tableDesc.identifier.database.getOrElse(
-        sessionState.catalog.getCurrentDatabase)
-      val tableIdentifier = tableDesc.identifier.copy(database = Option(database))
-
-      if (sessionState.catalog.tableExists(tableIdentifier)) {
-        if (allowExisting) {
-          // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
-          // already exists.
-        } else if (replace) {
-          // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-          sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
-        } else {
-          // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
-          // exists.
-          throw new AnalysisException(
-            s"View $tableIdentifier already exists. If you want to update the view definition, " +
-              "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
-        }
-      } else {
-        // Create the view if it doesn't exist.
-        sessionState.catalog.createTable(
-          prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
+      val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
+        case (attr, (colName, None)) => Alias(attr, colName)()
+        case (attr, (colName, Some(colComment))) =>
+          val meta = new MetadataBuilder().putString("comment", colComment).build()
+          Alias(attr, colName)(explicitMetadata = Some(meta))
       }
+      sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
+    }
+
+    val catalog = sparkSession.sessionState.catalog
+    if (viewType == LocalTempView) {
+      catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
+    } else if (viewType == GlobalTempView) {
+      catalog.createGlobalTempView(name.table, aliasedPlan, overrideIfExists = replace)
+    } else if (catalog.tableExists(name)) {
+      val tableMetadata = catalog.getTableMetadata(name)
+      if (allowExisting) {
+        // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
+        // already exists.
+      } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
+        throw new AnalysisException(s"$name is not a view")
+      } else if (replace) {
+        // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
+        catalog.alterTable(prepareTable(sparkSession, aliasedPlan))
+      } else {
+        // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
+        // exists.
+        throw new AnalysisException(
+          s"View $name already exists. If you want to update the view definition, " +
+            "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
+      }
+    } else {
+      // Create the view if it doesn't exist.
+      catalog.createTable(prepareTable(sparkSession, aliasedPlan), ignoreIfExists = false)
     }
     Seq.empty[Row]
-  }
-
-  private def createTemporaryView(
-      table: TableIdentifier, sparkSession: SparkSession, analyzedPlan: LogicalPlan): Unit = {
-
-    val sessionState = sparkSession.sessionState
-    val catalog = sessionState.catalog
-
-    // Projects column names to alias names
-    val logicalPlan = {
-      if (tableDesc.schema.isEmpty) {
-        analyzedPlan
-      } else {
-        val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
-          case (attr, col) => Alias(attr, col.name)()
-        }
-        sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
-      }
-    }
-
-    catalog.createTempView(table.table, logicalPlan, replace)
   }
 
   /**
    * Returns a [[CatalogTable]] that can be used to save in the catalog. This comment canonicalize
    * SQL based on the analyzed plan, and also creates the proper schema for the view.
    */
-  private def prepareTable(sparkSession: SparkSession, analyzedPlan: LogicalPlan): CatalogTable = {
-    val viewSQL: String = {
-      val logicalPlan =
-        if (tableDesc.schema.isEmpty) {
-          analyzedPlan
-        } else {
-          val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
-            case (attr, col) => Alias(attr, col.name)()
-          }
-          sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
-        }
-      new SQLBuilder(logicalPlan).toSQL
-    }
+  private def prepareTable(sparkSession: SparkSession, aliasedPlan: LogicalPlan): CatalogTable = {
+    val viewSQL: String = new SQLBuilder(aliasedPlan).toSQL
 
     // Validate the view SQL - make sure we can parse it and analyze it.
     // If we cannot analyze the generated query, there is probably a bug in SQL generation.
@@ -172,25 +185,77 @@ case class CreateViewCommand(
       sparkSession.sql(viewSQL).queryExecution.assertAnalyzed()
     } catch {
       case NonFatal(e) =>
-        throw new RuntimeException(
-          "Failed to analyze the canonicalized SQL. It is possible there is a bug in Spark.", e)
+        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
     }
 
-    val viewSchema: Seq[CatalogColumn] = {
-      if (tableDesc.schema.isEmpty) {
-        analyzedPlan.output.map { a =>
-          CatalogColumn(a.name, a.dataType.catalogString)
-        }
-      } else {
-        analyzedPlan.output.zip(tableDesc.schema).map { case (a, col) =>
-          CatalogColumn(col.name, a.dataType.catalogString, nullable = true, col.comment)
-        }
-      }
+    CatalogTable(
+      identifier = name,
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = aliasedPlan.schema,
+      properties = properties,
+      viewOriginalText = originalText,
+      viewText = Some(viewSQL),
+      comment = comment
+    )
+  }
+}
+
+/**
+ * Alter a view with given query plan. If the view name contains database prefix, this command will
+ * alter a permanent view matching the given name, or throw an exception if view not exist. Else,
+ * this command will try to alter a temporary view first, if view not exist, try permanent view
+ * next, if still not exist, throw an exception.
+ *
+ * @param name the name of this view.
+ * @param originalText the original SQL text of this view. Note that we can only alter a view by
+ *                     SQL API, which means we always have originalText.
+ * @param query the logical plan that represents the view; this is used to generate a canonicalized
+ *              version of the SQL that can be saved in the catalog.
+ */
+case class AlterViewAsCommand(
+    name: TableIdentifier,
+    originalText: String,
+    query: LogicalPlan) extends RunnableCommand {
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+
+  override def run(session: SparkSession): Seq[Row] = {
+    // If the plan cannot be analyzed, throw an exception and don't proceed.
+    val qe = session.sessionState.executePlan(query)
+    qe.assertAnalyzed()
+    val analyzedPlan = qe.analyzed
+
+    if (session.sessionState.catalog.alterTempViewDefinition(name, analyzedPlan)) {
+      // a local/global temp view has been altered, we are done.
+    } else {
+      alterPermanentView(session, analyzedPlan)
     }
 
-    tableDesc.copy(schema = viewSchema, viewText = Some(viewSQL))
+    Seq.empty[Row]
   }
 
-  /** Escape backtick with double-backtick in column name and wrap it with backtick. */
-  private def quote(name: String) = s"`${name.replaceAll("`", "``")}`"
+  private def alterPermanentView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
+    val viewMeta = session.sessionState.catalog.getTableMetadata(name)
+    if (viewMeta.tableType != CatalogTableType.VIEW) {
+      throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
+    }
+
+    val viewSQL: String = new SQLBuilder(analyzedPlan).toSQL
+    // Validate the view SQL - make sure we can parse it and analyze it.
+    // If we cannot analyze the generated query, there is probably a bug in SQL generation.
+    try {
+      session.sql(viewSQL).queryExecution.assertAnalyzed()
+    } catch {
+      case NonFatal(e) =>
+        throw new RuntimeException(s"Failed to analyze the canonicalized SQL: $viewSQL", e)
+    }
+
+    val updatedViewMeta = viewMeta.copy(
+      schema = analyzedPlan.schema,
+      viewOriginalText = Some(originalText),
+      viewText = Some(viewSQL))
+
+    session.sessionState.catalog.alterTable(updatedViewMeta)
+  }
 }

@@ -212,7 +212,7 @@ object Pipeline extends MLReadable[Pipeline] {
     }
   }
 
-  /** Methods for [[MLReader]] and [[MLWriter]] shared between [[Pipeline]] and [[PipelineModel]] */
+  /** Methods for `MLReader` and `MLWriter` shared between [[Pipeline]] and [[PipelineModel]] */
   private[ml] object SharedReadWrite {
 
     import org.json4s.JsonDSL._

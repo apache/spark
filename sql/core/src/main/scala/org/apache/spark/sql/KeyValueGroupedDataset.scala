@@ -19,12 +19,13 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.expressions.ReduceAggregator
 
 /**
  * :: Experimental ::
@@ -35,6 +36,7 @@ import org.apache.spark.sql.execution.QueryExecution
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],
@@ -120,6 +122,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Scala-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
@@ -148,6 +151,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
@@ -170,6 +174,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Scala-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
@@ -192,6 +197,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
@@ -213,19 +219,20 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Scala-specific)
    * Reduces the elements of each group of data using the specified binary function.
    * The given function must be commutative and associative or the result may be non-deterministic.
    *
    * @since 1.6.0
    */
   def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
-    val func = (key: K, it: Iterator[V]) => Iterator((key, it.reduce(f)))
-
-    implicit val resultEncoder = ExpressionEncoder.tuple(kExprEnc, vExprEnc)
-    flatMapGroups(func)
+    val vEncoder = encoderFor[V]
+    val aggregator: TypedColumn[V, V] = new ReduceAggregator[V](f)(vEncoder).toColumn
+    agg(aggregator)
   }
 
   /**
+   * (Java-specific)
    * Reduces the elements of each group of data using the specified binary function.
    * The given function must be commutative and associative or the result may be non-deterministic.
    *
@@ -243,7 +250,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(vExprEnc.deserializer, dataAttributes).named)
+      columns.map(_.withInputType(vExprEnc, dataAttributes).named)
     val keyColumn = if (kExprEnc.flat) {
       assert(groupingAttributes.length == 1)
       groupingAttributes.head
@@ -311,6 +318,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def count(): Dataset[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]()))
 
   /**
+   * (Scala-specific)
    * Applies the given function to each cogrouped data.  For each unique group, the function will
    * be passed the grouping key and 2 iterators containing all elements in the group from
    * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an
@@ -335,6 +343,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   /**
+   * (Java-specific)
    * Applies the given function to each cogrouped data.  For each unique group, the function will
    * be passed the grouping key and 2 iterators containing all elements in the group from
    * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an

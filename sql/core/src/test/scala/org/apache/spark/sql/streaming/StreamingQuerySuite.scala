@@ -17,17 +17,26 @@
 
 package org.apache.spark.sql.streaming
 
+import org.scalactic.TolerantNumerics
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.streaming.StreamingQueryListener._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.SparkException
-import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset, MemoryStream, StreamExecution}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.util.Utils
 
 
-class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
+class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
 
   import AwaitTerminationTester._
   import testImplicits._
+
+  // To make === between double tolerate inexact values
+  implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
 
   after {
     sqlContext.streams.active.foreach(_.stop())
@@ -100,29 +109,206 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
     )
   }
 
-  testQuietly("source and sink statuses") {
+  testQuietly("query statuses") {
+    val inputData = MemoryStream[Int]
+    val mapped = inputData.toDS().map(6 / _)
+    testStream(mapped)(
+      AssertOnQuery(q => q.status.name === q.name),
+      AssertOnQuery(q => q.status.id === q.id),
+      AssertOnQuery(_.status.timestamp <= System.currentTimeMillis),
+      AssertOnQuery(_.status.inputRate === 0.0),
+      AssertOnQuery(_.status.processingRate === 0.0),
+      AssertOnQuery(_.status.sourceStatuses.length === 1),
+      AssertOnQuery(_.status.sourceStatuses(0).description.contains("Memory")),
+      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === "-"),
+      AssertOnQuery(_.status.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.status.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.status.sinkStatus.description.contains("Memory")),
+      AssertOnQuery(_.status.sinkStatus.offsetDesc === CompositeOffset(None :: Nil).toString),
+      AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === "-"),
+      AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.sinkStatus.description.contains("Memory")),
+      AssertOnQuery(_.sinkStatus.offsetDesc === new CompositeOffset(None :: Nil).toString),
+
+      AddData(inputData, 1, 2),
+      CheckAnswer(6, 3),
+      AssertOnQuery(_.status.timestamp <= System.currentTimeMillis),
+      AssertOnQuery(_.status.inputRate >= 0.0),
+      AssertOnQuery(_.status.processingRate >= 0.0),
+      AssertOnQuery(_.status.sourceStatuses.length === 1),
+      AssertOnQuery(_.status.sourceStatuses(0).description.contains("Memory")),
+      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(0).toString),
+      AssertOnQuery(_.status.sourceStatuses(0).inputRate >= 0.0),
+      AssertOnQuery(_.status.sourceStatuses(0).processingRate >= 0.0),
+      AssertOnQuery(_.status.sinkStatus.description.contains("Memory")),
+      AssertOnQuery(_.status.sinkStatus.offsetDesc ===
+        CompositeOffset.fill(LongOffset(0)).toString),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(0).toString),
+      AssertOnQuery(_.sourceStatuses(0).inputRate >= 0.0),
+      AssertOnQuery(_.sourceStatuses(0).processingRate >= 0.0),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString),
+
+      AddData(inputData, 1, 2),
+      CheckAnswer(6, 3, 6, 3),
+      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(1).toString),
+      AssertOnQuery(_.status.sinkStatus.offsetDesc ===
+        CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(1).toString),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
+
+      StopStream,
+      AssertOnQuery(_.status.inputRate === 0.0),
+      AssertOnQuery(_.status.processingRate === 0.0),
+      AssertOnQuery(_.status.sourceStatuses.length === 1),
+      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(1).toString),
+      AssertOnQuery(_.status.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.status.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.status.sinkStatus.offsetDesc ===
+        CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(1).toString),
+      AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.status.triggerDetails.isEmpty),
+
+      StartStream(),
+      AddData(inputData, 0),
+      ExpectFailure[SparkException],
+      AssertOnQuery(_.status.inputRate === 0.0),
+      AssertOnQuery(_.status.processingRate === 0.0),
+      AssertOnQuery(_.status.sourceStatuses.length === 1),
+      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(2).toString),
+      AssertOnQuery(_.status.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.status.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.status.sinkStatus.offsetDesc ===
+        CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(2).toString),
+      AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
+      AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString)
+    )
+  }
+
+  test("codahale metrics") {
+    val inputData = MemoryStream[Int]
+
+    /** Whether metrics of a query is registered for reporting */
+    def isMetricsRegistered(query: StreamingQuery): Boolean = {
+      val sourceName = s"StructuredStreaming.${query.name}"
+      val sources = spark.sparkContext.env.metricsSystem.getSourcesByName(sourceName)
+      require(sources.size <= 1)
+      sources.nonEmpty
+    }
+    // Disabled by default
+    assert(spark.conf.get("spark.sql.streaming.metricsEnabled").toBoolean === false)
+
+    withSQLConf("spark.sql.streaming.metricsEnabled" -> "false") {
+      testStream(inputData.toDF)(
+        AssertOnQuery { q => !isMetricsRegistered(q) },
+        StopStream,
+        AssertOnQuery { q => !isMetricsRegistered(q) }
+      )
+    }
+
+    // Registered when enabled
+    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+      testStream(inputData.toDF)(
+        AssertOnQuery { q => isMetricsRegistered(q) },
+        StopStream,
+        AssertOnQuery { q => !isMetricsRegistered(q) }
+      )
+    }
+  }
+
+  test("input row calculation with mixed batch and streaming sources") {
+    val streamingTriggerDF = spark.createDataset(1 to 10).toDF
+    val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
+    val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
+
+    // Trigger input has 10 rows, static input has 2 rows,
+    // therefore after the first trigger, the calculated input rows should be 10
+    val status = getFirstTriggerStatus(streamingInputDF.join(staticInputDF, "value"))
+    assert(status.triggerDetails.get("numRows.input.total") === "10")
+    assert(status.sourceStatuses.size === 1)
+    assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "10")
+  }
+
+  test("input row calculation with trigger DF having multiple leaves") {
+    val streamingTriggerDF =
+      spark.createDataset(1 to 5).toDF.union(spark.createDataset(6 to 10).toDF)
+    require(streamingTriggerDF.logicalPlan.collectLeaves().size > 1)
+    val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF)
+
+    // After the first trigger, the calculated input rows should be 10
+    val status = getFirstTriggerStatus(streamingInputDF)
+    assert(status.triggerDetails.get("numRows.input.total") === "10")
+    assert(status.sourceStatuses.size === 1)
+    assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "10")
+  }
+
+  testQuietly("StreamExecution metadata garbage collection") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(6 / _)
 
+    // Run 3 batches, and then assert that only 1 metadata file is left at the end
+    // since the first 2 should have been purged.
     testStream(mapped)(
-      AssertOnQuery(_.sourceStatuses.length === 1),
-      AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
-      AssertOnQuery(_.sourceStatuses(0).offsetDesc === None),
-      AssertOnQuery(_.sinkStatus.description.contains("Memory")),
-      AssertOnQuery(_.sinkStatus.offsetDesc === new CompositeOffset(None :: Nil).toString),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
-      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString)),
-      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3, 6, 3),
-      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
-      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
-      AddData(inputData, 0),
-      ExpectFailure[SparkException],
-      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(2).toString)),
-      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString)
+      AddData(inputData, 4, 6),
+      CheckAnswer(6, 3, 6, 3, 1, 1),
+
+      AssertOnQuery("metadata log should contain only one file") { q =>
+        val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+        val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
+        val toTest = logFileNames.filter(! _.endsWith(".crc"))  // Workaround for SPARK-17475
+        assert(toTest.size == 1 && toTest.head == "2")
+        true
+      }
     )
+  }
+
+  /** Create a streaming DF that only execute one batch in which it returns the given static DF */
+  private def createSingleTriggerStreamingDF(triggerDF: DataFrame): DataFrame = {
+    require(!triggerDF.isStreaming)
+    // A streaming Source that generate only on trigger and returns the given Dataframe as batch
+    val source = new Source() {
+      override def schema: StructType = triggerDF.schema
+      override def getOffset: Option[Offset] = Some(LongOffset(0))
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = triggerDF
+      override def stop(): Unit = {}
+    }
+    StreamingExecutionRelation(source)
+  }
+
+  /** Returns the query status at the end of the first trigger of streaming DF */
+  private def getFirstTriggerStatus(streamingDF: DataFrame): StreamingQueryStatus = {
+    // A StreamingQueryListener that gets the query status after the first completed trigger
+    val listener = new StreamingQueryListener {
+      @volatile var firstStatus: StreamingQueryStatus = null
+      override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = { }
+      override def onQueryProgress(queryProgress: QueryProgressEvent): Unit = {
+       if (firstStatus == null) firstStatus = queryProgress.queryStatus
+      }
+      override def onQueryTerminated(queryTerminated: QueryTerminatedEvent): Unit = { }
+    }
+
+    try {
+      spark.streams.addListener(listener)
+      val q = streamingDF.writeStream.format("memory").queryName("test").start()
+      q.processAllAvailable()
+      eventually(timeout(streamingTimeout)) {
+        assert(listener.firstStatus != null)
+      }
+      listener.firstStatus
+    } finally {
+      spark.streams.active.map(_.stop())
+      spark.streams.removeListener(listener)
+    }
   }
 
   /**

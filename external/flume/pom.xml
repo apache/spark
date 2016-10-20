@@ -25,7 +25,6 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming-flume_2.11</artifactId>
   <properties>
     <sbt.project.name>streaming-flume</sbt.project.name>

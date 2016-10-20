@@ -141,8 +141,8 @@ trait CheckAnalysis extends PredicateHelper {
 
             // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
             def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
-              case SubqueryAlias(_, child) => cleanQuery(child)
-              case Project(_, child) => cleanQuery(child)
+              case s: SubqueryAlias => cleanQuery(s.child)
+              case p: Project => cleanQuery(p.child)
               case child => child
             }
 
@@ -253,19 +253,6 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case s @ SetOperation(left, right) if left.output.length != right.output.length =>
-            failAnalysis(
-              s"${s.nodeName} can only be performed on tables with the same number of columns, " +
-                s"but the left table has ${left.output.length} columns and the right has " +
-                s"${right.output.length}")
-
-          case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
-            val firstError = s.children.find(_.output.length != s.children.head.output.length).get
-            failAnalysis(
-              s"Unions can only be performed on tables with the same number of columns, " +
-                s"but one table has '${firstError.output.length}' columns and another table has " +
-                s"'${s.children.head.output.length}' columns")
-
           case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
           case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
@@ -279,6 +266,37 @@ trait CheckAnalysis extends PredicateHelper {
 
           case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
             failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+
+          case _: Union | _: SetOperation if operator.children.length > 1 =>
+            def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
+            def ordinalNumber(i: Int): String = i match {
+              case 0 => "first"
+              case 1 => "second"
+              case i => s"${i}th"
+            }
+            val ref = dataTypes(operator.children.head)
+            operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
+              // Check the number of columns
+              if (child.output.length != ref.length) {
+                failAnalysis(
+                  s"""
+                    |${operator.nodeName} can only be performed on tables with the same number
+                    |of columns, but the first table has ${ref.length} columns and
+                    |the ${ordinalNumber(ti + 1)} table has ${child.output.length} columns
+                  """.stripMargin.replace("\n", " ").trim())
+              }
+              // Check if the data types match.
+              dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+                if (dt1 != dt2) {
+                  failAnalysis(
+                    s"""
+                      |${operator.nodeName} can only be performed on tables with the compatible
+                      |column types. $dt1 <> $dt2 at the ${ordinalNumber(ci)} column of
+                      |the ${ordinalNumber(ti + 1)} table
+                    """.stripMargin.replace("\n", " ").trim())
+                }
+              }
+            }
 
           case _ => // Fallbacks to the following checks
         }
@@ -342,6 +360,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case InsertIntoTable(t, _, _, _, _)
             if !t.isInstanceOf[LeafNode] ||
+              t.isInstanceOf[Range] ||
               t == OneRowRelation ||
               t.isInstanceOf[LocalRelation] =>
             failAnalysis(s"Inserting into an RDD-based table is not allowed.")

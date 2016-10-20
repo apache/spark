@@ -54,7 +54,7 @@ if (nchar(Sys.getenv("SPARK_HOME")) < 1) {
   Sys.setenv(SPARK_HOME = "/home/spark")
 }
 library(SparkR, lib.loc = c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib")))
-sc <- sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory="2g"))
+sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory = "2g"))
 {% endhighlight %}
 </div>
 
@@ -62,6 +62,21 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
 
 <table class="table">
   <tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr>
+  <tr>
+    <td><code>spark.master</code></td>
+    <td>Application Properties</td>
+    <td><code>--master</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.yarn.keytab</code></td>
+    <td>Application Properties</td>
+    <td><code>--keytab</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.yarn.principal</code></td>
+    <td>Application Properties</td>
+    <td><code>--principal</code></td>
+  </tr>
   <tr>
     <td><code>spark.driver.memory</code></td>
     <td>Application Properties</td>
@@ -110,12 +125,13 @@ head(df)
 
 SparkR supports operating on a variety of data sources through the `SparkDataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
-The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically. SparkR supports reading JSON, CSV and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
+The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically.
+SparkR supports reading JSON, CSV and Parquet files natively, and through packages available from sources like [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects), you can find data source connectors for popular file formats like Avro. These packages can either be added by
 specifying `--packages` with `spark-submit` or `sparkR` commands, or if initializing SparkSession with `sparkPackages` parameter when in an interactive R shell or from RStudio.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
+sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
 {% endhighlight %}
 </div>
 
@@ -272,11 +288,11 @@ In SparkR, we support several kinds of User-Defined Functions:
 
 ##### dapply
 Apply a function to each partition of a `SparkDataFrame`. The function to be applied to each partition of the `SparkDataFrame`
-and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function
-should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match the R function's output.
+and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match to [data types](#data-type-mapping-between-r-and-spark) of returned value.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
+
 # Convert waiting time from hours to seconds.
 # Note that we can apply UDF to DataFrame.
 schema <- structType(structField("eruptions", "double"), structField("waiting", "double"),
@@ -295,8 +311,8 @@ head(collect(df1))
 
 ##### dapplyCollect
 Like `dapply`, apply a function to each partition of a `SparkDataFrame` and collect the result back. The output of function
-should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` only can be used if the
-output of UDF run on all the partitions can fit in driver memory.
+should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
@@ -315,6 +331,135 @@ head(ldf, 3)
 
 {% endhighlight %}
 </div>
+
+#### Run a given function on a large dataset grouping by input column(s) and using `gapply` or `gapplyCollect`
+
+##### gapply
+Apply a function to each group of a `SparkDataFrame`. The function is to be applied to each group of the `SparkDataFrame` and should have only two parameters: grouping key and R `data.frame` corresponding to
+that key. The groups are chosen from `SparkDataFrame`s column(s).
+The output of function should be a `data.frame`. Schema specifies the row format of the resulting
+`SparkDataFrame`. It must represent R function's output schema on the basis of Spark [data types](#data-type-mapping-between-r-and-spark). The column names of the returned `data.frame` are set by user.
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+
+# Determine six waiting times with the largest eruption time in minutes.
+schema <- structType(structField("waiting", "double"), structField("max_eruption", "double"))
+result <- gapply(
+    df,
+    "waiting",
+    function(key, x) {
+        y <- data.frame(key, max(x$eruptions))
+    },
+    schema)
+head(collect(arrange(result, "max_eruption", decreasing = TRUE)))
+
+##    waiting   max_eruption
+##1      64       5.100
+##2      69       5.067
+##3      71       5.033
+##4      87       5.000
+##5      63       4.933
+##6      89       4.900
+{% endhighlight %}
+</div>
+
+##### gapplyCollect
+Like `gapply`, applies a function to each partition of a `SparkDataFrame` and collect the result back to R data.frame. The output of the function should be a `data.frame`. But, the schema is not required to be passed. Note that `gapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+
+# Determine six waiting times with the largest eruption time in minutes.
+result <- gapplyCollect(
+    df,
+    "waiting",
+    function(key, x) {
+        y <- data.frame(key, max(x$eruptions))
+        colnames(y) <- c("waiting", "max_eruption")
+        y
+    })
+head(result[order(result$max_eruption, decreasing = TRUE), ])
+
+##    waiting   max_eruption
+##1      64       5.100
+##2      69       5.067
+##3      71       5.033
+##4      87       5.000
+##5      63       4.933
+##6      89       4.900
+
+{% endhighlight %}
+</div>
+
+#### Data type mapping between R and Spark
+<table class="table">
+<tr><th>R</th><th>Spark</th></tr>
+<tr>
+  <td>byte</td>
+  <td>byte</td>
+</tr>
+<tr>
+  <td>integer</td>
+  <td>integer</td>
+</tr>
+<tr>
+  <td>float</td>
+  <td>float</td>
+</tr>
+<tr>
+  <td>double</td>
+  <td>double</td>
+</tr>
+<tr>
+  <td>numeric</td>
+  <td>double</td>
+</tr>
+<tr>
+  <td>character</td>
+  <td>string</td>
+</tr>
+<tr>
+  <td>string</td>
+  <td>string</td>
+</tr>
+<tr>
+  <td>binary</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>raw</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>logical</td>
+  <td>boolean</td>
+</tr>
+<tr>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXct</a></td>
+  <td>timestamp</td>
+</tr>
+<tr>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXlt</a></td>
+  <td>timestamp</td>
+</tr>
+<tr>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/Dates.html">Date</a></td>
+  <td>date</td>
+</tr>
+<tr>
+  <td>array</td>
+  <td>array</td>
+</tr>
+<tr>
+  <td>list</td>
+  <td>array</td>
+</tr>
+<tr>
+  <td>env</td>
+  <td>map</td>
+</tr>
+</table>
 
 #### Run local R functions distributed using `spark.lapply`
 

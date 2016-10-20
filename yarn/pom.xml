@@ -24,7 +24,6 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-yarn_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project YARN</name>

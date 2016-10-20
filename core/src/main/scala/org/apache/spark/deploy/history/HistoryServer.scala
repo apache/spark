@@ -22,12 +22,14 @@ import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.util.control.NonFatal
+import scala.xml.Node
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
@@ -54,6 +56,9 @@ class HistoryServer(
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
+
+  // How many applications the summary ui displays
+  private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS);
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
@@ -170,12 +175,16 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
+  def getApplicationList(): Iterator[ApplicationHistoryInfo] = {
     provider.getListing()
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+    getApplicationList().map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  }
+
+  def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
+    provider.getApplicationInfo(appId).map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
   override def writeEventLogs(
@@ -183,6 +192,13 @@ class HistoryServer(
       attemptId: Option[String],
       zipStream: ZipOutputStream): Unit = {
     provider.writeEventLogs(appId, attemptId, zipStream)
+  }
+
+  /**
+   * @return html text to display when the application list is empty
+   */
+  def emptyListingHtml(): Seq[Node] = {
+    provider.getEmptyListingHtml()
   }
 
   /**

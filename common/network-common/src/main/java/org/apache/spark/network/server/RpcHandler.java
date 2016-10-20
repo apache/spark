@@ -83,7 +83,7 @@ public abstract class RpcHandler {
 
   private static class OneWayRpcCallback implements RpcResponseCallback {
 
-    private final Logger logger = LoggerFactory.getLogger(OneWayRpcCallback.class);
+    private static final Logger logger = LoggerFactory.getLogger(OneWayRpcCallback.class);
 
     @Override
     public void onSuccess(ByteBuffer response) {
