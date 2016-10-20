@@ -221,8 +221,6 @@ The following is an example of a command to run the tests:
 
     ./build/mvn -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
 
-Note, previously some tests required Spark to be packaged first before running them, so an explicit `mvn package` with `-DskipTests` was required before running `mvn test`. That is no longer required.
-
 The ScalaTest plugin also supports running only a specific Scala test suite as follows:
 
     ./build/mvn -P... -Dtest=none -DwildcardSuites=org.apache.spark.repl.ReplSuite test
@@ -237,8 +235,6 @@ or a Java test:
 The following is an example of a command to run the tests:
 
     ./build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
-
-Note, previously some tests required Spark to be packaged first before running them, so an explicit `build/sbt package` was required the first time. That is no longer required.
 
 To run only a specific test suite as follows:
 
