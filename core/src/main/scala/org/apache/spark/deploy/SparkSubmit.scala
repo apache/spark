@@ -545,20 +545,22 @@ object SparkSubmit {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
       }
-      if (args.principal != null) {
-        require(args.keytab != null, "Keytab must be specified when principal is specified")
-        if (!new File(args.keytab).exists()) {
-          throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
-        } else {
-          // Add keytab and principal configurations in sysProps to make them available
-          // for later use; e.g. in spark sql, the isolated class loader used to talk
-          // to HiveMetastore will use these settings. They will be set as Java system
-          // properties and then loaded by SparkConf
-          sysProps.put("spark.yarn.keytab", args.keytab)
-          sysProps.put("spark.yarn.principal", args.principal)
+    }
 
-          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
-        }
+    // assure a keytab is available from any place in a JVM
+    if (args.principal != null) {
+      require(args.keytab != null, "Keytab must be specified when principal is specified")
+      if (!new File(args.keytab).exists()) {
+        throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
+      } else {
+        // Add keytab and principal configurations in sysProps to make them available
+        // for later use; e.g. in spark sql, the isolated class loader used to talk
+        // to HiveMetastore will use these settings. They will be set as Java system
+        // properties and then loaded by SparkConf
+        sysProps.put("spark.yarn.keytab", args.keytab)
+        sysProps.put("spark.yarn.principal", args.principal)
+
+        UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
       }
     }
 
