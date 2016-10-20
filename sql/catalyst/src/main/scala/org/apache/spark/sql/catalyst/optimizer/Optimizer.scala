@@ -27,6 +27,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -564,7 +565,24 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {
-        Filter(And(newFilters.reduce(And), condition), child)
+        // Get the attributes which are not null given the IsNotNull conditions.
+        val isNotNullAttrs = condition.collect {
+          case c: IsNotNull => c
+        }.flatMap(expressions.scanNullIntolerantExpr(_))
+        val dedupFilters = newFilters.filter { cond =>
+          cond match {
+            // If the newly added IsNotNull condition is guaranteed given current condition,
+            // we don't need to include it.
+            case IsNotNull(a: Attribute) if isNotNullAttrs.contains(a) => false
+            case _ => true
+          }
+        }
+        val newCondition = if (dedupFilters.isEmpty) {
+          condition
+        } else {
+          And(dedupFilters.reduce(And), condition)
+        }
+        Filter(newCondition, child)
       } else {
         filter
       }

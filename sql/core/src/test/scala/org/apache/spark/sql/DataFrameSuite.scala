@@ -27,7 +27,8 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, Union}
+import org.apache.spark.sql.catalyst.expressions.{Expression, IsNotNull}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Project, Union}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
@@ -1614,5 +1615,50 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
       qe.assertAnalyzed()
     }
+  }
+
+  test("Skip additinal isnotnull condition inferred from constraints if possibly") {
+    def getFilter(df: DataFrame): Filter = {
+      df.queryExecution.optimizedPlan.collect {
+        case f: Filter => f
+      }.head.asInstanceOf[Filter]
+    }
+    def getIsNotNull(expr: Expression): Seq[Expression] = {
+      expr collect {
+        case e: IsNotNull => e
+      }
+    }
+    val df = sparkContext.parallelize(Seq(
+      null.asInstanceOf[java.lang.Integer] -> new java.lang.Integer(3),
+      new java.lang.Integer(1) -> null.asInstanceOf[java.lang.Integer],
+      new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF()
+
+    // The following isnotnull conditions don't need additional isnotnull condition from
+    // the constraints.
+    val expr1 = "_2 + Rand()"
+    val filter1 = getFilter(df.where(s"isnotnull($expr1)"))
+    assert(getIsNotNull(filter1.condition).size == 1)
+
+    val expr2 = "_2 + coalesce(_1, 0)"
+    val filter2 = getFilter(df.where(s"isnotnull($expr2)"))
+    assert(getIsNotNull(filter2.condition).size == 1)
+
+    val expr3 = "_1 + _2 * 3"
+    val filter3 = getFilter(df.where(s"isnotnull($expr3)"))
+    assert(getIsNotNull(filter3.condition).size == 1)
+
+    val expr4 = "_1"
+    val filter4 = getFilter(df.where(s"isnotnull($expr4)"))
+    assert(getIsNotNull(filter4.condition).size == 1)
+
+    val expr5 = "cast((_1 + _2) as boolean)"
+    val filter5 = getFilter(df.where(s"isnotnull($expr5)"))
+    assert(getIsNotNull(filter5.condition).size == 1)
+
+    // For the condition: _2 > 1, we would add additional condition IsNotNull(_2).
+    // This null check will be put ahead of _2 > 1 in physical Filter op so we can skip it early.
+    val expr6 = "_2 > 1"
+    val filter6 = getFilter(df.where(s"$expr6"))
+    assert(getIsNotNull(filter6.condition).size == 1)
   }
 }

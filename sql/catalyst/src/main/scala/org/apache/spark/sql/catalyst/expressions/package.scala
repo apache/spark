@@ -131,4 +131,15 @@ package object expressions  {
    * constraints.
    */
   trait NullIntolerant
+
+  /**
+   * Recursively explores the expressions which are null intolerant and returns all attributes
+   * in these expressions.
+   */
+  def scanNullIntolerantExpr(expr: Expression): Seq[Attribute] = expr match {
+    case a: Attribute => Seq(a)
+    case _: NullIntolerant | IsNotNull(_: NullIntolerant) =>
+      expr.children.flatMap(scanNullIntolerantExpr)
+    case _ => Seq.empty[Attribute]
+  }
 }

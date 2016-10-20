@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.apache.spark.sql.catalyst.{expressions => CatalystExpression}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -47,7 +48,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
     // First, we propagate constraints from the null intolerant expressions.
     var isNotNullConstraints: Set[Expression] =
-      constraints.flatMap(scanNullIntolerantExpr).map(IsNotNull(_))
+      constraints.flatMap(CatalystExpression.scanNullIntolerantExpr).map(IsNotNull(_))
 
     // Second, we infer additional constraints from non-nullable attributes that are part of the
     // operator's output
@@ -55,17 +56,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull).toSet
 
     isNotNullConstraints -- constraints
-  }
-
-  /**
-   * Recursively explores the expressions which are null intolerant and returns all attributes
-   * in these expressions.
-   */
-  private def scanNullIntolerantExpr(expr: Expression): Seq[Attribute] = expr match {
-    case a: Attribute => Seq(a)
-    case _: NullIntolerant | IsNotNull(_: NullIntolerant) =>
-      expr.children.flatMap(scanNullIntolerantExpr)
-    case _ => Seq.empty[Attribute]
   }
 
   /**

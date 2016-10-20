@@ -120,4 +120,20 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
+
+  test("no redundant isnotnull condition inferred from constraints") {
+    val originalQuery = testRelation.where('a === 1 && IsNotNull('a + 2)).analyze
+    // Make sure isnotnull('a) is in the constraints.
+    val isNotNullForA = originalQuery.constraints.find { c =>
+      c match {
+        case IsNotNull(a: Attribute) if a.semanticEquals(originalQuery.output(0)) => true
+        case _ => false
+      }
+    }
+    assert(isNotNullForA.isDefined)
+    // We don't need to add another isnotnull('a) although it is in the constraints.
+    val correctAnswer = originalQuery
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
 }
