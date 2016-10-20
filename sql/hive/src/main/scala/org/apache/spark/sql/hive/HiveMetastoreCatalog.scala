@@ -230,8 +230,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val sizeInBytes = metastoreRelation.statistics.sizeInBytes.toLong
         val fileCatalog = {
           val catalog = new TableFileCatalog(
-            sparkSession, db, table, partitionSchema, sizeInBytes,
-            FileStatusCache.getOrInitializeShared(new Object(), sparkSession))
+            sparkSession, db, table, partitionSchema, sizeInBytes)
           if (lazyPruningEnabled) {
             catalog
           } else {
