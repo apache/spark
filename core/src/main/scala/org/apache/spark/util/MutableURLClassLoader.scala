@@ -22,6 +22,8 @@ import java.util.Enumeration
 
 import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
+
 /**
  * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
  */
