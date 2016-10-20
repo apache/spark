@@ -267,7 +267,7 @@ object SQLConf {
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
            "unmatching partitions can be eliminated earlier.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val HIVE_FILESOURCE_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.hive.filesourcePartitionPruning")
