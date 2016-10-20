@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
@@ -336,28 +337,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show columns") {
-    checkAnswer(
-      sql("SHOW COLUMNS IN parquet_tab3"),
-      Row("col1") :: Row("col 2") :: Nil)
-
-    checkAnswer(
-      sql("SHOW COLUMNS IN default.parquet_tab3"),
-      Row("col1") :: Row("col 2") :: Nil)
-
-    checkAnswer(
-      sql("SHOW COLUMNS IN parquet_tab3 FROM default"),
-      Row("col1") :: Row("col 2") :: Nil)
-
-    checkAnswer(
-      sql("SHOW COLUMNS IN parquet_tab4 IN default"),
-      Row("price") :: Row("qty") :: Row("year") :: Row("month") :: Nil)
-
-    val message = intercept[NoSuchTableException] {
-      sql("SHOW COLUMNS IN badtable FROM default")
-    }.getMessage
-    assert(message.contains("'badtable' not found in database"))
-  }
 
   test("show partitions - show everything") {
     checkAnswer(
