@@ -45,7 +45,8 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
   test("GeneratePredicate should initialize expressions") {
     val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = GeneratePredicate.generate(expr)
-    assert(instance.apply(null) === false)
+    instance.initializeStatesForPartition(0)
+    assert(instance.eval(null) === false)
   }
 
   test("GenerateUnsafeProjection should not share expression instances") {
@@ -75,13 +76,13 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
   test("GeneratePredicate should not share expression instances") {
     val expr1 = MutableExpression()
     val instance1 = GeneratePredicate.generate(expr1)
-    assert(instance1.apply(null) === false)
+    assert(instance1.eval(null) === false)
 
     val expr2 = MutableExpression()
     expr2.mutableState = true
     val instance2 = GeneratePredicate.generate(expr2)
-    assert(instance1.apply(null) === false)
-    assert(instance2.apply(null) === true)
+    assert(instance1.eval(null) === false)
+    assert(instance2.eval(null) === true)
   }
 
 }

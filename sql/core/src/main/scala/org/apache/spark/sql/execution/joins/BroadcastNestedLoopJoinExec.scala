@@ -84,7 +84,7 @@ case class BroadcastNestedLoopJoinExec(
 
   @transient private lazy val boundCondition = {
     if (condition.isDefined) {
-      newPredicate(condition.get, streamed.output ++ broadcast.output)
+      newPredicate(condition.get, streamed.output ++ broadcast.output).eval _
     } else {
       (r: InternalRow) => true
     }

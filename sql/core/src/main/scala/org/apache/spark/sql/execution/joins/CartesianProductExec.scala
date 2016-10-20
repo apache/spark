@@ -98,15 +98,15 @@ case class CartesianProductExec(
     val rightResults = right.execute().asInstanceOf[RDD[UnsafeRow]]
 
     val pair = new UnsafeCartesianRDD(leftResults, rightResults, right.output.size)
-    pair.mapPartitionsInternal { iter =>
+    pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {
-        val boundCondition: (InternalRow) => Boolean =
-          newPredicate(condition.get, left.output ++ right.output)
+        val boundCondition = newPredicate(condition.get, left.output ++ right.output)
+        boundCondition.initializeStatesForPartition(index)
         val joined = new JoinedRow
 
         iter.filter { r =>
-          boundCondition(joined(r._1, r._2))
+          boundCondition.eval(joined(r._1, r._2))
         }
       } else {
         iter
