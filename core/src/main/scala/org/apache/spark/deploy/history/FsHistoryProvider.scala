@@ -77,10 +77,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   import FsHistoryProvider._
 
-  private val NOT_STARTED = "<Not Started>"
-
-  private val SPARK_HISTORY_FS_NUM_REPLAY_THREADS = "spark.history.fs.numReplayThreads"
-
   // Interval between safemode checks.
   private val SAFEMODE_CHECK_INTERVAL_S = conf.getTimeAsSeconds(
     "spark.history.fs.safemodeCheck.interval", "5s")
@@ -684,6 +680,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
 private[history] object FsHistoryProvider {
   val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
+
+  private val NOT_STARTED = "<Not Started>"
+
+  private val SPARK_HISTORY_FS_NUM_REPLAY_THREADS = "spark.history.fs.numReplayThreads"
 
   val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
 
