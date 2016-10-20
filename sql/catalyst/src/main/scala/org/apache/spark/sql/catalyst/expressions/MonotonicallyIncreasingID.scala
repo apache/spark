@@ -70,7 +70,7 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
     val partitionMaskTerm = ctx.freshName("partitionMask")
     ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
     ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
-      s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
+      s"$partitionMaskTerm = ((long) partitionIndex) << 33;")
 
     ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
