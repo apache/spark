@@ -3,7 +3,7 @@
 importFrom("methods", "setGeneric", "setMethod", "setOldClass")
 importFrom("methods", "is", "new", "signature", "show")
 importFrom("stats", "gaussian", "setNames")
-importFrom("utils", "download.file", "packageVersion", "untar")
+importFrom("utils", "download.file", "object.size", "packageVersion", "untar")
 
 # Disable native libraries till we figure out how to package it
 # See SPARKR-7839
