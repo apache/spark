@@ -591,3 +591,7 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
  - The method `registerTempTable` has been deprecated to be replaced by `createOrReplaceTempView`.
  - The method `dropTempTable` has been deprecated to be replaced by `dropTempView`.
  - The `sc` SparkContext parameter is no longer required for these functions: `setJobGroup`, `clearJobGroup`, `cancelJobGroup`
+
+## Upgrading to SparkR 2.1.0
+
+ - `join` no longer performs Cartesian Product by default, use `crossJoin` instead.

@@ -2275,8 +2275,8 @@ setMethod("dropDuplicates",
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
-#' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
-#' Column expression. If joinExpr is omitted, join() will perform a Cartesian join
+#' @param joinExpr The expression used to perform the join. joinExpr must be a
+#' Column expression. For Cartesian join, use crossJoin instead
 #' @param joinType The type of join to perform. The following join types are available:
 #' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
 #' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
@@ -2285,23 +2285,23 @@ setMethod("dropDuplicates",
 #' @aliases join,SparkDataFrame,SparkDataFrame-method
 #' @rdname join
 #' @name join
-#' @seealso \link{merge}
+#' @seealso \link{merge} \link{crossJoin}
 #' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
-#' join(df1, df2) # Performs a Cartesian
 #' join(df1, df2, df1$col1 == df2$col2) # Performs an inner join based on expression
 #' join(df1, df2, df1$col1 == df2$col2, "right_outer")
+#' crossJoin(df1, df2) # Performs a Cartesian
 #' }
 #' @note join since 1.4.0
 setMethod("join",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, joinExpr = NULL, joinType = NULL) {
             if (is.null(joinExpr)) {
-              sdf <- callJMethod(x@sdf, "crossJoin", y@sdf)
+              stop("use crossJoin for Cartesian join")
             } else {
               if (class(joinExpr) != "Column") stop("joinExpr must be a Column")
               if (is.null(joinType)) {
@@ -2322,22 +2322,36 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#' @aliases crossJoin,SparkDataFrame,SparkDataFrame-method
+#' @rdname join
+#' @name crossJoin
+#' @export
+#' @note crossJoin since 2.1.0
+setMethod("crossJoin",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            sdf <- callJMethod(x@sdf, "crossJoin", y@sdf)
+            dataFrame(sdf)
+          })
+
 #' Merges two data frames
 #'
 #' @name merge
-#' @param x the first data frame to be joined
-#' @param y the second data frame to be joined
+#' @param x the first data frame to be joined.
+#' @param y the second data frame to be joined.
 #' @param by a character vector specifying the join columns. If by is not
 #'   specified, the common column names in \code{x} and \code{y} will be used.
+#'   If by or both by.x and by.y are explicitly set to NULL or of length 0, the Cartesian
+#'   Product of x and y will be returned.
 #' @param by.x a character vector specifying the joining columns for x.
 #' @param by.y a character vector specifying the joining columns for y.
 #' @param all a boolean value setting \code{all.x} and \code{all.y}
 #'            if any of them are unset.
 #' @param all.x a boolean value indicating whether all the rows in x should
-#'              be including in the join
+#'              be including in the join.
 #' @param all.y a boolean value indicating whether all the rows in y should
-#'              be including in the join
-#' @param sort a logical argument indicating whether the resulting columns should be sorted
+#'              be including in the join.
+#' @param sort a logical argument indicating whether the resulting columns should be sorted.
 #' @param suffixes a string vector of length 2 used to make colnames of
 #'                 \code{x} and \code{y} unique.
 #'                 The first element is appended to each colname of \code{x}.
@@ -2401,7 +2415,7 @@ setMethod("merge",
               joinY <- by
             } else {
               # if by or both by.x and by.y have length 0, use Cartesian Product
-              joinRes <- join(x, y)
+              joinRes <- crossJoin(x, y)
               return (joinRes)
             }
 
