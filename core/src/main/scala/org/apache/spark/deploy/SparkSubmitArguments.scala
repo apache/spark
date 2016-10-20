@@ -70,6 +70,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var proxyUser: String = null
   var principal: String = null
   var keytab: String = null
+  var callerContext: String = null
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -186,6 +187,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
+    callerContext = Option(callerContext)
+      .orElse(sparkProperties.get("spark.hadoop.callerContext"))
+      .orNull
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {
@@ -303,6 +307,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  supervise               $supervise
     |  queue                   $queue
     |  numExecutors            $numExecutors
+    |  callerContext           $callerContext
     |  files                   $files
     |  pyFiles                 $pyFiles
     |  archives                $archives
@@ -351,6 +356,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case EXECUTOR_MEMORY =>
         executorMemory = value
+
+      case CALLER_CONTEXT =>
+        callerContext = value
 
       case DRIVER_MEMORY =>
         driverMemory = value

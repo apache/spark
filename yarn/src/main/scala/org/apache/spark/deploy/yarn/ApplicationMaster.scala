@@ -202,7 +202,8 @@ private[spark] class ApplicationMaster(
         attemptID = Option(appAttemptId.getAttemptId.toString)
       }
 
-      new CallerContext("APPMASTER",
+      new CallerContext(
+        "APPMASTER", sparkConf.getOption("spark.hadoop.callerContext"),
         Option(appAttemptId.getApplicationId.toString), attemptID).setCurrentContext()
 
       logInfo("ApplicationAttemptId: " + appAttemptId)

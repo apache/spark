@@ -92,8 +92,16 @@ private[spark] abstract class Task[T](
       kill(interruptThread = false)
     }
 
-    new CallerContext("TASK", appId, appAttemptId, jobId, Option(stageId), Option(stageAttemptId),
-      Option(taskAttemptId), Option(attemptNumber)).setCurrentContext()
+    new CallerContext(
+      "TASK",
+      SparkEnv.get.conf.getOption("spark.hadoop.callerContext"),
+      appId,
+      appAttemptId,
+      jobId,
+      Option(stageId),
+      Option(stageAttemptId),
+      Option(taskAttemptId),
+      Option(attemptNumber)).setCurrentContext()
 
     try {
       runTask(context)

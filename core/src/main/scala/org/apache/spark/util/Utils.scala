@@ -2579,6 +2579,7 @@ private[util] object CallerContext extends Logging {
  */
 private[spark] class CallerContext(
    from: String,
+   upstreamCallerContext: Option[String] = None,
    appId: Option[String] = None,
    appAttemptId: Option[String] = None,
    jobId: Option[Int] = None,
@@ -2587,6 +2588,8 @@ private[spark] class CallerContext(
    taskId: Option[Long] = None,
    taskAttemptNumber: Option[Int] = None) extends Logging {
 
+   val upstreamCallerContextStr =
+     if (upstreamCallerContext.isDefined) s"_${upstreamCallerContext.get}" else ""
    val appIdStr = if (appId.isDefined) s"_${appId.get}" else ""
    val appAttemptIdStr = if (appAttemptId.isDefined) s"_${appAttemptId.get}" else ""
    val jobIdStr = if (jobId.isDefined) s"_JId_${jobId.get}" else ""
@@ -2597,7 +2600,8 @@ private[spark] class CallerContext(
      if (taskAttemptNumber.isDefined) s"_${taskAttemptNumber.get}" else ""
 
    val context = "SPARK_" + from + appIdStr + appAttemptIdStr +
-     jobIdStr + stageIdStr + stageAttemptIdStr + taskIdStr + taskAttemptNumberStr
+     jobIdStr + stageIdStr + stageAttemptIdStr + taskIdStr + taskAttemptNumberStr +
+     upstreamCallerContextStr
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of

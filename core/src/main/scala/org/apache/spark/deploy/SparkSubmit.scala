@@ -462,6 +462,8 @@ object SparkSubmit {
       OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.archives"),
       OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
+      OptionAssigner(args.callerContext, YARN, ALL_DEPLOY_MODES,
+        sysProp = "spark.hadoop.callerContext"),
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
