@@ -34,18 +34,23 @@ abstract class OutputWriterFactory extends Serializable {
    * When writing to a [[HadoopFsRelation]], this method gets called by each task on executor side
    * to instantiate new [[OutputWriter]]s.
    *
-   * @param path Path of the file to which this [[OutputWriter]] is supposed to write.  Note that
-   *        this may not point to the final output file.  For example, `FileOutputFormat` writes to
-   *        temporary directories and then merge written files back to the final destination.  In
-   *        this case, `path` points to a temporary output file under the temporary directory.
+   * @param stagingDir Base path (directory) of the file to which this [[OutputWriter]] is supposed
+   *                   to write.  Note that this may not point to the final output file.  For
+   *                   example, `FileOutputFormat` writes to temporary directories and then merge
+   *                   written files back to the final destination.  In this case, `path` points to
+   *                   a temporary output file under the temporary directory.
+   * @param fileNamePrefix Prefix of the file name. The returned OutputWriter must make sure this
+   *                       prefix is used in the actual file name. For example, if the prefix is
+   *                       "part-1-2-3", then the file name must start with "part_1_2_3" but can
+   *                       end in arbitrary extension.
    * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
    *        schema if the relation being written is partitioned.
    * @param context The Hadoop MapReduce task context.
    * @since 1.4.0
    */
   def newInstance(
-      path: String,
-      bucketId: Option[Int], // TODO: This doesn't belong here...
+      stagingDir: String,
+      fileNamePrefix: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter
 
