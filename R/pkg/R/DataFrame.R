@@ -2302,7 +2302,8 @@ setMethod("join",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, joinExpr = NULL, joinType = NULL) {
             if (is.null(joinExpr)) {
-              sdf <- handledCallJMethod(x@sdf, "join", y@sdf)
+              # this does not fail until the planner checks for Cartesian join when actioned on.
+              sdf <- callJMethod(x@sdf, "join", y@sdf)
             } else {
               if (class(joinExpr) != "Column") stop("joinExpr must be a Column")
               if (is.null(joinType)) {
