@@ -76,7 +76,7 @@ private[scheduler] abstract class TaskAssigner {
 
   /** Invoked at the beginning of resource offering to construct the offer with the workoffers. */
   def construct(workOffer: Seq[WorkerOffer]): Unit = {
-    offer = workOffer.map(o => new OfferState(o))
+    offer = Random.shuffle(workOffer.map(o => new OfferState(o)))
   }
 
   /** Invoked at each round of Taskset assignment to initialize the internal structure. */
@@ -136,10 +136,6 @@ object TaskAssigner extends Logging {
 class RoundRobinAssigner extends TaskAssigner {
   private var currentOfferIndex = 0
 
-  override def construct(workOffer: Seq[WorkerOffer]): Unit = {
-    offer = Random.shuffle(workOffer.map(o => new OfferState(o)))
-  }
-
   override def init(): Unit = {
     currentOfferIndex = 0
   }
@@ -169,10 +165,6 @@ class BalancedAssigner extends TaskAssigner {
   }
   private val maxHeap: PriorityQueue[OfferState] = new PriorityQueue[OfferState]()
   private var currentOffer: OfferState = _
-
-  override def construct(workOffer: Seq[WorkerOffer]): Unit = {
-    offer = Random.shuffle(workOffer.map(o => new OfferState(o)))
-  }
 
   override def init(): Unit = {
     maxHeap.clear()
