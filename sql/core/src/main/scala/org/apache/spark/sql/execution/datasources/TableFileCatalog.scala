@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.StructType
 
 
 /**
- * A [[BasicFileCatalog]] for a metastore catalog table.
+ * A [[FileCatalog]] for a metastore catalog table.
  *
  * @param sparkSession a [[SparkSession]]
  * @param db the table's database name
@@ -38,10 +38,9 @@ class TableFileCatalog(
     db: String,
     table: String,
     partitionSchema: Option[StructType],
-    override val sizeInBytes: Long)
-  extends SessionFileCatalog(sparkSession) {
+    override val sizeInBytes: Long) extends FileCatalog {
 
-  override protected val hadoopConf = sparkSession.sessionState.newHadoopConf
+  protected val hadoopConf = sparkSession.sessionState.newHadoopConf
 
   private val externalCatalog = sparkSession.sharedState.externalCatalog
 
@@ -49,13 +48,18 @@ class TableFileCatalog(
 
   private val baseLocation = catalogTable.storage.locationUri
 
+  // Populated on-demand by calls to cachedAllPartitions
+  private var cachedAllPartitions: ListingFileCatalog = null
+
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
-  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
+  override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
     filterPartitions(filters).listFiles(Nil)
   }
 
-  override def refresh(): Unit = {}
+  override def refresh(): Unit = synchronized {
+    cachedAllPartitions = null
+  }
 
   /**
    * Returns a [[ListingFileCatalog]] for this table restricted to the subset of partitions
@@ -65,7 +69,7 @@ class TableFileCatalog(
    */
   def filterPartitions(filters: Seq[Expression]): ListingFileCatalog = {
     if (filters.isEmpty) {
-      cachedAllPartitions
+      allPartitions
     } else {
       filterPartitions0(filters)
     }
@@ -79,7 +83,7 @@ class TableFileCatalog(
       case Some(schema) =>
         val selectedPartitions = externalCatalog.listPartitionsByFilter(db, table, filters)
         val partitions = selectedPartitions.map { p =>
-          PartitionDirectory(p.toRow(schema), p.storage.locationUri.get)
+          PartitionPath(p.toRow(schema), p.storage.locationUri.get)
         }
         val partitionSpec = PartitionSpec(schema, partitions)
         new PrunedTableFileCatalog(
@@ -90,9 +94,14 @@ class TableFileCatalog(
   }
 
   // Not used in the hot path of queries when metastore partition pruning is enabled
-  lazy val cachedAllPartitions: ListingFileCatalog = filterPartitions0(Nil)
+  def allPartitions: ListingFileCatalog = synchronized {
+    if (cachedAllPartitions == null) {
+      cachedAllPartitions = filterPartitions0(Nil)
+    }
+    cachedAllPartitions
+  }
 
-  override def inputFiles: Array[String] = cachedAllPartitions.inputFiles
+  override def inputFiles: Array[String] = allPartitions.inputFiles
 }
 
 /**
