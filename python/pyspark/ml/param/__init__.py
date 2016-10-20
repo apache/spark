@@ -161,7 +161,7 @@ class TypeConverters(object):
     @staticmethod
     def toVector(value):
         """
-        Convert a value to a MLlib Vector, if possible.
+        Convert a value to a ML Vector, if possible.
         """
         if isinstance(value, Vector):
             return value

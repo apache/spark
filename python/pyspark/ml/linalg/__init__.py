@@ -16,11 +16,11 @@
 #
 
 """
-MLlib utilities for linear algebra. For dense vectors, MLlib
-uses the NumPy C{array} type, so you can simply pass NumPy arrays
-around. For sparse vectors, users can construct a L{SparseVector}
-object from MLlib or pass SciPy C{scipy.sparse} column vectors if
-SciPy is available in their environment.
+ML utilities for linear algebra. For dense vectors, ML uses the NumPy
+C{array} type, so you can simply pass NumPy arrays around. For sparse
+vectors, users can construct a L{SparseVector} object from ML or pass
+SciPy C{scipy.sparse} column vectors if SciPy is available in their
+environment.
 """
 
 import sys
@@ -54,7 +54,7 @@ if sys.version_info[:2] == (2, 7):
     copy_reg.pickle(array.array, fast_pickle_array)
 
 
-# Check whether we have SciPy. MLlib works without it too, but if we have it, some methods,
+# Check whether we have SciPy. ML works without it too, but if we have it, some methods,
 # such as _dot and _serialize_double_vector, start to support scipy.sparse matrices.
 
 try:
@@ -457,7 +457,7 @@ class DenseVector(Vector):
 
 class SparseVector(Vector):
     """
-    A simple sparse vector class for passing data to MLlib. Users may
+    A simple sparse vector class for passing data to ML. Users may
     alternatively pass SciPy's {scipy.sparse} data types.
     """
     def __init__(self, size, *args):
@@ -748,8 +748,8 @@ class Vectors(object):
     """
     Factory methods for working with vectors. Note that dense vectors
     are simply represented as NumPy array objects, so there is no need
-    to covert them for use in MLlib. For sparse vectors, the factory
-    methods in this class create an MLlib-compatible type, or users
+    to covert them for use in ML. For sparse vectors, the factory
+    methods in this class create an ML-compatible type, or users
     can pass in SciPy's C{scipy.sparse} column vectors.
     """
 

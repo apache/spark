@@ -72,9 +72,9 @@ from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 ser = PickleSerializer()
 
 
-class MLlibTestCase(unittest.TestCase):
+class MLTestCase(unittest.TestCase):
     def setUp(self):
-        self.sc = SparkContext('local[4]', "MLlib tests")
+        self.sc = SparkContext('local[4]', "ML tests")
         self.spark = SparkSession(self.sc)
 
     def tearDown(self):
@@ -1218,7 +1218,7 @@ def _squared_distance(a, b):
         return b.squared_distance(a)
 
 
-class VectorTests(MLlibTestCase):
+class VectorTests(MLTestCase):
 
     def _test_serialize(self, v):
         self.assertEqual(v, ser.loads(ser.dumps(v)))
@@ -1491,7 +1491,7 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(tmp.numNonzeros(), 1)
 
 
-class VectorUDTTests(MLlibTestCase):
+class VectorUDTTests(MLTestCase):
 
     dv0 = DenseVector([])
     dv1 = DenseVector([1.0, 2.0])
@@ -1524,7 +1524,7 @@ class VectorUDTTests(MLlibTestCase):
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
 
-class MatrixUDTTests(MLlibTestCase):
+class MatrixUDTTests(MLTestCase):
 
     dm1 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10])
     dm2 = DenseMatrix(3, 2, [0, 1, 4, 5, 9, 10], isTransposed=True)
