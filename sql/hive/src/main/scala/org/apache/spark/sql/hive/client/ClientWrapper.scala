@@ -375,6 +375,37 @@ private[hive] class ClientWrapper(
     qlTable
   }
 
+  private def toViewTable(view: HiveTable): metadata.Table = {
+    // TODO: this is duplicated with `toQlTable` except the table type stuff.
+    val tbl = new metadata.Table(view.database, view.name)
+    tbl.setTableType(HTableType.VIRTUAL_VIEW)
+    tbl.setSerializationLib(null)
+    tbl.clearSerDeInfo()
+
+    // TODO: we will save the same SQL string to original and expanded text, which is different
+    // from Hive.
+    tbl.setViewOriginalText(view.viewText.get)
+    tbl.setViewExpandedText(view.viewText.get)
+
+    tbl.setFields(view.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
+    view.properties.foreach { case (k, v) => tbl.setProperty(k, v) }
+
+    // set owner
+    tbl.setOwner(conf.getUser)
+    // set create time
+    tbl.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
+
+    tbl
+  }
+
+  override def createView(view: HiveTable): Unit = withHiveState {
+    client.createTable(toViewTable(view))
+  }
+
+  override def alertView(view: HiveTable): Unit = withHiveState {
+    client.alterTable(view.qualifiedName, toViewTable(view))
+  }
+
   override def createTable(table: HiveTable): Unit = withHiveState {
     val qlTable = toQlTable(table)
     client.createTable(qlTable)
