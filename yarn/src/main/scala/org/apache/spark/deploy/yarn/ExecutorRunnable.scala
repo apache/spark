@@ -236,10 +236,6 @@ private[yarn] class ExecutorRunnable(
       YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
     }
 
-    // Keep this for backwards compatibility but users should move to the config
-    sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
-      YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
-    }
 
     // lookup appropriate http scheme for container log urls
     val yarnHttpPolicy = conf.get(

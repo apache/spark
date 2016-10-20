@@ -761,14 +761,6 @@ private[spark] class Client(
       .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
       .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
 
-    // Keep this for backwards compatibility but users should move to the config
-    sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
-    // Allow users to specify some environment variables.
-      YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
-      // Pass SPARK_YARN_USER_ENV itself to the AM so it can use it to set up executor environments.
-      env("SPARK_YARN_USER_ENV") = userEnvs
-    }
-
     // If pyFiles contains any .py files, we need to add LOCALIZED_PYTHON_DIR to the PYTHONPATH
     // of the container processes too. Add all non-.py files directly to PYTHONPATH.
     //
