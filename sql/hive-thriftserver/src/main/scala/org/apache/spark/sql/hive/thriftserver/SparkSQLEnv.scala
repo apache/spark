@@ -52,7 +52,7 @@ private[hive] object SparkSQLEnv extends Logging {
           maybeSerializer.getOrElse("org.apache.spark.serializer.KryoSerializer"))
         .set(
           "spark.kryo.referenceTracking",
-          maybeKryoReferenceTracking.getOrElse("false"))
+          maybeKryoReferenceTracking.getOrElse("true"))
 
       val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
       sparkContext = sparkSession.sparkContext
