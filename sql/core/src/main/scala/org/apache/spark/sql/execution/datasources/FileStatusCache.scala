@@ -20,11 +20,14 @@ package org.apache.spark.sql.execution.datasources
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.JavaConverters._
+
 import com.google.common.cache._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.{SerializableConfiguration, SizeEstimator}
 
 /**
@@ -52,20 +55,54 @@ abstract class FileStatusCache {
   def invalidateAll(): Unit
 }
 
+object FileStatusCache {
+  // Opaque object that uniquely identifies a shared cache user
+  type ClientId = Object
+
+  private var sharedCache: SharedInMemoryCache = null
+
+  /**
+   * @return a cache for the specified client, sized based on session configuration. Cache
+   *         resources are shared across all clients.
+   */
+  def getOrInitializeShared(clientId: ClientId, session: SparkSession): FileStatusCache = {
+    synchronized {
+      if (session.sqlContext.conf.filesourcePartitionPruning &&
+          session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
+        if (sharedCache == null) {
+          sharedCache = new SharedInMemoryCache(
+            session.sqlContext.conf.filesourcePartitionFileCacheSize)
+        }
+        sharedCache.getForClient(clientId)
+      } else {
+        NoopCache
+      }
+    }
+  }
+
+  def resetForTesting(): Unit = synchronized {
+    sharedCache = null
+  }
+}
+
 /**
  * An implementation that caches partition file statuses in memory.
  *
  * @param maxSizeInBytes max allowable cache size before entries start getting evicted
  */
-class InMemoryCache(maxSizeInBytes: Long) extends FileStatusCache with Logging {
+private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
+  import FileStatusCache._
+
   private val warnedAboutEviction = new AtomicBoolean(false)
-  private val cache: Cache[Path, Array[FileStatus]] = CacheBuilder.newBuilder()
-    .weigher(new Weigher[Path, Array[FileStatus]] {
-      override def weigh(key: Path, value: Array[FileStatus]): Int = {
+
+  // we use a composite cache key in order to distinguish entries inserted by different clients
+  private val cache: Cache[(ClientId, Path), Array[FileStatus]] = CacheBuilder.newBuilder()
+    .weigher(new Weigher[(ClientId, Path), Array[FileStatus]] {
+      override def weigh(key: (ClientId, Path), value: Array[FileStatus]): Int = {
         (SizeEstimator.estimate(key) + SizeEstimator.estimate(value)).toInt
       }})
-    .removalListener(new RemovalListener[Path, Array[FileStatus]]() {
-      override def onRemoval(removed: RemovalNotification[Path, Array[FileStatus]]) = {
+    .removalListener(new RemovalListener[(ClientId, Path), Array[FileStatus]]() {
+      override def onRemoval(removed: RemovalNotification[(ClientId, Path), Array[FileStatus]]) = {
         if (removed.getCause() == RemovalCause.SIZE &&
             warnedAboutEviction.compareAndSet(false, true)) {
           logWarning(
@@ -77,16 +114,28 @@ class InMemoryCache(maxSizeInBytes: Long) extends FileStatusCache with Logging {
     .maximumWeight(maxSizeInBytes)
     .build()
 
-  override def getLeafFiles(path: Path): Option[Array[FileStatus]] = {
-    Option(cache.getIfPresent(path))
-  }
+  /**
+   * @param clientId object that uniquely identifies this client. Cache entries are isolated
+   *                 across clients, but cache resources are shared across all clients.
+   *
+   * @return a FileStatusCache for the specified client
+   */
+  def getForClient(clientId: ClientId): FileStatusCache = new FileStatusCache {
+    override def getLeafFiles(path: Path): Option[Array[FileStatus]] = {
+      Option(cache.getIfPresent((clientId, path)))
+    }
 
-  override def putLeafFiles(path: Path, leafFiles: Array[FileStatus]): Unit = {
-    cache.put(path, leafFiles.toArray)
-  }
+    override def putLeafFiles(path: Path, leafFiles: Array[FileStatus]): Unit = {
+      cache.put((clientId, path), leafFiles.toArray)
+    }
 
-  override def invalidateAll(): Unit = {
-    cache.invalidateAll()
+    override def invalidateAll(): Unit = {
+      cache.asMap.asScala.foreach { case (key, value) =>
+        if (key._1 == clientId) {
+          cache.invalidate(key)
+        }
+      }
+    }
   }
 }
 

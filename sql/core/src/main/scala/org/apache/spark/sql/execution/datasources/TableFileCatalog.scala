@@ -32,23 +32,15 @@ import org.apache.spark.sql.types.StructType
  * @param table the table's (unqualified) name
  * @param partitionSchema the schema of a partitioned table's partition columns
  * @param sizeInBytes the table's data size in bytes
- * @param fileStatusCacheSize if nonzero, enables and specifies the size of the file status cache
+ * @param fileStatusCache optional cache implementation to use for file listing
  */
 class TableFileCatalog(
     sparkSession: SparkSession,
-    val db: String,
-    val table: String,
-    override val partitionSchema: StructType,
-    override val sizeInBytes: Long) extends FileCatalog {
-
-  private val fileStatusCache = {
-    if (sparkSession.sqlContext.conf.filesourcePartitionManagement &&
-        sparkSession.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
-      new InMemoryCache(sparkSession.sqlContext.conf.filesourcePartitionFileCacheSize)
-    } else {
-      NoopCache
-    }
-  }
+    db: String,
+    table: String,
+    partitionSchema: Option[StructType],
+    override val sizeInBytes: Long,
+    fileStatusCache: FileStatusCache = NoopCache) extends FileCatalog {
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf
 
