@@ -185,8 +185,8 @@ class CodegenContext {
   }
 
   /**
-   * Code statements to initialize states that depends on the partition index.
-   * An integer `partitionIndex` will be available within the scope.
+   * Code statements to initialize states that depend on the partition index.
+   * An integer `partitionIndex` will be made available within the scope.
    */
   val partitionInitializationStatements: mutable.ArrayBuffer[String] = mutable.ArrayBuffer.empty
 

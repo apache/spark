@@ -22,10 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
- * Expression that returns the current partition id of the Spark task.
+ * Expression that returns the current partition id.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current partition id of the Spark task",
+  usage = "_FUNC_() - Returns the current partition id",
   extended = "> SELECT _FUNC_();\n 0")
 case class SparkPartitionID() extends LeafExpression with Nondeterministic {
 

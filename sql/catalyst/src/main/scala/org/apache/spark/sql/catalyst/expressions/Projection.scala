@@ -23,7 +23,6 @@ import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
- *
  * @param expressions a sequence of expressions that determine the value of each column of the
  *                    output row.
  */
@@ -57,7 +56,6 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
 /**
  * A [[MutableProjection]] that is calculated by calling `eval` on each of the specified
  * expressions.
- *
  * @param expressions a sequence of expressions that determine the value of each column of the
  *                    output row.
  */

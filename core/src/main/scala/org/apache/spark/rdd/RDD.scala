@@ -816,7 +816,6 @@ abstract class RDD[T: ClassTag](
       preservesPartitioning)
   }
 
-
   /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
