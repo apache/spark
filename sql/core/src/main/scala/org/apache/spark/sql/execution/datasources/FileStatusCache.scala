@@ -95,7 +95,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
 
   private val warnedAboutEviction = new AtomicBoolean(false)
 
-  // we use a composite cache key in order to provide isolation between cache clients
+  // we use a composite cache key in order to distinguish entries inserted by different clients
   private val cache: Cache[(ClientId, Path), Array[FileStatus]] = CacheBuilder.newBuilder()
     .weigher(new Weigher[(ClientId, Path), Array[FileStatus]] {
       override def weigh(key: (ClientId, Path), value: Array[FileStatus]): Int = {
