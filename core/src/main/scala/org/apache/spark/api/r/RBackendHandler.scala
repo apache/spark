@@ -20,9 +20,8 @@ package org.apache.spark.api.r
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.WeakHashMap
 import scala.language.existentials
-import scala.ref.WeakReference
 
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 import io.netty.channel.ChannelHandler.Sharable
@@ -263,7 +262,7 @@ private[r] class RBackendHandler(server: RBackend)
  */
 private[r] object JVMObjectTracker {
 
-  private[this] val objMap = new HashMap[String, WeakReference[Object]]
+  private[this] val objMap = new WeakHashMap[String, Object]
 
   private[this] val objCounter: AtomicLong = new AtomicLong(0L)
 
@@ -278,7 +277,7 @@ private[r] object JVMObjectTracker {
   def put(obj: Object): String = {
     val objId = objCounter.toString
     objCounter.incrementAndGet()
-    objMap.put(objId, new WeakReference(obj))
+    objMap.put(objId, obj)
     objId
   }
 
