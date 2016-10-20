@@ -68,10 +68,10 @@
   <tbody>
   {{#applications}}
     <tr>
-      <td class="rowGroupColumn"><span title="{{id}}"><a href="/history/{{id}}/{{num}}/jobs/">{{id}}</a></span></td>
+      <td class="rowGroupColumn"><span title="{{id}}"><a href="{{url}}">{{id}}</a></span></td>
       <td class="rowGroupColumn">{{name}}</td>
       {{#attempts}}
-      <td class="attemptIDSpan"><a href="/history/{{id}}/{{attemptId}}/jobs/">{{attemptId}}</a></td>
+      <td class="attemptIDSpan"><a href="/history/{{id}}/{{attemptId}}/">{{attemptId}}</a></td>
       <td>{{startTime}}</td>
       <td>{{endTime}}</td>
       <td><span title="{{duration}}" class="durationClass">{{duration}}</span></td>
