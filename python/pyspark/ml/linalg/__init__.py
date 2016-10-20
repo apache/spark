@@ -705,6 +705,13 @@ class SparseVector(Vector):
             return Vectors._equals(self.indices, self.values, list(xrange(len(other))), other.array)
         return False
 
+    def __getattr__(self, item):        
+        if _have_scipy:
+            csr = scipy.sparse.csr_matrix((self.values, self.indices, [0, 2]))
+            return getattr(csr, item)
+        else:
+            raise AttributeError("'{0}' object has no attribute '{1}'.".format(self.__class__, item))
+
     def __getitem__(self, index):
         inds = self.indices
         vals = self.values
