@@ -38,8 +38,18 @@ import org.apache.spark.unsafe.Platform
  * For input of type [[BinaryType]]
  */
 @ExpressionDescription(
-  usage = "_FUNC_(input) - Returns an MD5 128-bit checksum as a hex string of the input",
-  extended = "> SELECT _FUNC_('Spark');\n '8cde774d6f7333752ed72cacddb05126'")
+  usage = "_FUNC_(expr) - Returns an MD5 128-bit checksum as a hex string of expr.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - binary type or any type expression that can be implicitly converted to
+          binary type.
+
+      Examples:
+        > SELECT _FUNC_('Spark');
+         8cde774d6f7333752ed72cacddb05126
+  """)
 case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
@@ -65,10 +75,23 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_(input, bitLength) - Returns a checksum of SHA-2 family as a hex string of the input.
-            SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256.""",
-  extended = """> SELECT _FUNC_('Spark', 0);
-               '529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b'""")
+  usage = """
+    _FUNC_(expr, bitLength) - Returns a checksum of SHA-2 family as a hex string of expr.
+      SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256.
+  """,
+  extended = """
+    _FUNC_(expr, bitLength)
+
+      Arguments:
+        expr - string type or any type expression that can be implicitly converted to
+          string type.
+        bitLength - any numeric type or any nonnumeric type expression that can be implicitly
+          converted to numeric type.
+
+      Examples:
+        > SELECT _FUNC_('Spark', 0);
+         529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b
+  """)
 // scalastyle:on line.size.limit
 case class Sha2(left: Expression, right: Expression)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes {
@@ -136,8 +159,18 @@ case class Sha2(left: Expression, right: Expression)
  * For input of type [[BinaryType]] or [[StringType]]
  */
 @ExpressionDescription(
-  usage = "_FUNC_(input) - Returns a sha1 hash value as a hex string of the input",
-  extended = "> SELECT _FUNC_('Spark');\n '85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c'")
+  usage = "_FUNC_(expr) - Returns a sha1 hash value as a hex string of the expr.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - binary type or any type expression that that can be implicitly converted to
+          binary type.
+
+      Examples:
+        > SELECT _FUNC_('Spark');
+         85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c
+  """)
 case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
@@ -159,8 +192,18 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
  * For input of type [[BinaryType]]
  */
 @ExpressionDescription(
-  usage = "_FUNC_(input) - Returns a cyclic redundancy check value as a bigint of the input",
-  extended = "> SELECT _FUNC_('Spark');\n '1557323817'")
+  usage = "_FUNC_(expr) - Returns a cyclic redundancy check value as a bigint of the expr.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - binary type or any type expression that that can be implicitly converted to
+          binary type.
+
+      Examples:
+        > SELECT _FUNC_('Spark');
+         1557323817
+  """)
 case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = LongType
@@ -490,7 +533,17 @@ abstract class InterpretedHashFunction {
  * and bucketing have same data distribution.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a1, a2, ...) - Returns a hash value of the arguments.")
+  usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - any type expression.
+
+      Examples:
+        > SELECT _FUNC_('Spark', array(123), 2);
+          -1321691492
+  """)
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)
 
@@ -544,7 +597,18 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
  * A function throws an exception if 'condition' is not true.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(condition) - Throw an exception if 'condition' is not true.")
+  usage = "_FUNC_(expr) - Throw an exception if expr is not true.",
+  extended = """
+    _FUNC_(expr)
+
+      Arguments:
+        expr - boolean type or any type expression that can be implicitly converted to
+         boolean type.
+
+      Examples:
+        > SELECT _FUNC_(0 < 1);
+         NULL
+  """)
 case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = true
@@ -613,7 +677,13 @@ object XxHash64Function extends InterpretedHashFunction {
  */
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current database.",
-  extended = "> SELECT _FUNC_()")
+  extended = """
+    _FUNC_()
+
+      Examples:
+        > SELECT _FUNC_();
+         default
+  """)
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
   override def foldable: Boolean = true
@@ -631,7 +701,13 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
  * TODO: Support Decimal and date related types
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a1, a2, ...) - Returns a hash value of the arguments.")
+  usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
+  extended = """
+    _FUNC_(expr1, expr2, ...)
+
+      Arguments:
+        expr - any type expression.
+  """)
 case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override val seed = 0
 
