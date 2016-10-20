@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.{Accumulator, SparkEnv, TaskContextImpl, TaskContext}
+import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.unsafe.memory.TaskMemoryManager
@@ -48,7 +48,7 @@ private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    internalAccumulators: Seq[Accumulator[Long]]) extends Serializable {
+    internalAccumulators: Seq[Accumulator[Long]]) extends Logging with Serializable {
 
   /**
    * The key of the Map is the accumulator id and the value of the Map is the latest accumulator
@@ -84,18 +84,34 @@ private[spark] abstract class Task[T](
     if (_killed) {
       kill(interruptThread = false)
     }
+    var exceptionThrown: Boolean = true
     try {
-      (runTask(context), context.collectAccumulators())
+      val res = (runTask(context), context.collectAccumulators())
+      exceptionThrown = false
+      res
     } finally {
       context.markTaskCompleted()
       try {
+        val shuffleMemoryManager = SparkEnv.get.shuffleMemoryManager
+        val shuffleMemoryUsed = shuffleMemoryManager.getMemoryConsumptionForThisTask()
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for shuffles
-          SparkEnv.get.shuffleMemoryManager.releaseMemoryForThisTask()
+          shuffleMemoryManager.releaseMemoryForThisTask()
         }
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
           SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+        }
+        if (SparkEnv.get.conf.contains("spark.testing") && shuffleMemoryUsed != 0) {
+          val errMsg =
+            s"Shuffle memory leak detected; size = $shuffleMemoryUsed bytes, TID = $taskAttemptId"
+          if (!exceptionThrown) {
+            throw new SparkException(errMsg)
+          } else {
+            // The task failed with an exception, so don't throw here in order to avoid masking
+            // the original exception:
+            logWarning(errMsg)
+          }
         }
       } finally {
         TaskContext.unset()
