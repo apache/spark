@@ -39,13 +39,15 @@ class TableFileCatalog(
     db: String,
     table: String,
     partitionSchema: Option[StructType],
-    override val sizeInBytes: Long,
-    fileStatusCacheSize: Long) extends FileCatalog {
+    override val sizeInBytes: Long) extends FileCatalog {
 
-  private val fileStatusCache = if (fileStatusCacheSize > 0) {
-    new InMemoryCache(fileStatusCacheSize)
-  } else {
-    NoopCache
+  private val fileStatusCache = {
+    if (sparkSession.sqlContext.conf.filesourcePartitionPruning &&
+        sparkSession.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
+      new InMemoryCache(sparkSession.sqlContext.conf.filesourcePartitionFileCacheSize)
+    } else {
+      NoopCache
+    }
   }
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf
@@ -55,9 +57,6 @@ class TableFileCatalog(
   private val catalogTable = externalCatalog.getTable(db, table)
 
   private val baseLocation = catalogTable.storage.locationUri
-
-  // Populated on-demand by calls to cachedAllPartitions
-  private var cachedAllPartitions: ListingFileCatalog = null
 
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
