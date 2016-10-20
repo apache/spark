@@ -243,7 +243,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val appListener = new ApplicationEventListener()
           replayBus.addListener(appListener)
           val appAttemptInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
-                                      replayBus, ReplayListenerBus.SELECT_ALL_FILTER)
+            replayBus, ReplayListenerBus.SELECT_ALL_FILTER)
           appAttemptInfo.map { info =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
@@ -405,11 +405,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def mergeApplicationListing(fileStatus: FileStatus): Unit = {
     val newAttempts = try {
         val bus = new ReplayListenerBus()
-        val res = replay(fileStatus, bus,
-                         { eventString =>
-          eventString.startsWith (APPL_START_EVENT_PREFIX) ||
-          eventString.startsWith (APPL_END_EVENT_PREFIX)
-                         })
+
+        val eventsFilter: (String => Boolean) = { eventString =>
+          eventString.startsWith(APPL_START_EVENT_PREFIX) ||
+            eventString.startsWith(APPL_END_EVENT_PREFIX)
+        }
+
+        val res = replay(fileStatus, bus, eventsFilter)
 
         res match {
           case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully: $r")
