@@ -349,6 +349,94 @@ for more details on the API.
 </div>
 
 
+## $n$-gram
+
+An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (typically words) for some integer $n$. The `NGram` class can be used to transform input features into $n$-grams.
+
+`NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](ml-features.html#tokenizer).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains fewer than `n` strings, no output is produced.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+[`NGram`](api/scala/index.html#org.apache.spark.ml.feature.NGram) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+
+{% highlight scala %}
+import org.apache.spark.ml.feature.NGram
+
+val wordDataFrame = sqlContext.createDataFrame(Seq(
+  (0, Array("Hi", "I", "heard", "about", "Spark")),
+  (1, Array("I", "wish", "Java", "could", "use", "case", "classes")),
+  (2, Array("Logistic", "regression", "models", "are", "neat"))
+)).toDF("label", "words")
+
+val ngram = new NGram().setInputCol("words").setOutputCol("ngrams")
+val ngramDataFrame = ngram.transform(wordDataFrame)
+ngramDataFrame.take(3).map(_.getAs[Stream[String]]("ngrams").toList).foreach(println)
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+[`NGram`](api/java/org/apache/spark/ml/feature/NGram.html) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+
+{% highlight java %}
+import com.google.common.collect.Lists;
+
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.NGram;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+  RowFactory.create(0D, Lists.newArrayList("Hi", "I", "heard", "about", "Spark")),
+  RowFactory.create(1D, Lists.newArrayList("I", "wish", "Java", "could", "use", "case", "classes")),
+  RowFactory.create(2D, Lists.newArrayList("Logistic", "regression", "models", "are", "neat"))
+));
+StructType schema = new StructType(new StructField[]{
+  new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
+  new StructField("words", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
+});
+DataFrame wordDataFrame = sqlContext.createDataFrame(jrdd, schema);
+NGram ngramTransformer = new NGram().setInputCol("words").setOutputCol("ngrams");
+DataFrame ngramDataFrame = ngramTransformer.transform(wordDataFrame);
+for (Row r : ngramDataFrame.select("ngrams", "label").take(3)) {
+  java.util.List<String> ngrams = r.getList(0);
+  for (String ngram : ngrams) System.out.print(ngram + " --- ");
+  System.out.println();
+}
+{% endhighlight %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+[`NGram`](api/python/pyspark.ml.html#pyspark.ml.feature.NGram) takes an input column name, an output column name, and an optional length parameter n (n=2 by default).
+
+{% highlight python %}
+from pyspark.ml.feature import NGram
+
+wordDataFrame = sqlContext.createDataFrame([
+  (0, ["Hi", "I", "heard", "about", "Spark"]),
+  (1, ["I", "wish", "Java", "could", "use", "case", "classes"]),
+  (2, ["Logistic", "regression", "models", "are", "neat"])
+], ["label", "words"])
+ngram = NGram(inputCol="words", outputCol="ngrams")
+ngramDataFrame = ngram.transform(wordDataFrame)
+for ngrams_label in ngramDataFrame.select("ngrams", "label").take(3):
+  print(ngrams_label)
+{% endhighlight %}
+</div>
+</div>
+
+
 ## Binarizer
 
 Binarization is the process of thresholding numerical features to binary (0/1) features.
