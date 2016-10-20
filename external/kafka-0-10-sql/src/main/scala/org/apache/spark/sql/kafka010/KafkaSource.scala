@@ -235,8 +235,8 @@ private[kafka010] case class KafkaSource(
    * Set consumer position to specified offsets, making sure all assignments are set.
    */
   private def fetchSpecificStartingOffsets(
-      partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
-    withRetriesWithoutInterrupt {
+      partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+    val result = withRetriesWithoutInterrupt {
       // Poll to get the latest assigned partitions
       consumer.poll(0)
       val partitions = consumer.assignment()
@@ -252,20 +252,21 @@ private[kafka010] case class KafkaSource(
         case (tp, -2) => consumer.seekToBeginning(ju.Arrays.asList(tp))
         case (tp, off) => consumer.seek(tp, off)
       }
-      val result = partitionOffsets.map {
+      partitionOffsets.map {
         case (tp, _) => tp -> consumer.position(tp)
       }
-      partitionOffsets.foreach {
-        case (tp, off) if off != -1 && off != -2 =>
-          if (result(tp) != off) {
-            reportDataLoss(
-              s"startingOffsets for $tp was $off but consumer reset to earliest ${result(tp)}")
-          }
-        case _ =>
-          // no real way to check that beginning or end is reasonable
-      }
-      result
     }
+    partitionOffsets.foreach {
+      case (tp, off) if off != -1 && off != -2 =>
+        if (result(tp) != off) {
+          reportDataLoss(
+            s"startingOffsets for $tp was $off but consumer reset to ${result(tp)}")
+        }
+      case _ =>
+        // no real way to check that beginning or end is reasonable
+    }
+    result
+  }
 
   /**
    * Fetch the earliest offsets of partitions.
