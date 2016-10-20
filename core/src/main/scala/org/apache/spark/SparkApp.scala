@@ -22,6 +22,7 @@ package org.apache.spark
  * This is currently supported only in YARN mode.
  */
 trait SparkApp {
+  this: Singleton =>
 
   def sparkMain(args: Array[String], conf: scala.collection.mutable.Map[String, String]): Unit
 
