@@ -39,10 +39,11 @@ class TableFileCatalog(
     db: String,
     table: String,
     partitionSchema: Option[StructType],
-    override val sizeInBytes: Long,
-    fileStatusCache: FileStatusCache = NoopCache) extends FileCatalog {
+    override val sizeInBytes: Long) extends FileCatalog {
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf
+
+  private val fileStatusCache = FileStatusCache.getOrInitializeShared(new Object(), sparkSession)
 
   private val externalCatalog = sparkSession.sharedState.externalCatalog
 
