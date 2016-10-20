@@ -87,37 +87,35 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     def apply(filename: String): File = getFile(filename, localDirs)
   }
 
-  /** Looks up a file by hierarchy way in different speed storage devices. */
-  private val hierarchy = conf.getOption("spark.diskStore.hierarchy")
-  private class HierarchyAllocator extends FileAllocationStrategy {
-    case class Level(key: String, threshold: Long, dirs: Array[File])
-    // e.g.: hierarchy = "ram_disk 1GB, ssd 20GB"
-    val hsDescs: Array[(String, Long)] = hierarchy.get.trim.split(",").map {
-      s => val x = s.trim.split(" +")
-        val storage = x(0).toLowerCase
-        val threshold = s.replaceFirst(x(0), "").trim
-        (storage, Utils.byteStringAsBytes(threshold))
+  /** Looks up a file by tier way in different speed storage devices. */
+  private val tiersConf = conf.getenv("SPARK_DISKSTORE_TIERS")
+  private class TieredAllocator extends FileAllocationStrategy {
+    case class Tier(id: Int, dirs: Array[File], threshold: Array[Double])
+    val tiersIDs = tiersConf.trim.split("")
+    if (localDirs.length != tiersIDs.length) {
+      logError("Incorrect tiers desc.")
+      System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
     }
-    val hsLevels: Array[Level] = hsDescs.map(
-      s => Level(s._1, s._2, localDirs.filter(_.getPath.toLowerCase.containsSlice(s._1)))
-    )
-    val lastLevelDirs = localDirs.filter(dir => !hsLevels.exists(_.dirs.contains(dir)))
-    val allLevels: Array[Level] = hsLevels :+
-      Level("Last Level Storage", 10.toLong, lastLevelDirs)
-    val finalLevels: Array[Level] = allLevels.filter(_.dirs.nonEmpty)
-    logInfo("Hierarchy info:")
-    for (level <- finalLevels) {
-      logInfo("Level: %s, Threshold: %s".format(level.key, Utils.bytesToString(level.threshold)))
-      level.dirs.foreach { dir => logInfo("\t%s".format(dir.getCanonicalPath)) }
+    val tieredDirs: Seq[(String, Array[File])] = (localDirs zip tiersIDs).
+      groupBy(_._2).mapValues(_.map(_._1)).toSeq.sortBy(_._1)
+    val tiers = tieredDirs.map {
+      s => Tier(s._1.toInt, s._2, s._2.map(_.getTotalSpace * 0.1))
+    }
+    logInfo("Tires info:")
+    for (tier <- tiers) {
+      (tier.dirs zip tier.threshold).foreach
+      { dir => logInfo("\tDir: %s, Threshold: %s".format(dir._1.getCanonicalPath,
+        Utils.bytesToString(dir._2.toLong))) }
     }
 
     def apply(filename: String): File = {
       var availableFile: File = null
-      for (level <- finalLevels) {
-        val file = getFile(filename, level.dirs)
+      for (tier <- tiers) {
+        val file = getFile(filename, tier.dirs)
         if (file.exists()) return file
 
-        if (availableFile == null && file.getParentFile.getUsableSpace >= level.threshold) {
+        if (availableFile == null &&
+          file.getParentFile.getUsableSpace >= tier.threshold(tier.dirs.indexOf(file))) {
           availableFile = file
         }
       }
@@ -130,9 +128,9 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   private val fileAllocator: FileAllocationStrategy =
-    if (hierarchy.isDefined && !conf.getBoolean("spark.shuffle.service.enabled", false)) {
-      logInfo(s"Hierarchy allocator for blocks is enabled")
-      new HierarchyAllocator
+    if (tiersConf != null && !conf.getBoolean("spark.shuffle.service.enabled", false)) {
+      logInfo(s"Tiered allocator for blocks is enabled")
+      new TieredAllocator
     }
     else {
       logInfo(s"Hash allocator for blocks is enabled")
