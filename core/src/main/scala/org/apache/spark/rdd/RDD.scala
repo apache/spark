@@ -787,13 +787,25 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * [performance] Spark's internal mapPartitions method which skips closure cleaning. It is a
-   * performance API to be used carefully only if we are sure that the RDD elements are
+   * [performance] Spark's internal mapPartitionsWithIndex method that skips closure cleaning.
+   * It is a performance API to be used carefully only if we are sure that the RDD elements are
    * serializable and don't require closure cleaning.
    *
    * @param preservesPartitioning indicates whether the input function preserves the partitioner,
    * which should be `false` unless this is a pair RDD and the input function doesn't modify
    * the keys.
+   */
+  private[spark] def mapPartitionsWithIndexInternal[U: ClassTag](
+      f: (Int, Iterator[T]) => Iterator[U],
+      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+    new MapPartitionsRDD(
+      this,
+      (context: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
+      preservesPartitioning)
+  }
+
+  /**
+   * [performance] Spark's internal mapPartitions method that skips closure cleaning.
    */
   private[spark] def mapPartitionsInternal[U: ClassTag](
       f: Iterator[T] => Iterator[U],
@@ -803,6 +815,7 @@ abstract class RDD[T: ClassTag](
       (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter),
       preservesPartitioning)
   }
+
 
   /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
