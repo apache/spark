@@ -33,6 +33,11 @@ set PYTHONPATH=%SPARK_HOME%\python;%PYTHONPATH%
 set PYTHONPATH=%SPARK_HOME%\python\lib\py4j-0.10.3-src.zip;%PYTHONPATH%
 
 set OLD_PYTHONSTARTUP=%PYTHONSTARTUP%
+rem Check if we are pip installed or not
+IF EXIST %SPARK_HOME%\python\pyspark\shell.py (
 set PYTHONSTARTUP=%SPARK_HOME%\python\pyspark\shell.py
+) ELSE (
+set PYTHONSTARTUP=%SPARK_HOME%\shell.py
+)
 
 call "%SPARK_HOME%\bin\spark-submit2.cmd" pyspark-shell-main --name "PySparkShell" %*
