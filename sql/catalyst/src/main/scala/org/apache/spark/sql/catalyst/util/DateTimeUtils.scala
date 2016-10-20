@@ -688,7 +688,7 @@ object DateTimeUtils {
     val leapDay = if (currentMonthInYear == 1 && isLeapYear(currentYear + YearZero)) 1 else 0
     val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
 
-    val currentDayInMonth = if (daysToMonthEnd == 0 || dayOfMonth >= lastDayOfMonth) {
+    val currentDayInMonth = if (dayOfMonth >= lastDayOfMonth) {
       // last day of the month
       lastDayOfMonth
     } else {

@@ -392,10 +392,11 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c1.set(1997, 1, 28, 10, 30, 0)
     val days1 = millisToDays(c1.getTimeInMillis)
     val c2 = Calendar.getInstance()
-    c2.set(2000, 1, 29)
+    c2.set(2000, 1, 28)
     assert(dateAddMonths(days1, 36) === millisToDays(c2.getTimeInMillis))
-    c2.set(1996, 0, 31)
+    c2.set(1996, 0, 28)
     assert(dateAddMonths(days1, -13) === millisToDays(c2.getTimeInMillis))
+
   }
 
   test("timestamp add months") {
@@ -404,7 +405,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     c1.set(Calendar.MILLISECOND, 0)
     val ts1 = c1.getTimeInMillis * 1000L
     val c2 = Calendar.getInstance()
-    c2.set(2000, 1, 29, 10, 30, 0)
+    c2.set(2000, 1, 28, 10, 30, 0)
     c2.set(Calendar.MILLISECOND, 123)
     val ts2 = c2.getTimeInMillis * 1000L
     assert(timestampAddInterval(ts1, 36, 123000) === ts2)
