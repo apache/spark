@@ -35,6 +35,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
@@ -239,7 +240,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val appListener = new ApplicationEventListener()
           replayBus.addListener(appListener)
           val appAttemptInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
-            replayBus, ReplayListenerBus.SELECT_ALL_FILTER)
+            replayBus)
           appAttemptInfo.map { info =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
@@ -402,7 +403,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val newAttempts = try {
         val bus = new ReplayListenerBus()
 
-        val eventsFilter: (String => Boolean) = { eventString =>
+        val eventsFilter: ReplayEventsFilter = { eventString =>
           eventString.startsWith(APPL_START_EVENT_PREFIX) ||
             eventString.startsWith(APPL_END_EVENT_PREFIX)
         }
@@ -560,7 +561,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def replay(
       eventLog: FileStatus,
       bus: ReplayListenerBus,
-      eventsFilter: (String) => Boolean): Option[FsApplicationAttemptInfo] = {
+      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Option[FsApplicationAttemptInfo] = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
     // Note that the eventLog may have *increased* in size since when we grabbed the filestatus,

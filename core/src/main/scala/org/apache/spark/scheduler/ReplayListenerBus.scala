@@ -25,6 +25,7 @@ import com.fasterxml.jackson.core.JsonParseException
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.util.JsonProtocol
 
 /**
@@ -51,19 +52,25 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       logData: InputStream,
       sourceName: String,
       maybeTruncated: Boolean = false,
-      eventsFilter: (String) => Boolean = ReplayListenerBus.SELECT_ALL_FILTER): Unit = {
+      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
+
+    var currentLine: String = null
+    var lineNumber: Int = -1
+
     try {
       val lineEntries = Source.fromInputStream(logData)
         .getLines()
         .zipWithIndex
-        .filter(entry => eventsFilter(entry._1))
-
-      var entry: (String, Int) = ("", 0)
+        .filter { case (line, _) => eventsFilter(line) }
 
       while (lineEntries.hasNext) {
         try {
-          entry = lineEntries.next()
-          postToAll(JsonProtocol.sparkEventFromJson(parse(entry._1)))
+          val entry = lineEntries.next()
+
+          currentLine = entry._1
+          lineNumber = entry._2
+
+          postToAll(JsonProtocol.sparkEventFromJson(parse(currentLine)))
         } catch {
           case jpe: JsonParseException =>
             // We can only ignore exception from last line of the file that might be truncated
@@ -73,13 +80,8 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
               throw jpe
             } else {
               logWarning(s"Got JsonParseException from log file $sourceName" +
-                s" at line number ${entry._2}, the file might not have finished writing cleanly.")
+                s" at line ${lineNumber + 1}, the file might not have finished writing cleanly.")
             }
-
-          case e: Exception =>
-            logError (s"Exception parsing Spark event log $sourceName" +
-              s" at line number: ${entry._2}", e)
-            throw e // quit processing the event log
         }
       }
     } catch {
@@ -87,12 +89,17 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
         throw ioe
       case e: Exception =>
         logError(s"Exception parsing Spark event log: $sourceName", e)
+        logError(s"Malformed line #${lineNumber + 1}: ${currentLine}\n")
     }
   }
+
 }
+
 
 private[spark] object ReplayListenerBus {
 
+  type ReplayEventsFilter = (String) => Boolean
+
   // utility filter that selects all event logs during replay
-  val SELECT_ALL_FILTER = (eventString: String) => true
+  val SELECT_ALL_FILTER: ReplayEventsFilter = { (eventString: String) => true }
 }
