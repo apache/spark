@@ -56,16 +56,13 @@ abstract class FileStatusCache {
 }
 
 object FileStatusCache {
-  // Opaque object that uniquely identifies a shared cache user
-  type ClientId = Object
-
   private var sharedCache: SharedInMemoryCache = null
 
   /**
-   * @return a cache for the specified client, sized based on session configuration. Cache
-   *         resources are shared across all clients.
+   * @return a new FileStatusCache sized based on session configuration. Cache memory quota is
+   *         shared across all clients.
    */
-  def getOrInitializeShared(clientId: ClientId, session: SparkSession): FileStatusCache = {
+  def newCache(session: SparkSession): FileStatusCache = {
     synchronized {
       if (session.sqlContext.conf.filesourcePartitionPruning &&
           session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
@@ -73,7 +70,7 @@ object FileStatusCache {
           sharedCache = new SharedInMemoryCache(
             session.sqlContext.conf.filesourcePartitionFileCacheSize)
         }
-        sharedCache.getForClient(clientId)
+        sharedCache.getForNewClient()
       } else {
         NoopCache
       }
@@ -92,6 +89,9 @@ object FileStatusCache {
  */
 private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
   import FileStatusCache._
+
+  // Opaque object that uniquely identifies a shared cache user
+  private type ClientId = Object
 
   private val warnedAboutEviction = new AtomicBoolean(false)
 
@@ -115,12 +115,12 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
     .build()
 
   /**
-   * @param clientId object that uniquely identifies this client. Cache entries are isolated
-   *                 across clients, but cache resources are shared across all clients.
-   *
-   * @return a FileStatusCache for the specified client
+   * @return a FileStatusCache that does not share any entries with any other client, but does
+   *         shared memory resources for the purpose of cache eviction.
    */
-  def getForClient(clientId: ClientId): FileStatusCache = new FileStatusCache {
+  def getForNewClient(): FileStatusCache = new FileStatusCache {
+    val clientId = new Object()
+
     override def getLeafFiles(path: Path): Option[Array[FileStatus]] = {
       Option(cache.getIfPresent((clientId, path)))
     }
