@@ -2841,6 +2841,16 @@ object functions {
   }
 
   /**
+    * Returns true if the array contains `value` or `value` match any
+    * of the pattern available in array if array is of type string.
+    * @group collection_funcs
+    * @since 2.0
+    */
+  def array_contains_with_pattern_match(column: Column, value: Any): Column = withExpr {
+    ArrayContainsWithPatternMatch(column.expr, Literal(value))
+  }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
