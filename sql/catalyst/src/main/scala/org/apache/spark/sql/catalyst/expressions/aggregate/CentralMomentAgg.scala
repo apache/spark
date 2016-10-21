@@ -177,7 +177,7 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
   usage = "_FUNC_(expr) - Returns the population variance calculated from values of a group.",
   extended = """
     Arguments:
-     expr - a numeric expression.
+      expr - a numeric expression.
   """)
 case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
@@ -196,7 +196,7 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
   usage = "_FUNC_(expr) - Returns the sample variance calculated from values of a group.",
   extended = """
     Arguments:
-     expr - a numeric expression.
+      expr - a numeric expression.
   """)
 case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
@@ -215,7 +215,7 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
   usage = "_FUNC_(expr) - Returns the skewness value calculated from values of a group.",
   extended = """
     Arguments:
-     expr - a numeric expression.
+      expr - a numeric expression.
   """)
 case class Skewness(expr: Expression) extends CentralMomentAgg(expr) {
 
@@ -234,7 +234,7 @@ case class Skewness(expr: Expression) extends CentralMomentAgg(expr) {
   usage = "_FUNC_(expr) - Returns the kurtosis value calculated from values of a group.",
   extended = """
     Arguments:
-     expr - a numeric expression.
+      expr - a numeric expression.
   """)
 case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 

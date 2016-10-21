@@ -902,6 +902,7 @@ case class ShiftLeft(left: Expression, right: Expression)
   }
 }
 
+
 /**
  * Bitwise right shift.
  *
@@ -938,6 +939,7 @@ case class ShiftRight(left: Expression, right: Expression)
     defineCodeGen(ctx, ev, (left, right) => s"$left >> $right")
   }
 }
+
 
 /**
  * Bitwise unsigned right shift, for integer and long data type.

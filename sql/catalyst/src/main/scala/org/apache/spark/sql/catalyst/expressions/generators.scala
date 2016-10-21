@@ -102,11 +102,11 @@ case class UserDefinedGenerator(
  * }}}
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n, v1, ..., vk) - Separate v1, ..., vk into n rows.",
+  usage = "_FUNC_(n, expr1, ..., exprk) - Separate expr1, ..., exprk into n rows.",
   extended = """
     Arguments:
       n - a integer literal that represents the number of output rows.
-      v - an expression of any type.
+      expr - an expression of any type.
 
     Examples:
       > SELECT _FUNC_(2, 1, 2, 3);

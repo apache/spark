@@ -437,7 +437,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   extended = """
     Arguments:
       text - a string expression that represents data to convert into map.
-      pairDelim - a string literal that defines the delimiter to separate each pair.For example, ",".
+      pairDelim - a string literal that defines the delimiter to separate each pair. For example, ",".
       keyValueDelim - a string literal that defines the delimiter to separate key and value in the pair. For example, ":".
 
     Examples:

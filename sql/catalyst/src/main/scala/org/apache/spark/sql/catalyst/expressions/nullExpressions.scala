@@ -96,6 +96,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 }
 
+
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns expr2 if expr1 is null, or expr1 otherwise.",
   extended = """
@@ -122,6 +123,7 @@ case class IfNull(left: Expression, right: Expression) extends RuntimeReplaceabl
     }
   }
 }
+
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if expr1 equals to expr2, or expr1 otherwise.",
@@ -152,6 +154,7 @@ case class NullIf(left: Expression, right: Expression) extends RuntimeReplaceabl
   }
 }
 
+
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns expr2 if expr1 is null, or expr1 otherwise.",
   extended = """
@@ -178,6 +181,7 @@ case class Nvl(left: Expression, right: Expression) extends RuntimeReplaceable {
     }
   }
 }
+
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -210,6 +214,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression)
     }
   }
 }
+
 
 /**
  * Evaluates to `true` iff it's NaN.
@@ -255,6 +260,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
     }
   }
 }
+
 
 /**
  * An Expression evaluates to `left` iff it's not NaN, or evaluates to `right` otherwise.
