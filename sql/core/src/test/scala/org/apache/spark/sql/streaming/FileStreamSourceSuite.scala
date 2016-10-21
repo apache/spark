@@ -664,7 +664,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     def createFile(content: String, src: File, tmp: File): Unit = {
       val tempFile = Utils.tempFileWith(new File(tmp, "text"))
       val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
+      require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
+      require(src.mkdirs(), s"Cannot create $src")
+      require(src.isDirectory(), s"$src is not a directory")
       require(stringToFile(tempFile, content).renameTo(finalFile))
     }
 
