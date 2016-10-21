@@ -622,7 +622,7 @@ class LogisticRegression @Since("1.2.0") (
             rawCoefficients(coefIndex)
           }
         } else {
-          Array[Double]()
+          Array.empty[Double]
         }
         val interceptVector = if (interceptsArray.nonEmpty && isMultinomial) {
           // The intercepts are never regularized, so we always center the mean.
