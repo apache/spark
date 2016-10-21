@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, LongType}
@@ -40,18 +41,27 @@ import org.apache.spark.sql.types.{DataType, LongType}
       represent the record number within each partition. The assumption is that the data frame has
       less than 1 billion partitions, and each partition has less than 8 billion records.""",
   extended = "> SELECT _FUNC_();\n 0")
-case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
+case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
+  with Nondeterministic {
+
+  def this() = {
+    this(offset = 0)
+  }
+
+  def this(offset: Expression) = {
+    this(offset = MonotonicallyIncreasingID.parseExpression(offset))
+  }
 
   /**
-   * Record ID within each partition. By being transient, count's value is reset to 0 every time
-   * we serialize and deserialize and initialize it.
+   * Record ID within each partition. By being transient, count's value is reset to offset every
+   * time we serialize and deserialize and initialize it.
    */
   @transient private[this] var count: Long = _
 
   @transient private[this] var partitionMask: Long = _
 
   override protected def initInternal(): Unit = {
-    count = 0L
+    count = offset
     partitionMask = TaskContext.getPartitionId().toLong << 33
   }
 
@@ -68,7 +78,7 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val countTerm = ctx.freshName("count")
     val partitionMaskTerm = ctx.freshName("partitionMask")
-    ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
+    ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = ${offset}L;")
     ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
       s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
 
@@ -80,4 +90,13 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
   override def prettyName: String = "monotonically_increasing_id"
 
   override def sql: String = s"$prettyName()"
+}
+
+object MonotonicallyIncreasingID {
+  private def parseExpression(expr: Expression): Long = expr match {
+    case IntegerLiteral(i) => i.toLong
+    case NonNullLiteral(l: Long, LongType) => l
+    case _ => throw new AnalysisException("The offset must be " +
+      "an integer or long literal.")
+  }
 }
