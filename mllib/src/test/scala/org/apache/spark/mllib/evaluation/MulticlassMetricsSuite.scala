@@ -36,9 +36,9 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
         (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)), 2)
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val delta = 0.0000001
-    val tpRate0 = 2.0 / (2 + 1 + 1)
-    val tpRate1 = 3.0 / (1 + 3)
-    val tpRate2 = 1.0 / (1 + 1)
+    val tpRate0 = 2.0 / (2 + 2)
+    val tpRate1 = 3.0 / (3 + 1)
+    val tpRate2 = 1.0 / (1 + 0)
     val fpRate0 = 1.0 / (9 - 4)
     val fpRate1 = 1.0 / (9 - 4)
     val fpRate2 = 1.0 / (9 - 1)
