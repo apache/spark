@@ -345,7 +345,7 @@ setMethod("colnames<-",
 
             # Check if the column names have . in it
             if (any(regexec(".", value, fixed = TRUE)[[1]][1] != -1)) {
-              stop("Colum names cannot contain the '.' symbol.")
+              stop("Column names cannot contain the '.' symbol.")
             }
 
             sdf <- callJMethod(x@sdf, "toDF", as.list(value))
@@ -2297,6 +2297,8 @@ setMethod("join",
 #' @param y the second data frame to be joined
 #' @param by a character vector specifying the join columns. If by is not
 #'   specified, the common column names in \code{x} and \code{y} will be used.
+#'   If by or both by.x and by.y are explicitly set to NULL or of length 0, the Cartesian
+#'   Product of x and y will be returned.
 #' @param by.x a character vector specifying the joining columns for x.
 #' @param by.y a character vector specifying the joining columns for y.
 #' @param all a boolean value setting \code{all.x} and \code{all.y}
@@ -2326,13 +2328,14 @@ setMethod("join",
 #' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
-#' merge(df1, df2) # Performs a Cartesian
+#' merge(df1, df2) # Performs an inner join by common columns
 #' merge(df1, df2, by = "col1") # Performs an inner join based on expression
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.y = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE, all.y = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all = TRUE, sort = FALSE)
 #' merge(df1, df2, by = "col1", all = TRUE, suffixes = c("-X", "-Y"))
+#' merge(df1, df2, by = NULL) # Performs a Cartesian join
 #' }
 #' @note merge since 1.5.0
 setMethod("merge",
