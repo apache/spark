@@ -25,7 +25,7 @@ import threading
 from threading import RLock
 from tempfile import NamedTemporaryFile
 
-from pyspark import accumulators
+import pyspark.accumulators as accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
 from pyspark.conf import SparkConf
