@@ -269,7 +269,7 @@ object SQLConf {
            "not converted to filesource relations (see HiveUtils.CONVERT_METASTORE_PARQUET and " +
            "HiveUtils.CONVERT_METASTORE_ORC for more information).")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val HIVE_FILESOURCE_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.hive.filesourcePartitionPruning")
@@ -348,13 +348,6 @@ object SQLConf {
       .doc("When true, automatically infer the data types for partitioned columns.")
       .booleanConf
       .createWithDefault(true)
-
-  val PARTITION_MAX_FILES =
-    SQLConfigBuilder("spark.sql.sources.maxConcurrentWrites")
-      .doc("The maximum number of concurrent files to open before falling back on sorting when " +
-            "writing out files using dynamic partitioning.")
-      .intConf
-      .createWithDefault(1)
 
   val BUCKETING_ENABLED = SQLConfigBuilder("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
@@ -744,8 +737,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def partitionColumnTypeInferenceEnabled: Boolean =
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
-
-  def partitionMaxFiles: Int = getConf(PARTITION_MAX_FILES)
 
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
