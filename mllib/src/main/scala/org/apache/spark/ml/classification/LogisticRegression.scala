@@ -438,18 +438,14 @@ class LogisticRegression @Since("1.2.0") (
           val standardizationParam = $(standardization)
           def regParamL1Fun = (index: Int) => {
             // Remove the L1 penalization on the intercept
-            val isIntercept = $(fitIntercept) && ((index + 1) % numFeaturesPlusIntercept == 0)
+            val isIntercept = $(fitIntercept) && index >= numFeatures * numCoefficientSets
             if (isIntercept) {
               0.0
             } else {
               if (standardizationParam) {
                 regParamL1
               } else {
-                val featureIndex = if ($(fitIntercept)) {
-                  index % numFeaturesPlusIntercept
-                } else {
-                  index % numFeatures
-                }
+                val featureIndex = index / numCoefficientSets
                 // If `standardization` is false, we still standardize the data
                 // to improve the rate of convergence; as a result, we have to
                 // perform this reverse standardization by penalizing each component
@@ -486,6 +482,7 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         if (initialModelIsValid) {
+          // TODO: change indexing copy row major initialmodel to col major
           val initialCoefWithInterceptArray = initialCoefficientsWithIntercept.toArray
           val providedCoef = optInitialModel.get.coefficientMatrix
           providedCoef.foreachActive { (row, col, value) =>
@@ -526,7 +523,7 @@ class LogisticRegression @Since("1.2.0") (
           val rawIntercepts = histogram.map(c => math.log(c + 1)) // add 1 for smoothing
           val rawMean = rawIntercepts.sum / rawIntercepts.length
           rawIntercepts.indices.foreach { i =>
-            initialCoefficientsWithIntercept.toArray(i * numFeaturesPlusIntercept + numFeatures) =
+            initialCoefficientsWithIntercept.toArray(numClasses * numFeatures + i) =
               rawIntercepts(i) - rawMean
           }
         } else if ($(fitIntercept)) {
@@ -577,11 +574,11 @@ class LogisticRegression @Since("1.2.0") (
          */
         val rawCoefficients = state.x.toArray.clone()
         val coefficientArray = Array.tabulate(numCoefficientSets * numFeatures) { i =>
-          // flatIndex will loop though rawCoefficients, and skip the intercept terms.
-          val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
+          // TODO: comment
+          val colMajorIndex = (i % numFeatures) * numCoefficientSets + i / numFeatures
           val featureIndex = i % numFeatures
           if (featuresStd(featureIndex) != 0.0) {
-            rawCoefficients(flatIndex) / featuresStd(featureIndex)
+            rawCoefficients(colMajorIndex) / featuresStd(featureIndex)
           } else {
             0.0
           }
@@ -618,7 +615,7 @@ class LogisticRegression @Since("1.2.0") (
 
         val interceptsArray: Array[Double] = if ($(fitIntercept)) {
           Array.tabulate(numCoefficientSets) { i =>
-            val coefIndex = (i + 1) * numFeaturesPlusIntercept - 1
+            val coefIndex = numFeatures * numCoefficientSets + i
             rawCoefficients(coefIndex)
           }
         } else {
@@ -697,6 +694,7 @@ class LogisticRegressionModel private[spark] (
   /**
    * A vector of model coefficients for "binomial" logistic regression. If this model was trained
    * using the "multinomial" family then an exception is thrown.
+   *
    * @return Vector
    */
   @Since("2.0.0")
@@ -720,6 +718,7 @@ class LogisticRegressionModel private[spark] (
   /**
    * The model intercept for "binomial" logistic regression. If this model was fit with the
    * "multinomial" family then an exception is thrown.
+   *
    * @return Double
    */
   @Since("1.3.0")
@@ -1389,6 +1388,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    $$
  * </blockquote></p>
  *
+ *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
@@ -1486,24 +1486,45 @@ private class LogisticAggregator(
     var marginOfLabel = 0.0
     var maxMargin = Double.NegativeInfinity
 
-    val margins = Array.tabulate(numClasses) { i =>
-      var margin = 0.0
-      features.foreachActive { (index, value) =>
-        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-          margin += localCoefficients(i * numFeaturesPlusIntercept + index) *
-            value / localFeaturesStd(index)
-        }
+    val margins = new Array[Double](numClasses)
+    features.foreachActive { (index, value) =>
+      val mult = value / localFeaturesStd(index)
+      var j = 0
+      while (j < numClasses) {
+        margins(j) += localCoefficients(index * numClasses + j) * mult
+        j += 1
       }
-
-      if (fitIntercept) {
-        margin += localCoefficients(i * numFeaturesPlusIntercept + numFeatures)
-      }
-      if (i == label.toInt) marginOfLabel = margin
-      if (margin > maxMargin) {
-        maxMargin = margin
-      }
-      margin
     }
+    var i = 0
+    while (i < numClasses) {
+      if (fitIntercept) {
+        margins(i) += localCoefficients(numClasses * numFeatures + i)
+      }
+      if (i == label.toInt) marginOfLabel = margins(i)
+      if (margins(i) > maxMargin) {
+        maxMargin = margins(i)
+      }
+      i += 1
+    }
+
+//    val margins = Array.tabulate(numClasses) { i =>
+//      var margin = 0.0
+//      features.foreachActive { (index, value) =>
+//        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+//          margin += localCoefficients(i * numFeaturesPlusIntercept + index) *
+//            value / localFeaturesStd(index)
+//        }
+//      }
+//
+//      if (fitIntercept) {
+//        margin += localCoefficients(i * numFeaturesPlusIntercept + numFeatures)
+//      }
+//      if (i == label.toInt) marginOfLabel = margin
+//      if (margin > maxMargin) {
+//        maxMargin = margin
+//      }
+//      margin
+//    }
 
     /**
      * When maxMargin > 0, the original formula could cause overflow.
@@ -1525,20 +1546,42 @@ private class LogisticAggregator(
       temp
     }
 
-    for (i <- 0 until numClasses) {
-      val multiplier = math.exp(margins(i)) / sum - {
-        if (label == i) 1.0 else 0.0
-      }
-      features.foreachActive { (index, value) =>
-        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-          localGradientArray(i * numFeaturesPlusIntercept + index) +=
-            weight * multiplier * value / localFeaturesStd(index)
+    val multipliers = margins.zipWithIndex.map { case (m, i) =>
+      math.exp(m) / sum - (if (label == i) 1.0 else 0.0)
+    }
+    features.foreachActive { (index, value) =>
+      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        val mult = value / localFeaturesStd(index)
+        var j = 0
+        while (j < numClasses) {
+          localGradientArray(index * numClasses + j) +=
+            weight * multipliers(j) * mult
+          j += 1
         }
       }
-      if (fitIntercept) {
-        localGradientArray(i * numFeaturesPlusIntercept + numFeatures) += weight * multiplier
+    }
+    if (fitIntercept) {
+      var i = 0
+      while (i < numClasses) {
+        localGradientArray(numFeatures * numClasses + i) += weight * multipliers(i)
+        i += 1
       }
     }
+
+//    for (i <- 0 until numClasses) {
+    //      val multiplier = math.exp(margins(i)) / sum - {
+    //        if (label == i) 1.0 else 0.0
+    //      }
+    //      features.foreachActive { (index, value) =>
+    //        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+    //          localGradientArray(i * numFeaturesPlusIntercept + index) +=
+    //            weight * multiplier * value / localFeaturesStd(index)
+    //        }
+    //      }
+    //      if (fitIntercept) {
+    //        localGradientArray(i * numFeaturesPlusIntercept + numFeatures) += weight * multiplier
+    //      }
+    //    }
 
     val loss = if (maxMargin > 0) {
       math.log(sum) - marginOfLabel + maxMargin
@@ -1637,6 +1680,7 @@ private class LogisticCostFun(
     val bcCoeffs = instances.context.broadcast(coeffs)
     val featuresStd = bcFeaturesStd.value
     val numFeatures = featuresStd.length
+    val numCoefficientSets = if (multinomial) numClasses else 1
 
     val logisticAggregator = {
       val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
@@ -1656,7 +1700,7 @@ private class LogisticCostFun(
       var sum = 0.0
       coeffs.foreachActive { case (index, value) =>
         // We do not apply regularization to the intercepts
-        val isIntercept = fitIntercept && ((index + 1) % (numFeatures + 1) == 0)
+        val isIntercept = fitIntercept && index >= numCoefficientSets * numFeatures
         if (!isIntercept) {
           // The following code will compute the loss of the regularization; also
           // the gradient of the regularization, and add back to totalGradientArray.
@@ -1665,11 +1709,7 @@ private class LogisticCostFun(
               totalGradientArray(index) += regParamL2 * value
               value * value
             } else {
-              val featureIndex = if (fitIntercept) {
-                index % (numFeatures + 1)
-              } else {
-                index % numFeatures
-              }
+              val featureIndex = index / numCoefficientSets
               if (featuresStd(featureIndex) != 0.0) {
                 // If `standardization` is false, we still standardize the data
                 // to improve the rate of convergence; as a result, we have to
