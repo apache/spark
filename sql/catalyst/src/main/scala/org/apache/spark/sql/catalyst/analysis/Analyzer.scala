@@ -733,6 +733,11 @@ class Analyzer(
         }
         Sort(newOrders, global, child)
 
+      // Eliminate the useless position numbers
+      case s @ Sort(orders, global, child)
+          if !conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+        Sort(orders.filterNot(o => IntegerIndex.unapply(o.child).nonEmpty), global, child)
+
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
       case a @ Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
@@ -1256,7 +1261,9 @@ class Analyzer(
           case ae: AnalysisException => filter
         }
 
-      case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
+      // If there exists ordinal sort orders, it's not resolved completely yet. See SPARK-16955.
+      case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved &&
+          sortOrder.forall(x => IntegerIndex.unapply(x.child).isEmpty) =>
 
         // Try resolving the ordering as though it is in the aggregate clause.
         try {

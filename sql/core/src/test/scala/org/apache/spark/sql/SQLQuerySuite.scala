@@ -480,6 +480,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-16955: Using ordinals in ORDER BY and GROUP BY causes an analysis error") {
+    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "true") {
+      checkAnswer(
+        sql("SELECT a, avg(a) FROM (SELECT * FROM VALUES 1,2,3 T(a)) U GROUP BY 1 ORDER BY 1 DESC"),
+        sql("SELECT a, avg(a) FROM (SELECT * FROM VALUES 1,2,3 T(a)) U GROUP BY a ORDER BY a DESC"))
+    }
+    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
+      checkAnswer(
+        sql("SELECT a, avg(a) FROM (SELECT * FROM VALUES 1,2,3 T(a)) U GROUP BY 1 ORDER BY 1 DESC"),
+        sql("SELECT a, avg(a) FROM (SELECT * FROM VALUES 1,2,3 T(a)) U GROUP BY a"))
+    }
+  }
+
   test("select *") {
     checkAnswer(
       sql("SELECT * FROM testData"),
