@@ -271,8 +271,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val HIVE_FILESOURCE_PARTITION_MANAGEMENT =
-    SQLConfigBuilder("spark.sql.hive.filesourcePartitionManagement")
+  val HIVE_MANAGE_FILESOURCE_PARTITIONS =
+    SQLConfigBuilder("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
            "This includes both datasource and converted Hive tables. This also controls whether " +
            "datasource tables will automatically store partition metadata in the Hive metastore.")
@@ -679,7 +679,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  def filesourcePartitionManagement: Boolean = getConf(HIVE_FILESOURCE_PARTITION_MANAGEMENT)
+  def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
 

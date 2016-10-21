@@ -405,7 +405,7 @@ case class DataSource(
             })
         }
 
-        val fileCatalog = if (sparkSession.sqlContext.conf.filesourcePartitionManagement &&
+        val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.partitionProviderIsHive) {
           new TableFileCatalog(
             sparkSession,

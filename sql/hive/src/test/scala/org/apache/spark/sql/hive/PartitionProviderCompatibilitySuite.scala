@@ -56,7 +56,7 @@ class PartitionProviderCompatibilitySuite
   }
 
   private def verifyIsNewTable(tableName: String): Unit = {
-    withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
       spark.sql(s"show partitions $tableName").count()  // check does not throw
     }
   }
@@ -64,11 +64,11 @@ class PartitionProviderCompatibilitySuite
   test("convert partition provider to hive with repair table") {
     withTable("test") {
       withTempDir { dir =>
-        withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "false") {
+        withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
           setupPartitionedDatasourceTable("test", dir)
           assert(spark.sql("select * from test").count() == 5)
         }
-        withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true") {
+        withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
           verifyIsLegacyTable("test")
           spark.sql("msck repair table test")
           verifyIsNewTable("test")
@@ -86,7 +86,7 @@ class PartitionProviderCompatibilitySuite
   test("when partition management is enabled, new tables have partition provider hive") {
     withTable("test") {
       withTempDir { dir =>
-        withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true") {
+        withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
           setupPartitionedDatasourceTable("test", dir)
           verifyIsNewTable("test")
           assert(spark.sql("select * from test").count() == 0)  // needs repair
@@ -100,7 +100,7 @@ class PartitionProviderCompatibilitySuite
   test("when partition management is disabled, new tables have no partition provider") {
     withTable("test") {
       withTempDir { dir =>
-        withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "false") {
+        withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
           setupPartitionedDatasourceTable("test", dir)
           verifyIsLegacyTable("test")
           assert(spark.sql("select * from test").count() == 5)

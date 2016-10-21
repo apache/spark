@@ -92,7 +92,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     }
 
     val newProps = if (partitionColumnNames.nonEmpty &&
-        sparkSession.sqlContext.conf.filesourcePartitionManagement) {
+        sparkSession.sqlContext.conf.manageFilesourcePartitions) {
       table.properties ++
         Map(CatalogTable.PARTITION_PROVIDER_KEY -> CatalogTable.PARTITION_PROVIDER_HIVE)
     } else {
@@ -244,7 +244,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
     result match {
       case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
-          sparkSession.sqlContext.conf.filesourcePartitionManagement =>
+          sparkSession.sqlContext.conf.manageFilesourcePartitions =>
         sparkSession.sessionState.executePlan(
           AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
       case _ =>

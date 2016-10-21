@@ -390,7 +390,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         )
         val createCmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
         val cmd = if (tableDesc.partitionColumnNames.nonEmpty &&
-            df.sparkSession.sqlContext.conf.filesourcePartitionManagement) {
+            df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
           val recoverPartitionCmd = AlterTableRecoverPartitionsCommand(tableDesc.identifier)
           Union(createCmd, recoverPartitionCmd)
         } else {

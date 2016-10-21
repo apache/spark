@@ -110,7 +110,7 @@ class PartitionedTablePerfStatsSuite
 
   genericTest("lazy partition pruning reads only necessary partition data") { spec =>
     withSQLConf(
-        SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true",
+        SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true",
         SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key -> "0") {
       withTable("test") {
         withTempDir { dir =>
@@ -151,7 +151,7 @@ class PartitionedTablePerfStatsSuite
 
   genericTest("lazy partition pruning with file status caching enabled") { spec =>
     withSQLConf(
-        SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true",
+        SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true",
         SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key -> "9999999") {
       withTable("test") {
         withTempDir { dir =>
@@ -192,7 +192,7 @@ class PartitionedTablePerfStatsSuite
 
   genericTest("file status caching respects refresh table and refreshByPath") { spec =>
     withSQLConf(
-        SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true",
+        SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true",
         SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key -> "9999999") {
       withTable("test") {
         withTempDir { dir =>
@@ -221,7 +221,7 @@ class PartitionedTablePerfStatsSuite
 
   genericTest("file status cache respects size limit") { spec =>
     withSQLConf(
-        SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true",
+        SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true",
         SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key -> "1" /* 1 byte */) {
       withTable("test") {
         withTempDir { dir =>
@@ -239,7 +239,7 @@ class PartitionedTablePerfStatsSuite
   }
 
   test("hive table: files read and cached when filesource partition management is off") {
-    withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "false") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
       withTable("test") {
         withTempDir { dir =>
           setupPartitionedHiveTable("test", dir)
@@ -268,7 +268,7 @@ class PartitionedTablePerfStatsSuite
   }
 
   test("datasource table: all partition data cached in memory when partition management is off") {
-    withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "false") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
       withTable("test") {
         withTempDir { dir =>
           setupPartitionedDatasourceTable("test", dir)
