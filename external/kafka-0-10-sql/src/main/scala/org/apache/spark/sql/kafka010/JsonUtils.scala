@@ -19,35 +19,29 @@ package org.apache.spark.sql.kafka010
 
 import java.io.Writer
 
-import scala.collection.mutable.{ ArrayBuffer, HashMap }
+import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.node._
 import org.apache.kafka.common.TopicPartition
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
 
 /**
  * Utilities for converting Kafka related objects to and from json.
  */
 private object JsonUtils {
-  private val mapper = new ObjectMapper()
+  private implicit val formats = Serialization.formats(NoTypeHints)
 
   /**
    * Read TopicPartitions from json string
    */
   def partitions(str: String): Array[TopicPartition] = {
     try {
-      val res = new ArrayBuffer[TopicPartition]()
-      val topics = mapper.readTree(str).fields
-      while (topics.hasNext) {
-        val node = topics.next
-        val topic = node.getKey
-        val parts = node.getValue.elements
-        while (parts.hasNext) {
-          res.append(new TopicPartition(topic, parts.next().asInt))
-        }
-      }
-      res.toArray
+      Serialization.read[Map[String, Seq[Int]]](str).flatMap {  case (topic, parts) =>
+          parts.map { part =>
+            new TopicPartition(topic, part)
+          }
+      }.toArray
     } catch {
       case NonFatal(x) =>
         throw new IllegalArgumentException(
@@ -56,19 +50,15 @@ private object JsonUtils {
   }
 
   /**
-   * Write TopicPartitions as json
+   * Write TopicPartitions as json string
    */
-  def partitions(partitions: Iterable[TopicPartition], writer: Writer): Unit = {
-    val root = mapper.createObjectNode()
+  def partitions(partitions: Iterable[TopicPartition]): String = {
+    val result = new HashMap[String, List[Int]]
     partitions.foreach { tp =>
-      var topic = root.get(tp.topic)
-      if (null == topic) {
-        root.set(tp.topic, mapper.createArrayNode())
-        topic = root.get(tp.topic)
-      }
-      topic.asInstanceOf[ArrayNode].add(tp.partition)
+      val parts: List[Int] = result.getOrElse(tp.topic, Nil)
+      result += tp.topic -> (tp.partition::parts)
     }
-    mapper.writeValue(writer, root)
+    Serialization.write(result)
   }
 
   /**
@@ -76,20 +66,11 @@ private object JsonUtils {
    */
   def partitionOffsets(str: String): Map[TopicPartition, Long] = {
     try {
-      val res = new HashMap[TopicPartition, Long]
-      val topics = mapper.readTree(str).fields
-      while (topics.hasNext) {
-        val node = topics.next
-        val topic = node.getKey
-        val parts = node.getValue.fields
-        while (parts.hasNext) {
-          val node = parts.next
-          val part = node.getKey.toInt
-          val offset = node.getValue.asLong
-          res += new TopicPartition(topic, part) -> offset
-        }
-      }
-      res.toMap
+      Serialization.read[Map[String, Map[Int, Long]]](str).flatMap { case (topic, partOffsets) =>
+          partOffsets.map { case (part, offset) =>
+              new TopicPartition(topic, part) -> offset
+          }
+      }.toMap
     } catch {
       case NonFatal(x) =>
         throw new IllegalArgumentException(
@@ -98,18 +79,15 @@ private object JsonUtils {
   }
 
   /**
-   * Write per-TopicPartition offsets as json
+   * Write per-TopicPartition offsets as json string
    */
-  def partitionOffsets(partitionOffsets: Map[TopicPartition, Long], writer: Writer): Unit = {
-    val root = mapper.createObjectNode()
+  def partitionOffsets(partitionOffsets: Map[TopicPartition, Long]): String = {
+    val result = new HashMap[String, HashMap[Int, Long]]()
     partitionOffsets.foreach { case (tp, off) =>
-        var topic = root.get(tp.topic)
-        if (null == topic) {
-          root.set(tp.topic, mapper.createObjectNode())
-          topic = root.get(tp.topic)
-        }
-        topic.asInstanceOf[ObjectNode].set(tp.partition.toString, new LongNode(off))
+        val parts = result.getOrElse(tp.topic, new HashMap[Int, Long])
+        parts += tp.partition -> off
+        result += tp.topic -> parts
     }
-    mapper.writeValue(writer, root)
+    Serialization.write(result)
   }
 }

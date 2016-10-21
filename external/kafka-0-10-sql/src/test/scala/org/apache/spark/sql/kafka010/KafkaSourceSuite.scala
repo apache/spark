@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.io.StringWriter
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.util.Random
@@ -326,15 +325,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
   private def assignString(topic: String, partitions: Iterable[Int]): String = {
-    val writer = new StringWriter
-    JsonUtils.partitions(
-      partitions.map(p => new TopicPartition(topic, p)),
-      writer)
-    writer.toString
+    JsonUtils.partitions(partitions.map(p => new TopicPartition(topic, p)))
   }
 
   private def testFromSpecificOffsets(topic: String, options: (String, String)*): Unit = {
-    val writer = new StringWriter
     val partitionOffsets = Map(
       new TopicPartition(topic, 0) -> -2L,
       new TopicPartition(topic, 1) -> -1L,
@@ -342,8 +336,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       new TopicPartition(topic, 3) -> 1L,
       new TopicPartition(topic, 4) -> 2L
     )
-    JsonUtils.partitionOffsets(partitionOffsets, writer)
-    val startingOffsets = writer.toString
+    val startingOffsets = JsonUtils.partitionOffsets(partitionOffsets)
 
     testUtils.createTopic(topic, partitions = 5)
     // part 0 starts at earliest, these should all be seen
