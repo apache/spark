@@ -22,7 +22,10 @@ package org.apache.spark.sql.execution.streaming
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
  */
-case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
+case class OffsetSeq(offsets: Seq[Option[Offset]]) {
+
+  val json = offsets.map(_.map(_.json)).flatten.mkString("\n")
+
   /**
    * Unpacks an offset into [[StreamProgress]] by associating each offset with the order list of
    * sources.
@@ -39,12 +42,12 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
     offsets.map(_.map(_.toString).getOrElse("-")).mkString("[", ", ", "]")
 }
 
-object CompositeOffset {
+object OffsetSeq {
   /**
-   * Returns a [[CompositeOffset]] with a variable sequence of offsets.
+   * Returns a [[OffsetSeq]] with a variable sequence of offsets.
    * `nulls` in the sequence are converted to `None`s.
    */
-  def fill(offsets: Offset*): CompositeOffset = {
-    CompositeOffset(offsets.map(Option(_)))
+  def fill(offsets: Offset*): OffsetSeq = {
+    OffsetSeq(offsets.map(Option(_)))
   }
 }

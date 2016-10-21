@@ -23,4 +23,9 @@ package org.apache.spark.sql.execution.streaming
  * ordering of two [[Offset]] instances.  We do assume that if two offsets are `equal` then no
  * new data has arrived.
  */
-trait Offset extends Serializable {}
+abstract class Offset {
+  def json: String
+}
+
+/** Used when loading */
+final class SerializedOffset(override val json: String) extends Offset
