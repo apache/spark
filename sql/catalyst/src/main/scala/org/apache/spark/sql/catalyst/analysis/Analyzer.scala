@@ -103,6 +103,7 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables ::
+      ResolveCreateStruct ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -1141,7 +1142,7 @@ class Analyzer(
         case In(e, Seq(l @ ListQuery(_, exprId))) if e.resolved =>
           // Get the left hand side expressions.
           val expressions = e match {
-            case CreateStruct(exprs) => exprs
+            case CreateStruct(exprs, _) => exprs
             case expr => Seq(expr)
           }
           resolveSubQuery(l, plans, expressions.size) { (rewrite, conditions) =>
@@ -2072,18 +2073,8 @@ object EliminateUnions extends Rule[LogicalPlan] {
  */
 object CleanupAliases extends Rule[LogicalPlan] {
   private def trimAliases(e: Expression): Expression = {
-    var stop = false
     e.transformDown {
-      // CreateStruct is a special case, we need to retain its top level Aliases as they decide the
-      // name of StructField. We also need to stop transform down this expression, or the Aliases
-      // under CreateStruct will be mistakenly trimmed.
-      case c: CreateStruct if !stop =>
-        stop = true
-        c.copy(children = c.children.map(trimNonTopLevelAliases))
-      case c: CreateStructUnsafe if !stop =>
-        stop = true
-        c.copy(children = c.children.map(trimNonTopLevelAliases))
-      case Alias(child, _) if !stop => child
+      case Alias(child, _) => child
     }
   }
 
@@ -2116,15 +2107,8 @@ object CleanupAliases extends Rule[LogicalPlan] {
     case a: AppendColumns => a
 
     case other =>
-      var stop = false
       other transformExpressionsDown {
-        case c: CreateStruct if !stop =>
-          stop = true
-          c.copy(children = c.children.map(trimNonTopLevelAliases))
-        case c: CreateStructUnsafe if !stop =>
-          stop = true
-          c.copy(children = c.children.map(trimNonTopLevelAliases))
-        case Alias(child, _) if !stop => child
+        case Alias(child, _) => child
       }
   }
 }
@@ -2189,9 +2173,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
               window.slideDuration + window.startTime
           val windowEnd = windowStart + window.windowDuration
 
-          CreateNamedStruct(
-            Literal(WINDOW_START) :: windowStart ::
-            Literal(WINDOW_END) :: windowEnd :: Nil)
+          CreateStruct.withNameValuePairs(
+            (WINDOW_START, windowStart) ::
+            (WINDOW_END, windowEnd) :: Nil)
         }
 
         val projections = windows.map(_ +: p.children.head.output)
@@ -2215,5 +2199,17 @@ object TimeWindowing extends Rule[LogicalPlan] {
       } else {
         p // Return unchanged. Analyzer will throw exception later
       }
+  }
+}
+
+/**
+ * Resolve the column names for [[CreateStruct]].
+ */
+object ResolveCreateStruct extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions {
+    case create: CreateStruct if !create.resolved && create.childrenResolved =>
+      create.copy(names = CreateStruct.generateNames(create.children))
+    case create: CreateStructUnsafe if !create.resolved && create.childrenResolved =>
+      create.copy(names = CreateStruct.generateNames(create.children))
   }
 }

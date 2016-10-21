@@ -140,7 +140,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-14793: split wide named struct creation into blocks due to JVM code size limit") {
     val length = 5000
-    val expressions = Seq(CreateNamedStruct(
+    val expressions = Seq(CreateStruct.withFlatExpressions(
       List.fill(length)(EqualTo(Literal(1), Literal(1))).flatMap {
         expr => Seq(Literal(expr.toString), expr)
       }))

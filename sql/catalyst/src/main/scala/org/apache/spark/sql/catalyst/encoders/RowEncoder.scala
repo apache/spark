@@ -63,7 +63,7 @@ object RowEncoder {
     new ExpressionEncoder[Row](
       schema,
       flat = false,
-      serializer.asInstanceOf[CreateNamedStruct].flatten,
+      serializer.asInstanceOf[CreateStruct].flatten,
       deserializer,
       ClassTag(cls))
   }
@@ -153,22 +153,23 @@ object RowEncoder {
         dataType = t)
 
     case StructType(fields) =>
-      val nonNullOutput = CreateNamedStruct(fields.zipWithIndex.flatMap { case (field, index) =>
-        val fieldValue = serializerFor(
-          ValidateExternalType(
-            GetExternalRowField(inputObject, index, field.name),
-            field.dataType),
-          field.dataType)
-        val convertedField = if (field.nullable) {
-          If(
-            Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
-            Literal.create(null, field.dataType),
+      val nonNullOutput = CreateStruct.withNameValuePairs(fields.zipWithIndex.map {
+        case (field, index) =>
+          val fieldValue = serializerFor(
+            ValidateExternalType(
+              GetExternalRowField(inputObject, index, field.name),
+              field.dataType),
+            field.dataType)
+          val convertedField = if (field.nullable) {
+            If(
+              Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
+              Literal.create(null, field.dataType),
+              fieldValue
+            )
+          } else {
             fieldValue
-          )
-        } else {
-          fieldValue
-        }
-        Literal(field.name) :: convertedField :: Nil
+          }
+          (field.name, convertedField)
       })
 
       if (inputObject.nullable) {

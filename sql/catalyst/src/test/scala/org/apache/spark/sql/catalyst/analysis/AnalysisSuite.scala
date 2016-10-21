@@ -215,12 +215,6 @@ class AnalysisSuite extends AnalysisTest {
     plan = testRelation.groupBy(a.as("a1").as("a2"))((min(a).as("min_a") + 1).as("col"))
     expected = testRelation.groupBy(a)((min(a) + 1).as("col"))
     checkAnalysis(plan, expected)
-
-    // CreateStruct is a special case that we should not trim Alias for it.
-    plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
-    checkAnalysis(plan, plan)
-    plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
-    checkAnalysis(plan, plan)
   }
 
   test("SPARK-10534: resolve attribute references in order by clause") {

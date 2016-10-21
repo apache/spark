@@ -418,13 +418,13 @@ object ScalaReflection extends ScalaReflection {
    *  * the element type of [[Array]] or [[Seq]]: `array element class: "abc.xyz.MyClass"`
    *  * the field of [[Product]]: `field (class: "abc.xyz.MyClass", name: "myField")`
    */
-  def serializerFor[T : TypeTag](inputObject: Expression): CreateNamedStruct = {
+  def serializerFor[T : TypeTag](inputObject: Expression): CreateStruct = {
     val tpe = localTypeOf[T]
     val clsName = getClassNameFromType(tpe)
     val walkedTypePath = s"""- root class: "$clsName"""" :: Nil
     serializerFor(inputObject, tpe, walkedTypePath) match {
-      case expressions.If(_, _, s: CreateNamedStruct) if definedByConstructorParams(tpe) => s
-      case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
+      case expressions.If(_, _, s: CreateStruct) if definedByConstructorParams(tpe) => s
+      case other => CreateStruct(other :: Nil, "value" :: Nil)
     }
   }
 
@@ -568,16 +568,17 @@ object ScalaReflection extends ScalaReflection {
 
       case t if definedByConstructorParams(t) =>
         val params = getConstructorParameters(t)
-        val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
-          if (javaKeywords.contains(fieldName)) {
-            throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
-              "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
-          }
+        val nonNullOutput = CreateStruct.withNameValuePairs(params.map {
+          case (fieldName, fieldType) =>
+            if (javaKeywords.contains(fieldName)) {
+              throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
+                "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
+            }
 
-          val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
-          val clsName = getClassNameFromType(fieldType)
-          val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
-          expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType, newPath) :: Nil
+            val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
+            val clsName = getClassNameFromType(fieldType)
+            val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
+            (fieldName, serializerFor(fieldValue, fieldType, newPath))
         })
         val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
         expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
