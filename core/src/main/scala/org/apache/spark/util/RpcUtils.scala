@@ -17,8 +17,6 @@
 
 package org.apache.spark.util
 
-import scala.language.postfixOps
-
 import org.apache.spark.SparkConf
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 
@@ -52,5 +50,17 @@ private[spark] object RpcUtils {
   /** Returns the default Spark timeout to use for RPC remote endpoint lookup. */
   def lookupRpcTimeout(conf: SparkConf): RpcTimeout = {
     RpcTimeout(conf, Seq("spark.rpc.lookupTimeout", "spark.network.timeout"), "120s")
+  }
+
+  private val MAX_MESSAGE_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
+
+  /** Returns the configured max message size for messages in bytes. */
+  def maxMessageSizeBytes(conf: SparkConf): Int = {
+    val maxSizeInMB = conf.getInt("spark.rpc.message.maxSize", 128)
+    if (maxSizeInMB > MAX_MESSAGE_SIZE_IN_MB) {
+      throw new IllegalArgumentException(
+        s"spark.rpc.message.maxSize should not be greater than $MAX_MESSAGE_SIZE_IN_MB MB")
+    }
+    maxSizeInMB * 1024 * 1024
   }
 }

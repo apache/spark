@@ -16,8 +16,11 @@
  */
 package org.apache.spark.mllib.fpm
 
+import scala.language.existentials
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.Utils
 
 class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -355,6 +358,36 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       (pattern.map(itemSet => itemSet.map(intToString)), count)
     }
     compareResults(expected, model.freqSequences.collect())
+  }
+
+  test("model save/load") {
+    val sequences = Seq(
+      Array(Array(1, 2), Array(3)),
+      Array(Array(1), Array(3, 2), Array(1, 2)),
+      Array(Array(1, 2), Array(5)),
+      Array(Array(6)))
+    val rdd = sc.parallelize(sequences, 2).cache()
+
+    val prefixSpan = new PrefixSpan()
+      .setMinSupport(0.5)
+      .setMaxPatternLength(5)
+    val model = prefixSpan.run(rdd)
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    try {
+      model.save(sc, path)
+      val newModel = PrefixSpanModel.load(sc, path)
+      val originalSet = model.freqSequences.collect().map { x =>
+        (x.sequence.map(_.toSet).toSeq, x.freq)
+      }.toSet
+      val newSet = newModel.freqSequences.collect().map { x =>
+        (x.sequence.map(_.toSet).toSeq, x.freq)
+      }.toSet
+      assert(originalSet === newSet)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 
   private def compareResults[Item](

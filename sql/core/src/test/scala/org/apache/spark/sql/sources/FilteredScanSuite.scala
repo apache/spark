@@ -23,6 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -31,13 +32,15 @@ class FilteredScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimpleFilteredScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
+    SimpleFilteredScan(parameters("from").toInt, parameters("to").toInt)(sqlContext.sparkSession)
   }
 }
 
-case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
+case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan {
+
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(
@@ -114,7 +117,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       filters.forall(translateFilterOnA(_)(a)) && filters.forall(translateFilterOnC(_)(c))
     }
 
-    sqlContext.sparkContext.parallelize(from to to).filter(eval).map(i =>
+    sparkSession.sparkContext.parallelize(from to to).filter(eval).map(i =>
       Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
@@ -130,13 +133,13 @@ object ColumnsRequired {
 }
 
 class FilteredScanSuite extends DataSourceTest with SharedSQLContext with PredicateHelper {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenFiltered
+        |CREATE TEMPORARY VIEW oneToTenFiltered
         |USING org.apache.spark.sql.sources.FilteredScanSource
         |OPTIONS (
         |  from '1',
@@ -304,30 +307,38 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
     expectedCount: Int,
     requiredColumnNames: Set[String],
     expectedUnhandledFilters: Set[Filter]): Unit = {
+
     test(s"PushDown Returns $expectedCount: $sqlString") {
-      val queryExecution = sql(sqlString).queryExecution
-      val rawPlan = queryExecution.executedPlan.collect {
-        case p: execution.PhysicalRDD => p
-      } match {
-        case Seq(p) => p
-        case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
-      }
-      val rawCount = rawPlan.execute().count()
-      assert(ColumnsRequired.set === requiredColumnNames)
+      // These tests check a particular plan, disable whole stage codegen.
+      spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, false)
+      try {
+        val queryExecution = sql(sqlString).queryExecution
+        val rawPlan = queryExecution.executedPlan.collect {
+          case p: execution.DataSourceScanExec => p
+        } match {
+          case Seq(p) => p
+          case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
+        }
+        val rawCount = rawPlan.execute().count()
+        assert(ColumnsRequired.set === requiredColumnNames)
 
-      val table = caseInsensitiveContext.table("oneToTenFiltered")
-      val relation = table.queryExecution.logical.collectFirst {
-        case LogicalRelation(r, _, _) => r
-      }.get
+        val table = spark.table("oneToTenFiltered")
+        val relation = table.queryExecution.logical.collectFirst {
+          case LogicalRelation(r, _, _) => r
+        }.get
 
-      assert(
-        relation.unhandledFilters(FiltersPushed.list.toArray).toSet === expectedUnhandledFilters)
+        assert(
+          relation.unhandledFilters(FiltersPushed.list.toArray).toSet === expectedUnhandledFilters)
 
-      if (rawCount != expectedCount) {
-        fail(
-          s"Wrong # of results for pushed filter. Got $rawCount, Expected $expectedCount\n" +
-            s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
-            queryExecution)
+        if (rawCount != expectedCount) {
+          fail(
+            s"Wrong # of results for pushed filter. Got $rawCount, Expected $expectedCount\n" +
+              s"Filters pushed: ${FiltersPushed.list.mkString(",")}\n" +
+              queryExecution)
+        }
+      } finally {
+        spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }
   }

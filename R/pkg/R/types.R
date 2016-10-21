@@ -47,10 +47,39 @@ COMPLEX_TYPES <- list(
 # The full list of data types.
 DATA_TYPES <- as.environment(c(as.list(PRIMITIVE_TYPES), COMPLEX_TYPES))
 
+SHORT_TYPES <- as.environment(list(
+  "character" = "chr",
+  "logical" = "logi",
+  "POSIXct" = "POSIXct",
+  "integer" = "int",
+  "numeric" = "num",
+  "raw" = "raw",
+  "Date" = "Date",
+  "map" = "map",
+  "array" = "array",
+  "struct" = "struct"
+))
+
 # An environment for mapping R to Scala, names are R types and values are Scala types.
 rToSQLTypes <- as.environment(list(
-  "integer"   = "integer", # in R, integer is 32bit
-  "numeric"   = "double",  # in R, numeric == double which is 64bit
-  "double"    = "double",
+  "integer" = "integer", # in R, integer is 32bit
+  "numeric" = "double",  # in R, numeric == double which is 64bit
+  "double" = "double",
   "character" = "string",
-  "logical"   = "boolean"))
+  "logical" = "boolean"))
+
+# Helper function of coverting decimal type. When backend returns column type in the
+# format of decimal(,) (e.g., decimal(10, 0)), this function coverts the column type
+# as double type. This function converts backend returned types that are not the key
+# of PRIMITIVE_TYPES, but should be treated as PRIMITIVE_TYPES.
+# @param A type returned from the JVM backend.
+# @return A type is the key of the PRIMITIVE_TYPES.
+specialtypeshandle <- function(type) {
+  returntype <- NULL
+  m <- regexec("^decimal(.+)$", type)
+  matchedStrings <- regmatches(type, m)
+  if (length(matchedStrings[[1]]) >= 2) {
+    returntype <- "double"
+  }
+  returntype
+}

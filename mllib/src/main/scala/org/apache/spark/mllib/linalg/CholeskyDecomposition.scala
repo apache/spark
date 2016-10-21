@@ -33,11 +33,10 @@ private[spark] object CholeskyDecomposition {
    * @return the solution array
    */
   def solve(A: Array[Double], bx: Array[Double]): Array[Double] = {
-    val k = bx.size
+    val k = bx.length
     val info = new intW(0)
     lapack.dppsv("U", k, 1, A, bx, k, info)
-    val code = info.`val`
-    assert(code == 0, s"lapack.dpotrs returned $code.")
+    checkReturnValue(info, "dppsv")
     bx
   }
 
@@ -52,8 +51,20 @@ private[spark] object CholeskyDecomposition {
   def inverse(UAi: Array[Double], k: Int): Array[Double] = {
     val info = new intW(0)
     lapack.dpptri("U", k, UAi, info)
-    val code = info.`val`
-    assert(code == 0, s"lapack.dpptri returned $code.")
+    checkReturnValue(info, "dpptri")
     UAi
   }
+
+  private def checkReturnValue(info: intW, method: String): Unit = {
+    info.`val` match {
+      case code if code < 0 =>
+        throw new IllegalStateException(s"LAPACK.$method returned $code; arg ${-code} is illegal")
+      case code if code > 0 =>
+        throw new IllegalArgumentException(
+          s"LAPACK.$method returned $code because A is not positive definite. Is A derived from " +
+          "a singular matrix (e.g. collinear column values)?")
+      case _ => // do nothing
+    }
+  }
+
 }

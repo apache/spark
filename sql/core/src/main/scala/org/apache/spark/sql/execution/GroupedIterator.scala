@@ -115,7 +115,8 @@ class GroupedIterator private(
       false
     } else {
       // Skip to next group.
-      while (input.hasNext && keyOrdering.compare(currentGroup, currentRow) == 0) {
+      // currentRow may be overwritten by `hasNext`, so we should compare them first.
+      while (keyOrdering.compare(currentGroup, currentRow) == 0 && input.hasNext) {
         currentRow = input.next()
       }
 

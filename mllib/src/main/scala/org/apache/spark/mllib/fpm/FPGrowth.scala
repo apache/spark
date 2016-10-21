@@ -29,14 +29,15 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkContext, SparkException}
+import org.apache.spark.{HashPartitioner, Partitioner, SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.fpm.FPGrowth._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -98,7 +99,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
     def save(model: FPGrowthModel[_], path: String): Unit = {
       val sc = model.freqItemsets.sparkContext
-      val sqlContext = SQLContext.getOrCreate(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
@@ -115,26 +116,26 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
         StructField("freq", LongType))
       val schema = StructType(fields)
       val rowDataRDD = model.freqItemsets.map { x =>
-        Row(x.items, x.freq)
+        Row(x.items.toSeq, x.freq)
       }
-      sqlContext.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): FPGrowthModel[_] = {
       implicit val formats = DefaultFormats
-      val sqlContext = SQLContext.getOrCreate(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
 
-      val freqItemsets = sqlContext.read.parquet(Loader.dataPath(path))
+      val freqItemsets = spark.read.parquet(Loader.dataPath(path))
       val sample = freqItemsets.select("items").head().get(0)
       loadImpl(freqItemsets, sample)
     }
 
     def loadImpl[Item: ClassTag](freqItemsets: DataFrame, sample: Item): FPGrowthModel[Item] = {
-      val freqItemsetsRDD = freqItemsets.select("items", "freq").map { x =>
+      val freqItemsetsRDD = freqItemsets.select("items", "freq").rdd.map { x =>
         val items = x.getAs[Seq[Item]](0).toArray
         val freq = x.getLong(1)
         new FreqItemset(items, freq)
@@ -152,7 +153,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
  * [[http://dx.doi.org/10.1145/335191.335372 Han et al., Mining frequent patterns without candidate
  *  generation]].
  *
- * @param minSupport the minimal support level of the frequent pattern, any pattern appears
+ * @param minSupport the minimal support level of the frequent pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
  * @param numPartitions number of partitions used by parallel FP-growth
  *
@@ -179,6 +180,8 @@ class FPGrowth private (
    */
   @Since("1.3.0")
   def setMinSupport(minSupport: Double): this.type = {
+    require(minSupport >= 0.0 && minSupport <= 1.0,
+      s"Minimal support level must be in range [0, 1] but got ${minSupport}")
     this.minSupport = minSupport
     this
   }
@@ -189,6 +192,8 @@ class FPGrowth private (
    */
   @Since("1.3.0")
   def setNumPartitions(numPartitions: Int): this.type = {
+    require(numPartitions > 0,
+      s"Number of partitions must be positive but got ${numPartitions}")
     this.numPartitions = numPartitions
     this
   }
@@ -232,7 +237,7 @@ class FPGrowth private (
       partitioner: Partitioner): Array[Item] = {
     data.flatMap { t =>
       val uniq = t.toSet
-      if (t.size != uniq.size) {
+      if (t.length != uniq.size) {
         throw new SparkException(s"Items in a transaction must be unique but got ${t.toSeq}.")
       }
       t
@@ -321,6 +326,10 @@ object FPGrowth {
     @Since("1.3.0")
     def javaItems: java.util.List[Item] = {
       items.toList.asJava
+    }
+
+    override def toString: String = {
+      s"${items.mkString("{", ",", "}")}: $freq"
     }
   }
 }

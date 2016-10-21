@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util
+import java.util.Objects
+import javax.xml.bind.DatatypeConverter
 
 import org.json4s.JsonAST._
 
@@ -59,7 +63,8 @@ object Literal {
    * Constructs a [[Literal]] of [[ObjectType]], for example when you need to pass an object
    * into code generation.
    */
-  def fromObject(obj: AnyRef): Literal = new Literal(obj, ObjectType(obj.getClass))
+  def fromObject(obj: Any, objType: DataType): Literal = new Literal(obj, objType)
+  def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
 
   def fromJSON(json: JValue): Literal = {
     val dataType = DataType.parseDataType(json \ "dataType")
@@ -109,7 +114,7 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case StringType => Literal("")
-    case BinaryType => Literal("".getBytes)
+    case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
@@ -140,26 +145,60 @@ object IntegerLiteral {
 }
 
 /**
+ * Extractor for and other utility methods for decimal literals.
+ */
+object DecimalLiteral {
+  def apply(v: Long): Literal = Literal(Decimal(v))
+
+  def apply(v: Double): Literal = Literal(Decimal(v))
+
+  def unapply(e: Expression): Option[Decimal] = e match {
+    case Literal(v, _: DecimalType) => Some(v.asInstanceOf[Decimal])
+    case _ => None
+  }
+
+  def largerThanLargestLong(v: Decimal): Boolean = v > Decimal(Long.MaxValue)
+
+  def smallerThanSmallestLong(v: Decimal): Boolean = v < Decimal(Long.MinValue)
+}
+
+/**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal protected (value: Any, dataType: DataType)
-  extends LeafExpression with CodegenFallback {
+case class Literal (value: Any, dataType: DataType) extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
-  override def toString: String = if (value != null) value.toString else "null"
+  override def toString: String = value match {
+    case null => "null"
+    case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
+    case other => other.toString
+  }
+
+  override def hashCode(): Int = {
+    val valueHashCode = value match {
+      case null => 0
+      case binary: Array[Byte] => util.Arrays.hashCode(binary)
+      case other => other.hashCode()
+    }
+    31 * Objects.hashCode(dataType) + valueHashCode
+  }
 
   override def equals(other: Any): Boolean = other match {
+    case o: Literal if !dataType.equals(o.dataType) => false
     case o: Literal =>
-      dataType.equals(o.dataType) &&
-        (value == null && null == o.value || value != null && value.equals(o.value))
+      (value, o.value) match {
+        case (null, null) => true
+        case (a: Array[Byte], b: Array[Byte]) => util.Arrays.equals(a, b)
+        case (a, b) => a != null && a.equals(b)
+      }
     case _ => false
   }
 
   override protected def jsonFields: List[JField] = {
     // Turns all kinds of literal values to string in json field, as the type info is hard to
-    // retain in json format, e.g. {"a": 123} can be a int, or double, or decimal, etc.
+    // retain in json format, e.g. {"a": 123} can be an int, or double, or decimal, etc.
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
@@ -171,97 +210,83 @@ case class Literal protected (value: Any, dataType: DataType)
 
   override def eval(input: InternalRow): Any = value
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};"
+      ev.copy(s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};")
     } else {
       dataType match {
         case BooleanType =>
           ev.isNull = "false"
           ev.value = value.toString
-          ""
+          ev.copy("")
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].doGenCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}f"
-            ""
+            ev.copy("")
           }
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].doGenCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}D"
-            ""
+            ev.copy("")
           }
         case ByteType | ShortType =>
           ev.isNull = "false"
           ev.value = s"(${ctx.javaType(dataType)})$value"
-          ""
+          ev.copy("")
         case IntegerType | DateType =>
           ev.isNull = "false"
           ev.value = value.toString
-          ""
+          ev.copy("")
         case TimestampType | LongType =>
           ev.isNull = "false"
           ev.value = s"${value}L"
-          ""
+          ev.copy("")
         // eval() version may be faster for non-primitive types
         case other =>
-          super.genCode(ctx, ev)
+          super[CodegenFallback].doGenCode(ctx, ev)
       }
     }
   }
 
   override def sql: String = (value, dataType) match {
-    case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null =>
-      "NULL"
-
-    case _ if value == null =>
-      s"CAST(NULL AS ${dataType.sql})"
-
+    case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
+    case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
     case (v: UTF8String, StringType) =>
-      // Escapes all backslashes and double quotes.
-      "\"" + v.toString.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-
-    case (v: Byte, ByteType) =>
-      s"CAST($v AS ${ByteType.simpleString.toUpperCase})"
-
-    case (v: Short, ShortType) =>
-      s"CAST($v AS ${ShortType.simpleString.toUpperCase})"
-
-    case (v: Long, LongType) =>
-      s"CAST($v AS ${LongType.simpleString.toUpperCase})"
-
+      // Escapes all backslashes and single quotes.
+      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
+    case (v: Byte, ByteType) => v + "Y"
+    case (v: Short, ShortType) => v + "S"
+    case (v: Long, LongType) => v + "L"
+    // Float type doesn't have a suffix
     case (v: Float, FloatType) =>
-      s"CAST($v AS ${FloatType.simpleString.toUpperCase})"
-
-    case (v: Decimal, DecimalType.Fixed(precision, scale)) =>
-      s"CAST($v AS ${DecimalType.simpleString.toUpperCase}($precision, $scale))"
-
-    case (v: Int, DateType) =>
-      s"DATE '${DateTimeUtils.toJavaDate(v)}'"
-
-    case (v: Long, TimestampType) =>
-      s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
-
+      val castedValue = v match {
+        case _ if v.isNaN => "'NaN'"
+        case Float.PositiveInfinity => "'Infinity'"
+        case Float.NegativeInfinity => "'-Infinity'"
+        case _ => v
+      }
+      s"CAST($castedValue AS ${FloatType.sql})"
+    case (v: Double, DoubleType) =>
+      v match {
+        case _ if v.isNaN => s"CAST('NaN' AS ${DoubleType.sql})"
+        case Double.PositiveInfinity => s"CAST('Infinity' AS ${DoubleType.sql})"
+        case Double.NegativeInfinity => s"CAST('-Infinity' AS ${DoubleType.sql})"
+        case _ => v + "D"
+      }
+    case (v: Decimal, t: DecimalType) => v + "BD"
+    case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
+    case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
+    case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }
-}
-
-// TODO: Specialize
-case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
-  extends LeafExpression with CodegenFallback {
-
-  def update(expression: Expression, input: InternalRow): Unit = {
-    value = expression.eval(input)
-  }
-
-  override def eval(input: InternalRow): Any = value
 }

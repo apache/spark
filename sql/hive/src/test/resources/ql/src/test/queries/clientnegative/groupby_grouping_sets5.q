@@ -1,5 +1,0 @@
-CREATE TABLE T1(a STRING, b STRING, c STRING);
-
--- Alias in GROUPING SETS
-SELECT a as c, count(*) FROM T1 GROUP BY c GROUPING SETS (c);
-

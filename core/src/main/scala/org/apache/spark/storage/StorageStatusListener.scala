@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 
@@ -29,12 +30,18 @@ import org.apache.spark.scheduler._
  * This class is thread-safe (unlike JobProgressListener)
  */
 @DeveloperApi
-class StorageStatusListener extends SparkListener {
+class StorageStatusListener(conf: SparkConf) extends SparkListener {
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
+  private[storage] val deadExecutorStorageStatus = new mutable.ListBuffer[StorageStatus]()
+  private[this] val retainedDeadExecutors = conf.getInt("spark.ui.retainedDeadExecutors", 100)
 
   def storageStatusList: Seq[StorageStatus] = synchronized {
     executorIdToStorageStatus.values.toSeq
+  }
+
+  def deadStorageStatusList: Seq[StorageStatus] = synchronized {
+    deadExecutorStorageStatus.toSeq
   }
 
   /** Update storage status list to reflect updated block statuses */
@@ -59,17 +66,6 @@ class StorageStatusListener extends SparkListener {
     }
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
-    val info = taskEnd.taskInfo
-    val metrics = taskEnd.taskMetrics
-    if (info != null && metrics != null) {
-      val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
-      if (updatedBlocks.length > 0) {
-        updateStorageStatus(info.executorId, updatedBlocks)
-      }
-    }
-  }
-
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD): Unit = synchronized {
     updateStorageStatus(unpersistRDD.rddId)
   }
@@ -81,14 +77,32 @@ class StorageStatusListener extends SparkListener {
       val maxMem = blockManagerAdded.maxMem
       val storageStatus = new StorageStatus(blockManagerId, maxMem)
       executorIdToStorageStatus(executorId) = storageStatus
+
+      // Try to remove the dead storage status if same executor register the block manager twice.
+      deadExecutorStorageStatus.zipWithIndex.find(_._1.blockManagerId.executorId == executorId)
+        .foreach(toRemoveExecutor => deadExecutorStorageStatus.remove(toRemoveExecutor._2))
     }
   }
 
   override def onBlockManagerRemoved(blockManagerRemoved: SparkListenerBlockManagerRemoved) {
     synchronized {
       val executorId = blockManagerRemoved.blockManagerId.executorId
-      executorIdToStorageStatus.remove(executorId)
+      executorIdToStorageStatus.remove(executorId).foreach { status =>
+        deadExecutorStorageStatus += status
+      }
+      if (deadExecutorStorageStatus.size > retainedDeadExecutors) {
+        deadExecutorStorageStatus.trimStart(1)
+      }
     }
   }
 
+  override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
+    val executorId = blockUpdated.blockUpdatedInfo.blockManagerId.executorId
+    val blockId = blockUpdated.blockUpdatedInfo.blockId
+    val storageLevel = blockUpdated.blockUpdatedInfo.storageLevel
+    val memSize = blockUpdated.blockUpdatedInfo.memSize
+    val diskSize = blockUpdated.blockUpdatedInfo.diskSize
+    val blockStatus = BlockStatus(storageLevel, memSize, diskSize)
+    updateStorageStatus(executorId, Seq((blockId, blockStatus)))
+  }
 }

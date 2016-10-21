@@ -19,7 +19,8 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
@@ -72,12 +73,6 @@ private[spark] object LocalRDDCheckpointData {
    * This method is idempotent.
    */
   def transformStorageLevel(level: StorageLevel): StorageLevel = {
-    // If this RDD is to be cached off-heap, fail fast since we cannot provide any
-    // correctness guarantees about subsequent computations after the first one
-    if (level.useOffHeap) {
-      throw new SparkException("Local checkpointing is not compatible with off-heap caching.")
-    }
-
     StorageLevel(useDisk = true, level.useMemory, level.deserialized, level.replication)
   }
 }

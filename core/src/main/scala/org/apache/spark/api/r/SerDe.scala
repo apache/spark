@@ -18,6 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.{DataInputStream, DataOutputStream}
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Time, Timestamp}
 
 import scala.collection.JavaConverters._
@@ -109,7 +110,7 @@ private[spark] object SerDe {
     val bytes = new Array[Byte](len)
     in.readFully(bytes)
     assert(bytes(len - 1) == 0)
-    val str = new String(bytes.dropRight(1), "UTF-8")
+    val str = new String(bytes.dropRight(1), StandardCharsets.UTF_8)
     str
   }
 
@@ -355,6 +356,13 @@ private[spark] object SerDe {
           writeInt(dos, v.length)
           v.foreach(elem => writeObject(dos, elem))
 
+        // Handle Properties
+        // This must be above the case java.util.Map below.
+        // (Properties implements Map<Object,Object> and will be serialized as map otherwise)
+        case v: java.util.Properties =>
+          writeType(dos, "jobj")
+          writeJObj(dos, value)
+
         // Handle map
         case v: java.util.Map[_, _] =>
           writeType(dos, "map")
@@ -409,7 +417,7 @@ private[spark] object SerDe {
   }
 
   def writeString(out: DataOutputStream, value: String): Unit = {
-    val utf8 = value.getBytes("UTF-8")
+    val utf8 = value.getBytes(StandardCharsets.UTF_8)
     val len = utf8.length
     out.writeInt(len)
     out.write(utf8, 0, len)
@@ -451,7 +459,7 @@ private[spark] object SerDe {
 
 }
 
-private[r] object SerializationFormats {
+private[spark] object SerializationFormats {
   val BYTE = "byte"
   val STRING = "string"
   val ROW = "row"

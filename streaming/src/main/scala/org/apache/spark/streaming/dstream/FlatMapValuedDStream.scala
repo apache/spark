@@ -19,7 +19,6 @@ package org.apache.spark.streaming.dstream
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Duration, Time}
 

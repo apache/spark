@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{FileBasedWriteAheadLogSegment, FileBasedWriteAheadLogWriter}
 import org.apache.spark.util.Utils
@@ -39,6 +40,7 @@ class WriteAheadLogBackedBlockRDDSuite
 
   var sparkContext: SparkContext = null
   var blockManager: BlockManager = null
+  var serializerManager: SerializerManager = null
   var dir: File = null
 
   override def beforeEach(): Unit = {
@@ -58,6 +60,7 @@ class WriteAheadLogBackedBlockRDDSuite
     super.beforeAll()
     sparkContext = new SparkContext(conf)
     blockManager = sparkContext.env.blockManager
+    serializerManager = sparkContext.env.serializerManager
   }
 
   override def afterAll(): Unit = {
@@ -65,6 +68,8 @@ class WriteAheadLogBackedBlockRDDSuite
     try {
       sparkContext.stop()
       System.clearProperty("spark.driver.port")
+      blockManager = null
+      serializerManager = null
     } finally {
       super.afterAll()
     }
@@ -106,8 +111,6 @@ class WriteAheadLogBackedBlockRDDSuite
    * and the rest to a write ahead log, and then reading reading it all back using the RDD.
    * It can also test if the partitions that were read from the log were again stored in
    * block manager.
-   *
-   *
    *
    * @param numPartitions Number of partitions in RDD
    * @param numPartitionsInBM Number of partitions to write to the BlockManager.
@@ -223,7 +226,7 @@ class WriteAheadLogBackedBlockRDDSuite
     require(blockData.size === blockIds.size)
     val writer = new FileBasedWriteAheadLogWriter(new File(dir, "logFile").toString, hadoopConf)
     val segments = blockData.zip(blockIds).map { case (data, id) =>
-      writer.write(blockManager.dataSerialize(id, data.iterator))
+      writer.write(serializerManager.dataSerialize(id, data.iterator).toByteBuffer)
     }
     writer.close()
     segments

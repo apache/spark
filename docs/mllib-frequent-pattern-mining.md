@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Frequent Pattern Mining - spark.mllib
-displayTitle: Frequent Pattern Mining - spark.mllib
+title: Frequent Pattern Mining - RDD-based API
+displayTitle: Frequent Pattern Mining - RDD-based API
 ---
 
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the
@@ -135,7 +135,7 @@ pattern mining problem.
   included in the results.
 * `maxLocalProjDBSize`: the maximum number of items allowed in a
   prefix-projected database before local iterative processing of the
-  projected databse begins. This parameter should be tuned with respect
+  projected database begins. This parameter should be tuned with respect
   to the size of your executors.
 
 **Examples**

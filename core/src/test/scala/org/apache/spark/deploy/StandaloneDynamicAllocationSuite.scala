@@ -438,16 +438,32 @@ class StandaloneDynamicAllocationSuite
     val executorIdToTaskCount = taskScheduler invokePrivate getMap()
     executorIdToTaskCount(executors.head) = 1
     // kill the busy executor without force; this should fail
-    assert(!killExecutor(sc, executors.head, force = false))
+    assert(killExecutor(sc, executors.head, force = false).isEmpty)
     apps = getApplications()
     assert(apps.head.executors.size === 2)
 
     // force kill busy executor
-    assert(killExecutor(sc, executors.head, force = true))
+    assert(killExecutor(sc, executors.head, force = true).nonEmpty)
     apps = getApplications()
     // kill executor successfully
     assert(apps.head.executors.size === 1)
+  }
 
+  test("initial executor limit") {
+    val initialExecutorLimit = 1
+    val myConf = appConf
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.shuffle.service.enabled", "true")
+      .set("spark.dynamicAllocation.initialExecutors", initialExecutorLimit.toString)
+    sc = new SparkContext(myConf)
+    val appId = sc.applicationId
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.size === 1)
+      assert(apps.head.id === appId)
+      assert(apps.head.executors.size === initialExecutorLimit)
+      assert(apps.head.getExecutorLimit === initialExecutorLimit)
+    }
   }
 
   // ===============================
@@ -485,7 +501,7 @@ class StandaloneDynamicAllocationSuite
     master.self.askWithRetry[MasterStateResponse](RequestMasterState)
   }
 
-  /** Get the applictions that are active from Master */
+  /** Get the applications that are active from Master */
   private def getApplications(): Seq[ApplicationInfo] = {
     getMasterState.activeApps
   }
@@ -502,7 +518,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   /** Kill the given executor, specifying whether to force kill it. */
-  private def killExecutor(sc: SparkContext, executorId: String, force: Boolean): Boolean = {
+  private def killExecutor(sc: SparkContext, executorId: String, force: Boolean): Seq[String] = {
     syncExecutors(sc)
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
@@ -540,13 +556,12 @@ class StandaloneDynamicAllocationSuite
     val missingExecutors = masterExecutors.toSet.diff(driverExecutors.toSet).toSeq.sorted
     missingExecutors.foreach { id =>
       // Fake an executor registration so the driver knows about us
-      val port = System.currentTimeMillis % 65536
       val endpointRef = mock(classOf[RpcEndpointRef])
       val mockAddress = mock(classOf[RpcAddress])
       when(endpointRef.address).thenReturn(mockAddress)
-      val message = RegisterExecutor(id, endpointRef, s"localhost:$port", 10, Map.empty)
+      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
-      backend.driverEndpoint.askWithRetry[CoarseGrainedClusterMessage](message)
+      backend.driverEndpoint.askWithRetry[Boolean](message)
     }
   }
 

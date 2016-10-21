@@ -31,6 +31,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -58,7 +59,7 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow extends MutableRow implements Externalizable, KryoSerializable {
+public final class UnsafeRow extends InternalRow implements Externalizable, KryoSerializable {
 
   //////////////////////////////////////////////////////////////////////////////
   // Static methods
@@ -66,6 +67,10 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
 
   public static int calculateBitSetWidthInBytes(int numFields) {
     return ((numFields + 63)/ 64) * 8;
+  }
+
+  public static int calculateFixedPortionByteSize(int numFields) {
+    return 8 * numFields + calculateBitSetWidthInBytes(numFields);
   }
 
   /**
@@ -396,7 +401,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       return null;
     }
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
-      return Decimal.apply(getLong(ordinal), precision, scale);
+      return Decimal.createUnsafe(getLong(ordinal), precision, scale);
     } else {
       byte[] bytes = getBinary(ordinal);
       BigInteger bigInteger = new BigInteger(bytes);
@@ -573,8 +578,12 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);
+    } else if (!(other instanceof InternalRow)) {
+      return false;
+    } else {
+      throw new IllegalArgumentException(
+        "Cannot compare UnsafeRow to " + other.getClass().getName());
     }
-    return false;
   }
 
   /**
@@ -596,10 +605,9 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   public String toString() {
     StringBuilder build = new StringBuilder("[");
     for (int i = 0; i < sizeInBytes; i += 8) {
+      if (i != 0) build.append(',');
       build.append(java.lang.Long.toHexString(Platform.getLong(baseObject, baseOffset + i)));
-      build.append(',');
     }
-    build.deleteCharAt(build.length() - 1);
     build.append(']');
     return build.toString();
   }

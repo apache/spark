@@ -18,10 +18,10 @@
 package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.rdd.RDD
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
@@ -46,7 +46,7 @@ class RegressionMetrics @Since("2.0.0") (
    *                                  prediction and observation
    */
   private[mllib] def this(predictionAndObservations: DataFrame) =
-    this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndObservations.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
@@ -73,7 +73,7 @@ class RegressionMetrics @Since("2.0.0") (
 
   /**
    * Returns the variance explained by regression.
-   * explainedVariance = \sum_i (\hat{y_i} - \bar{y})^2 / n
+   * explainedVariance = $\sum_i (\hat{y_i} - \bar{y})^2 / n$
    * @see [[https://en.wikipedia.org/wiki/Fraction_of_variance_unexplained]]
    */
   @Since("1.2.0")

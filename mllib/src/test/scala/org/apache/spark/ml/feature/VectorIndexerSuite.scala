@@ -19,11 +19,12 @@ package org.apache.spark.ml.feature
 
 import scala.beans.{BeanInfo, BeanProperty}
 
-import org.apache.spark.{Logging, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -31,6 +32,7 @@ import org.apache.spark.sql.DataFrame
 class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest with Logging {
 
+  import testImplicits._
   import VectorIndexerSuite.FeatureData
 
   // identical, of length 3
@@ -84,11 +86,11 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
     checkPair(densePoints1Seq, sparsePoints1Seq)
     checkPair(densePoints2Seq, sparsePoints2Seq)
 
-    densePoints1 = sqlContext.createDataFrame(sc.parallelize(densePoints1Seq, 2).map(FeatureData))
-    sparsePoints1 = sqlContext.createDataFrame(sc.parallelize(sparsePoints1Seq, 2).map(FeatureData))
-    densePoints2 = sqlContext.createDataFrame(sc.parallelize(densePoints2Seq, 2).map(FeatureData))
-    sparsePoints2 = sqlContext.createDataFrame(sc.parallelize(sparsePoints2Seq, 2).map(FeatureData))
-    badPoints = sqlContext.createDataFrame(sc.parallelize(badPointsSeq, 2).map(FeatureData))
+    densePoints1 = densePoints1Seq.map(FeatureData).toDF()
+    sparsePoints1 = sparsePoints1Seq.map(FeatureData).toDF()
+    densePoints2 = densePoints2Seq.map(FeatureData).toDF()
+    sparsePoints2 = sparsePoints2Seq.map(FeatureData).toDF()
+    badPoints = badPointsSeq.map(FeatureData).toDF()
   }
 
   private def getIndexer: VectorIndexer =
@@ -101,7 +103,7 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("Cannot fit an empty DataFrame") {
-    val rdd = sqlContext.createDataFrame(sc.parallelize(Array.empty[Vector], 2).map(FeatureData))
+    val rdd = Array.empty[Vector].map(FeatureData).toSeq.toDF()
     val vectorIndexer = getIndexer
     intercept[IllegalArgumentException] {
       vectorIndexer.fit(rdd)
@@ -117,8 +119,15 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
 
     model.transform(densePoints1) // should work
     model.transform(sparsePoints1) // should work
-    intercept[SparkException] {
+    // If the data is local Dataset, it throws AssertionError directly.
+    intercept[AssertionError] {
       model.transform(densePoints2).collect()
+      logInfo("Did not throw error when fit, transform were called on vectors of different lengths")
+    }
+    // If the data is distributed Dataset, it throws SparkException
+    // which is the wrapper of AssertionError.
+    intercept[SparkException] {
+      model.transform(densePoints2.repartition(2)).collect()
       logInfo("Did not throw error when fit, transform were called on vectors of different lengths")
     }
     intercept[SparkException] {
@@ -159,7 +168,7 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
         // Chose correct categorical features
         assert(categoryMaps.keys.toSet === categoricalFeatures)
         val transformed = model.transform(data).select("indexed")
-        val indexedRDD: RDD[Vector] = transformed.map(_.getAs[Vector](0))
+        val indexedRDD: RDD[Vector] = transformed.rdd.map(_.getAs[Vector](0))
         val featureAttrs = AttributeGroup.fromStructField(transformed.schema("indexed"))
         assert(featureAttrs.name === "indexed")
         assert(featureAttrs.attributes.get.length === model.numFeatures)
@@ -216,7 +225,8 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
       val points = data.collect().map(_.getAs[Vector](0))
       val vectorIndexer = getIndexer.setMaxCategories(maxCategories)
       val model = vectorIndexer.fit(data)
-      val indexedPoints = model.transform(data).select("indexed").map(_.getAs[Vector](0)).collect()
+      val indexedPoints =
+        model.transform(data).select("indexed").rdd.map(_.getAs[Vector](0)).collect()
       points.zip(indexedPoints).foreach {
         case (orig: SparseVector, indexed: SparseVector) =>
           assert(orig.indices.length == indexed.indices.length)

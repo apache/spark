@@ -37,7 +37,8 @@ import scala.reflect.{ ClassTag, classTag }
 import scala.tools.reflect.StdRuntimeTags._
 import scala.util.control.ControlThrowable
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 import org.apache.spark.annotation.DeveloperApi
 
@@ -72,7 +73,7 @@ import org.apache.spark.annotation.DeveloperApi
    *  all variables defined by that code.  To extract the result of an
    *  interpreted line to show the user, a second "result object" is created
    *  which imports the variables exported by the above object and then
-   *  exports members called "$eval" and "$print". To accomodate user expressions
+   *  exports members called "$eval" and "$print". To accommodate user expressions
    *  that read from variables or methods defined in previous statements, "import"
    *  statements are used.
    *
@@ -1515,7 +1516,7 @@ import org.apache.spark.annotation.DeveloperApi
     exprTyper.symbolOfLine(code)
 
   /**
-   * Constucts type information based on the provided expression's final
+   * Constructs type information based on the provided expression's final
    * result or the definition provided.
    *
    * @param expr The expression or definition

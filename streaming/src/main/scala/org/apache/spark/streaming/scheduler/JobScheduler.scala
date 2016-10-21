@@ -22,11 +22,15 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import scala.collection.JavaConverters._
 import scala.util.Failure
 
-import org.apache.spark.Logging
-import org.apache.spark.rdd.PairRDDFunctions
+import org.apache.commons.lang3.SerializationUtils
+
+import org.apache.spark.ExecutorAllocationClient
+import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.{PairRDDFunctions, RDD}
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
+import org.apache.spark.util.{EventLoop, ThreadUtils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
@@ -49,13 +53,15 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor")
   private val jobGenerator = new JobGenerator(this)
   val clock = jobGenerator.clock
-  val listenerBus = new StreamingListenerBus()
+  val listenerBus = new StreamingListenerBus(ssc.sparkContext.listenerBus)
 
   // These two are created only when scheduler starts.
   // eventLoop not being null means the scheduler has been started and not stopped
   var receiverTracker: ReceiverTracker = null
   // A tracker to track all the input stream information as well as processed record number
   var inputInfoTracker: InputInfoTracker = null
+
+  private var executorAllocationManager: Option[ExecutorAllocationManager] = None
 
   private var eventLoop: EventLoop[JobSchedulerEvent] = null
 
@@ -76,11 +82,25 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       rateController <- inputDStream.rateController
     } ssc.addStreamingListener(rateController)
 
-    listenerBus.start(ssc.sparkContext)
+    listenerBus.start()
     receiverTracker = new ReceiverTracker(ssc)
     inputInfoTracker = new InputInfoTracker(ssc)
+
+    val executorAllocClient: ExecutorAllocationClient = ssc.sparkContext.schedulerBackend match {
+      case b: ExecutorAllocationClient => b.asInstanceOf[ExecutorAllocationClient]
+      case _ => null
+    }
+
+    executorAllocationManager = ExecutorAllocationManager.createIfEnabled(
+      executorAllocClient,
+      receiverTracker,
+      ssc.conf,
+      ssc.graph.batchDuration.milliseconds,
+      clock)
+    executorAllocationManager.foreach(ssc.addStreamingListener)
     receiverTracker.start()
     jobGenerator.start()
+    executorAllocationManager.foreach(_.start())
     logInfo("Started JobScheduler")
   }
 
@@ -91,6 +111,10 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (receiverTracker != null) {
       // First, stop receiving
       receiverTracker.stop(processAllReceivedData)
+    }
+
+    if (executorAllocationManager != null) {
+      executorAllocationManager.foreach(_.stop())
     }
 
     // Second, stop generating jobs. If it has to process all received data,
@@ -194,13 +218,16 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private def handleError(msg: String, e: Throwable) {
     logError(msg, e)
     ssc.waiter.notifyError(e)
+    PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
   }
 
   private class JobHandler(job: Job) extends Runnable with Logging {
     import JobScheduler._
 
     def run() {
+      val oldProps = ssc.sparkContext.getLocalProperties
       try {
+        ssc.sparkContext.setLocalProperties(SerializationUtils.clone(ssc.savedProperties.get()))
         val formattedTime = UIUtils.formatBatchTime(
           job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
         val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"
@@ -210,6 +237,9 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           s"""Streaming job from <a href="$batchUrl">$batchLinkText</a>""")
         ssc.sc.setLocalProperty(BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString)
         ssc.sc.setLocalProperty(OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString)
+        // Checkpoint all RDDs marked for checkpointing to ensure their lineages are
+        // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
+        ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
 
         // We need to assign `eventLoop` to a temp variable. Otherwise, because
         // `JobScheduler.stop(false)` may set `eventLoop` to null when this method is running, then
@@ -231,8 +261,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           // JobScheduler has been stopped.
         }
       } finally {
-        ssc.sc.setLocalProperty(JobScheduler.BATCH_TIME_PROPERTY_KEY, null)
-        ssc.sc.setLocalProperty(JobScheduler.OUTPUT_OP_ID_PROPERTY_KEY, null)
+        ssc.sparkContext.setLocalProperties(oldProps)
       }
     }
   }

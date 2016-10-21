@@ -21,31 +21,30 @@ import java.util.Random
 
 import scala.collection.mutable
 
-import org.scalatest.Assertions._
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificInternalRow}
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class HyperLogLogPlusPlusSuite extends SparkFunSuite {
 
   /** Create a HLL++ instance and an input and output buffer. */
   def createEstimator(rsd: Double, dt: DataType = IntegerType):
-      (HyperLogLogPlusPlus, MutableRow, MutableRow) = {
-    val input = new SpecificMutableRow(Seq(dt))
+      (HyperLogLogPlusPlus, InternalRow, InternalRow) = {
+    val input = new SpecificInternalRow(Seq(dt))
     val hll = new HyperLogLogPlusPlus(new BoundReference(0, dt, true), rsd)
     val buffer = createBuffer(hll)
     (hll, input, buffer)
   }
 
-  def createBuffer(hll: HyperLogLogPlusPlus): MutableRow = {
-    val buffer = new SpecificMutableRow(hll.aggBufferAttributes.map(_.dataType))
+  def createBuffer(hll: HyperLogLogPlusPlus): InternalRow = {
+    val buffer = new SpecificInternalRow(hll.aggBufferAttributes.map(_.dataType))
     hll.initialize(buffer)
     buffer
   }
 
   /** Evaluate the estimate. It should be within 3*SD's of the given true rsd. */
-  def evaluateEstimate(hll: HyperLogLogPlusPlus, buffer: MutableRow, cardinality: Int): Unit = {
+  def evaluateEstimate(hll: HyperLogLogPlusPlus, buffer: InternalRow, cardinality: Int): Unit = {
     val estimate = hll.eval(buffer).asInstanceOf[Long].toDouble
     val error = math.abs((estimate / cardinality.toDouble) - 1.0d)
     assert(error < hll.trueRsd * 3.0d, "Error should be within 3 std. errors.")
@@ -133,7 +132,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
       i += 1
     }
 
-    // Merge the lower and upper halfs.
+    // Merge the lower and upper halves.
     hll.merge(buffer1a, buffer1b)
 
     // Create the other buffer in reverse

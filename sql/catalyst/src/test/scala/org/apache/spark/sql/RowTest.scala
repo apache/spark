@@ -86,7 +86,7 @@ class RowTest extends FunSpec with Matchers {
       }
     }
 
-    it("getAs() on type extending AnyVal does not throw exception when value is null"){
+    it("getAs() on type extending AnyVal does not throw exception when value is null") {
       sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col1")) shouldBe null
     }
   }
@@ -121,7 +121,7 @@ class RowTest extends FunSpec with Matchers {
       externalRow should be theSameInstanceAs externalRow.copy()
     }
 
-    it("copy should return same ref for interal rows") {
+    it("copy should return same ref for internal rows") {
       internalRow should be theSameInstanceAs internalRow.copy()
     }
 
