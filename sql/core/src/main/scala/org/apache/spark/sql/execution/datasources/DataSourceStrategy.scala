@@ -190,7 +190,8 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         mode)
 
       if (l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
-          t.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
+          l.catalogTable.get.partitionProviderIsHive) {
+        // TODO(ekl) we should be more efficient here and only recover the newly added partitions
         val recoverPartitionCmd = AlterTableRecoverPartitionsCommand(l.catalogTable.get.identifier)
         Union(insertCmd, recoverPartitionCmd)
       } else {

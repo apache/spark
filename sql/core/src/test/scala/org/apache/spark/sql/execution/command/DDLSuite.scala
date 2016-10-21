@@ -97,7 +97,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
-      properties = Map("partitionProvider" -> "hive"))
+      properties =
+        Map(CatalogTable.PARTITION_PROVIDER_KEY -> CatalogTable.PARTITION_PROVIDER_HIVE))
   }
 
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {

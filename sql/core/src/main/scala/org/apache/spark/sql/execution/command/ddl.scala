@@ -456,7 +456,7 @@ case class AlterTableRecoverPartitionsCommand(
     }
   }
 
-  private def getPath(table: CatalogTable): Option[String] = {
+  private def getBasePath(table: CatalogTable): Option[String] = {
     if (table.provider == Some("hive")) {
       table.storage.locationUri
     } else {
@@ -474,7 +474,7 @@ case class AlterTableRecoverPartitionsCommand(
         s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
     }
 
-    val tablePath = getPath(table)
+    val tablePath = getBasePath(table)
     if (tablePath.isEmpty) {
       throw new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
         s"location provided: $tableIdentWithDB")

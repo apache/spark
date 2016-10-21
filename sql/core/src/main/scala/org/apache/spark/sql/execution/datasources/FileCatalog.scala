@@ -65,6 +65,6 @@ trait FileCatalog {
   /** Sum of table file sizes, in bytes */
   def sizeInBytes: Long
 
-  /** Schema of the partitioning columns, or the empty schema. */
+  /** Schema of the partitioning columns, or the empty schema if the table is not partitioned. */
   def partitionSchema: StructType
 }
