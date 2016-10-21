@@ -795,7 +795,7 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
   persist(df, "MEMORY_AND_DISK")
   expect_true(df@env$isCached)
 
-  expect_equal(storageLevel(df), "StorageLevel(disk, memory, deserialized, 1 replicas)")
+  expect_equal(storageLevel(df), "MEMORY_AND_DISK")
 
   unpersist(df)
   expect_false(df@env$isCached)
