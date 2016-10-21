@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchange}
 import org.apache.spark.util.Utils
 
 
@@ -36,14 +36,14 @@ import org.apache.spark.util.Utils
 case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
-  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
-  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+  override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+  override def executeCollect(): Array[InternalRow] = child match {
+    case e: Exchange => e.child.executeTake(limit)
+    case _ => child.executeTake(limit)
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
-    val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
-    val shuffled = new ShuffledRowRDD(
-      ShuffleExchange.prepareShuffleDependency(
-        locallyLimited, child.output, SinglePartition, serializer))
-    shuffled.mapPartitionsInternal(_.take(limit))
+    child.execute().mapPartitionsInternal(_.take(limit))
   }
 }
 
@@ -83,9 +83,8 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
     s"""
        | if ($countTerm < $limit) {
        |   $countTerm += 1;
+       |   if ($countTerm == $limit) $stopEarly = true;
        |   ${consume(ctx, input)}
-       | } else {
-       |   $stopEarly = true;
        | }
      """.stripMargin
   }

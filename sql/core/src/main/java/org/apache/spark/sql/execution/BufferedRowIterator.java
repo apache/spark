@@ -39,7 +39,7 @@ public abstract class BufferedRowIterator {
   protected int partitionIndex = -1;
 
   public boolean hasNext() throws IOException {
-    if (currentRows.isEmpty()) {
+    if (!shouldStop()) {
       processNext();
     }
     return !currentRows.isEmpty();
