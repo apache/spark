@@ -1306,6 +1306,11 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
 
+#' @rdname spark.glmnet
+#' @export
+setGeneric("spark.glmnet", function(data, formula, ...) { standardGeneric("spark.glmnet") })
+
+
 #' @param x,y For \code{glm}: logical values indicating whether the response vector
 #'          and model matrix used in the fitting process should be returned as
 #'          components of the returned value.
