@@ -74,9 +74,11 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 /**
  * Adds a number of days to startdate.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days after start_date.",
+  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days after start_date. The time part of start_date is ignored.",
   extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-31'")
+// scalastyle:on line.size.limit
 case class DateAdd(startDate: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -103,9 +105,11 @@ case class DateAdd(startDate: Expression, days: Expression)
 /**
  * Subtracts a number of days to startdate.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days before start_date.",
+  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days before start_date. The time part of start_date is ignored.",
   extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-29'")
+// scalastyle:on line.size.limit
 case class DateSub(startDate: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
   override def left: Expression = startDate
@@ -585,9 +589,11 @@ case class FromUnixTime(sec: Expression, format: Expression)
 /**
  * Returns the last day of the month which the date belongs to.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the last day of the month which the date belongs to.",
+  usage = "_FUNC_(start_date) - Returns the last day of the month which the start_date belongs to. The time part of start_date is ignored.",
   extended = "> SELECT _FUNC_('2009-01-12');\n '2009-01-31'")
+// scalastyle:on line.size.limit
 case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def child: Expression = startDate
 
@@ -616,7 +622,7 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, day_of_week) - Returns the first date which is later than start_date and named as indicated.",
+  usage = "_FUNC_(start_date, day_of_week) - Returns the first date which is later than start_date and named as indicated. The time part of start_date is ignored.",
   extended = "> SELECT _FUNC_('2015-01-14', 'TU');\n '2015-01-20'")
 // scalastyle:on line.size.limit
 case class NextDay(startDate: Expression, dayOfWeek: Expression)
@@ -785,9 +791,11 @@ case class TimeSub(start: Expression, interval: Expression)
 /**
  * Returns the date that is num_months after start_date.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_months) - Returns the date that is num_months after start_date.",
+  usage = "_FUNC_(start_date, num_months) - Returns the date that is num_months after start_date. The time part of start_date is ignored.",
   extended = "> SELECT _FUNC_('2016-08-31', 1);\n '2016-09-30'")
+// scalastyle:on line.size.limit
 case class AddMonths(startDate: Expression, numMonths: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -897,9 +905,11 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
 /**
  * Returns the date part of a timestamp or string.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Extracts the date part of the date or datetime expression expr.",
+  usage = "_FUNC_(expr) - Extracts the date part of the date or datetime expression expr. The time part of the date is ignored.",
   extended = "> SELECT _FUNC_('2009-07-30 04:17:52');\n '2009-07-30'")
+// scalastyle:on line.size.limit
 case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   // Implicit casting of spark will accept string in both date and timestamp format, as
@@ -922,7 +932,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date, fmt) - Returns returns date with the time portion of the day truncated to the unit specified by the format model fmt.",
+  usage = "_FUNC_(date, fmt) - Returns returns date with the time portion of the day truncated to the unit specified by the format model fmt. The time part of the date is ignored.",
   extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01'\n> SELECT _FUNC_('2015-10-27', 'YEAR');\n '2015-01-01'")
 // scalastyle:on line.size.limit
 case class TruncDate(date: Expression, format: Expression)
