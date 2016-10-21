@@ -65,15 +65,19 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
   test("commit shuffle files multiple times") {
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    val shuffleId = 1
+    val mapId = 2
+
     val lengths = Array[Long](10, 0, 20)
-    val dataTmp = File.createTempFile("shuffle", null, tempDir)
+    val data = resolver.getDataFile(shuffleId, mapId)
+    val dataTmp = Utils.tempFileWith(data)
     val out = new FileOutputStream(dataTmp)
     Utils.tryWithSafeFinally {
       out.write(new Array[Byte](30))
     } {
       out.close()
     }
-    resolver.writeIndexFileAndCommit(1, 2, lengths, dataTmp)
+    resolver.writeIndexFileAndCommit(1, 2, lengths, dataTmp, data)
 
     val dataFile = resolver.getDataFile(1, 2)
     assert(dataFile.exists())
@@ -81,7 +85,8 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     assert(!dataTmp.exists())
 
     val lengths2 = new Array[Long](3)
-    val dataTmp2 = File.createTempFile("shuffle", null, tempDir)
+    val data2 = resolver.getDataFile(shuffleId, mapId)
+    val dataTmp2 = Utils.tempFileWith(data2)
     val out2 = new FileOutputStream(dataTmp2)
     Utils.tryWithSafeFinally {
       out2.write(Array[Byte](1))
@@ -89,7 +94,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out2.close()
     }
-    resolver.writeIndexFileAndCommit(1, 2, lengths2, dataTmp2)
+    resolver.writeIndexFileAndCommit(1, 2, lengths2, dataTmp2, data2)
     assert(lengths2.toSeq === lengths.toSeq)
     assert(dataFile.exists())
     assert(dataFile.length() === 30)
@@ -109,7 +114,8 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     dataFile.delete()
 
     val lengths3 = Array[Long](10, 10, 15)
-    val dataTmp3 = File.createTempFile("shuffle", null, tempDir)
+    val data3 = resolver.getDataFile(shuffleId, mapId)
+    val dataTmp3 = Utils.tempFileWith(data3)
     val out3 = new FileOutputStream(dataTmp3)
     Utils.tryWithSafeFinally {
       out3.write(Array[Byte](2))
@@ -117,7 +123,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out3.close()
     }
-    resolver.writeIndexFileAndCommit(1, 2, lengths3, dataTmp3)
+    resolver.writeIndexFileAndCommit(1, 2, lengths3, dataTmp3, data3)
     assert(lengths3.toSeq != lengths.toSeq)
     assert(dataFile.exists())
     assert(dataFile.length() === 35)
