@@ -209,7 +209,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       tblName: String,
       partColNames: Seq[String]): InsertIntoTable = {
 
-    val normalizedPartSpec = normalizePartitionSpec(insert.partition, partColNames, tblName)
+    val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
+      insert.partition, partColNames, tblName, conf.resolver)
 
     val expectedColumns = {
       val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
@@ -240,30 +241,6 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       castAndRenameChildOutput(insert, expectedColumns)
         .copy(partition = partColNames.map(_ -> None).toMap)
     }
-  }
-
-  private def normalizePartitionSpec(
-      partitionSpec: Map[String, Option[String]],
-      partColNames: Seq[String],
-      tblName: String): Map[String, Option[String]] = {
-    val resolver = conf.resolver
-    val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
-      val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
-        throw new AnalysisException(s"Cannot insert into table $tblName because $key is not a " +
-          "valid partition column")
-      }
-      normalizedKey -> value
-    }
-
-    if (normalizedPartSpec.map(_._1).distinct.length != normalizedPartSpec.length) {
-      val duplicateColumns = normalizedPartSpec.map(_._1).groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      throw new AnalysisException(s"Cannot insert into table $tblName because there are " +
-        "duplicated columns in partition specification: " + duplicateColumns.mkString(", "))
-    }
-
-    normalizedPartSpec.toMap
   }
 
   private def castAndRenameChildOutput(
