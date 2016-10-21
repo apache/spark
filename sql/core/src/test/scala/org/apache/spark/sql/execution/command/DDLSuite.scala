@@ -96,7 +96,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         .add("b", "int"),
       provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
-      createTime = 0L)
+      createTime = 0L,
+      properties = Map("partitionProvider" -> "hive"))
   }
 
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
@@ -1076,14 +1077,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     def getProps: Map[String, String] = {
       catalog.getTableMetadata(tableIdent).properties
     }
-    assert(getProps.isEmpty)
     // set table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
-    assert(getProps == Map("andrew" -> "or14", "kor" -> "bel"))
+    assert(Map("andrew" -> "or14", "kor" -> "bel").toSet.subsetOf(getProps.toSet))
     // set table properties without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
-    assert(getProps == Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
+    assert(
+      Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol").toSet.subsetOf(getProps.toSet))
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
@@ -1104,11 +1105,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     // unset table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
     sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
-    assert(getProps == Map("p" -> "an", "c" -> "lan", "x" -> "y"))
+    assert(Map("p" -> "an", "c" -> "lan", "x" -> "y").toSet.subsetOf(getProps.toSet))
+    assert(!getProps.contains("j"))
     // unset table properties without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
-    assert(getProps == Map("c" -> "lan", "x" -> "y"))
+    assert(Map("c" -> "lan", "x" -> "y").toSet.subsetOf(getProps.toSet))
+    assert(!getProps.contains("p"))
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')")
@@ -1120,7 +1123,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(e.getMessage.contains("xyz"))
     // property to unset does not exist, but "IF EXISTS" is specified
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
-    assert(getProps == Map("x" -> "y"))
+    assert(Map("x" -> "y").toSet.subsetOf(getProps.toSet))
+    assert(!getProps.contains("c"))
   }
 
   private def testSetLocation(isDatasourceTable: Boolean): Unit = {
@@ -1620,12 +1624,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       }
     }
 
-    // truncating partitioned data source tables is not supported
     withTable("rectangles", "rectangles2") {
       data.write.saveAsTable("rectangles")
       data.write.partitionBy("length").saveAsTable("rectangles2")
+
+      // not supported since the table is not partitioned
       assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
-      assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+
+      // supported since partitions are stored in the metastore
+      spark.sql("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+      assert(spark.table("rectangles2").collect().isEmpty)
     }
   }
 

@@ -91,23 +91,22 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       table.storage.properties
     }
 
+    val newProps = if (partitionColumnNames.nonEmpty &&
+        sparkSession.sqlContext.conf.filesourcePartitionManagement) {
+      table.properties ++
+        Map(CatalogTable.PARTITION_PROVIDER_KEY -> CatalogTable.PARTITION_PROVIDER_HIVE)
+    } else {
+      table.properties
+    }
+
     val newTable = table.copy(
       storage = table.storage.copy(properties = optionsWithPath),
       schema = dataSource.schema,
-      partitionColumnNames = partitionColumnNames)
+      partitionColumnNames = partitionColumnNames,
+      properties = newProps)
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)
-
-    dataSource match {
-      case fs: HadoopFsRelation =>
-        if (table.tableType == CatalogTableType.EXTERNAL && partitionColumnNames.nonEmpty &&
-            sparkSession.sqlContext.conf.filesourcePartitionManagement) {
-          sparkSession.sessionState.executePlan(
-            AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
-        }
-      case _ =>
-    }
 
     Seq.empty[Row]
   }

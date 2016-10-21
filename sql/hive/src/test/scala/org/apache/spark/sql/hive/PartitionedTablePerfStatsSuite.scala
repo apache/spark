@@ -81,6 +81,7 @@ class PartitionedTablePerfStatsSuite
       |using parquet
       |options (path "${dir.getAbsolutePath}")
       |partitioned by (partCol1, partCol2)""".stripMargin)
+    spark.sql(s"msck repair table $tableName")
   }
 
   genericTest("partitioned pruned table reports only selected files") { spec =>

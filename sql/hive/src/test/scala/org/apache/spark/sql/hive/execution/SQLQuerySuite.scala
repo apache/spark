@@ -396,10 +396,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
         .partitionBy("d")
         .saveAsTable("datasource_table")
-      val m4 = intercept[AnalysisException] {
-        sql("DESC datasource_table PARTITION (d=2)")
-      }.getMessage()
-      assert(m4.contains("DESC PARTITION is not allowed on a datasource table"))
+
+      sql("DESC datasource_table PARTITION (d=0)")
 
       val m5 = intercept[AnalysisException] {
         spark.range(10).select('id as 'a, 'id as 'b).createTempView("view1")

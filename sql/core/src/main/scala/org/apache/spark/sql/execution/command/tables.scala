@@ -338,13 +338,13 @@ case class TruncateTableCommand(
         s"Operation not allowed: TRUNCATE TABLE on views: $tableIdentwithDB")
     }
     val isDatasourceTable = DDLUtils.isDatasourceTable(table)
-    if (partitionSpec.isDefined) {
-      DDLUtils.verifyPartitionProviderIsHive(table, "TRUNCATE TABLE ... PARTITION")
-    }
     if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
         s"for tables that are not partitioned: $tableIdentwithDB")
+    }
+    if (partitionSpec.isDefined) {
+      DDLUtils.verifyPartitionProviderIsHive(table, "TRUNCATE TABLE ... PARTITION")
     }
     val locations =
       if (DDLUtils.isDatasourceTable(table)) {

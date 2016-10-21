@@ -57,13 +57,7 @@ class PartitionProviderCompatibilitySuite
 
   private def verifyIsNewTable(tableName: String): Unit = {
     withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true") {
-      assert(spark.sql(s"show partitions $tableName").count() == 5)
-      HiveCatalogMetrics.reset()
-
-      // sanity check table performance
-      assert(spark.sql(s"select * from $tableName where partcol1 < 2").count() == 2)
-      assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 2)
-      assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 2)
+      spark.sql(s"show partitions $tableName").count()  // check does not throw
     }
   }
 
@@ -72,11 +66,18 @@ class PartitionProviderCompatibilitySuite
       withTempDir { dir =>
         withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "false") {
           setupPartitionedDatasourceTable("test", dir)
+          assert(spark.sql("select * from test").count() == 5)
         }
         withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true") {
           verifyIsLegacyTable("test")
           spark.sql("msck repair table test")
           verifyIsNewTable("test")
+
+          // sanity check table performance
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test where partcol1 < 2").count() == 2)
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 2)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 2)
         }
       }
     }
@@ -88,6 +89,9 @@ class PartitionProviderCompatibilitySuite
         withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "true") {
           setupPartitionedDatasourceTable("test", dir)
           verifyIsNewTable("test")
+          assert(spark.sql("select * from test").count() == 0)  // needs repair
+          spark.sql("msck repair table test")
+          assert(spark.sql("select * from test").count() == 5)
         }
       }
     }
@@ -99,6 +103,7 @@ class PartitionProviderCompatibilitySuite
         withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_MANAGEMENT.key -> "false") {
           setupPartitionedDatasourceTable("test", dir)
           verifyIsLegacyTable("test")
+          assert(spark.sql("select * from test").count() == 5)
         }
       }
     }
