@@ -1325,7 +1325,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           var numExplicits = 0
           // Stacking factors(vectors) in matrices to speed up the computation,
           // when the number of factors and the rank is large enough.
-          val doStack = srcPtrs(j + 1) - srcPtrs(j) > 128 && rank > 128
+          val doStack = srcPtrs(j + 1) - srcPtrs(j) > 1024 && rank > 1024
           val srcFactorBuffer = mutable.ArrayBuilder.make[Double]
           val bBuffer = mutable.ArrayBuilder.make[Double]
           while (i < srcPtrs(j + 1)) {
