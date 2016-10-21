@@ -1392,7 +1392,6 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    $$
  * </blockquote></p>
  *
- *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
@@ -1492,10 +1491,10 @@ private class LogisticAggregator(
 
     val margins = new Array[Double](numClasses)
     features.foreachActive { (index, value) =>
-      val mult = value / localFeaturesStd(index)
+      val stdValue = value / localFeaturesStd(index)
       var j = 0
       while (j < numClasses) {
-        margins(j) += localCoefficients(index * numClasses + j) * mult
+        margins(j) += localCoefficients(index * numClasses + j) * stdValue
         j += 1
       }
     }
@@ -1511,55 +1510,45 @@ private class LogisticAggregator(
       i += 1
     }
 
-//    val margins = Array.tabulate(numClasses) { i =>
-//      var margin = 0.0
-//      features.foreachActive { (index, value) =>
-//        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-//          margin += localCoefficients(i * numFeaturesPlusIntercept + index) *
-//            value / localFeaturesStd(index)
-//        }
-//      }
-//
-//      if (fitIntercept) {
-//        margin += localCoefficients(i * numFeaturesPlusIntercept + numFeatures)
-//      }
-//      if (i == label.toInt) marginOfLabel = margin
-//      if (margin > maxMargin) {
-//        maxMargin = margin
-//      }
-//      margin
-//    }
-
     /**
      * When maxMargin > 0, the original formula could cause overflow.
      * We address this by subtracting maxMargin from all the margins, so it's guaranteed
      * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
      */
+    val multipliers = new Array[Double](numClasses)
     val sum = {
       var temp = 0.0
       if (maxMargin > 0) {
-        for (i <- 0 until numClasses) {
+        var i = 0
+        while (i < numClasses) {
           margins(i) -= maxMargin
-          temp += math.exp(margins(i))
+          val exp = math.exp(margins(i))
+          temp += exp
+          multipliers(i) = exp
+          i += 1
         }
       } else {
-        for (i <- 0 until numClasses) {
-          temp += math.exp(margins(i))
+        var i = 0
+        while (i < numClasses) {
+          val exp = math.exp(margins(i))
+          temp += exp
+          multipliers(i) = exp
+          i += 1
         }
       }
       temp
     }
 
-    val multipliers = margins.zipWithIndex.map { case (m, i) =>
-      math.exp(m) / sum - (if (label == i) 1.0 else 0.0)
+    margins.indices.foreach { i =>
+      multipliers(i) = multipliers(i) / sum - (if (label == i) 1.0 else 0.0)
     }
     features.foreachActive { (index, value) =>
       if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-        val mult = value / localFeaturesStd(index)
+        val stdValue = value / localFeaturesStd(index)
         var j = 0
         while (j < numClasses) {
           localGradientArray(index * numClasses + j) +=
-            weight * multipliers(j) * mult
+            weight * multipliers(j) * stdValue
           j += 1
         }
       }
@@ -1571,21 +1560,6 @@ private class LogisticAggregator(
         i += 1
       }
     }
-
-//    for (i <- 0 until numClasses) {
-    //      val multiplier = math.exp(margins(i)) / sum - {
-    //        if (label == i) 1.0 else 0.0
-    //      }
-    //      features.foreachActive { (index, value) =>
-    //        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-    //          localGradientArray(i * numFeaturesPlusIntercept + index) +=
-    //            weight * multiplier * value / localFeaturesStd(index)
-    //        }
-    //      }
-    //      if (fitIntercept) {
-    //        localGradientArray(i * numFeaturesPlusIntercept + numFeatures) += weight * multiplier
-    //      }
-    //    }
 
     val loss = if (maxMargin > 0) {
       math.log(sum) - marginOfLabel + maxMargin

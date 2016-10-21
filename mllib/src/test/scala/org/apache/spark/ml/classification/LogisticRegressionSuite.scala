@@ -1454,9 +1454,9 @@ class LogisticRegressionSuite
       0.05208012, -0.29843864, 0.06256289, 0.03183676), isTransposed = true)
     val interceptsR = Vectors.dense(-1.5681088, 1.1217130, 0.44639579)
 
-//    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.001)
-//    assert(model1.interceptVector ~== interceptsRStd relTol 0.05)
-//    assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
+    assert(model1.coefficientMatrix ~== coefficientsRStd absTol 0.001)
+    assert(model1.interceptVector ~== interceptsRStd relTol 0.05)
+    assert(model1.interceptVector.toArray.sum ~== 0.0 absTol eps)
     assert(model2.coefficientMatrix ~== coefficientsR relTol 0.05)
     assert(model2.interceptVector ~== interceptsR relTol 0.05)
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
