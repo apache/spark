@@ -1497,8 +1497,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("DESCRIBE FUNCTION EXTENDED ^"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
         Row(
-          "Extended Usage: " +
-          """
+          """Extended Usage:
             |    expr1 ^ expr2
             |
             |      Arguments:
