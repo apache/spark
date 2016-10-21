@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
@@ -207,6 +208,16 @@ case class CreateDataSourceTableAsSelectCommand(
       case None => data
     }
 
+    if (createMetastoreTable) {
+      val newTable = table.copy(
+        storage = table.storage.copy(properties = optionsWithPath),
+        // Here we always create a table with all columns nullable, because users may insert more
+        // records into this table and Spark SQL can't guarantee the nullability at that time. Thus
+        // marking all columns as nullable is safer and more robust.
+        schema = df.schema.asNullable)
+      sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    }
+
     // Create the relation based on the data of df.
     val dataSource = DataSource(
       sparkSession,
@@ -215,21 +226,20 @@ case class CreateDataSourceTableAsSelectCommand(
       bucketSpec = table.bucketSpec,
       options = optionsWithPath)
 
-    val result = try {
-      dataSource.write(mode, df)
+    try {
+      // If the table type is MANAGED and the mode is ErrorIfExists, it's guaranteed that the table
+      // is newly created and the table path is empty. Here we use Append as the write mode because
+      // the table path is already created by `ExternalCatalog`.
+      val isManaged = table.tableType == CatalogTableType.MANAGED
+      val writeMode = if (isManaged && mode == SaveMode.ErrorIfExists) SaveMode.Append else mode
+      dataSource.write(writeMode, df)
     } catch {
-      case ex: AnalysisException =>
+      case NonFatal(ex) =>
         logError(s"Failed to write to table $tableName in $mode mode", ex)
+        if (createMetastoreTable) {
+          sessionState.catalog.dropTable(tableIdentWithDB, ignoreIfNotExists = false, purge = false)
+        }
         throw ex
-    }
-    if (createMetastoreTable) {
-      val newTable = table.copy(
-        storage = table.storage.copy(properties = optionsWithPath),
-        // We will use the schema of resolved.relation as the schema of the table (instead of
-        // the schema of df). It is important since the nullability may be changed by the relation
-        // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
-        schema = result.schema)
-      sessionState.catalog.createTable(newTable, ignoreIfExists = false)
     }
 
     // Refresh the cache of the table in the catalog.
