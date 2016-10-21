@@ -41,6 +41,22 @@ class StopAfterExecSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("StopAfter on bucketed and sorted table") {
+    val schema = new StructType()
+      .add("a", IntegerType, nullable = false)
+      .add("b", IntegerType, nullable = false)
+    val inputData = Seq(1, 2, 3).flatMap(i => (1 to 10).map(j => Row(i, j)))
+    val df = spark.createDataFrame(sparkContext.parallelize(inputData, 10), schema)
+
+    withTable("table") {
+      df.write.format("parquet").bucketBy(1, "a").sortBy("b").saveAsTable("table")
+      val table = spark.table("table")
+      table.show()
+      val sorted = table.filter("b < 5")
+      println(sorted.queryExecution.executedPlan)
+    }
+  }
+
   test("Filter on sorted data: StopAfter should not change filter results") {
     val N = 10L << 5
     // Prevent filter has been pushdown through sort, so persist sort result.
