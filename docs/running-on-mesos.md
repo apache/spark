@@ -498,6 +498,15 @@ See the [configuration page](configuration.html) for information on Spark config
     in the history server.
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.gpus.max</code></td>
+  <td><code>0</code></td>
+  <td>
+    Set the maximum number GPU resources to acquire for this job. Note that executors will still launch when no GPU resources are found
+    since this configuration is just a upper limit and not a guaranteed amount.
+  </td>
+</tr>
+
 
 </table>
 

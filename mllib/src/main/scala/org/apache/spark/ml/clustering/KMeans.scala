@@ -69,7 +69,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 
   /**
    * Param for the number of steps for the k-means|| initialization mode. This is an advanced
-   * setting -- the default of 5 is almost always enough. Must be > 0. Default: 5.
+   * setting -- the default of 2 is almost always enough. Must be > 0. Default: 2.
    * @group expertParam
    */
   @Since("1.5.0")
@@ -262,7 +262,7 @@ class KMeans @Since("1.5.0") (
     k -> 2,
     maxIter -> 20,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
-    initSteps -> 5,
+    initSteps -> 2,
     tol -> 1e-4)
 
   @Since("1.5.0")

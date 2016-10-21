@@ -25,6 +25,8 @@ import org.apache.spark.sql.Row
 
 class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   test("MinMaxScaler fit basic case") {
     val data = Array(
       Vectors.dense(1, 0, Long.MinValue),
@@ -38,7 +40,7 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       Vectors.sparse(3, Array(0, 2), Array(5, 5)),
       Vectors.sparse(3, Array(0), Array(-2.5)))
 
-    val df = spark.createDataFrame(data.zip(expected)).toDF("features", "expected")
+    val df = data.zip(expected).toSeq.toDF("features", "expected")
     val scaler = new MinMaxScaler()
       .setInputCol("features")
       .setOutputCol("scaled")
@@ -57,14 +59,13 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
 
   test("MinMaxScaler arguments max must be larger than min") {
     withClue("arguments max must be larger than min") {
-      val dummyDF = spark.createDataFrame(Seq(
-        (1, Vectors.dense(1.0, 2.0)))).toDF("id", "feature")
+      val dummyDF = Seq((1, Vectors.dense(1.0, 2.0))).toDF("id", "features")
       intercept[IllegalArgumentException] {
-        val scaler = new MinMaxScaler().setMin(10).setMax(0).setInputCol("feature")
+        val scaler = new MinMaxScaler().setMin(10).setMax(0).setInputCol("features")
         scaler.transformSchema(dummyDF.schema)
       }
       intercept[IllegalArgumentException] {
-        val scaler = new MinMaxScaler().setMin(0).setMax(0).setInputCol("feature")
+        val scaler = new MinMaxScaler().setMin(0).setMax(0).setInputCol("features")
         scaler.transformSchema(dummyDF.schema)
       }
     }
@@ -104,7 +105,7 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       Vectors.dense(-1.0, Double.NaN, -5.0, -5.0),
       Vectors.dense(5.0, 0.0, 5.0, Double.NaN))
 
-    val df = spark.createDataFrame(data.zip(expected)).toDF("features", "expected")
+    val df = data.zip(expected).toSeq.toDF("features", "expected")
     val scaler = new MinMaxScaler()
       .setInputCol("features")
       .setOutputCol("scaled")

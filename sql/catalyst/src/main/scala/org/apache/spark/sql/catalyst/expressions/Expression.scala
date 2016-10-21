@@ -295,7 +295,7 @@ trait Nondeterministic extends Expression {
  */
 abstract class LeafExpression extends Expression {
 
-  def children: Seq[Expression] = Nil
+  override final def children: Seq[Expression] = Nil
 }
 
 
@@ -307,7 +307,7 @@ abstract class UnaryExpression extends Expression {
 
   def child: Expression
 
-  override def children: Seq[Expression] = child :: Nil
+  override final def children: Seq[Expression] = child :: Nil
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -394,7 +394,7 @@ abstract class BinaryExpression extends Expression {
   def left: Expression
   def right: Expression
 
-  override def children: Seq[Expression] = Seq(left, right)
+  override final def children: Seq[Expression] = Seq(left, right)
 
   override def foldable: Boolean = left.foldable && right.foldable
 

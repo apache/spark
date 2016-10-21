@@ -59,7 +59,7 @@ object JavaTypeInference {
    * @param typeToken Java type
    * @return (SQL data type, nullable)
    */
-  private def inferDataType(typeToken: TypeToken[_]): (DataType, Boolean) = {
+  private[sql] def inferDataType(typeToken: TypeToken[_]): (DataType, Boolean) = {
     typeToken.getRawType match {
       case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
         (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)

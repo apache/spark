@@ -582,6 +582,25 @@ class SparkSubmitSuite
     val sysProps3 = SparkSubmit.prepareSubmitEnvironment(appArgs3)._3
     sysProps3("spark.submit.pyFiles") should be(
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
+
+    // Test remote python files
+    val f4 = File.createTempFile("test-submit-remote-python-files", "", tmpDir)
+    val writer4 = new PrintWriter(f4)
+    val remotePyFiles = "hdfs:///tmp/file1.py,hdfs:///tmp/file2.py"
+    writer4.println("spark.submit.pyFiles " + remotePyFiles)
+    writer4.close()
+    val clArgs4 = Seq(
+      "--master", "yarn",
+      "--deploy-mode", "cluster",
+      "--properties-file", f4.getPath,
+      "hdfs:///tmp/mister.py"
+    )
+    val appArgs4 = new SparkSubmitArguments(clArgs4)
+    val sysProps4 = SparkSubmit.prepareSubmitEnvironment(appArgs4)._3
+    // Should not format python path for yarn cluster mode
+    sysProps4("spark.submit.pyFiles") should be(
+      Utils.resolveURIs(remotePyFiles)
+    )
   }
 
   test("user classpath first in driver") {
@@ -630,8 +649,13 @@ class SparkSubmitSuite
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val sparkSubmitFile = if (Utils.isWindows) {
+      new File("..\\bin\\spark-submit.cmd")
+    } else {
+      new File("../bin/spark-submit")
+    }
     val process = Utils.executeCommand(
-      Seq("./bin/spark-submit") ++ args,
+      Seq(sparkSubmitFile.getCanonicalPath) ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
 

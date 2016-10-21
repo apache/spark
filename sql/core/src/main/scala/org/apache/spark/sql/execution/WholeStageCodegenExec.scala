@@ -316,14 +316,16 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       final class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
         private Object[] references;
+        private scala.collection.Iterator[] inputs;
         ${ctx.declareMutableStates()}
 
         public GeneratedIterator(Object[] references) {
           this.references = references;
         }
 
-        public void init(int index, scala.collection.Iterator inputs[]) {
+        public void init(int index, scala.collection.Iterator[] inputs) {
           partitionIndex = index;
+          this.inputs = inputs;
           ${ctx.initMutableStates()}
         }
 

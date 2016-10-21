@@ -23,6 +23,7 @@ import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
+import scala.xml.Node
 
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
@@ -222,7 +223,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def getListing(): Iterable[FsApplicationHistoryInfo] = applications.values
+  override def getListing(): Iterator[FsApplicationHistoryInfo] = applications.values.iterator
+
+  override def getApplicationInfo(appId: String): Option[FsApplicationHistoryInfo] = {
+    applications.get(appId)
+  }
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     try {
@@ -258,6 +263,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  override def getEmptyListingHtml(): Seq[Node] = {
+    <p>
+      Did you specify the correct logging directory? Please verify your setting of
+      <span style="font-style:italic">spark.history.fs.logDirectory</span>
+      listed above and whether you have the permissions to access it.
+      <br/>
+      It is also possible that your application did not run to
+      completion or did not stop the SparkContext.
+    </p>
+  }
+
   override def getConfig(): Map[String, String] = {
     val safeMode = if (isFsInSafeMode()) {
       Map("HDFS State" -> "In safe mode, application logs not available.")
@@ -290,7 +306,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .filter { entry =>
           try {
             val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
-            !entry.isDirectory() && prevFileSize < entry.getLen()
+            !entry.isDirectory() &&
+              // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
+              // reading a garbage file is safe, but we would log an error which can be scary to
+              // the end-user.
+              !entry.getPath().getName().startsWith(".") &&
+              prevFileSize < entry.getLen()
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on

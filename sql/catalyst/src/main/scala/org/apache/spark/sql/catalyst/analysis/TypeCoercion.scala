@@ -96,6 +96,9 @@ object TypeCoercion {
       val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
       Some(numericPrecedence(index))
 
+    case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
+      Some(TimestampType)
+
     case _ => None
   }
 

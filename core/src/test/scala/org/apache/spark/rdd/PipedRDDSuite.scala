@@ -214,7 +214,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   def testCommandAvailable(command: String): Boolean = {
-    val attempt = Try(Process(command).run().exitValue())
+    val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0
   }
 

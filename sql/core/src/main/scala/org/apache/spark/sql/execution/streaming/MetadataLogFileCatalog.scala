@@ -34,7 +34,8 @@ class MetadataLogFileCatalog(sparkSession: SparkSession, path: Path)
 
   private val metadataDirectory = new Path(path, FileStreamSink.metadataDir)
   logInfo(s"Reading streaming file log from $metadataDirectory")
-  private val metadataLog = new FileStreamSinkLog(sparkSession, metadataDirectory.toUri.toString)
+  private val metadataLog =
+    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, metadataDirectory.toUri.toString)
   private val allFilesFromLog = metadataLog.allFiles().map(_.toFileStatus).filterNot(_.isDirectory)
   private var cachedPartitionSpec: PartitionSpec = _
 
@@ -46,7 +47,7 @@ class MetadataLogFileCatalog(sparkSession: SparkSession, path: Path)
     allFilesFromLog.toArray.groupBy(_.getPath.getParent)
   }
 
-  override def paths: Seq[Path] = path :: Nil
+  override def rootPaths: Seq[Path] = path :: Nil
 
   override def refresh(): Unit = { }
 

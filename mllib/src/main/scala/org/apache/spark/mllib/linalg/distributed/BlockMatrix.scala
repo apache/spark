@@ -257,7 +257,7 @@ class BlockMatrix @Since("1.3.0") (
       val colStart = blockColIndex.toLong * colsPerBlock
       val entryValues = new ArrayBuffer[MatrixEntry]()
       mat.foreachActive { (i, j, v) =>
-        if (v != 0.0) entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v))
+        if (v != 0.0) entryValues += new MatrixEntry(rowStart + i, colStart + j, v)
       }
       entryValues
     }

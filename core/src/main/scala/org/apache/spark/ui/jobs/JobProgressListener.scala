@@ -19,12 +19,13 @@ package org.apache.spark.ui.jobs
 
 import java.util.concurrent.TimeoutException
 
-import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
+import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
@@ -93,6 +94,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   val retainedStages = conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
   val retainedJobs = conf.getInt("spark.ui.retainedJobs", SparkUI.DEFAULT_RETAINED_JOBS)
+  val retainedTasks = conf.get(UI_RETAINED_TASKS)
 
   // We can test for memory leaks by ensuring that collections that track non-active jobs and
   // stages do not grow without bound and that collections for active jobs/stages eventually become
@@ -405,6 +407,11 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskData.updateTaskMetrics(taskMetrics)
       taskData.errorMessage = errorMessage
 
+      // If Tasks is too large, remove and garbage collect old tasks
+      if (stageData.taskData.size > retainedTasks) {
+        stageData.taskData = stageData.taskData.drop(stageData.taskData.size - retainedTasks)
+      }
+
       for (
         activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskEnd.stageId);
         jobId <- activeJobsDependentOnStage;
@@ -496,6 +503,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     val timeDelta =
       taskMetrics.executorRunTime - oldMetrics.map(_.executorRunTime).getOrElse(0L)
     stageData.executorRunTime += timeDelta
+
+    val cpuTimeDelta =
+      taskMetrics.executorCpuTime - oldMetrics.map(_.executorCpuTime).getOrElse(0L)
+    stageData.executorCpuTime += cpuTimeDelta
   }
 
   override def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) {

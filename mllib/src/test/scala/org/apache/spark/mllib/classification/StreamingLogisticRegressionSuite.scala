@@ -95,7 +95,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
     // (we add a count to ensure the result is a DStream)
     ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
       model.trainOn(inputDStream)
-      inputDStream.foreachRDD(x => history.append(math.abs(model.latestModel().weights(0) - B)))
+      inputDStream.foreachRDD(x => history += math.abs(model.latestModel().weights(0) - B))
       inputDStream.count()
     })
     runStreams(ssc, numBatches, numBatches)

@@ -466,7 +466,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("self join") {
     val ds = Seq("1", "2").toDS().as("a")
-    val joined = ds.joinWith(ds, lit(true))
+    val joined = ds.joinWith(ds, lit(true), "cross")
     checkDataset(joined, ("1", "1"), ("1", "2"), ("2", "1"), ("2", "2"))
   }
 
@@ -486,7 +486,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Kryo encoder self join") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
-    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
+    assert(ds.joinWith(ds, lit(true), "cross").collect().toSet ==
       Set(
         (KryoData(1), KryoData(1)),
         (KryoData(1), KryoData(2)),
@@ -514,7 +514,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Java encoder self join") {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
-    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
+    assert(ds.joinWith(ds, lit(true), "cross").collect().toSet ==
       Set(
         (JavaData(1), JavaData(1)),
         (JavaData(1), JavaData(2)),
@@ -532,7 +532,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
 
     checkDataset(
-      ds1.joinWith(ds2, lit(true)),
+      ds1.joinWith(ds2, lit(true), "cross"),
       ((nullInt, "1"), (nullInt, "1")),
       ((nullInt, "1"), (new java.lang.Integer(22), "2")),
       ((new java.lang.Integer(22), "2"), (nullInt, "1")),
@@ -870,6 +870,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.dropDuplicates("_1", "_2"),
       ("a", 1), ("a", 2), ("b", 1))
+  }
+
+  test("dropDuplicates: columns with same column name") {
+    val ds1 = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    val ds2 = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    // The dataset joined has two columns of the same name "_2".
+    val joined = ds1.join(ds2, "_1").select(ds1("_2").as[Int], ds2("_2").as[Int])
+    checkDataset(
+      joined.dropDuplicates(),
+      (1, 2), (1, 1), (2, 1), (2, 2))
+  }
+
+  test("dropDuplicates should not change child plan output") {
+    val ds = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    checkDataset(
+      ds.dropDuplicates("_1").select(ds("_1").as[String], ds("_2").as[Int]),
+      ("a", 1), ("b", 1))
   }
 
   test("SPARK-16097: Encoders.tuple should handle null object correctly") {

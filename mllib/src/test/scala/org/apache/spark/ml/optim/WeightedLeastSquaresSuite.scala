@@ -60,6 +60,26 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
     ), 2)
   }
 
+  test("two collinear features result in error with no regularization") {
+    val singularInstances = sc.parallelize(Seq(
+      Instance(1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      Instance(2.0, 1.0, Vectors.dense(2.0, 4.0)),
+      Instance(3.0, 1.0, Vectors.dense(3.0, 6.0)),
+      Instance(4.0, 1.0, Vectors.dense(4.0, 8.0))
+    ), 2)
+
+    intercept[IllegalArgumentException] {
+      new WeightedLeastSquares(
+        false, regParam = 0.0, standardizeFeatures = false,
+        standardizeLabel = false).fit(singularInstances)
+    }
+
+    // Should not throw an exception
+    new WeightedLeastSquares(
+      false, regParam = 1.0, standardizeFeatures = false,
+      standardizeLabel = false).fit(singularInstances)
+  }
+
   test("WLS against lm") {
     /*
        R code:

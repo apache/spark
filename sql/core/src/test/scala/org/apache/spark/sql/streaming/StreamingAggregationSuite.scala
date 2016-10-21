@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.InternalOutputModes._
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -126,6 +127,59 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       CheckLastBatch(isSorted = true, (3, 3), (2, 2), (1, 1)),
       AddData(inputData, 4, 4, 4, 4),
       CheckLastBatch(isSorted = true, (4, 4), (3, 3), (2, 2), (1, 1))
+    )
+  }
+
+  test("state metrics") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDS()
+        .flatMap(x => Seq(x, x + 1))
+        .toDF("value")
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    implicit class RichStreamExecution(query: StreamExecution) {
+      def stateNodes: Seq[SparkPlan] = {
+        query.lastExecution.executedPlan.collect {
+          case p if p.isInstanceOf[StateStoreSaveExec] => p
+        }
+      }
+    }
+
+    // Test with Update mode
+    testStream(aggregated, Update)(
+      AddData(inputData, 1),
+      CheckLastBatch((1, 1), (2, 1)),
+      AssertOnQuery { _.stateNodes.size === 1 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 2 },
+      AddData(inputData, 2, 3),
+      CheckLastBatch((2, 2), (3, 2), (4, 1)),
+      AssertOnQuery { _.stateNodes.size === 1 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 3 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 3 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 4 }
+    )
+
+    // Test with Complete mode
+    inputData.reset()
+    testStream(aggregated, Complete)(
+      AddData(inputData, 1),
+      CheckLastBatch((1, 1), (2, 1)),
+      AssertOnQuery { _.stateNodes.size === 1 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 2 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 2 },
+      AddData(inputData, 2, 3),
+      CheckLastBatch((1, 1), (2, 2), (3, 2), (4, 1)),
+      AssertOnQuery { _.stateNodes.size === 1 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numOutputRows").get.value === 4 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numUpdatedStateRows").get.value === 3 },
+      AssertOnQuery { _.stateNodes.head.metrics.get("numTotalStateRows").get.value === 4 }
     )
   }
 

@@ -173,6 +173,24 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testSparkRShell() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+      SparkSubmitCommandBuilder.SPARKR_SHELL,
+      "--master=foo",
+      "--deploy-mode=bar",
+      "--conf", "spark.r.shell.command=/usr/bin/R");
+
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+    assertEquals("/usr/bin/R", cmd.get(cmd.size() - 1));
+    assertEquals(
+      String.format(
+        "\"%s\" \"foo\" \"%s\" \"bar\" \"--conf\" \"spark.r.shell.command=/usr/bin/R\" \"%s\"",
+        parser.MASTER, parser.DEPLOY_MODE, SparkSubmitCommandBuilder.SPARKR_SHELL_RESOURCE),
+      env.get("SPARKR_SUBMIT_ARGS"));
+  }
+
+  @Test
   public void testExamplesRunner() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
       SparkSubmitCommandBuilder.RUN_EXAMPLE,

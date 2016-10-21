@@ -70,9 +70,9 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
                           localDir = NULL, overwrite = FALSE) {
   version <- paste0("spark-", packageVersion("SparkR"))
   hadoopVersion <- tolower(hadoopVersion)
-  hadoopVersionName <- hadoop_version_name(hadoopVersion)
+  hadoopVersionName <- hadoopVersionName(hadoopVersion)
   packageName <- paste(version, "bin", hadoopVersionName, sep = "-")
-  localDir <- ifelse(is.null(localDir), spark_cache_path(),
+  localDir <- ifelse(is.null(localDir), sparkCachePath(),
                      normalizePath(localDir, mustWork = FALSE))
 
   if (is.na(file.info(localDir)$isdir)) {
@@ -88,12 +88,14 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
 
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
   if (!is.na(file.info(packageLocalDir)$isdir) && !overwrite) {
-    fmt <- "Spark %s for Hadoop %s is found, and SPARK_HOME set to %s"
+    fmt <- "%s for Hadoop %s found, with SPARK_HOME set to %s"
     msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
                    packageLocalDir)
     message(msg)
     Sys.setenv(SPARK_HOME = packageLocalDir)
     return(invisible(packageLocalDir))
+  } else {
+    message("Spark not found in the cache directory. Installation will start.")
   }
 
   packageLocalPath <- paste0(packageLocalDir, ".tgz")
@@ -102,7 +104,7 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   if (tarExists && !overwrite) {
     message("tar file found.")
   } else {
-    robust_download_tar(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath)
+    robustDownloadTar(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath)
   }
 
   message(sprintf("Installing to %s", localDir))
@@ -116,33 +118,37 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   invisible(packageLocalDir)
 }
 
-robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
+robustDownloadTar <- function(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
   # step 1: use user-provided url
   if (!is.null(mirrorUrl)) {
     msg <- sprintf("Use user-provided mirror site: %s.", mirrorUrl)
     message(msg)
-    success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
+    success <- directDownloadTar(mirrorUrl, version, hadoopVersion,
                                    packageName, packageLocalPath)
-    if (success) return()
+    if (success) {
+      return()
+    } else {
+      message(paste0("Unable to download from mirrorUrl: ", mirrorUrl))
+    }
   } else {
-    message("Mirror site not provided.")
+    message("MirrorUrl not provided.")
   }
 
   # step 2: use url suggested from apache website
-  message("Looking for site suggested from apache website...")
-  mirrorUrl <- get_preferred_mirror(version, packageName)
+  message("Looking for preferred site from apache website...")
+  mirrorUrl <- getPreferredMirror(version, packageName)
   if (!is.null(mirrorUrl)) {
-    success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
+    success <- directDownloadTar(mirrorUrl, version, hadoopVersion,
                                    packageName, packageLocalPath)
     if (success) return()
   } else {
-    message("Unable to find suggested mirror site.")
+    message("Unable to find preferred mirror site.")
   }
 
   # step 3: use backup option
   message("To use backup site...")
-  mirrorUrl <- default_mirror_url()
-  success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
+  mirrorUrl <- defaultMirrorUrl()
+  success <- directDownloadTar(mirrorUrl, version, hadoopVersion,
                                  packageName, packageLocalPath)
   if (success) {
     return(packageLocalPath)
@@ -155,7 +161,7 @@ robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
   }
 }
 
-get_preferred_mirror <- function(version, packageName) {
+getPreferredMirror <- function(version, packageName) {
   jsonUrl <- paste0("http://www.apache.org/dyn/closer.cgi?path=",
                         file.path("spark", version, packageName),
                         ".tgz&as_json=1")
@@ -175,10 +181,10 @@ get_preferred_mirror <- function(version, packageName) {
   mirrorPreferred
 }
 
-direct_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
+directDownloadTar <- function(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
   packageRemotePath <- paste0(
     file.path(mirrorUrl, version, packageName), ".tgz")
-  fmt <- paste("Downloading Spark %s for Hadoop %s from:\n- %s")
+  fmt <- "Downloading %s for Hadoop %s from:\n- %s"
   msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
                  packageRemotePath)
   message(msg)
@@ -192,11 +198,11 @@ direct_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
   !isFail
 }
 
-default_mirror_url <- function() {
+defaultMirrorUrl <- function() {
   "http://www-us.apache.org/dist/spark"
 }
 
-hadoop_version_name <- function(hadoopVersion) {
+hadoopVersionName <- function(hadoopVersion) {
   if (hadoopVersion == "without") {
     "without-hadoop"
   } else if (grepl("^[0-9]+\\.[0-9]+$", hadoopVersion, perl = TRUE)) {
@@ -208,7 +214,7 @@ hadoop_version_name <- function(hadoopVersion) {
 
 # The implementation refers to appdirs package: https://pypi.python.org/pypi/appdirs and
 # adapt to Spark context
-spark_cache_path <- function() {
+sparkCachePath <- function() {
   if (.Platform$OS.type == "windows") {
     winAppPath <- Sys.getenv("LOCALAPPDATA", unset = NA)
     if (is.na(winAppPath)) {
@@ -230,4 +236,22 @@ spark_cache_path <- function() {
     stop(sprintf("Unknown OS: %s", .Platform$OS.type))
   }
   normalizePath(path, mustWork = FALSE)
+}
+
+
+installInstruction <- function(mode) {
+  if (mode == "remote") {
+    paste0("Connecting to a remote Spark master. ",
+           "Please make sure Spark package is also installed in this machine.\n",
+           "- If there is one, set the path in sparkHome parameter or ",
+           "environment variable SPARK_HOME.\n",
+           "- If not, you may run install.spark function to do the job. ",
+           "Please make sure the Spark and the Hadoop versions ",
+           "match the versions on the cluster. ",
+           "SparkR package is compatible with Spark ", packageVersion("SparkR"), ".",
+           "If you need further help, ",
+           "contact the administrators of the cluster.")
+  } else {
+    stop(paste0("No instruction found for ", mode, " mode."))
+  }
 }

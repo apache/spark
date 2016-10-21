@@ -188,6 +188,7 @@ class TypeCoercionSuite extends PlanTest {
     // TimestampType
     widenTest(NullType, TimestampType, Some(TimestampType))
     widenTest(TimestampType, TimestampType, Some(TimestampType))
+    widenTest(DateType, TimestampType, Some(TimestampType))
     widenTest(IntegerType, TimestampType, None)
     widenTest(StringType, TimestampType, None)
 

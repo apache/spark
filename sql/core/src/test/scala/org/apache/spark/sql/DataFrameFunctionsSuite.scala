@@ -324,15 +324,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
       (Seq[Int](), "y"),
-      (Seq[Int](1, 2, 3), "z")
+      (Seq[Int](1, 2, 3), "z"),
+      (null, "empty")
     ).toDF("a", "b")
     checkAnswer(
       df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3))
+      Seq(Row(2), Row(0), Row(3), Row(-1))
     )
     checkAnswer(
       df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3))
+      Seq(Row(2), Row(0), Row(3), Row(-1))
     )
   }
 
@@ -340,15 +341,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
       (Map[Int, Int](), "y"),
-      (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z")
+      (Map[Int, Int](1 -> 1, 2 -> 2, 3 -> 3), "z"),
+      (null, "empty")
     ).toDF("a", "b")
     checkAnswer(
       df.select(size($"a")),
-      Seq(Row(2), Row(0), Row(3))
+      Seq(Row(2), Row(0), Row(3), Row(-1))
     )
     checkAnswer(
       df.selectExpr("size(a)"),
-      Seq(Row(2), Row(0), Row(3))
+      Seq(Row(2), Row(0), Row(3), Row(-1))
     )
   }
 

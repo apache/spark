@@ -112,7 +112,7 @@ object FileSourceStrategy extends Strategy with Logging {
           outputSchema,
           partitionKeyFilters.toSeq,
           pushedDownFilters,
-          table)
+          table.map(_.identifier))
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
       val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)

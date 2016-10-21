@@ -35,9 +35,7 @@ import org.apache.spark.sql.types._
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
  * wrapped in `ExecutedCommand` during execution.
  */
-trait RunnableCommand extends LogicalPlan with logical.Command {
-  override def output: Seq[Attribute] = Seq.empty
-  override def children: Seq[LogicalPlan] = Seq.empty
+trait RunnableCommand extends logical.Command {
   def run(sparkSession: SparkSession): Seq[Row]
 }
 

@@ -70,7 +70,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, Poi
  * All of the scheduling and execution in Spark is done based on these methods, allowing each RDD
  * to implement its own way of computing itself. Indeed, users can implement custom RDDs (e.g. for
  * reading data from a new storage system) by overriding these functions. Please refer to the
- * [[http://www.cs.berkeley.edu/~matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
+ * [[http://people.csail.mit.edu/matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
  * on RDD internals.
  */
 abstract class RDD[T: ClassTag](
@@ -1296,6 +1296,7 @@ abstract class RDD[T: ClassTag](
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
+    val scaleUpFactor = Math.max(conf.getInt("spark.rdd.limit.scaleUpFactor", 4), 2)
     if (num == 0) {
       new Array[T](0)
     } else {
@@ -1310,12 +1311,12 @@ abstract class RDD[T: ClassTag](
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate
           // it by 50%. We also cap the estimation in the end.
-          if (buf.size == 0) {
-            numPartsToTry = partsScanned * 4
+          if (buf.isEmpty) {
+            numPartsToTry = partsScanned * scaleUpFactor
           } else {
             // the left side of max is >=1 whenever partsScanned >= 2
             numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
-            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * scaleUpFactor)
           }
         }
 

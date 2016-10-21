@@ -387,15 +387,22 @@ class DDLCommandSuite extends PlanTest {
     val parsed_table = parser.parsePlan(sql_table)
     val parsed_view = parser.parsePlan(sql_view)
     val expected_table = AlterTableRenameCommand(
-      TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None),
+      TableIdentifier("table_name"),
+      TableIdentifier("new_table_name"),
       isView = false)
     val expected_view = AlterTableRenameCommand(
-      TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None),
+      TableIdentifier("table_name"),
+      TableIdentifier("new_table_name"),
       isView = true)
     comparePlans(parsed_table, expected_table)
     comparePlans(parsed_view, expected_view)
+  }
+
+  test("alter table: rename table with database") {
+    val query = "ALTER TABLE db1.tbl RENAME TO db1.tbl2"
+    val plan = parseAs[AlterTableRenameCommand](query)
+    assert(plan.oldName == TableIdentifier("tbl", Some("db1")))
+    assert(plan.newName == TableIdentifier("tbl2", Some("db1")))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);

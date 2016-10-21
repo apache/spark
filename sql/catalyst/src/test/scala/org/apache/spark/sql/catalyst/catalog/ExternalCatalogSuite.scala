@@ -25,6 +25,8 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -160,6 +162,15 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     catalog.createTable(table, ignoreIfExists = false)
     val actual = catalog.getTable("db2", "external_table1")
     assert(actual.tableType === CatalogTableType.EXTERNAL)
+  }
+
+  test("create table when the table already exists") {
+    val catalog = newBasicCatalog()
+    assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
+    val table = newTable("tbl1", "db2")
+    intercept[TableAlreadyExistsException] {
+      catalog.createTable(table, ignoreIfExists = false)
+    }
   }
 
   test("drop table") {
@@ -440,14 +451,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("create function when database does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchDatabaseException] {
       catalog.createFunction("does_not_exist", newFunc())
     }
   }
 
   test("create function that already exists") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[FunctionAlreadyExistsException] {
       catalog.createFunction("db2", newFunc("func1"))
     }
   }
@@ -461,14 +472,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("drop function when database does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchDatabaseException] {
       catalog.dropFunction("does_not_exist", "something")
     }
   }
 
   test("drop function that does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchFunctionException] {
       catalog.dropFunction("db2", "does_not_exist")
     }
   }
@@ -478,14 +489,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(catalog.getFunction("db2", "func1") ==
       CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
         Seq.empty[FunctionResource]))
-    intercept[AnalysisException] {
+    intercept[NoSuchFunctionException] {
       catalog.getFunction("db2", "does_not_exist")
     }
   }
 
   test("get function when database does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchDatabaseException] {
       catalog.getFunction("does_not_exist", "func1")
     }
   }
@@ -495,15 +506,15 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val newName = "funcky"
     assert(catalog.getFunction("db2", "func1").className == funcClass)
     catalog.renameFunction("db2", "func1", newName)
-    intercept[AnalysisException] { catalog.getFunction("db2", "func1") }
+    intercept[NoSuchFunctionException] { catalog.getFunction("db2", "func1") }
     assert(catalog.getFunction("db2", newName).identifier.funcName == newName)
     assert(catalog.getFunction("db2", newName).className == funcClass)
-    intercept[AnalysisException] { catalog.renameFunction("db2", "does_not_exist", "me") }
+    intercept[NoSuchFunctionException] { catalog.renameFunction("db2", "does_not_exist", "me") }
   }
 
   test("rename function when database does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
+    intercept[NoSuchDatabaseException] {
       catalog.renameFunction("does_not_exist", "func1", "func5")
     }
   }
@@ -511,7 +522,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("rename function when new function already exists") {
     val catalog = newBasicCatalog()
     catalog.createFunction("db2", newFunc("func2", Some("db2")))
-    intercept[AnalysisException] {
+    intercept[FunctionAlreadyExistsException] {
       catalog.renameFunction("db2", "func1", "func2")
     }
   }

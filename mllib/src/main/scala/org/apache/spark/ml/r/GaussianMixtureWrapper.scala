@@ -68,10 +68,11 @@ private[r] object GaussianMixtureWrapper extends MLReadable[GaussianMixtureWrapp
       maxIter: Int,
       tol: Double): GaussianMixtureWrapper = {
 
-    val rFormulaModel = new RFormula()
+    val rFormula = new RFormula()
       .setFormula(formula)
       .setFeaturesCol("features")
-      .fit(data)
+    RWrapperUtils.checkDataColumns(rFormula, data)
+    val rFormulaModel = rFormula.fit(data)
 
     // get feature names from output schema
     val schema = rFormulaModel.transform(data).schema
@@ -84,6 +85,7 @@ private[r] object GaussianMixtureWrapper extends MLReadable[GaussianMixtureWrapp
       .setK(k)
       .setMaxIter(maxIter)
       .setTol(tol)
+      .setFeaturesCol(rFormula.getFeaturesCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, gm))

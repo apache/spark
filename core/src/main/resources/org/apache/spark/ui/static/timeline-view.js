@@ -41,7 +41,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
   setupExecutorEventAction();
 
   function setupJobEventAction() {
-    $(".item.range.job.application-timeline-object").each(function() {
+    $(".vis-item.vis-range.job.application-timeline-object").each(function() {
       var getSelectorForJobEntry = function(baseElem) {
         var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
         var jobId = jobIdText.match("\\(Job (\\d+)\\)$")[1];
@@ -116,7 +116,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
   setupExecutorEventAction();
 
   function setupStageEventAction() {
-    $(".item.range.stage.job-timeline-object").each(function() {
+    $(".vis-item.vis-range.stage.job-timeline-object").each(function() {
       var getSelectorForStageEntry = function(baseElem) {
         var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
         var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)$")[1].split(".");
@@ -233,7 +233,7 @@ $(function (){
 });
 
 function setupExecutorEventAction() {
-  $(".item.box.executor").each(function () {
+  $(".vis-item.vis-box.executor").each(function () {
     $(this).hover(
       function() {
         $($(this).find(".executor-event-content")[0]).tooltip("show");

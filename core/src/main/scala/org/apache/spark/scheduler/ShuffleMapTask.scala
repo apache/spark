@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.util.Properties
 
@@ -43,6 +44,11 @@ import org.apache.spark.shuffle.ShuffleWriter
  * @param locs preferred task execution locations for locality scheduling
  * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
+ *
+ * The parameters below are optional:
+ * @param jobId id of the job this task belongs to
+ * @param appId id of the app this task belongs to
+ * @param appAttemptId attempt id of the app this task belongs to
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,
@@ -51,8 +57,12 @@ private[spark] class ShuffleMapTask(
     partition: Partition,
     @transient private var locs: Seq[TaskLocation],
     metrics: TaskMetrics,
-    localProperties: Properties)
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, metrics, localProperties)
+    localProperties: Properties,
+    jobId: Option[Int] = None,
+    appId: Option[String] = None,
+    appAttemptId: Option[String] = None)
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, metrics, localProperties, jobId,
+    appId, appAttemptId)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
@@ -66,11 +76,18 @@ private[spark] class ShuffleMapTask(
 
   override def runTask(context: TaskContext): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
+    val threadMXBean = ManagementFactory.getThreadMXBean
     val deserializeStartTime = System.currentTimeMillis()
+    val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
+      threadMXBean.getCurrentThreadCpuTime
+    } else 0L
     val ser = SparkEnv.get.closureSerializer.newInstance()
     val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
+    _executorDeserializeCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
+      threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
+    } else 0L
 
     var writer: ShuffleWriter[Any, Any] = null
     try {
