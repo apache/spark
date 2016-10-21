@@ -102,8 +102,8 @@ case class CatalogTablePartition(
    * Given the partition schema, returns a row with that schema holding the partition values.
    */
   def toRow(partitionSchema: StructType): InternalRow = {
-    InternalRow.fromSeq(partitionSchema.map { case StructField(name, dataType, _, _) =>
-      Cast(Literal(spec(name)), dataType).eval()
+    InternalRow.fromSeq(partitionSchema.map { field =>
+      Cast(Literal(spec(field.name)), field.dataType).eval()
     })
   }
 }

@@ -59,7 +59,9 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         val prunedFileCatalog = tableFileCatalog.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =
           fsRelation.copy(location = prunedFileCatalog)(sparkSession)
-        val prunedLogicalRelation = logicalRelation.copy(relation = prunedFsRelation)
+        val prunedLogicalRelation = logicalRelation.copy(
+          relation = prunedFsRelation,
+          expectedOutputAttributes = Some(logicalRelation.output))
 
         // Keep partition-pruning predicates so that they are visible in physical planning
         val filterExpression = filters.reduceLeft(And)
