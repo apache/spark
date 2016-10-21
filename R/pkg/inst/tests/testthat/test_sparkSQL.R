@@ -831,8 +831,6 @@ test_that("names() colnames() set the column names", {
   colnames(df) <- c("col3", "col4")
   expect_equal(names(df)[1], "col3")
 
-  expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
-               "Colum names cannot contain the '.' symbol.")
   expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
   expect_error(colnames(df) <- c("a"),
                "Column names must have the same length as the number of columns in the dataset.")
@@ -840,7 +838,7 @@ test_that("names() colnames() set the column names", {
 
   # Note: if this test is broken, remove check for "." character on colnames<- method
   irisDF <- suppressWarnings(createDataFrame(iris))
-  expect_equal(names(irisDF)[1], "Sepal_Length")
+  expect_equal(names(irisDF)[1], "Sepal.Length")
 
   # Test base::colnames base::names
   m2 <- cbind(1, 1:4)
@@ -2174,11 +2172,11 @@ test_that("attach() on a DataFrame", {
 })
 
 test_that("with() on a DataFrame", {
-  df <- suppressWarnings(createDataFrame(iris))
-  expect_error(Sepal_Length)
-  sum1 <- with(df, list(summary(Sepal_Length), summary(Sepal_Width)))
-  expect_equal(collect(sum1[[1]])[1, "Sepal_Length"], "150")
-  sum2 <- with(df, distinct(Sepal_Length))
+  df <- createDataFrame(iris)
+  expect_error(Sepal.Length)
+  sum1 <- with(df, list(summary(Sepal.Length), summary(Sepal.Width)))
+  expect_equal(collect(sum1[[1]])[1, "Sepal.Length"], "150")
+  sum2 <- with(df, distinct(Sepal.Length))
   expect_equal(nrow(sum2), 35)
 })
 
@@ -2227,17 +2225,17 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
 test_that("Method str()", {
   # Structure of Iris
   iris2 <- iris
-  colnames(iris2) <- c("Sepal_Length", "Sepal_Width", "Petal_Length", "Petal_Width", "Species")
+  colnames(iris2) <- c("Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width", "Species")
   iris2$col <- TRUE
   irisDF2 <- createDataFrame(iris2)
 
   out <- capture.output(str(irisDF2))
   expect_equal(length(out), 7)
   expect_equal(out[1], "'SparkDataFrame': 6 variables:")
-  expect_equal(out[2], " $ Sepal_Length: num 5.1 4.9 4.7 4.6 5 5.4")
-  expect_equal(out[3], " $ Sepal_Width : num 3.5 3 3.2 3.1 3.6 3.9")
-  expect_equal(out[4], " $ Petal_Length: num 1.4 1.4 1.3 1.5 1.4 1.7")
-  expect_equal(out[5], " $ Petal_Width : num 0.2 0.2 0.2 0.2 0.2 0.4")
+  expect_equal(out[2], " $ Sepal.Length: num 5.1 4.9 4.7 4.6 5 5.4")
+  expect_equal(out[3], " $ Sepal.Width : num 3.5 3 3.2 3.1 3.6 3.9")
+  expect_equal(out[4], " $ Petal.Length: num 1.4 1.4 1.3 1.5 1.4 1.7")
+  expect_equal(out[5], " $ Petal.Width : num 0.2 0.2 0.2 0.2 0.2 0.4")
   expect_equal(out[6], paste0(" $ Species     : chr \"setosa\" \"setosa\" \"",
                               "setosa\" \"setosa\" \"setosa\" \"setosa\""))
   expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE")
@@ -2267,7 +2265,7 @@ test_that("Histogram", {
 
   # Basic histogram test with colname
   expect_equal(
-    all(histogram(irisDF, "Petal_Width", 8) ==
+    all(histogram(irisDF, "Petal.Width", 8) ==
         data.frame(bins = seq(0, 7),
                    counts = c(48, 2, 7, 21, 24, 19, 15, 14),
                    centroids = seq(0, 7) * 0.3 + 0.25)),
@@ -2275,7 +2273,7 @@ test_that("Histogram", {
 
   # Basic histogram test with Column
   expect_equal(
-    all(histogram(irisDF, irisDF$Petal_Width, 8) ==
+    all(histogram(irisDF, irisDF$Petal.Width, 8) ==
           data.frame(bins = seq(0, 7),
                      counts = c(48, 2, 7, 21, 24, 19, 15, 14),
                      centroids = seq(0, 7) * 0.3 + 0.25)),
@@ -2283,26 +2281,26 @@ test_that("Histogram", {
 
   # Basic histogram test with derived column
   expect_equal(
-    all(round(histogram(irisDF, irisDF$Petal_Width + 1, 8), 2) ==
+    all(round(histogram(irisDF, irisDF$Petal.Width + 1, 8), 2) ==
           data.frame(bins = seq(0, 7),
                      counts = c(48, 2, 7, 21, 24, 19, 15, 14),
                      centroids = seq(0, 7) * 0.3 + 1.25)),
     TRUE)
 
   # Missing nbins
-  expect_equal(length(histogram(irisDF, "Petal_Width")$counts), 10)
+  expect_equal(length(histogram(irisDF, "Petal.Width")$counts), 10)
 
   # Wrong colname
   expect_error(histogram(irisDF, "xxx"),
                "Specified colname does not belong to the given SparkDataFrame.")
 
   # Invalid nbins
-  expect_error(histogram(irisDF, "Petal_Width", nbins = 0),
+  expect_error(histogram(irisDF, "Petal.Width", nbins = 0),
                "The number of bins must be a positive integer number greater than 1.")
 
   # Test against R's hist
   expect_equal(all(hist(iris$Sepal.Width)$counts ==
-                   histogram(irisDF, "Sepal_Width", 12)$counts), T)
+                   histogram(irisDF, "Sepal.Width", 12)$counts), T)
 
   # Test when there are zero counts
   df <- as.DataFrame(data.frame(x = c(1, 2, 3, 4, 100)))
@@ -2491,23 +2489,23 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   actual <- df3Collect[order(df3Collect$a), ]
   expect_identical(actual$avg, expected$avg)
 
-  irisDF <- suppressWarnings(createDataFrame (iris))
-  schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
-  # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
+  irisDF <- createDataFrame (iris)
+  schema <-  structType(structField("Sepal.Length", "double"), structField("Avg", "double"))
+  # Groups by `Sepal.Length` and computes the average for `Sepal.Width`
   df4 <- gapply(
-    cols = "Sepal_Length",
+    cols = "Sepal.Length",
     irisDF,
     function(key, x) {
-      y <- data.frame(key, mean(x$Sepal_Width), stringsAsFactors = FALSE)
+      y <- data.frame(key, mean(x$Sepal.Width), stringsAsFactors = FALSE)
     },
     schema)
   actual <- collect(df4)
-  actual <- actual[order(actual$Sepal_Length), ]
+  actual <- actual[order(actual$Sepal.Length), ]
   rownames(actual) <- NULL
   agg_local_df <- data.frame(aggregate(iris$Sepal.Width, by = list(iris$Sepal.Length), FUN = mean),
                     stringsAsFactors = FALSE)
-  colnames(agg_local_df) <- c("Sepal_Length", "Avg")
-  expected <-  agg_local_df[order(agg_local_df$Sepal_Length), ]
+  colnames(agg_local_df) <- c("Sepal.Length", "Avg")
+  expected <-  agg_local_df[order(agg_local_df$Sepal.Length), ]
   rownames(expected) <- NULL
   expect_identical(actual, expected)
 })

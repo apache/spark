@@ -201,6 +201,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       attribute: Attribute): Option[(Attribute, List[String])] = {
     if (!attribute.isGenerated && resolver(attribute.name, nameParts.head)) {
       Option((attribute.withName(nameParts.head), nameParts.tail.toList))
+    } else if (!attribute.isGenerated && resolver(attribute.name, nameParts.mkString("."))) {
+      Option((attribute.withName(nameParts.mkString(".")), Nil))
     } else {
       None
     }

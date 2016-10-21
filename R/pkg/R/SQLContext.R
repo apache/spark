@@ -253,16 +253,6 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
       })
     }
 
-    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
-    # TODO(davies): remove this once SPARK-2775 is fixed
-    names <- lapply(names, function(n) {
-      nn <- gsub("[.]", "_", n)
-      if (nn != n) {
-        warning(paste("Use", nn, "instead of", n, " as column name"))
-      }
-      nn
-    })
-
     types <- lapply(row, infer_type)
     fields <- lapply(1:length(row), function(i) {
       structField(names[[i]], types[[i]], TRUE)
