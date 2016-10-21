@@ -1455,34 +1455,34 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("DESCRIBE FUNCTION log"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Logarithm") ::
         Row("Function: log") ::
-        Row("Usage: log(b, x) - Returns the logarithm of x with base b.") :: Nil
+        Row("Usage: log(expr1, expr2) - Returns the logarithm of expr1 with base expr2.") :: Nil
     )
     // predicate operator
     checkAnswer(
       sql("DESCRIBE FUNCTION or"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Or") ::
         Row("Function: or") ::
-        Row("Usage: a or b - Logical OR.") :: Nil
+        Row("Usage: expr1 or expr2 - Logical OR.") :: Nil
     )
     checkAnswer(
       sql("DESCRIBE FUNCTION !"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Not") ::
         Row("Function: !") ::
-        Row("Usage: ! a - Logical not") :: Nil
+        Row("Usage: ! expr - Logical not.") :: Nil
     )
     // arithmetic operators
     checkAnswer(
       sql("DESCRIBE FUNCTION +"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Add") ::
         Row("Function: +") ::
-        Row("Usage: a + b - Returns a+b.") :: Nil
+        Row("Usage: expr1 + expr2 - Returns expr1+expr2.") :: Nil
     )
     // comparison operators
     checkAnswer(
       sql("DESCRIBE FUNCTION <"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.LessThan") ::
         Row("Function: <") ::
-        Row("Usage: a < b - Returns TRUE if a is less than b.") :: Nil
+        Row("Usage: expr1 < expr2 - Returns TRUE if expr1 is less than expr2.") :: Nil
     )
     // STRING
     checkAnswer(
@@ -1490,15 +1490,27 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
         Row("Usage: concat(str1, str2, ..., strN) " +
-          "- Returns the concatenation of str1, str2, ..., strN") :: Nil
+          "- Returns the concatenation of str1, str2, ..., strN.") :: Nil
     )
     // extended mode
     checkAnswer(
       sql("DESCRIBE FUNCTION EXTENDED ^"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
-        Row("Extended Usage:\n> SELECT 3 ^ 5; 2") ::
+        Row(
+          "Extended Usage: " +
+          """
+            |    expr1 ^ expr2
+            |
+            |      Arguments:
+            |        expr1 - any intergal numeric type expression.
+            |        expr2 - any intergal numeric type expression.
+            |
+            |      Examples:
+            |        > SELECT 3 ^ 5;
+            |         2
+            |  """.stripMargin) ::
         Row("Function: ^") ::
-        Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
+        Row("Usage: expr1 ^ expr2 - Bitwise exclusive OR.") :: Nil
     )
   }
 

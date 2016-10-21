@@ -90,8 +90,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase",
       "Extended Usage:",
+      "upper(str)",
+      "Arguments:",
+      "str - string type or any type expression that can be implicitly converted",
+      "to string type.",
+      "Examples:",
       "> SELECT upper('SparkSql');",
-      "'SPARKSQL'")
+      "SPARKSQL")
 
     checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
