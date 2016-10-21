@@ -23,12 +23,11 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.feature.StringIndexer
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
  * An example runner for logistic regression with elastic-net (mixing L1/L2) regularization.
@@ -81,11 +80,11 @@ object LogisticRegressionExample {
         s"to higher accuracy with the cost of more iterations, default: ${defaultParams.tol}")
         .action((x, c) => c.copy(tol = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        .text(s"fraction of data to hold out for testing. If given option testInput, " +
         s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+        .text(s"input path to test dataset. If given, option fracTest is ignored." +
         s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")
@@ -104,28 +103,29 @@ object LogisticRegressionExample {
       }
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"LogisticRegressionExample with $params")
-    val sc = new SparkContext(conf)
+  def run(params: Params): Unit = {
+    val spark = SparkSession
+      .builder
+      .appName(s"LogisticRegressionExample with $params")
+      .getOrCreate()
 
     println(s"LogisticRegressionExample with parameters:\n$params")
 
     // Load training and test data and cache it.
-    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(sc, params.input,
+    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(params.input,
       params.dataFormat, params.testInput, "classification", params.fracTest)
 
-    // Set up Pipeline
+    // Set up Pipeline.
     val stages = new mutable.ArrayBuffer[PipelineStage]()
 
     val labelIndexer = new StringIndexer()
-      .setInputCol("labelString")
+      .setInputCol("label")
       .setOutputCol("indexedLabel")
     stages += labelIndexer
 
@@ -141,7 +141,7 @@ object LogisticRegressionExample {
     stages += lor
     val pipeline = new Pipeline().setStages(stages.toArray)
 
-    // Fit the Pipeline
+    // Fit the Pipeline.
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
@@ -149,14 +149,14 @@ object LogisticRegressionExample {
 
     val lorModel = pipelineModel.stages.last.asInstanceOf[LogisticRegressionModel]
     // Print the weights and intercept for logistic regression.
-    println(s"Weights: ${lorModel.weights} Intercept: ${lorModel.intercept}")
+    println(s"Weights: ${lorModel.coefficients} Intercept: ${lorModel.intercept}")
 
     println("Training data results:")
     DecisionTreeExample.evaluateClassificationModel(pipelineModel, training, "indexedLabel")
     println("Test data results:")
     DecisionTreeExample.evaluateClassificationModel(pipelineModel, test, "indexedLabel")
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

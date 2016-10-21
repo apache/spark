@@ -24,10 +24,8 @@ import java.util.jar.Manifest
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.{Files, ByteStreams}
-
+import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.FileUtils
-
 import org.apache.ivy.core.settings.IvySettings
 
 import org.apache.spark.TestUtils.{createCompiledClass, JavaSourceFromString}
@@ -307,7 +305,7 @@ private[deploy] object IvyTestUtils {
       val allFiles = ArrayBuffer[(String, File)](javaFile)
       if (withPython) {
         val pythonFile = createPythonFile(root)
-        allFiles.append((pythonFile.getName, pythonFile))
+        allFiles += Tuple2(pythonFile.getName, pythonFile)
       }
       if (withR) {
         val rFiles = createRFiles(root, className, artifact.groupId)

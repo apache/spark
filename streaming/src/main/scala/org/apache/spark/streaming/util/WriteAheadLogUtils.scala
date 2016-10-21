@@ -21,8 +21,9 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /** A helper class with utility functions related to the WriteAheadLog interface */
 private[streaming] object WriteAheadLogUtils extends Logging {
@@ -31,11 +32,17 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   val RECEIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
     "spark.streaming.receiver.writeAheadLog.rollingIntervalSecs"
   val RECEIVER_WAL_MAX_FAILURES_CONF_KEY = "spark.streaming.receiver.writeAheadLog.maxFailures"
+  val RECEIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
+    "spark.streaming.receiver.writeAheadLog.closeFileAfterWrite"
 
   val DRIVER_WAL_CLASS_CONF_KEY = "spark.streaming.driver.writeAheadLog.class"
   val DRIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
     "spark.streaming.driver.writeAheadLog.rollingIntervalSecs"
   val DRIVER_WAL_MAX_FAILURES_CONF_KEY = "spark.streaming.driver.writeAheadLog.maxFailures"
+  val DRIVER_WAL_BATCHING_CONF_KEY = "spark.streaming.driver.writeAheadLog.allowBatching"
+  val DRIVER_WAL_BATCHING_TIMEOUT_CONF_KEY = "spark.streaming.driver.writeAheadLog.batchingTimeout"
+  val DRIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
+    "spark.streaming.driver.writeAheadLog.closeFileAfterWrite"
 
   val DEFAULT_ROLLING_INTERVAL_SECS = 60
   val DEFAULT_MAX_FAILURES = 3
@@ -57,6 +64,26 @@ private[streaming] object WriteAheadLogUtils extends Logging {
       conf.getInt(DRIVER_WAL_MAX_FAILURES_CONF_KEY, DEFAULT_MAX_FAILURES)
     } else {
       conf.getInt(RECEIVER_WAL_MAX_FAILURES_CONF_KEY, DEFAULT_MAX_FAILURES)
+    }
+  }
+
+  def isBatchingEnabled(conf: SparkConf, isDriver: Boolean): Boolean = {
+    isDriver && conf.getBoolean(DRIVER_WAL_BATCHING_CONF_KEY, defaultValue = true)
+  }
+
+  /**
+   * How long we will wait for the wrappedLog in the BatchedWriteAheadLog to write the records
+   * before we fail the write attempt to unblock receivers.
+   */
+  def getBatchingTimeout(conf: SparkConf): Long = {
+    conf.getLong(DRIVER_WAL_BATCHING_TIMEOUT_CONF_KEY, defaultValue = 5000)
+  }
+
+  def shouldCloseFileAfterWrite(conf: SparkConf, isDriver: Boolean): Boolean = {
+    if (isDriver) {
+      conf.getBoolean(DRIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY, defaultValue = false)
+    } else {
+      conf.getBoolean(RECEIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY, defaultValue = false)
     }
   }
 
@@ -103,7 +130,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     } else {
       sparkConf.getOption(RECEIVER_WAL_CLASS_CONF_KEY)
     }
-    classNameOption.map { className =>
+    val wal = classNameOption.map { className =>
       try {
         instantiateClass(
           Utils.classForName(className).asInstanceOf[Class[_ <: WriteAheadLog]], sparkConf)
@@ -113,7 +140,13 @@ private[streaming] object WriteAheadLogUtils extends Logging {
       }
     }.getOrElse {
       new FileBasedWriteAheadLog(sparkConf, fileWalLogDirectory, fileWalHadoopConf,
-        getRollingIntervalSecs(sparkConf, isDriver), getMaxFailures(sparkConf, isDriver))
+        getRollingIntervalSecs(sparkConf, isDriver), getMaxFailures(sparkConf, isDriver),
+        shouldCloseFileAfterWrite(sparkConf, isDriver))
+    }
+    if (isBatchingEnabled(sparkConf, isDriver)) {
+      new BatchedWriteAheadLog(wal, sparkConf)
+    } else {
+      wal
     }
   }
 

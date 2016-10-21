@@ -18,26 +18,29 @@
 package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import com.google.common.base.Charsets.UTF_8
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext, TestOutputStream}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.{Seconds, TestOutputStream, StreamingContext}
 import org.apache.spark.util.{ManualClock, Utils}
 
-class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   val maxAttempts = 5
   val batchDuration = Seconds(1)
+
+  @transient private var _sc: SparkContext = _
 
   val conf = new SparkConf()
     .setMaster("local[2]")
@@ -45,6 +48,17 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
     .set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
 
   val utils = new PollingFlumeTestUtils
+
+  override def beforeAll(): Unit = {
+    _sc = new SparkContext(conf)
+  }
+
+  override def afterAll(): Unit = {
+    if (_sc != null) {
+      _sc.stop()
+      _sc = null
+    }
+  }
 
   test("flume polling test") {
     testMultipleTimes(testFlumePolling)
@@ -97,33 +111,33 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
 
   def writeAndVerify(sinkPorts: Seq[Int]): Unit = {
     // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
+    val ssc = new StreamingContext(_sc, batchDuration)
     val addresses = sinkPorts.map(port => new InetSocketAddress("localhost", port))
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
       FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
         utils.eventsPerBatch, 5)
-    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
-      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    val outputQueue = new ConcurrentLinkedQueue[Seq[SparkFlumeEvent]]
+    val outputStream = new TestOutputStream(flumeStream, outputQueue)
     outputStream.register()
 
     ssc.start()
     try {
-      utils.sendDatAndEnsureAllDataHasBeenReceived()
+      utils.sendDataAndEnsureAllDataHasBeenReceived()
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
       clock.advance(batchDuration.milliseconds)
 
       // The eventually is required to ensure that all data in the batch has been processed.
       eventually(timeout(10 seconds), interval(100 milliseconds)) {
-        val flattenOutputBuffer = outputBuffer.flatten
-        val headers = flattenOutputBuffer.map(_.event.getHeaders.asScala.map {
+        val flattenOutput = outputQueue.asScala.toSeq.flatten
+        val headers = flattenOutput.map(_.event.getHeaders.asScala.map {
           case (key, value) => (key.toString, value.toString)
         }).map(_.asJava)
-        val bodies = flattenOutputBuffer.map(e => new String(e.event.getBody.array(), UTF_8))
-        utils.assertOutput(headers, bodies)
+        val bodies = flattenOutput.map(e => JavaUtils.bytesToString(e.event.getBody))
+        utils.assertOutput(headers.asJava, bodies.asJava)
       }
     } finally {
-      ssc.stop()
+      // here stop ssc only, but not underlying sparkcontext
+      ssc.stop(false)
     }
   }
 

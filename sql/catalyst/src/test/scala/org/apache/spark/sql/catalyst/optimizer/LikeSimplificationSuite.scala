@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+/* Implicit conversions */
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules._
-
-/* Implicit conversions */
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.dsl.plans._
 
 class LikeSimplificationSuite extends PlanTest {
 
@@ -57,6 +56,20 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .where(EndsWith('a, "xyz"))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("simplify Like into startsWith and EndsWith") {
+    val originalQuery =
+      testRelation
+        .where(('a like "abc\\%def") || ('a like "abc%def"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(('a like "abc\\%def") ||
+        (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def"))))
       .analyze
 
     comparePlans(optimized, correctAnswer)

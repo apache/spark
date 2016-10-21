@@ -19,17 +19,15 @@ package org.apache.spark.mllib.classification
 
 import org.json4s.{DefaultFormats, JValue}
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
  * Represents a classification model that predicts to which of a set of categories an example
  * belongs. The categories are represented by double values: 0.0, 1.0, 2.0, etc.
  */
-@Experimental
 @Since("0.8.0")
 trait ClassificationModel extends Serializable {
   /**

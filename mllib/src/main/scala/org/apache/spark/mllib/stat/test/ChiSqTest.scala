@@ -17,15 +17,16 @@
 
 package org.apache.spark.mllib.stat.test
 
+import scala.collection.mutable
+
 import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.commons.math3.distribution.ChiSquaredDistribution
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-
-import scala.collection.mutable
 
 /**
  * Conduct the chi-squared test for the input RDDs using the specified method.
@@ -109,7 +110,9 @@ private[stat] object ChiSqTest extends Logging {
           }
           i += 1
           distinctLabels += label
-          features.toArray.view.zipWithIndex.slice(startCol, endCol).map { case (feature, col) =>
+          val brzFeatures = features.asBreeze
+          (startCol until endCol).map { col =>
+            val feature = brzFeatures(col)
             allDistinctFeatures(col) += feature
             (col, feature, label)
           }
@@ -122,7 +125,7 @@ private[stat] object ChiSqTest extends Logging {
           pairCounts.keys.filter(_._1 == startCol).map(_._3).toArray.distinct.zipWithIndex.toMap
       }
       val numLabels = labels.size
-      pairCounts.keys.groupBy(_._1).map { case (col, keys) =>
+      pairCounts.keys.groupBy(_._1).foreach { case (col, keys) =>
         val features = keys.map(_._2).toArray.distinct.zipWithIndex.toMap
         val numRows = features.size
         val contingency = new BDM(numRows, numLabels, new Array[Double](numRows * numLabels))
@@ -143,7 +146,7 @@ private[stat] object ChiSqTest extends Logging {
    * Uniform distribution is assumed when `expected` is not passed in.
    */
   def chiSquared(observed: Vector,
-      expected: Vector = Vectors.dense(Array[Double]()),
+      expected: Vector = Vectors.dense(Array.empty[Double]),
       methodName: String = PEARSON.name): ChiSqTestResult = {
 
     // Validate input arguments

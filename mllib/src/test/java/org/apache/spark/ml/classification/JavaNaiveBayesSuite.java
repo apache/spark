@@ -17,46 +17,27 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
 import java.util.Arrays;
+import java.util.List;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.SharedSparkSession;
+import org.apache.spark.ml.linalg.VectorUDT;
+import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaNaiveBayesSuite implements Serializable {
+public class JavaNaiveBayesSuite extends SharedSparkSession {
 
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
-
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
-    jsql = new SQLContext(jsc);
-  }
-
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
-  }
-
-  public void validatePrediction(DataFrame predictionAndLabels) {
-    for (Row r : predictionAndLabels.collect()) {
+  public void validatePrediction(Dataset<Row> predictionAndLabels) {
+    for (Row r : predictionAndLabels.collectAsList()) {
       double prediction = r.getAs(0);
       double label = r.getAs(1);
       assertEquals(label, prediction, 1E-5);
@@ -75,25 +56,24 @@ public class JavaNaiveBayesSuite implements Serializable {
 
   @Test
   public void testNaiveBayes() {
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(0.0, Vectors.dense(1.0, 0.0, 0.0)),
       RowFactory.create(0.0, Vectors.dense(2.0, 0.0, 0.0)),
       RowFactory.create(1.0, Vectors.dense(0.0, 1.0, 0.0)),
       RowFactory.create(1.0, Vectors.dense(0.0, 2.0, 0.0)),
       RowFactory.create(2.0, Vectors.dense(0.0, 0.0, 1.0)),
-      RowFactory.create(2.0, Vectors.dense(0.0, 0.0, 2.0))
-    ));
+      RowFactory.create(2.0, Vectors.dense(0.0, 0.0, 2.0)));
 
     StructType schema = new StructType(new StructField[]{
       new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
       new StructField("features", new VectorUDT(), false, Metadata.empty())
     });
 
-    DataFrame dataset = jsql.createDataFrame(jrdd, schema);
+    Dataset<Row> dataset = spark.createDataFrame(data, schema);
     NaiveBayes nb = new NaiveBayes().setSmoothing(0.5).setModelType("multinomial");
     NaiveBayesModel model = nb.fit(dataset);
 
-    DataFrame predictionAndLabels = model.transform(dataset).select("prediction", "label");
+    Dataset<Row> predictionAndLabels = model.transform(dataset).select("prediction", "label");
     validatePrediction(predictionAndLabels);
   }
 }

@@ -19,45 +19,41 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression2, AggregateFunction2}
-import org.apache.spark.sql.execution.metric.LongSQLMetric
-import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
+import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
- * An iterator used to evaluate [[AggregateFunction2]]. It assumes the input rows have been
- * sorted by values of [[groupingKeyAttributes]].
+ * An iterator used to evaluate [[AggregateFunction]]. It assumes the input rows have been
+ * sorted by values of [[groupingExpressions]].
  */
 class SortBasedAggregationIterator(
-    groupingKeyAttributes: Seq[Attribute],
+    groupingExpressions: Seq[NamedExpression],
     valueAttributes: Seq[Attribute],
-    inputKVIterator: KVIterator[InternalRow, InternalRow],
-    nonCompleteAggregateExpressions: Seq[AggregateExpression2],
-    nonCompleteAggregateAttributes: Seq[Attribute],
-    completeAggregateExpressions: Seq[AggregateExpression2],
-    completeAggregateAttributes: Seq[Attribute],
+    inputIterator: Iterator[InternalRow],
+    aggregateExpressions: Seq[AggregateExpression],
+    aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    outputsUnsafeRows: Boolean,
-    numInputRows: LongSQLMetric,
-    numOutputRows: LongSQLMetric)
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    numOutputRows: SQLMetric)
   extends AggregationIterator(
-    groupingKeyAttributes,
+    groupingExpressions,
     valueAttributes,
-    nonCompleteAggregateExpressions,
-    nonCompleteAggregateAttributes,
-    completeAggregateExpressions,
-    completeAggregateAttributes,
+    aggregateExpressions,
+    aggregateAttributes,
     initialInputBufferOffset,
     resultExpressions,
-    newMutableProjection,
-    outputsUnsafeRows) {
+    newMutableProjection) {
 
-  override protected def newBuffer: MutableRow = {
-    val bufferSchema = allAggregateFunctions.flatMap(_.bufferAttributes)
+  /**
+   * Creates a new aggregation buffer and initializes buffer values
+   * for all aggregate functions.
+   */
+  private def newBuffer: InternalRow = {
+    val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
-    val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
+    val genericMutableBuffer = new GenericInternalRow(bufferRowSize)
     val useUnsafeBuffer = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
 
     val buffer = if (useUnsafeBuffer) {
@@ -76,10 +72,10 @@ class SortBasedAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   // The partition key of the current partition.
-  private[this] var currentGroupingKey: InternalRow = _
+  private[this] var currentGroupingKey: UnsafeRow = _
 
   // The partition key of next partition.
-  private[this] var nextGroupingKey: InternalRow = _
+  private[this] var nextGroupingKey: UnsafeRow = _
 
   // The first row of next partition.
   private[this] var firstRowInNextGroup: InternalRow = _
@@ -88,7 +84,33 @@ class SortBasedAggregationIterator(
   private[this] var sortedInputHasNewGroup: Boolean = false
 
   // The aggregation buffer used by the sort-based aggregation.
-  private[this] val sortBasedAggregationBuffer: MutableRow = newBuffer
+  private[this] val sortBasedAggregationBuffer: InternalRow = newBuffer
+
+  // This safe projection is used to turn the input row into safe row. This is necessary
+  // because the input row may be produced by unsafe projection in child operator and all the
+  // produced rows share one byte array. However, when we update the aggregate buffer according to
+  // the input row, we may cache some values from input row, e.g. `Max` will keep the max value from
+  // input row via MutableProjection, `CollectList` will keep all values in an array via
+  // ImperativeAggregate framework. These values may get changed unexpectedly if the underlying
+  // unsafe projection update the shared byte array. By applying a safe projection to the input row,
+  // we can cut down the connection from input row to the shared byte array, and thus it's safe to
+  // cache values from input row while updating the aggregation buffer.
+  private[this] val safeProj: Projection = FromUnsafeProjection(valueAttributes.map(_.dataType))
+
+  protected def initialize(): Unit = {
+    if (inputIterator.hasNext) {
+      initializeBuffer(sortBasedAggregationBuffer)
+      val inputRow = inputIterator.next()
+      nextGroupingKey = groupingProjection(inputRow).copy()
+      firstRowInNextGroup = inputRow.copy()
+      sortedInputHasNewGroup = true
+    } else {
+      // This inputIter is empty.
+      sortedInputHasNewGroup = false
+    }
+  }
+
+  initialize()
 
   /** Processes rows in the current group. It will stop when it find a new group. */
   protected def processCurrentSortedGroup(): Unit = {
@@ -97,22 +119,18 @@ class SortBasedAggregationIterator(
     // We create a variable to track if we see the next group.
     var findNextPartition = false
     // firstRowInNextGroup is the first row of this group. We first process it.
-    processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
+    processRow(sortBasedAggregationBuffer, safeProj(firstRowInNextGroup))
 
     // The search will stop when we see the next group or there is no
     // input row left in the iter.
-    var hasNext = inputKVIterator.next()
-    while (!findNextPartition && hasNext) {
+    while (!findNextPartition && inputIterator.hasNext) {
       // Get the grouping key.
-      val groupingKey = inputKVIterator.getKey
-      val currentRow = inputKVIterator.getValue
-      numInputRows += 1
+      val currentRow = inputIterator.next()
+      val groupingKey = groupingProjection(currentRow)
 
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {
-        processRow(sortBasedAggregationBuffer, currentRow)
-
-        hasNext = inputKVIterator.next()
+        processRow(sortBasedAggregationBuffer, safeProj(currentRow))
       } else {
         // We find a new group.
         findNextPartition = true
@@ -133,7 +151,7 @@ class SortBasedAggregationIterator(
 
   override final def hasNext: Boolean = sortedInputHasNewGroup
 
-  override final def next(): InternalRow = {
+  override final def next(): UnsafeRow = {
     if (hasNext) {
       // Process the current group.
       processCurrentSortedGroup()
@@ -149,68 +167,8 @@ class SortBasedAggregationIterator(
     }
   }
 
-  protected def initialize(): Unit = {
-    if (inputKVIterator.next()) {
-      initializeBuffer(sortBasedAggregationBuffer)
-
-      nextGroupingKey = inputKVIterator.getKey().copy()
-      firstRowInNextGroup = inputKVIterator.getValue().copy()
-      numInputRows += 1
-      sortedInputHasNewGroup = true
-    } else {
-      // This inputIter is empty.
-      sortedInputHasNewGroup = false
-    }
-  }
-
-  initialize()
-
-  def outputForEmptyGroupingKeyWithoutInput(): InternalRow = {
+  def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
     initializeBuffer(sortBasedAggregationBuffer)
-    generateOutput(new GenericInternalRow(0), sortBasedAggregationBuffer)
+    generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer)
   }
-}
-
-object SortBasedAggregationIterator {
-  // scalastyle:off
-  def createFromInputIterator(
-      groupingExprs: Seq[NamedExpression],
-      nonCompleteAggregateExpressions: Seq[AggregateExpression2],
-      nonCompleteAggregateAttributes: Seq[Attribute],
-      completeAggregateExpressions: Seq[AggregateExpression2],
-      completeAggregateAttributes: Seq[Attribute],
-      initialInputBufferOffset: Int,
-      resultExpressions: Seq[NamedExpression],
-      newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-      newProjection: (Seq[Expression], Seq[Attribute]) => Projection,
-      inputAttributes: Seq[Attribute],
-      inputIter: Iterator[InternalRow],
-      outputsUnsafeRows: Boolean,
-      numInputRows: LongSQLMetric,
-      numOutputRows: LongSQLMetric): SortBasedAggregationIterator = {
-    val kvIterator = if (UnsafeProjection.canSupport(groupingExprs)) {
-      AggregationIterator.unsafeKVIterator(
-        groupingExprs,
-        inputAttributes,
-        inputIter).asInstanceOf[KVIterator[InternalRow, InternalRow]]
-    } else {
-      AggregationIterator.kvIterator(groupingExprs, newProjection, inputAttributes, inputIter)
-    }
-
-    new SortBasedAggregationIterator(
-      groupingExprs.map(_.toAttribute),
-      inputAttributes,
-      kvIterator,
-      nonCompleteAggregateExpressions,
-      nonCompleteAggregateAttributes,
-      completeAggregateExpressions,
-      completeAggregateAttributes,
-      initialInputBufferOffset,
-      resultExpressions,
-      newMutableProjection,
-      outputsUnsafeRows,
-      numInputRows,
-      numOutputRows)
-  }
-  // scalastyle:on
 }

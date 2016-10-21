@@ -6,6 +6,10 @@
   "numCompleteTasks" : 8,
   "numFailedTasks" : 0,
   "executorRunTime" : 3476,
+  "executorCpuTime" : 0,
+  "submissionTime" : "2015-02-03T16:43:05.829GMT",
+  "firstTaskLaunchedTime" : "2015-02-03T16:43:05.829GMT",
+  "completionTime" : "2015-02-03T16:43:06.286GMT",
   "inputBytes" : 28000128,
   "inputRecords" : 0,
   "outputBytes" : 0,
@@ -33,7 +37,9 @@
       "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 1,
+        "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 435,
+        "executorCpuTime" : 0,
         "resultSize" : 1902,
         "jvmGcTime" : 19,
         "resultSerializationTime" : 2,
@@ -41,6 +47,18 @@
         "diskBytesSpilled" : 0,
         "inputMetrics" : {
           "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -62,7 +80,9 @@
       "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
+        "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 434,
+        "executorCpuTime" : 0,
         "resultSize" : 1902,
         "jvmGcTime" : 19,
         "resultSerializationTime" : 1,
@@ -70,6 +90,18 @@
         "diskBytesSpilled" : 0,
         "inputMetrics" : {
           "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -91,7 +123,9 @@
       "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
+        "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 434,
+        "executorCpuTime" : 0,
         "resultSize" : 1902,
         "jvmGcTime" : 19,
         "resultSerializationTime" : 1,
@@ -99,6 +133,18 @@
         "diskBytesSpilled" : 0,
         "inputMetrics" : {
           "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -120,7 +166,9 @@
       "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
+        "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 434,
+        "executorCpuTime" : 0,
         "resultSize" : 1902,
         "jvmGcTime" : 19,
         "resultSerializationTime" : 2,
@@ -128,6 +176,18 @@
         "diskBytesSpilled" : 0,
         "inputMetrics" : {
           "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -149,7 +209,9 @@
       "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
+        "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 434,
+        "executorCpuTime" : 0,
         "resultSize" : 1902,
         "jvmGcTime" : 19,
         "resultSerializationTime" : 1,
@@ -157,6 +219,18 @@
         "diskBytesSpilled" : 0,
         "inputMetrics" : {
           "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -178,7 +252,9 @@
       "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 1,
+        "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 436,
+        "executorCpuTime" : 0,
         "resultSize" : 1902,
         "jvmGcTime" : 19,
         "resultSerializationTime" : 0,
@@ -186,6 +262,18 @@
         "diskBytesSpilled" : 0,
         "inputMetrics" : {
           "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -207,7 +295,9 @@
       "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 2,
+        "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 434,
+        "executorCpuTime" : 0,
         "resultSize" : 1902,
         "jvmGcTime" : 19,
         "resultSerializationTime" : 1,
@@ -215,6 +305,18 @@
         "diskBytesSpilled" : 0,
         "inputMetrics" : {
           "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {
@@ -236,7 +338,9 @@
       "accumulatorUpdates" : [ ],
       "taskMetrics" : {
         "executorDeserializeTime" : 1,
+        "executorDeserializeCpuTime" : 0,
         "executorRunTime" : 435,
+        "executorCpuTime" : 0,
         "resultSize" : 1902,
         "jvmGcTime" : 19,
         "resultSerializationTime" : 1,
@@ -244,6 +348,18 @@
         "diskBytesSpilled" : 0,
         "inputMetrics" : {
           "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
           "recordsRead" : 0
         },
         "shuffleWriteMetrics" : {

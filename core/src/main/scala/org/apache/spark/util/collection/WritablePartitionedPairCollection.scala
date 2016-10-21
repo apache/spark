@@ -23,9 +23,10 @@ import org.apache.spark.storage.DiskBlockObjectWriter
 
 /**
  * A common interface for size-tracking collections of key-value pairs that
- * - Have an associated partition for each key-value pair.
- * - Support a memory-efficient sorted iterator
- * - Support a WritablePartitionedIterator for writing the contents directly as bytes.
+ *
+ *  - Have an associated partition for each key-value pair.
+ *  - Support a memory-efficient sorted iterator
+ *  - Support a WritablePartitionedIterator for writing the contents directly as bytes.
  */
 private[spark] trait WritablePartitionedPairCollection[K, V] {
   /**

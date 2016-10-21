@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -29,9 +29,9 @@ import org.apache.spark.sql.types._
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends LeafExpression with NamedExpression {
+  extends LeafExpression {
 
-  override def toString: String = s"input[$ordinal, $dataType]"
+  override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
@@ -58,21 +58,23 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     }
   }
 
-  override def name: String = s"i[$ordinal]"
-
-  override def toAttribute: Attribute = throw new UnsupportedOperationException
-
-  override def qualifiers: Seq[String] = throw new UnsupportedOperationException
-
-  override def exprId: ExprId = throw new UnsupportedOperationException
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue("i", dataType, ordinal.toString)
-    s"""
-      boolean ${ev.isNull} = i.isNullAt($ordinal);
-      $javaType ${ev.primitive} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-    """
+    val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
+    if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
+      val oev = ctx.currentVars(ordinal)
+      ev.isNull = oev.isNull
+      ev.value = oev.value
+      val code = oev.code
+      oev.code = ""
+      ev.copy(code = code)
+    } else if (nullable) {
+      ev.copy(code = s"""
+        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);""")
+    } else {
+      ev.copy(code = s"""$javaType ${ev.value} = $value;""", isNull = "false")
+    }
   }
 }
 
@@ -80,19 +82,19 @@ object BindReferences extends Logging {
 
   def bindReference[A <: Expression](
       expression: A,
-      input: Seq[Attribute],
+      input: AttributeSeq,
       allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
-        val ordinal = input.indexWhere(_.exprId == a.exprId)
+        val ordinal = input.indexOf(a.exprId)
         if (ordinal == -1) {
           if (allowFailures) {
             a
           } else {
-            sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
+            sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
           }
         } else {
-          BoundReference(ordinal, a.dataType, a.nullable)
+          BoundReference(ordinal, a.dataType, input(ordinal).nullable)
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.

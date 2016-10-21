@@ -17,14 +17,145 @@
 
 package org.apache.spark.ml.param
 
+import java.io.{ByteArrayOutputStream, ObjectOutputStream}
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.MyParams
 
 class ParamsSuite extends SparkFunSuite {
+
+  test("json encode/decode") {
+    val dummy = new Params {
+      override def copy(extra: ParamMap): Params = defaultCopy(extra)
+
+      override val uid: String = "dummy"
+    }
+
+    { // BooleanParam
+      val param = new BooleanParam(dummy, "name", "doc")
+      for (value <- Seq(true, false)) {
+        val json = param.jsonEncode(value)
+        assert(param.jsonDecode(json) === value)
+      }
+    }
+
+    { // IntParam
+      val param = new IntParam(dummy, "name", "doc")
+      for (value <- Seq(Int.MinValue, -1, 0, 1, Int.MaxValue)) {
+        val json = param.jsonEncode(value)
+        assert(param.jsonDecode(json) === value)
+      }
+    }
+
+    { // LongParam
+      val param = new LongParam(dummy, "name", "doc")
+      for (value <- Seq(Long.MinValue, -1L, 0L, 1L, Long.MaxValue)) {
+        val json = param.jsonEncode(value)
+        assert(param.jsonDecode(json) === value)
+      }
+    }
+
+    { // FloatParam
+      val param = new FloatParam(dummy, "name", "doc")
+      for (value <- Seq(Float.NaN, Float.NegativeInfinity, Float.MinValue, -1.0f, -0.5f, 0.0f,
+        Float.MinPositiveValue, 0.5f, 1.0f, Float.MaxValue, Float.PositiveInfinity)) {
+        val json = param.jsonEncode(value)
+        val decoded = param.jsonDecode(json)
+        if (value.isNaN) {
+          assert(decoded.isNaN)
+        } else {
+          assert(decoded === value)
+        }
+      }
+    }
+
+    { // DoubleParam
+      val param = new DoubleParam(dummy, "name", "doc")
+      for (value <- Seq(Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, -0.5, 0.0,
+          Double.MinPositiveValue, 0.5, 1.0, Double.MaxValue, Double.PositiveInfinity)) {
+        val json = param.jsonEncode(value)
+        val decoded = param.jsonDecode(json)
+        if (value.isNaN) {
+          assert(decoded.isNaN)
+        } else {
+          assert(decoded === value)
+        }
+      }
+    }
+
+    { // Param[String]
+      val param = new Param[String](dummy, "name", "doc")
+      // Currently we do not support null.
+      for (value <- Seq("", "1", "abc", "quote\"", "newline\n")) {
+        val json = param.jsonEncode(value)
+        assert(param.jsonDecode(json) === value)
+      }
+    }
+
+    { // Param[Vector]
+      val param = new Param[Vector](dummy, "name", "doc")
+      val values = Seq(
+        Vectors.dense(Array.empty[Double]),
+        Vectors.dense(0.0, 2.0),
+        Vectors.sparse(0, Array.empty, Array.empty),
+        Vectors.sparse(2, Array(1), Array(2.0)))
+      for (value <- values) {
+        val json = param.jsonEncode(value)
+        assert(param.jsonDecode(json) === value)
+      }
+    }
+
+    { // IntArrayParam
+      val param = new IntArrayParam(dummy, "name", "doc")
+      val values: Seq[Array[Int]] = Seq(
+        Array(),
+        Array(1),
+        Array(Int.MinValue, 0, Int.MaxValue))
+      for (value <- values) {
+        val json = param.jsonEncode(value)
+        assert(param.jsonDecode(json) === value)
+      }
+    }
+
+    { // DoubleArrayParam
+      val param = new DoubleArrayParam(dummy, "name", "doc")
+      val values: Seq[Array[Double]] = Seq(
+         Array(),
+         Array(1.0),
+         Array(Double.NaN, Double.NegativeInfinity, Double.MinValue, -1.0, 0.0,
+           Double.MinPositiveValue, 1.0, Double.MaxValue, Double.PositiveInfinity))
+      for (value <- values) {
+        val json = param.jsonEncode(value)
+        val decoded = param.jsonDecode(json)
+        assert(decoded.length === value.length)
+        decoded.zip(value).foreach { case (actual, expected) =>
+          if (expected.isNaN) {
+            assert(actual.isNaN)
+          } else {
+            assert(actual === expected)
+          }
+        }
+      }
+    }
+
+    { // StringArrayParam
+      val param = new StringArrayParam(dummy, "name", "doc")
+      val values: Seq[Array[String]] = Seq(
+        Array(),
+        Array(""),
+        Array("", "1", "abc", "quote\"", "newline\n"))
+      for (value <- values) {
+        val json = param.jsonEncode(value)
+        assert(param.jsonDecode(json) === value)
+      }
+    }
+  }
 
   test("param") {
     val solver = new TestParams()
     val uid = solver.uid
-    import solver.{maxIter, inputCol}
+    import solver.{inputCol, maxIter}
 
     assert(maxIter.name === "maxIter")
     assert(maxIter.doc === "maximum number of iterations (>= 0)")
@@ -67,7 +198,7 @@ class ParamsSuite extends SparkFunSuite {
 
   test("param map") {
     val solver = new TestParams()
-    import solver.{maxIter, inputCol}
+    import solver.{inputCol, maxIter}
 
     val map0 = ParamMap.empty
 
@@ -106,7 +237,7 @@ class ParamsSuite extends SparkFunSuite {
 
   test("params") {
     val solver = new TestParams()
-    import solver.{handleInvalid, maxIter, inputCol}
+    import solver.{handleInvalid, inputCol, maxIter}
 
     val params = solver.params
     assert(params.length === 3)
@@ -137,15 +268,10 @@ class ParamsSuite extends SparkFunSuite {
       solver.getParam("abc")
     }
 
-    intercept[IllegalArgumentException] {
-      solver.validateParams()
-    }
-    solver.copy(ParamMap(inputCol -> "input")).validateParams()
     solver.setInputCol("input")
     assert(solver.isSet(inputCol))
     assert(solver.isDefined(inputCol))
     assert(solver.getInputCol === "input")
-    solver.validateParams()
     intercept[IllegalArgumentException] {
       ParamMap(maxIter -> -10)
     }
@@ -154,6 +280,11 @@ class ParamsSuite extends SparkFunSuite {
     }
 
     solver.clearMaxIter()
+    assert(!solver.isSet(maxIter))
+
+    // Re-set and clear maxIter using the generic clear API
+    solver.setMaxIter(10)
+    solver.clear(maxIter)
     assert(!solver.isSet(maxIter))
 
     val copied = solver.copy(ParamMap(solver.maxIter -> 50))
@@ -215,6 +346,31 @@ class ParamsSuite extends SparkFunSuite {
     assert(!t2.isSet(t2.maxIter))
     val t3 = t.copy(ParamMap(t.maxIter -> 20))
     assert(t3.isSet(t3.maxIter))
+  }
+
+  test("Filtering ParamMap") {
+    val params1 = new MyParams("my_params1")
+    val params2 = new MyParams("my_params2")
+    val paramMap = ParamMap(
+      params1.intParam -> 1,
+      params2.intParam -> 1,
+      params1.doubleParam -> 0.2,
+      params2.doubleParam -> 0.2)
+    val filteredParamMap = paramMap.filter(params1)
+
+    assert(filteredParamMap.size === 2)
+    filteredParamMap.toSeq.foreach {
+      case ParamPair(p, _) =>
+        assert(p.parent === params1.uid)
+    }
+
+    // At the previous implementation of ParamMap#filter,
+    // mutable.Map#filterKeys was used internally but
+    // the return type of the method is not serializable (see SI-6654).
+    // Now mutable.Map#filter is used instead of filterKeys and the return type is serializable.
+    // So let's ensure serializability.
+    val objOut = new ObjectOutputStream(new ByteArrayOutputStream())
+    objOut.writeObject(filteredParamMap)
   }
 }
 

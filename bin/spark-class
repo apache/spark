@@ -17,10 +17,11 @@
 # limitations under the License.
 #
 
-# Figure out where Spark is installed
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-. "$SPARK_HOME"/bin/load-spark-env.sh
+. "${SPARK_HOME}"/bin/load-spark-env.sh
 
 # Find the java binary
 if [ -n "${JAVA_HOME}" ]; then
@@ -34,46 +35,63 @@ else
   fi
 fi
 
-# Find assembly jar
-SPARK_ASSEMBLY_JAR=
-if [ -f "$SPARK_HOME/RELEASE" ]; then
-  ASSEMBLY_DIR="$SPARK_HOME/lib"
+# Find Spark jars.
+if [ -f "${SPARK_HOME}/RELEASE" ]; then
+  SPARK_JARS_DIR="${SPARK_HOME}/jars"
 else
-  ASSEMBLY_DIR="$SPARK_HOME/assembly/target/scala-$SPARK_SCALA_VERSION"
+  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"
 fi
 
-num_jars="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*hadoop.*\.jar$" | wc -l)"
-if [ "$num_jars" -eq "0" -a -z "$SPARK_ASSEMBLY_JAR" -a "$SPARK_PREPEND_CLASSES" != "1" ]; then
-  echo "Failed to find Spark assembly in $ASSEMBLY_DIR." 1>&2
-  echo "You need to build Spark before running this program." 1>&2
+if [ ! -d "$SPARK_JARS_DIR" ] && [ -z "$SPARK_TESTING$SPARK_SQL_TESTING" ]; then
+  echo "Failed to find Spark jars directory ($SPARK_JARS_DIR)." 1>&2
+  echo "You need to build Spark with the target \"package\" before running this program." 1>&2
   exit 1
+else
+  LAUNCH_CLASSPATH="$SPARK_JARS_DIR/*"
 fi
-if [ -d "$ASSEMBLY_DIR" ]; then
-  ASSEMBLY_JARS="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*hadoop.*\.jar$" || true)"
-  if [ "$num_jars" -gt "1" ]; then
-    echo "Found multiple Spark assembly jars in $ASSEMBLY_DIR:" 1>&2
-    echo "$ASSEMBLY_JARS" 1>&2
-    echo "Please remove all but one jar." 1>&2
-    exit 1
-  fi
-fi
-
-SPARK_ASSEMBLY_JAR="${ASSEMBLY_DIR}/${ASSEMBLY_JARS}"
-
-LAUNCH_CLASSPATH="$SPARK_ASSEMBLY_JAR"
 
 # Add the launcher build dir to the classpath if requested.
 if [ -n "$SPARK_PREPEND_CLASSES" ]; then
-  LAUNCH_CLASSPATH="$SPARK_HOME/launcher/target/scala-$SPARK_SCALA_VERSION/classes:$LAUNCH_CLASSPATH"
+  LAUNCH_CLASSPATH="${SPARK_HOME}/launcher/target/scala-$SPARK_SCALA_VERSION/classes:$LAUNCH_CLASSPATH"
 fi
 
-export _SPARK_ASSEMBLY="$SPARK_ASSEMBLY_JAR"
+# For tests
+if [[ -n "$SPARK_TESTING" ]]; then
+  unset YARN_CONF_DIR
+  unset HADOOP_CONF_DIR
+fi
 
 # The launcher library will print arguments separated by a NULL character, to allow arguments with
 # characters that would be otherwise interpreted by the shell. Read that in a while loop, populating
 # an array that will be used to exec the final command.
+#
+# The exit code of the launcher is appended to the output, so the parent shell removes it from the
+# command array and checks the value to see if the launcher succeeded.
+build_command() {
+  "$RUNNER" -Xmx128m -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@"
+  printf "%d\0" $?
+}
+
 CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
-done < <("$RUNNER" -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@")
+done < <(build_command "$@")
+
+COUNT=${#CMD[@]}
+LAST=$((COUNT - 1))
+LAUNCHER_EXIT_CODE=${CMD[$LAST]}
+
+# Certain JVM failures result in errors being printed to stdout (instead of stderr), which causes
+# the code that parses the output of the launcher to get confused. In those cases, check if the
+# exit code is an integer, and if it's not, handle it as a special error case.
+if ! [[ $LAUNCHER_EXIT_CODE =~ ^[0-9]+$ ]]; then
+  echo "${CMD[@]}" | head -n-1 1>&2
+  exit 1
+fi
+
+if [ $LAUNCHER_EXIT_CODE != 0 ]; then
+  exit $LAUNCHER_EXIT_CODE
+fi
+
+CMD=("${CMD[@]:0:$LAST}")
 exec "${CMD[@]}"

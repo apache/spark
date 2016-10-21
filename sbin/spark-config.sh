@@ -19,21 +19,15 @@
 # should not be executable directly
 # also should not be passed any arguments, since we need original $*
 
-# resolve links - $0 may be a softlink
-this="${BASH_SOURCE:-$0}"
-common_bin="$(cd -P -- "$(dirname -- "$this")" && pwd -P)"
-script="$(basename -- "$this")"
-this="$common_bin/$script"
+# symlink and absolute path should rely on SPARK_HOME to resolve
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-# convert relative path to absolute path
-config_bin="`dirname "$this"`"
-script="`basename "$this"`"
-config_bin="`cd "$config_bin"; pwd`"
-this="$config_bin/$script"
-
-export SPARK_PREFIX="`dirname "$this"`"/..
-export SPARK_HOME="${SPARK_PREFIX}"
-export SPARK_CONF_DIR="${SPARK_CONF_DIR:-"$SPARK_HOME/conf"}"
+export SPARK_CONF_DIR="${SPARK_CONF_DIR:-"${SPARK_HOME}/conf"}"
 # Add the PySpark classes to the PYTHONPATH:
-export PYTHONPATH="$SPARK_HOME/python:$PYTHONPATH"
-export PYTHONPATH="$SPARK_HOME/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"
+if [ -z "${PYSPARK_PYTHONPATH_SET}" ]; then
+  export PYTHONPATH="${SPARK_HOME}/python:${PYTHONPATH}"
+  export PYTHONPATH="${SPARK_HOME}/python/lib/py4j-0.10.3-src.zip:${PYTHONPATH}"
+  export PYSPARK_PYTHONPATH_SET=1
+fi

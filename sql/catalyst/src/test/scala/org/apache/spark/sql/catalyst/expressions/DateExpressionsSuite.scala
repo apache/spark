@@ -143,7 +143,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Seconds") {
-    checkEvaluation(Second(Literal.create(null, DateType)), null)
+    assert(Second(Literal.create(null, DateType)).resolved === false)
     checkEvaluation(Second(Cast(Literal(d), TimestampType)), 0)
     checkEvaluation(Second(Cast(Literal(sdf.format(d)), TimestampType)), 15)
     checkEvaluation(Second(Literal(ts)), 15)
@@ -176,7 +176,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Hour") {
-    checkEvaluation(Hour(Literal.create(null, DateType)), null)
+    assert(Hour(Literal.create(null, DateType)).resolved === false)
     checkEvaluation(Hour(Cast(Literal(d), TimestampType)), 0)
     checkEvaluation(Hour(Cast(Literal(sdf.format(d)), TimestampType)), 13)
     checkEvaluation(Hour(Literal(ts)), 13)
@@ -195,7 +195,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Minute") {
-    checkEvaluation(Minute(Literal.create(null, DateType)), null)
+    assert(Minute(Literal.create(null, DateType)).resolved === false)
     checkEvaluation(Minute(Cast(Literal(d), TimestampType)), 0)
     checkEvaluation(Minute(Cast(Literal(sdf.format(d)), TimestampType)), 10)
     checkEvaluation(Minute(Literal(ts)), 10)
@@ -463,6 +463,42 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(date1), Literal.create(null, StringType)), date1.getTime / 1000L)
     checkEvaluation(
       UnixTimestamp(Literal("2015-07-24"), Literal("not a valid format")), null)
+  }
+
+  test("to_unix_timestamp") {
+    val sdf1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val fmt2 = "yyyy-MM-dd HH:mm:ss.SSS"
+    val sdf2 = new SimpleDateFormat(fmt2)
+    val fmt3 = "yy-MM-dd"
+    val sdf3 = new SimpleDateFormat(fmt3)
+    val date1 = Date.valueOf("2015-07-24")
+    checkEvaluation(
+      ToUnixTimestamp(Literal(sdf1.format(new Timestamp(0))), Literal("yyyy-MM-dd HH:mm:ss")), 0L)
+    checkEvaluation(ToUnixTimestamp(
+      Literal(sdf1.format(new Timestamp(1000000))), Literal("yyyy-MM-dd HH:mm:ss")), 1000L)
+    checkEvaluation(
+      ToUnixTimestamp(Literal(new Timestamp(1000000)), Literal("yyyy-MM-dd HH:mm:ss")), 1000L)
+    checkEvaluation(
+      ToUnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss")),
+      DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(date1)) / 1000L)
+    checkEvaluation(
+      ToUnixTimestamp(Literal(sdf2.format(new Timestamp(-1000000))), Literal(fmt2)), -1000L)
+    checkEvaluation(ToUnixTimestamp(
+      Literal(sdf3.format(Date.valueOf("2015-07-24"))), Literal(fmt3)),
+      DateTimeUtils.daysToMillis(DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-24"))) / 1000L)
+    val t1 = ToUnixTimestamp(
+      CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
+    val t2 = ToUnixTimestamp(
+      CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss")).eval().asInstanceOf[Long]
+    assert(t2 - t1 <= 1)
+    checkEvaluation(
+      ToUnixTimestamp(Literal.create(null, DateType), Literal.create(null, StringType)), null)
+    checkEvaluation(
+      ToUnixTimestamp(Literal.create(null, DateType), Literal("yyyy-MM-dd HH:mm:ss")), null)
+    checkEvaluation(ToUnixTimestamp(
+      Literal(date1), Literal.create(null, StringType)), date1.getTime / 1000L)
+    checkEvaluation(
+      ToUnixTimestamp(Literal("2015-07-24"), Literal("not a valid format")), null)
   }
 
   test("datediff") {

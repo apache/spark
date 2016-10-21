@@ -19,9 +19,12 @@ package org.apache.spark.mllib.linalg
 
 import scala.util.Random
 
-import breeze.linalg.{DenseMatrix => BDM, squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
+import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
-import org.apache.spark.{Logging, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.internal.Logging
+import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
 
 class VectorsSuite extends SparkFunSuite with Logging {
@@ -266,7 +269,7 @@ class VectorsSuite extends SparkFunSuite with Logging {
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
       val denseVector2 = Vectors.dense(sparseVector2.toArray)
 
-      val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
+      val squaredDist = breezeSquaredDistance(sparseVector1.asBreeze, sparseVector2.asBreeze)
 
       // SparseVector vs. SparseVector
       assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
@@ -373,5 +376,89 @@ class VectorsSuite extends SparkFunSuite with Logging {
     assert(v.slice(Array(0, 2)) === new SparseVector(2, Array(1), Array(2.2)))
     assert(v.slice(Array(2, 0)) === new SparseVector(2, Array(0), Array(2.2)))
     assert(v.slice(Array(2, 0, 3, 4)) === new SparseVector(4, Array(0, 3), Array(2.2, 4.4)))
+  }
+
+  test("toJson/fromJson") {
+    val sv0 = Vectors.sparse(0, Array.empty, Array.empty)
+    val sv1 = Vectors.sparse(1, Array.empty, Array.empty)
+    val sv2 = Vectors.sparse(2, Array(1), Array(2.0))
+    val dv0 = Vectors.dense(Array.empty[Double])
+    val dv1 = Vectors.dense(1.0)
+    val dv2 = Vectors.dense(0.0, 2.0)
+    for (v <- Seq(sv0, sv1, sv2, dv0, dv1, dv2)) {
+      val json = v.toJson
+      parseJson(json) // `json` should be a valid JSON string
+      val u = Vectors.fromJson(json)
+      assert(u.getClass === v.getClass, "toJson/fromJson should preserve vector types.")
+      assert(u === v, "toJson/fromJson should preserve vector values.")
+    }
+  }
+
+  test("conversions between new local linalg and mllib linalg") {
+    val dv: DenseVector = new DenseVector(Array(1.0, 2.0, 3.5))
+    val sv: SparseVector = new SparseVector(5, Array(1, 2, 4), Array(1.1, 2.2, 4.4))
+    val sv0: Vector = sv.asInstanceOf[Vector]
+    val dv0: Vector = dv.asInstanceOf[Vector]
+
+    val newSV: newlinalg.SparseVector = sv.asML
+    val newDV: newlinalg.DenseVector = dv.asML
+    val newSV0: newlinalg.Vector = sv0.asML
+    val newDV0: newlinalg.Vector = dv0.asML
+    assert(newSV0.isInstanceOf[newlinalg.SparseVector])
+    assert(newDV0.isInstanceOf[newlinalg.DenseVector])
+    assert(sv.toArray === newSV.toArray)
+    assert(dv.toArray === newDV.toArray)
+    assert(sv0.toArray === newSV0.toArray)
+    assert(dv0.toArray === newDV0.toArray)
+
+    val oldSV: SparseVector = SparseVector.fromML(newSV)
+    val oldDV: DenseVector = DenseVector.fromML(newDV)
+    val oldSV0: Vector = Vectors.fromML(newSV0)
+    val oldDV0: Vector = Vectors.fromML(newDV0)
+    assert(oldSV0.isInstanceOf[SparseVector])
+    assert(oldDV0.isInstanceOf[DenseVector])
+    assert(oldSV.toArray === newSV.toArray)
+    assert(oldDV.toArray === newDV.toArray)
+    assert(oldSV0.toArray === newSV0.toArray)
+    assert(oldDV0.toArray === newDV0.toArray)
+  }
+
+  test("implicit conversions between new local linalg and mllib linalg") {
+
+    def mllibVectorToArray(v: Vector): Array[Double] = v.toArray
+
+    def mllibDenseVectorToArray(v: DenseVector): Array[Double] = v.toArray
+
+    def mllibSparseVectorToArray(v: SparseVector): Array[Double] = v.toArray
+
+    def mlVectorToArray(v: newlinalg.Vector): Array[Double] = v.toArray
+
+    def mlDenseVectorToArray(v: newlinalg.DenseVector): Array[Double] = v.toArray
+
+    def mlSparseVectorToArray(v: newlinalg.SparseVector): Array[Double] = v.toArray
+
+    val dv: DenseVector = new DenseVector(Array(1.0, 2.0, 3.5))
+    val sv: SparseVector = new SparseVector(5, Array(1, 2, 4), Array(1.1, 2.2, 4.4))
+    val sv0: Vector = sv.asInstanceOf[Vector]
+    val dv0: Vector = dv.asInstanceOf[Vector]
+
+    val newSV: newlinalg.SparseVector = sv.asML
+    val newDV: newlinalg.DenseVector = dv.asML
+    val newSV0: newlinalg.Vector = sv0.asML
+    val newDV0: newlinalg.Vector = dv0.asML
+
+    import org.apache.spark.mllib.linalg.VectorImplicits._
+
+    assert(mllibVectorToArray(dv0) === mllibVectorToArray(newDV0))
+    assert(mllibVectorToArray(sv0) === mllibVectorToArray(newSV0))
+
+    assert(mllibDenseVectorToArray(dv) === mllibDenseVectorToArray(newDV))
+    assert(mllibSparseVectorToArray(sv) === mllibSparseVectorToArray(newSV))
+
+    assert(mlVectorToArray(dv0) === mlVectorToArray(newDV0))
+    assert(mlVectorToArray(sv0) === mlVectorToArray(newSV0))
+
+    assert(mlDenseVectorToArray(dv) === mlDenseVectorToArray(newDV))
+    assert(mlSparseVectorToArray(sv) === mlSparseVectorToArray(newSV))
   }
 }

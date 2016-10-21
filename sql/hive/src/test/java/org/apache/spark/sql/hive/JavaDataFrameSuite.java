@@ -36,11 +36,11 @@ import org.apache.spark.sql.hive.aggregate.MyDoubleSum;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext sc;
-  private transient HiveContext hc;
+  private transient SQLContext hc;
 
-  DataFrame df;
+  Dataset<Row> df;
 
-  private void checkAnswer(DataFrame actual, List<Row> expected) {
+  private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
     if (errorMessage != null) {
       Assert.fail(errorMessage);
@@ -52,12 +52,12 @@ public class JavaDataFrameSuite {
     hc = TestHive$.MODULE$;
     sc = new JavaSparkContext(hc.sparkContext());
 
-    List<String> jsonObjects = new ArrayList<String>(10);
+    List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
     }
     df = hc.read().json(sc.parallelize(jsonObjects));
-    df.registerTempTable("window_table");
+    df.createOrReplaceTempView("window_table");
   }
 
   @After
@@ -71,7 +71,7 @@ public class JavaDataFrameSuite {
   @Test
   public void saveTableAndQueryIt() {
     checkAnswer(
-      df.select(functions.avg("key").over(
+      df.select(avg("key").over(
         Window.partitionBy("value").orderBy("key").rowsBetween(-1, 1))),
       hc.sql("SELECT avg(key) " +
         "OVER (PARTITION BY value " +
@@ -82,12 +82,12 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testUDAF() {
-    DataFrame df = hc.range(0, 100).unionAll(hc.range(0, 100)).select(col("id").as("value"));
+    Dataset<Row> df = hc.range(0, 100).union(hc.range(0, 100)).select(col("id").as("value"));
     UserDefinedAggregateFunction udaf = new MyDoubleSum();
     UserDefinedAggregateFunction registeredUDAF = hc.udf().register("mydoublesum", udaf);
     // Create Columns for the UDAF. For now, callUDF does not take an argument to specific if
     // we want to use distinct aggregation.
-    DataFrame aggregatedDF =
+    Dataset<Row> aggregatedDF =
       df.groupBy()
         .agg(
           udaf.distinct(col("value")),
@@ -95,7 +95,7 @@ public class JavaDataFrameSuite {
           registeredUDAF.apply(col("value")),
           callUDF("mydoublesum", col("value")));
 
-    List<Row> expectedResult = new ArrayList<Row>();
+    List<Row> expectedResult = new ArrayList<>();
     expectedResult.add(RowFactory.create(4950.0, 9900.0, 9900.0, 9900.0));
     checkAnswer(
       aggregatedDF,

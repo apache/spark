@@ -164,8 +164,8 @@ class DoubleRDDSuite extends SparkFunSuite with SharedSparkContext {
     val expectedHistogramResults = Array(4, 2, 1, 2, 3)
     assert(histogramResults === expectedHistogramResults)
   }
-  // Make sure this works with a NaN end bucket and an inifity
-  test("WorksMixedRangeWithUnevenBucketsAndNaNAndNaNRangeAndInfity") {
+  // Make sure this works with a NaN end bucket and an infinity
+  test("WorksMixedRangeWithUnevenBucketsAndNaNAndNaNRangeAndInfinity") {
     // Make sure that it works with two unequally spaced buckets and elements in each
     val rdd = sc.parallelize(Seq(-0.01, 0.0, 1, 2, 3, 5, 6, 11.01, 12.0, 199.0,
       200.0, 200.1, 1.0/0.0, -1.0/0.0, Double.NaN))
@@ -178,7 +178,7 @@ class DoubleRDDSuite extends SparkFunSuite with SharedSparkContext {
   test("WorksWithOutOfRangeWithInfiniteBuckets") {
     // Verify that out of range works with two buckets
     val rdd = sc.parallelize(Seq(10.01, -0.01, Double.NaN))
-    val buckets = Array(-1.0/0.0 , 0.0, 1.0/0.0)
+    val buckets = Array(-1.0/0.0, 0.0, 1.0/0.0)
     val histogramResults = rdd.histogram(buckets)
     val expectedHistogramResults = Array(1, 1)
     assert(histogramResults === expectedHistogramResults)

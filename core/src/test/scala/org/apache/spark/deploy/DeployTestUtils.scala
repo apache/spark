@@ -20,9 +20,9 @@ package org.apache.spark.deploy
 import java.io.File
 import java.util.Date
 
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.{SecurityManager, SparkConf}
 
 private[deploy] object DeployTestUtils {
   def createAppDesc(): ApplicationDescription = {
@@ -31,8 +31,9 @@ private[deploy] object DeployTestUtils {
   }
 
   def createAppInfo() : ApplicationInfo = {
+    val appDesc = createAppDesc()
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
-      "id", createAppDesc(), JsonConstants.submitDate, null, Int.MaxValue)
+      "id", appDesc, JsonConstants.submitDate, null, Int.MaxValue)
     appInfo.endTime = JsonConstants.currTimeInMillis
     appInfo
   }
@@ -49,7 +50,7 @@ private[deploy] object DeployTestUtils {
     createDriverDesc(), new Date())
 
   def createWorkerInfo(): WorkerInfo = {
-    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, 80, "publicAddress")
+    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, "http://publicAddress:80")
     workerInfo.lastHeartbeat = JsonConstants.currTimeInMillis
     workerInfo
   }
@@ -68,7 +69,7 @@ private[deploy] object DeployTestUtils {
       "publicAddress",
       new File("sparkHome"),
       new File("workDir"),
-      "akka://worker",
+      "spark://worker",
       new SparkConf,
       Seq("localDir"),
       ExecutorState.RUNNING)
@@ -83,7 +84,7 @@ private[deploy] object DeployTestUtils {
       new File("sparkHome"),
       createDriverDesc(),
       null,
-      "akka://worker",
+      "spark://worker",
       new SecurityManager(conf))
   }
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.rules
 import org.apache.spark.util.Utils
 
@@ -40,10 +39,8 @@ package object codegen {
   }
 
   /**
-   * :: DeveloperApi ::
    * Dumps the bytecode from a class to the screen using javap.
    */
-  @DeveloperApi
   object DumpByteCode {
     import scala.sys.process._
     val dumpDirectory = Utils.createTempDir()

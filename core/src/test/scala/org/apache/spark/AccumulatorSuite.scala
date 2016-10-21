@@ -17,18 +17,33 @@
 
 package org.apache.spark
 
+import java.util.concurrent.Semaphore
+import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
+import scala.util.control.NonFatal
 
 import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
 
+import org.apache.spark.AccumulatorParam.StringAccumulatorParam
 import org.apache.spark.scheduler._
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
 
 
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
-  import InternalAccumulator._
+  import AccumulatorSuite.createLongAccum
+
+  override def afterEach(): Unit = {
+    try {
+      AccumulatorContext.clear()
+    } finally {
+      super.afterEach()
+    }
+  }
 
   implicit def setAccum[A]: AccumulableParam[mutable.Set[A], A] =
     new AccumulableParam[mutable.Set[A], A] {
@@ -45,9 +60,30 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       }
     }
 
-  test ("basic accumulation"){
+  test("accumulator serialization") {
+    val ser = new JavaSerializer(new SparkConf).newInstance()
+    val acc = createLongAccum("x")
+    acc.add(5)
+    assert(acc.value == 5)
+    assert(acc.isAtDriverSide)
+
+    // serialize and de-serialize it, to simulate sending accumulator to executor.
+    val acc2 = ser.deserialize[LongAccumulator](ser.serialize(acc))
+    // value is reset on the executors
+    assert(acc2.value == 0)
+    assert(!acc2.isAtDriverSide)
+
+    acc2.add(10)
+    // serialize and de-serialize it again, to simulate sending accumulator back to driver.
+    val acc3 = ser.deserialize[LongAccumulator](ser.serialize(acc2))
+    // value is not reset on the driver
+    assert(acc3.value == 10)
+    assert(acc3.isAtDriverSide)
+  }
+
+  test ("basic accumulation") {
     sc = new SparkContext("local", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0)
+    val acc: Accumulator[Int] = sc.accumulator(0)
 
     val d = sc.parallelize(1 to 20)
     d.foreach{x => acc += x}
@@ -59,12 +95,14 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     longAcc.value should be (210L + maxInt * 20)
   }
 
-  test ("value not assignable from tasks") {
+  test("value not assignable from tasks") {
     sc = new SparkContext("local", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0)
+    val acc: Accumulator[Int] = sc.accumulator(0)
 
     val d = sc.parallelize(1 to 20)
-    an [Exception] should be thrownBy {d.foreach{x => acc.value = x}}
+    intercept[SparkException] {
+      d.foreach(x => acc.value = x)
+    }
   }
 
   test ("add value to collection accumulators") {
@@ -84,7 +122,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     }
   }
 
-  test ("value not readable in tasks") {
+  test("value not readable in tasks") {
     val maxI = 1000
     for (nThreads <- List(1, 10)) { // test single & multi-threaded
       sc = new SparkContext("local[" + nThreads + "]", "test")
@@ -135,7 +173,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       d.foreach {
         x => acc.localValue ++= x
       }
-      acc.value should be ( (0 to maxI).toSet)
+      acc.value should be ((0 to maxI).toSet)
       resetSparkContext()
     }
   }
@@ -155,197 +193,95 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     System.gc()
     assert(ref.get.isEmpty)
 
-    Accumulators.remove(accId)
-    assert(!Accumulators.originals.get(accId).isDefined)
+    AccumulatorContext.remove(accId)
+    assert(!AccumulatorContext.get(accId).isDefined)
   }
 
-  test("internal accumulators in TaskContext") {
-    sc = new SparkContext("local", "test")
-    val accums = InternalAccumulator.create(sc)
-    val taskContext = new TaskContextImpl(0, 0, 0, 0, null, null, accums)
-    val internalMetricsToAccums = taskContext.internalMetricsToAccumulators
-    val collectedInternalAccums = taskContext.collectInternalAccumulators()
-    val collectedAccums = taskContext.collectAccumulators()
-    assert(internalMetricsToAccums.size > 0)
-    assert(internalMetricsToAccums.values.forall(_.isInternal))
-    assert(internalMetricsToAccums.contains(TEST_ACCUMULATOR))
-    val testAccum = internalMetricsToAccums(TEST_ACCUMULATOR)
-    assert(collectedInternalAccums.size === internalMetricsToAccums.size)
-    assert(collectedInternalAccums.size === collectedAccums.size)
-    assert(collectedInternalAccums.contains(testAccum.id))
-    assert(collectedAccums.contains(testAccum.id))
-  }
+  test("get accum") {
+    // Don't register with SparkContext for cleanup
+    var acc = createLongAccum("a")
+    val accId = acc.id
+    val ref = WeakReference(acc)
+    assert(ref.get.isDefined)
 
-  test("internal accumulators in a stage") {
-    val listener = new SaveInfoListener
-    val numPartitions = 10
-    sc = new SparkContext("local", "test")
-    sc.addSparkListener(listener)
-    // Have each task add 1 to the internal accumulator
-    val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitions { iter =>
-      TaskContext.get().internalMetricsToAccumulators(TEST_ACCUMULATOR) += 1
-      iter
+    // Remove the explicit reference to it and allow weak reference to get garbage collected
+    acc = null
+    System.gc()
+    assert(ref.get.isEmpty)
+
+    // Getting a garbage collected accum should throw error
+    intercept[IllegalAccessError] {
+      AccumulatorContext.get(accId)
     }
-    // Register asserts in job completion callback to avoid flakiness
-    listener.registerJobCompletionCallback { _ =>
-      val stageInfos = listener.getCompletedStageInfos
-      val taskInfos = listener.getCompletedTaskInfos
-      assert(stageInfos.size === 1)
-      assert(taskInfos.size === numPartitions)
-      // The accumulator values should be merged in the stage
-      val stageAccum = findAccumulableInfo(stageInfos.head.accumulables.values, TEST_ACCUMULATOR)
-      assert(stageAccum.value.toLong === numPartitions)
-      // The accumulator should be updated locally on each task
-      val taskAccumValues = taskInfos.map { taskInfo =>
-        val taskAccum = findAccumulableInfo(taskInfo.accumulables, TEST_ACCUMULATOR)
-        assert(taskAccum.update.isDefined)
-        assert(taskAccum.update.get.toLong === 1)
-        taskAccum.value.toLong
-      }
-      // Each task should keep track of the partial value on the way, i.e. 1, 2, ... numPartitions
-      assert(taskAccumValues.sorted === (1L to numPartitions).toSeq)
-    }
-    rdd.count()
+
+    // Getting a normal accumulator. Note: this has to be separate because referencing an
+    // accumulator above in an `assert` would keep it from being garbage collected.
+    val acc2 = createLongAccum("b")
+    assert(AccumulatorContext.get(acc2.id) === Some(acc2))
+
+    // Getting an accumulator that does not exist should return None
+    assert(AccumulatorContext.get(100000).isEmpty)
   }
 
-  test("internal accumulators in multiple stages") {
-    val listener = new SaveInfoListener
-    val numPartitions = 10
-    sc = new SparkContext("local", "test")
-    sc.addSparkListener(listener)
-    // Each stage creates its own set of internal accumulators so the
-    // values for the same metric should not be mixed up across stages
-    val rdd = sc.parallelize(1 to 100, numPartitions)
-      .map { i => (i, i) }
-      .mapPartitions { iter =>
-        TaskContext.get().internalMetricsToAccumulators(TEST_ACCUMULATOR) += 1
-        iter
-      }
-      .reduceByKey { case (x, y) => x + y }
-      .mapPartitions { iter =>
-        TaskContext.get().internalMetricsToAccumulators(TEST_ACCUMULATOR) += 10
-        iter
-      }
-      .repartition(numPartitions * 2)
-      .mapPartitions { iter =>
-        TaskContext.get().internalMetricsToAccumulators(TEST_ACCUMULATOR) += 100
-        iter
-      }
-    // Register asserts in job completion callback to avoid flakiness
-    listener.registerJobCompletionCallback { _ =>
-      // We ran 3 stages, and the accumulator values should be distinct
-      val stageInfos = listener.getCompletedStageInfos
-      assert(stageInfos.size === 3)
-      val (firstStageAccum, secondStageAccum, thirdStageAccum) =
-        (findAccumulableInfo(stageInfos(0).accumulables.values, TEST_ACCUMULATOR),
-        findAccumulableInfo(stageInfos(1).accumulables.values, TEST_ACCUMULATOR),
-        findAccumulableInfo(stageInfos(2).accumulables.values, TEST_ACCUMULATOR))
-      assert(firstStageAccum.value.toLong === numPartitions)
-      assert(secondStageAccum.value.toLong === numPartitions * 10)
-      assert(thirdStageAccum.value.toLong === numPartitions * 2 * 100)
-    }
-    rdd.count()
+  test("string accumulator param") {
+    val acc = new Accumulator("", StringAccumulatorParam, Some("darkness"))
+    assert(acc.value === "")
+    acc.setValue("feeds")
+    assert(acc.value === "feeds")
+    acc.add("your")
+    assert(acc.value === "your") // value is overwritten, not concatenated
+    acc += "soul"
+    assert(acc.value === "soul")
+    acc ++= "with"
+    assert(acc.value === "with")
+    acc.merge("kindness")
+    assert(acc.value === "kindness")
   }
-
-  test("internal accumulators in fully resubmitted stages") {
-    testInternalAccumulatorsWithFailedTasks((i: Int) => true) // fail all tasks
-  }
-
-  test("internal accumulators in partially resubmitted stages") {
-    testInternalAccumulatorsWithFailedTasks((i: Int) => i % 2 == 0) // fail a subset
-  }
-
-  /**
-   * Return the accumulable info that matches the specified name.
-   */
-  private def findAccumulableInfo(
-      accums: Iterable[AccumulableInfo],
-      name: String): AccumulableInfo = {
-    accums.find { a => a.name == name }.getOrElse {
-      throw new TestFailedException(s"internal accumulator '$name' not found", 0)
-    }
-  }
-
-  /**
-   * Test whether internal accumulators are merged properly if some tasks fail.
-   */
-  private def testInternalAccumulatorsWithFailedTasks(failCondition: (Int => Boolean)): Unit = {
-    val listener = new SaveInfoListener
-    val numPartitions = 10
-    val numFailedPartitions = (0 until numPartitions).count(failCondition)
-    // This says use 1 core and retry tasks up to 2 times
-    sc = new SparkContext("local[1, 2]", "test")
-    sc.addSparkListener(listener)
-    val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitionsWithIndex { case (i, iter) =>
-      val taskContext = TaskContext.get()
-      taskContext.internalMetricsToAccumulators(TEST_ACCUMULATOR) += 1
-      // Fail the first attempts of a subset of the tasks
-      if (failCondition(i) && taskContext.attemptNumber() == 0) {
-        throw new Exception("Failing a task intentionally.")
-      }
-      iter
-    }
-    // Register asserts in job completion callback to avoid flakiness
-    listener.registerJobCompletionCallback { _ =>
-      val stageInfos = listener.getCompletedStageInfos
-      val taskInfos = listener.getCompletedTaskInfos
-      assert(stageInfos.size === 1)
-      assert(taskInfos.size === numPartitions + numFailedPartitions)
-      val stageAccum = findAccumulableInfo(stageInfos.head.accumulables.values, TEST_ACCUMULATOR)
-      // We should not double count values in the merged accumulator
-      assert(stageAccum.value.toLong === numPartitions)
-      val taskAccumValues = taskInfos.flatMap { taskInfo =>
-        if (!taskInfo.failed) {
-          // If a task succeeded, its update value should always be 1
-          val taskAccum = findAccumulableInfo(taskInfo.accumulables, TEST_ACCUMULATOR)
-          assert(taskAccum.update.isDefined)
-          assert(taskAccum.update.get.toLong === 1)
-          Some(taskAccum.value.toLong)
-        } else {
-          // If a task failed, we should not get its accumulator values
-          assert(taskInfo.accumulables.isEmpty)
-          None
-        }
-      }
-      assert(taskAccumValues.sorted === (1L to numPartitions).toSeq)
-    }
-    rdd.count()
-  }
-
 }
 
 private[spark] object AccumulatorSuite {
+  import InternalAccumulator._
 
   /**
-   * Run one or more Spark jobs and verify that the peak execution memory accumulator
-   * is updated afterwards.
+   * Create a long accumulator and register it to [[AccumulatorContext]].
+   */
+  def createLongAccum(
+      name: String,
+      countFailedValues: Boolean = false,
+      initValue: Long = 0,
+      id: Long = AccumulatorContext.newId()): LongAccumulator = {
+    val acc = new LongAccumulator
+    acc.setValue(initValue)
+    acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues)
+    AccumulatorContext.register(acc)
+    acc
+  }
+
+  /**
+   * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
+   * info as an accumulator update.
+   */
+  def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)
+
+  /**
+   * Run one or more Spark jobs and verify that in at least one job the peak execution memory
+   * accumulator is updated afterwards.
    */
   def verifyPeakExecutionMemorySet(
       sc: SparkContext,
       testName: String)(testBody: => Unit): Unit = {
     val listener = new SaveInfoListener
     sc.addSparkListener(listener)
-    // Register asserts in job completion callback to avoid flakiness
-    listener.registerJobCompletionCallback { jobId =>
-      if (jobId == 0) {
-        // The first job is a dummy one to verify that the accumulator does not already exist
-        val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
-        assert(!accums.exists(_.name == InternalAccumulator.PEAK_EXECUTION_MEMORY))
-      } else {
-        // In the subsequent jobs, verify that peak execution memory is updated
-        val accum = listener.getCompletedStageInfos
-          .flatMap(_.accumulables.values)
-          .find(_.name == InternalAccumulator.PEAK_EXECUTION_MEMORY)
-          .getOrElse {
-          throw new TestFailedException(
-            s"peak execution memory accumulator not set in '$testName'", 0)
-        }
-        assert(accum.value.toLong > 0)
-      }
-    }
-    // Run the jobs
-    sc.parallelize(1 to 10).count()
     testBody
+    // wait until all events have been processed before proceeding to assert things
+    sc.listenerBus.waitUntilEmpty(10 * 1000)
+    val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
+    val isSet = accums.exists { a =>
+      a.name == Some(PEAK_EXECUTION_MEMORY) && a.value.exists(_.asInstanceOf[Long] > 0L)
+    }
+    if (!isSet) {
+      throw new TestFailedException(s"peak execution memory accumulator not set in '$testName'", 0)
+    }
   }
 }
 
@@ -353,21 +289,56 @@ private[spark] object AccumulatorSuite {
  * A simple listener that keeps track of the TaskInfos and StageInfos of all completed jobs.
  */
 private class SaveInfoListener extends SparkListener {
-  private val completedStageInfos: ArrayBuffer[StageInfo] = new ArrayBuffer[StageInfo]
-  private val completedTaskInfos: ArrayBuffer[TaskInfo] = new ArrayBuffer[TaskInfo]
-  private var jobCompletionCallback: (Int => Unit) = null // parameter is job ID
+  type StageId = Int
+  type StageAttemptId = Int
+
+  private val completedStageInfos = new ArrayBuffer[StageInfo]
+  private val completedTaskInfos =
+    new mutable.HashMap[(StageId, StageAttemptId), ArrayBuffer[TaskInfo]]
+
+  // Callback to call when a job completes. Parameter is job ID.
+  @GuardedBy("this")
+  private var jobCompletionCallback: () => Unit = null
+  private val jobCompletionSem = new Semaphore(0)
+  private var exception: Throwable = null
 
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
-  def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.toArray.toSeq
+  def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.values.flatten.toSeq
+  def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
+    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo])
 
-  /** Register a callback to be called on job end. */
-  def registerJobCompletionCallback(callback: (Int => Unit)): Unit = {
+  /**
+   * If `jobCompletionCallback` is set, block until the next call has finished.
+   * If the callback failed with an exception, throw it.
+   */
+  def awaitNextJobCompletion(): Unit = {
+    if (jobCompletionCallback != null) {
+      jobCompletionSem.acquire()
+      if (exception != null) {
+        throw exception
+      }
+    }
+  }
+
+  /**
+   * Register a callback to be called on job end.
+   * A call to this should be followed by [[awaitNextJobCompletion]].
+   */
+  def registerJobCompletionCallback(callback: () => Unit): Unit = {
     jobCompletionCallback = callback
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
     if (jobCompletionCallback != null) {
-      jobCompletionCallback(jobEnd.jobId)
+      try {
+        jobCompletionCallback()
+      } catch {
+        // Store any exception thrown here so we can throw them later in the main thread.
+        // Otherwise, if `jobCompletionCallback` threw something it wouldn't fail the test.
+        case NonFatal(e) => exception = e
+      } finally {
+        jobCompletionSem.release()
+      }
     }
   }
 
@@ -376,6 +347,7 @@ private class SaveInfoListener extends SparkListener {
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-    completedTaskInfos += taskEnd.taskInfo
+    completedTaskInfos.getOrElseUpdate(
+      (taskEnd.stageId, taskEnd.stageAttemptId), new ArrayBuffer[TaskInfo]) += taskEnd.taskInfo
   }
 }

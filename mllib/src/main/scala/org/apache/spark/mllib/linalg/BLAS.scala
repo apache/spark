@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
@@ -75,7 +75,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val xIndices = x.indices
     val yValues = y.values
-    val nnz = xIndices.size
+    val nnz = xIndices.length
 
     if (a == 1.0) {
       var k = 0
@@ -135,7 +135,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val xIndices = x.indices
     val yValues = y.values
-    val nnz = xIndices.size
+    val nnz = xIndices.length
 
     var sum = 0.0
     var k = 0
@@ -154,8 +154,8 @@ private[spark] object BLAS extends Serializable with Logging {
     val xIndices = x.indices
     val yValues = y.values
     val yIndices = y.indices
-    val nnzx = xIndices.size
-    val nnzy = yIndices.size
+    val nnzx = xIndices.length
+    val nnzy = yIndices.length
 
     var kx = 0
     var ky = 0
@@ -188,7 +188,7 @@ private[spark] object BLAS extends Serializable with Logging {
             val sxIndices = sx.indices
             val sxValues = sx.values
             val dyValues = dy.values
-            val nnz = sxIndices.size
+            val nnz = sxIndices.length
 
             var i = 0
             var k = 0
@@ -234,6 +234,49 @@ private[spark] object BLAS extends Serializable with Logging {
       _nativeBLAS = NativeBLAS
     }
     _nativeBLAS
+  }
+
+  /**
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   *
+   * @param U the upper triangular part of the matrix in a [[DenseVector]](column major)
+   */
+  def spr(alpha: Double, v: Vector, U: DenseVector): Unit = {
+    spr(alpha, v, U.values)
+  }
+
+  /**
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   *
+   * @param U the upper triangular part of the matrix packed in an array (column major)
+   */
+  def spr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
+    val n = v.size
+    v match {
+      case DenseVector(values) =>
+        NativeBLAS.dspr("U", n, alpha, values, 1, U)
+      case SparseVector(size, indices, values) =>
+        val nnz = indices.length
+        var colStartIdx = 0
+        var prevCol = 0
+        var col = 0
+        var j = 0
+        var i = 0
+        var av = 0.0
+        while (j < nnz) {
+          col = indices(j)
+          // Skip empty columns.
+          colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
+          av = alpha * values(j)
+          i = 0
+          while (i <= j) {
+            U(colStartIdx + indices(i)) += av * values(i)
+            i += 1
+          }
+          j += 1
+          prevCol = col
+        }
+    }
   }
 
   /**
@@ -376,7 +419,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val AcolPtrs = A.colPtrs
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (A.isTransposed){
+    if (A.isTransposed) {
       var colCounterForB = 0
       if (!B.isTransposed) { // Expensive to put the check inside the loop
         while (colCounterForB < nB) {
@@ -594,12 +637,16 @@ private[spark] object BLAS extends Serializable with Logging {
         val indEnd = Arows(rowCounter + 1)
         var sum = 0.0
         var k = 0
-        while (k < xNnz && i < indEnd) {
+        while (i < indEnd && k < xNnz) {
           if (xIndices(k) == Acols(i)) {
             sum += Avals(i) * xValues(k)
+            k += 1
+            i += 1
+          } else if (xIndices(k) < Acols(i)) {
+            k += 1
+          } else {
             i += 1
           }
-          k += 1
         }
         yValues(rowCounter) = sum * alpha + beta * yValues(rowCounter)
         rowCounter += 1

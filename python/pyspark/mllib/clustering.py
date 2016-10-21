@@ -17,6 +17,7 @@
 
 import sys
 import array as pyarray
+import warnings
 
 if sys.version > '3':
     xrange = range
@@ -28,7 +29,7 @@ from numpy import array, random, tile
 
 from collections import namedtuple
 
-from pyspark import SparkContext
+from pyspark import SparkContext, since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
@@ -37,10 +38,134 @@ from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
 
-__all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture',
-           'PowerIterationClusteringModel', 'PowerIterationClustering',
-           'StreamingKMeans', 'StreamingKMeansModel',
+__all__ = ['BisectingKMeansModel', 'BisectingKMeans', 'KMeansModel', 'KMeans',
+           'GaussianMixtureModel', 'GaussianMixture', 'PowerIterationClusteringModel',
+           'PowerIterationClustering', 'StreamingKMeans', 'StreamingKMeansModel',
            'LDA', 'LDAModel']
+
+
+@inherit_doc
+class BisectingKMeansModel(JavaModelWrapper):
+    """
+    A clustering model derived from the bisecting k-means method.
+
+    >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
+    >>> bskm = BisectingKMeans()
+    >>> model = bskm.train(sc.parallelize(data, 2), k=4)
+    >>> p = array([0.0, 0.0])
+    >>> model.predict(p)
+    0
+    >>> model.k
+    4
+    >>> model.computeCost(p)
+    0.0
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __init__(self, java_model):
+        super(BisectingKMeansModel, self).__init__(java_model)
+        self.centers = [c.toArray() for c in self.call("clusterCenters")]
+
+    @property
+    @since('2.0.0')
+    def clusterCenters(self):
+        """Get the cluster centers, represented as a list of NumPy
+        arrays."""
+        return self.centers
+
+    @property
+    @since('2.0.0')
+    def k(self):
+        """Get the number of clusters"""
+        return self.call("k")
+
+    @since('2.0.0')
+    def predict(self, x):
+        """
+        Find the cluster that each of the points belongs to in this
+        model.
+
+        :param x:
+          A data point (or RDD of points) to determine cluster index.
+        :return:
+          Predicted cluster index or an RDD of predicted cluster indices
+          if the input is an RDD.
+        """
+        if isinstance(x, RDD):
+            vecs = x.map(_convert_to_vector)
+            return self.call("predict", vecs)
+
+        x = _convert_to_vector(x)
+        return self.call("predict", x)
+
+    @since('2.0.0')
+    def computeCost(self, x):
+        """
+        Return the Bisecting K-means cost (sum of squared distances of
+        points to their nearest center) for this model on the given
+        data. If provided with an RDD of points returns the sum.
+
+        :param point:
+          A data point (or RDD of points) to compute the cost(s).
+        """
+        if isinstance(x, RDD):
+            vecs = x.map(_convert_to_vector)
+            return self.call("computeCost", vecs)
+
+        return self.call("computeCost", _convert_to_vector(x))
+
+
+class BisectingKMeans(object):
+    """
+    A bisecting k-means algorithm based on the paper "A comparison of
+    document clustering techniques" by Steinbach, Karypis, and Kumar,
+    with modification to fit Spark.
+    The algorithm starts from a single cluster that contains all points.
+    Iteratively it finds divisible clusters on the bottom level and
+    bisects each of them using k-means, until there are `k` leaf
+    clusters in total or no leaf clusters are divisible.
+    The bisecting steps of clusters on the same level are grouped
+    together to increase parallelism. If bisecting all divisible
+    clusters on the bottom level would result more than `k` leaf
+    clusters, larger clusters get higher priority.
+
+    Based on
+    U{http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf}
+    Steinbach, Karypis, and Kumar, A comparison of document clustering
+    techniques, KDD Workshop on Text Mining, 2000.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @classmethod
+    @since('2.0.0')
+    def train(self, rdd, k=4, maxIterations=20, minDivisibleClusterSize=1.0, seed=-1888008604):
+        """
+        Runs the bisecting k-means algorithm return the model.
+
+        :param rdd:
+          Training points as an `RDD` of `Vector` or convertible
+          sequence types.
+        :param k:
+          The desired number of leaf clusters. The actual number could
+          be smaller if there are no divisible leaf clusters.
+          (default: 4)
+        :param maxIterations:
+          Maximum number of iterations allowed to split clusters.
+          (default: 20)
+        :param minDivisibleClusterSize:
+          Minimum number of points (if >= 1.0) or the minimum proportion
+          of points (if < 1.0) of a divisible cluster.
+          (default: 1)
+        :param seed:
+          Random seed value for cluster initialization.
+          (default: -1888008604 from classOf[BisectingKMeans].getName.##)
+        """
+        java_model = callMLlibFunc(
+            "trainBisectingKMeans", rdd.map(_convert_to_vector),
+            k, maxIterations, minDivisibleClusterSize, seed)
+        return BisectingKMeansModel(java_model)
 
 
 @inherit_doc
@@ -50,7 +175,7 @@ class KMeansModel(Saveable, Loader):
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> model = KMeans.train(
-    ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random",
+    ...     sc.parallelize(data), 2, maxIterations=10, initializationMode="random",
     ...                    seed=50, initializationSteps=5, epsilon=1e-4)
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
     True
@@ -90,23 +215,43 @@ class KMeansModel(Saveable, Loader):
     ...     rmtree(path)
     ... except OSError:
     ...     pass
+
+    >>> data = array([-383.1,-382.9, 28.7,31.2, 366.2,367.3]).reshape(3, 2)
+    >>> model = KMeans.train(sc.parallelize(data), 3, maxIterations=0,
+    ...     initialModel = KMeansModel([(-1000.0,-1000.0),(5.0,5.0),(1000.0,1000.0)]))
+    >>> model.clusterCenters
+    [array([-1000., -1000.]), array([ 5.,  5.]), array([ 1000.,  1000.])]
+
+    .. versionadded:: 0.9.0
     """
 
     def __init__(self, centers):
         self.centers = centers
 
     @property
+    @since('1.0.0')
     def clusterCenters(self):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return self.centers
 
     @property
+    @since('1.4.0')
     def k(self):
         """Total number of clusters."""
         return len(self.centers)
 
+    @since('0.9.0')
     def predict(self, x):
-        """Find the cluster to which x belongs in this model."""
+        """
+        Find the cluster that each of the points belongs to in this
+        model.
+
+        :param x:
+          A data point (or RDD of points) to determine cluster index.
+        :return:
+          Predicted cluster index or an RDD of predicted cluster indices
+          if the input is an RDD.
+        """
         best = 0
         best_distance = float("inf")
         if isinstance(x, RDD):
@@ -120,34 +265,95 @@ class KMeansModel(Saveable, Loader):
                 best_distance = distance
         return best
 
+    @since('1.4.0')
     def computeCost(self, rdd):
         """
         Return the K-means cost (sum of squared distances of points to
-        their nearest center) for this model on the given data.
+        their nearest center) for this model on the given
+        data.
+
+        :param rdd:
+          The RDD of points to compute the cost on.
         """
         cost = callMLlibFunc("computeCostKmeansModel", rdd.map(_convert_to_vector),
                              [_convert_to_vector(c) for c in self.centers])
         return cost
 
+    @since('1.4.0')
     def save(self, sc, path):
+        """
+        Save this model to the given path.
+        """
         java_centers = _py2java(sc, [_convert_to_vector(c) for c in self.centers])
         java_model = sc._jvm.org.apache.spark.mllib.clustering.KMeansModel(java_centers)
         java_model.save(sc._jsc.sc(), path)
 
     @classmethod
+    @since('1.4.0')
     def load(cls, sc, path):
+        """
+        Load a model from the given path.
+        """
         java_model = sc._jvm.org.apache.spark.mllib.clustering.KMeansModel.load(sc._jsc.sc(), path)
         return KMeansModel(_java2py(sc, java_model.clusterCenters()))
 
 
 class KMeans(object):
+    """
+    .. versionadded:: 0.9.0
+    """
 
     @classmethod
+    @since('0.9.0')
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
-              seed=None, initializationSteps=5, epsilon=1e-4):
-        """Train a k-means clustering model."""
+              seed=None, initializationSteps=2, epsilon=1e-4, initialModel=None):
+        """
+        Train a k-means clustering model.
+
+        :param rdd:
+          Training points as an `RDD` of `Vector` or convertible
+          sequence types.
+        :param k:
+          Number of clusters to create.
+        :param maxIterations:
+          Maximum number of iterations allowed.
+          (default: 100)
+        :param runs:
+          This param has no effect since Spark 2.0.0.
+        :param initializationMode:
+          The initialization algorithm. This can be either "random" or
+          "k-means||".
+          (default: "k-means||")
+        :param seed:
+          Random seed value for cluster initialization. Set as None to
+          generate seed based on system time.
+          (default: None)
+        :param initializationSteps:
+          Number of steps for the k-means|| initialization mode.
+          This is an advanced setting -- the default of 2 is almost
+          always enough.
+          (default: 2)
+        :param epsilon:
+          Distance threshold within which a center will be considered to
+          have converged. If all centers move less than this Euclidean
+          distance, iterations are stopped.
+          (default: 1e-4)
+        :param initialModel:
+          Initial cluster centers can be provided as a KMeansModel object
+          rather than using the random or k-means|| initializationModel.
+          (default: None)
+        """
+        if runs != 1:
+            warnings.warn("The param `runs` has no effect since Spark 2.0.0.")
+        clusterInitialModel = []
+        if initialModel is not None:
+            if not isinstance(initialModel, KMeansModel):
+                raise Exception("initialModel is of "+str(type(initialModel))+". It needs "
+                                "to be of <type 'KMeansModel'>")
+            clusterInitialModel = [_convert_to_vector(c) for c in initialModel.clusterCenters]
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
-                              runs, initializationMode, seed, initializationSteps, epsilon)
+                              runs, initializationMode, seed, initializationSteps, epsilon,
+                              clusterInitialModel)
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
 
@@ -156,8 +362,6 @@ class KMeans(object):
 class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """
-    .. note:: Experimental
-
     A clustering model derived from the Gaussian Mixture Model method.
 
     >>> from pyspark.mllib.linalg import Vectors, DenseMatrix
@@ -167,15 +371,24 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> clusterdata_1 =  sc.parallelize(array([-0.1,-0.05,-0.01,-0.1,
     ...                                         0.9,0.8,0.75,0.935,
-    ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2))
+    ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6, 2), 2)
     >>> model = GaussianMixture.train(clusterdata_1, 3, convergenceTol=0.0001,
     ...                                 maxIterations=50, seed=10)
     >>> labels = model.predict(clusterdata_1).collect()
     >>> labels[0]==labels[1]
     False
     >>> labels[1]==labels[2]
-    True
+    False
     >>> labels[4]==labels[5]
+    True
+    >>> model.predict([-0.1,-0.05])
+    0
+    >>> softPredicted = model.predictSoft([-0.1,-0.05])
+    >>> abs(softPredicted[0] - 1.0) < 0.001
+    True
+    >>> abs(softPredicted[1] - 0.0) < 0.001
+    True
+    >>> abs(softPredicted[2] - 0.0) < 0.001
     True
 
     >>> path = tempfile.mkdtemp()
@@ -203,15 +416,18 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     ...                 4.5605,  5.2043,  6.2734])
     >>> clusterdata_2 = sc.parallelize(data.reshape(5,3))
     >>> model = GaussianMixture.train(clusterdata_2, 2, convergenceTol=0.0001,
-    ...                               maxIterations=150, seed=10)
+    ...                               maxIterations=150, seed=4)
     >>> labels = model.predict(clusterdata_2).collect()
-    >>> labels[0]==labels[1]==labels[2]
+    >>> labels[0]==labels[1]
     True
-    >>> labels[3]==labels[4]
+    >>> labels[2]==labels[3]==labels[4]
     True
+
+    .. versionadded:: 1.3.0
     """
 
     @property
+    @since('1.4.0')
     def weights(self):
         """
         Weights for each Gaussian distribution in the mixture, where weights[i] is
@@ -220,6 +436,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return array(self.call("weights"))
 
     @property
+    @since('1.4.0')
     def gaussians(self):
         """
         Array of MultivariateGaussian where gaussians[i] represents
@@ -227,34 +444,43 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         return [
             MultivariateGaussian(gaussian[0], gaussian[1])
-            for gaussian in zip(*self.call("gaussians"))]
+            for gaussian in self.call("gaussians")]
 
     @property
+    @since('1.4.0')
     def k(self):
         """Number of gaussians in mixture."""
         return len(self.weights)
 
+    @since('1.3.0')
     def predict(self, x):
         """
-        Find the cluster to which the points in 'x' has maximum membership
-        in this model.
+        Find the cluster to which the point 'x' or each point in RDD 'x'
+        has maximum membership in this model.
 
-        :param x:    RDD of data points.
-        :return:     cluster_labels. RDD of cluster labels.
+        :param x:
+          A feature vector or an RDD of vectors representing data points.
+        :return:
+          Predicted cluster label or an RDD of predicted cluster labels
+          if the input is an RDD.
         """
         if isinstance(x, RDD):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
             return cluster_labels
         else:
-            raise TypeError("x should be represented by an RDD, "
-                            "but got %s." % type(x))
+            z = self.predictSoft(x)
+            return z.argmax()
 
+    @since('1.3.0')
     def predictSoft(self, x):
         """
-        Find the membership of each point in 'x' to all mixture components.
+        Find the membership of point 'x' or each point in RDD 'x' to all mixture components.
 
-        :param x:    RDD of data points.
-        :return:     membership_matrix. RDD of array of double values.
+        :param x:
+          A feature vector or an RDD of vectors representing data points.
+        :return:
+          The membership value to all mixture components for vector 'x'
+          or each vector in RDD 'x'.
         """
         if isinstance(x, RDD):
             means, sigmas = zip(*[(g.mu, g.sigma) for g in self.gaussians])
@@ -262,37 +488,56 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
                                               _convert_to_vector(self.weights), means, sigmas)
             return membership_matrix.map(lambda x: pyarray.array('d', x))
         else:
-            raise TypeError("x should be represented by an RDD, "
-                            "but got %s." % type(x))
+            return self.call("predictSoft", _convert_to_vector(x)).toArray()
 
     @classmethod
+    @since('1.5.0')
     def load(cls, sc, path):
         """Load the GaussianMixtureModel from disk.
 
-        :param sc: SparkContext
-        :param path: str, path to where the model is stored.
+        :param sc:
+          SparkContext.
+        :param path:
+          Path to where the model is stored.
         """
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.GaussianMixtureModelWrapper(model)
+        wrapper = sc._jvm.org.apache.spark.mllib.api.python.GaussianMixtureModelWrapper(model)
         return cls(wrapper)
 
 
 class GaussianMixture(object):
     """
-    .. note:: Experimental
-
     Learning algorithm for Gaussian Mixtures using the expectation-maximization algorithm.
 
-    :param data:            RDD of data points
-    :param k:               Number of components
-    :param convergenceTol:  Threshold value to check the convergence criteria. Defaults to 1e-3
-    :param maxIterations:   Number of iterations. Default to 100
-    :param seed:            Random Seed
-    :param initialModel:    GaussianMixtureModel for initializing learning
+    .. versionadded:: 1.3.0
     """
     @classmethod
+    @since('1.3.0')
     def train(cls, rdd, k, convergenceTol=1e-3, maxIterations=100, seed=None, initialModel=None):
-        """Train a Gaussian Mixture clustering model."""
+        """
+        Train a Gaussian Mixture clustering model.
+
+        :param rdd:
+          Training points as an `RDD` of `Vector` or convertible
+          sequence types.
+        :param k:
+          Number of independent Gaussians in the mixture model.
+        :param convergenceTol:
+          Maximum change in log-likelihood at which convergence is
+          considered to have occurred.
+          (default: 1e-3)
+        :param maxIterations:
+          Maximum number of iterations allowed.
+          (default: 100)
+        :param seed:
+          Random seed for initial Gaussian distribution. Set as None to
+          generate seed based on system time.
+          (default: None)
+        :param initialModel:
+          Initial GMM starting point, bypassing the random
+          initialization.
+          (default: None)
+        """
         initialModelWeights = None
         initialModelMu = None
         initialModelSigma = None
@@ -300,7 +545,7 @@ class GaussianMixture(object):
             if initialModel.k != k:
                 raise Exception("Mismatched cluster count, initialModel.k = %s, however k = %s"
                                 % (initialModel.k, k))
-            initialModelWeights = initialModel.weights
+            initialModelWeights = list(initialModel.weights)
             initialModelMu = [initialModel.gaussians[i].mu for i in range(initialModel.k)]
             initialModelSigma = [initialModel.gaussians[i].sigma for i in range(initialModel.k)]
         java_model = callMLlibFunc("trainGaussianMixtureModel", rdd.map(_convert_to_vector),
@@ -312,16 +557,27 @@ class GaussianMixture(object):
 class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """
-    .. note:: Experimental
-
     Model produced by [[PowerIterationClustering]].
 
-    >>> data = [(0, 1, 1.0), (0, 2, 1.0), (0, 3, 1.0), (1, 2, 1.0), (1, 3, 1.0),
-    ... (2, 3, 1.0), (3, 4, 0.1), (4, 5, 1.0), (4, 15, 1.0), (5, 6, 1.0),
-    ... (6, 7, 1.0), (7, 8, 1.0), (8, 9, 1.0), (9, 10, 1.0), (10, 11, 1.0),
-    ... (11, 12, 1.0), (12, 13, 1.0), (13, 14, 1.0), (14, 15, 1.0)]
-    >>> rdd = sc.parallelize(data, 2)
-    >>> model = PowerIterationClustering.train(rdd, 2, 100)
+    >>> import math
+    >>> def genCircle(r, n):
+    ...     points = []
+    ...     for i in range(0, n):
+    ...         theta = 2.0 * math.pi * i / n
+    ...         points.append((r * math.cos(theta), r * math.sin(theta)))
+    ...     return points
+    >>> def sim(x, y):
+    ...     dist2 = (x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1])
+    ...     return math.exp(-dist2 / 2.0)
+    >>> r1 = 1.0
+    >>> n1 = 10
+    >>> r2 = 4.0
+    >>> n2 = 40
+    >>> n = n1 + n2
+    >>> points = genCircle(r1, n1) + genCircle(r2, n2)
+    >>> similarities = [(i, j, sim(points[i], points[j])) for i in range(1, n) for j in range(0, i)]
+    >>> rdd = sc.parallelize(similarities, 2)
+    >>> model = PowerIterationClustering.train(rdd, 2, 40)
     >>> model.k
     2
     >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
@@ -345,15 +601,19 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     ...     rmtree(path)
     ... except OSError:
     ...     pass
+
+    .. versionadded:: 1.5.0
     """
 
     @property
+    @since('1.5.0')
     def k(self):
         """
         Returns the number of clusters.
         """
         return self.call("k")
 
+    @since('1.5.0')
     def assignments(self):
         """
         Returns the cluster assignments of this model.
@@ -362,38 +622,50 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
             lambda x: (PowerIterationClustering.Assignment(*x)))
 
     @classmethod
+    @since('1.5.0')
     def load(cls, sc, path):
+        """
+        Load a model from the given path.
+        """
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.PowerIterationClusteringModelWrapper(model)
+        wrapper =\
+            sc._jvm.org.apache.spark.mllib.api.python.PowerIterationClusteringModelWrapper(model)
         return PowerIterationClusteringModel(wrapper)
 
 
 class PowerIterationClustering(object):
     """
-    .. note:: Experimental
-
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm
     developed by [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]].
     From the abstract: PIC finds a very low-dimensional embedding of a
     dataset using truncated power iteration on a normalized pair-wise
     similarity matrix of the data.
+
+    .. versionadded:: 1.5.0
     """
 
     @classmethod
+    @since('1.5.0')
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
         """
-        :param rdd: an RDD of (i, j, s,,ij,,) tuples representing the
-            affinity matrix, which is the matrix A in the PIC paper.
-            The similarity s,,ij,, must be nonnegative.
-            This is a symmetric matrix and hence s,,ij,, = s,,ji,,.
-            For any (i, j) with nonzero similarity, there should be
-            either (i, j, s,,ij,,) or (j, i, s,,ji,,) in the input.
-            Tuples with i = j are ignored, because we assume
-            s,,ij,, = 0.0.
-        :param k: Number of clusters.
-        :param maxIterations: Maximum number of iterations of the
-            PIC algorithm.
-        :param initMode: Initialization mode.
+        :param rdd:
+          An RDD of (i, j, s\ :sub:`ij`\) tuples representing the
+          affinity matrix, which is the matrix A in the PIC paper.  The
+          similarity s\ :sub:`ij`\ must be nonnegative.  This is a symmetric
+          matrix and hence s\ :sub:`ij`\ = s\ :sub:`ji`\  For any (i, j) with
+          nonzero similarity, there should be either (i, j, s\ :sub:`ij`\) or
+          (j, i, s\ :sub:`ji`\) in the input.  Tuples with i = j are ignored,
+          because it is assumed s\ :sub:`ij`\ = 0.0.
+        :param k:
+          Number of clusters.
+        :param maxIterations:
+          Maximum number of iterations of the PIC algorithm.
+          (default: 100)
+        :param initMode:
+          Initialization mode. This can be either "random" to use
+          a random vector as vertex properties, or "degree" to use
+          normalized sum similarities.
+          (default: "random")
         """
         model = callMLlibFunc("trainPowerIterationClusteringModel",
                               rdd.map(_convert_to_vector), int(k), int(maxIterations), initMode)
@@ -402,13 +674,13 @@ class PowerIterationClustering(object):
     class Assignment(namedtuple("Assignment", ["id", "cluster"])):
         """
         Represents an (id, cluster) tuple.
+
+        .. versionadded:: 1.5.0
         """
 
 
 class StreamingKMeansModel(KMeansModel):
     """
-    .. note:: Experimental
-
     Clustering model which can perform an online update of the centroids.
 
     The update formula for each centroid is given by
@@ -431,8 +703,10 @@ class StreamingKMeansModel(KMeansModel):
     and new data. If it set to zero, the old centroids are completely
     forgotten.
 
-    :param clusterCenters: Initial cluster centers.
-    :param clusterWeights: List of weights assigned to each cluster.
+    :param clusterCenters:
+      Initial cluster centers.
+    :param clusterWeights:
+      List of weights assigned to each cluster.
 
     >>> initCenters = [[0.0, 0.0], [1.0, 1.0]]
     >>> initWeights = [1.0, 1.0]
@@ -461,25 +735,32 @@ class StreamingKMeansModel(KMeansModel):
     0
     >>> stkm.predict([1.5, 1.5])
     1
+
+    .. versionadded:: 1.5.0
     """
     def __init__(self, clusterCenters, clusterWeights):
         super(StreamingKMeansModel, self).__init__(centers=clusterCenters)
         self._clusterWeights = list(clusterWeights)
 
     @property
+    @since('1.5.0')
     def clusterWeights(self):
         """Return the cluster weights."""
         return self._clusterWeights
 
     @ignore_unicode_prefix
+    @since('1.5.0')
     def update(self, data, decayFactor, timeUnit):
         """Update the centroids, according to data
 
-        :param data: Should be a RDD that represents the new data.
-        :param decayFactor: forgetfulness of the previous centroids.
-        :param timeUnit: Can be "batches" or "points". If points, then the
-                         decay factor is raised to the power of number of new
-                         points and if batches, it is used as it is.
+        :param data:
+          RDD with new data for the model update.
+        :param decayFactor:
+          Forgetfulness of the previous centroids.
+        :param timeUnit:
+          Can be "batches" or "points". If points, then the decay factor
+          is raised to the power of number of new points and if batches,
+          then decay factor will be used as is.
         """
         if not isinstance(data, RDD):
             raise TypeError("Data should be of an RDD, got %s." % type(data))
@@ -499,17 +780,24 @@ class StreamingKMeansModel(KMeansModel):
 
 class StreamingKMeans(object):
     """
-    .. note:: Experimental
-
     Provides methods to set k, decayFactor, timeUnit to configure the
     KMeans algorithm for fitting and predicting on incoming dstreams.
     More details on how the centroids are updated are provided under the
     docs of StreamingKMeansModel.
 
-    :param k: int, number of clusters
-    :param decayFactor: float, forgetfulness of the previous centroids.
-    :param timeUnit: can be "batches" or "points". If points, then the
-                     decayfactor is raised to the power of no. of new points.
+    :param k:
+      Number of clusters.
+      (default: 2)
+    :param decayFactor:
+      Forgetfulness of the previous centroids.
+      (default: 1.0)
+    :param timeUnit:
+      Can be "batches" or "points". If points, then the decay factor is
+      raised to the power of number of new points and if batches, then
+      decay factor will be used as is.
+      (default: "batches")
+
+    .. versionadded:: 1.5.0
     """
     def __init__(self, k=2, decayFactor=1.0, timeUnit="batches"):
         self._k = k
@@ -520,6 +808,7 @@ class StreamingKMeans(object):
         self._timeUnit = timeUnit
         self._model = None
 
+    @since('1.5.0')
     def latestModel(self):
         """Return the latest model"""
         return self._model
@@ -534,16 +823,19 @@ class StreamingKMeans(object):
                 "Expected dstream to be of type DStream, "
                 "got type %s" % type(dstream))
 
+    @since('1.5.0')
     def setK(self, k):
         """Set number of clusters."""
         self._k = k
         return self
 
+    @since('1.5.0')
     def setDecayFactor(self, decayFactor):
         """Set decay factor."""
         self._decayFactor = decayFactor
         return self
 
+    @since('1.5.0')
     def setHalfLife(self, halfLife, timeUnit):
         """
         Set number of batches after which the centroids of that
@@ -553,6 +845,7 @@ class StreamingKMeans(object):
         self._decayFactor = exp(log(0.5) / halfLife)
         return self
 
+    @since('1.5.0')
     def setInitialCenters(self, centers, weights):
         """
         Set initial centers. Should be set before calling trainOn.
@@ -560,6 +853,7 @@ class StreamingKMeans(object):
         self._model = StreamingKMeansModel(centers, weights)
         return self
 
+    @since('1.5.0')
     def setRandomCenters(self, dim, weight, seed):
         """
         Set the initial centres to be random samples from
@@ -571,6 +865,7 @@ class StreamingKMeans(object):
         self._model = StreamingKMeansModel(clusterCenters, clusterWeights)
         return self
 
+    @since('1.5.0')
     def trainOn(self, dstream):
         """Train the model on the incoming dstream."""
         self._validate(dstream)
@@ -580,6 +875,7 @@ class StreamingKMeans(object):
 
         dstream.foreachRDD(update)
 
+    @since('1.5.0')
     def predictOn(self, dstream):
         """
         Make predictions on a dstream.
@@ -588,6 +884,7 @@ class StreamingKMeans(object):
         self._validate(dstream)
         return dstream.map(lambda x: self._model.predict(x))
 
+    @since('1.5.0')
     def predictOnValues(self, dstream):
         """
         Make predictions on a keyed dstream.
@@ -597,7 +894,7 @@ class StreamingKMeans(object):
         return dstream.mapValues(lambda x: self._model.predict(x))
 
 
-class LDAModel(JavaModelWrapper):
+class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
 
     """ A clustering model derived from the LDA method.
 
@@ -617,9 +914,14 @@ class LDAModel(JavaModelWrapper):
     ...     [2, SparseVector(2, {0: 1.0})],
     ... ]
     >>> rdd =  sc.parallelize(data)
-    >>> model = LDA.train(rdd, k=2)
+    >>> model = LDA.train(rdd, k=2, seed=1)
     >>> model.vocabSize()
     2
+    >>> model.describeTopics()
+    [([1, 0], [0.5..., 0.49...]), ([0, 1], [0.5..., 0.49...])]
+    >>> model.describeTopics(1)
+    [([1], [0.5...]), ([0], [0.5...])]
+
     >>> topics = model.topicsMatrix()
     >>> topics_expect = array([[0.5,  0.5], [0.5, 0.5]])
     >>> assert_almost_equal(topics, topics_expect, 1)
@@ -636,62 +938,101 @@ class LDAModel(JavaModelWrapper):
     ...     rmtree(path)
     ... except OSError:
     ...     pass
+
+    .. versionadded:: 1.5.0
     """
 
+    @since('1.5.0')
     def topicsMatrix(self):
         """Inferred topics, where each topic is represented by a distribution over terms."""
         return self.call("topicsMatrix").toArray()
 
+    @since('1.5.0')
     def vocabSize(self):
         """Vocabulary size (number of terms or terms in the vocabulary)"""
         return self.call("vocabSize")
 
-    def save(self, sc, path):
-        """Save the LDAModel on to disk.
+    @since('1.6.0')
+    def describeTopics(self, maxTermsPerTopic=None):
+        """Return the topics described by weighted terms.
 
-        :param sc: SparkContext
-        :param path: str, path to where the model needs to be stored.
+        WARNING: If vocabSize and k are large, this can return a large object!
+
+        :param maxTermsPerTopic:
+          Maximum number of terms to collect for each topic.
+          (default: vocabulary size)
+        :return:
+          Array over topics. Each topic is represented as a pair of
+          matching arrays: (term indices, term weights in topic).
+          Each topic's terms are sorted in order of decreasing weight.
         """
-        if not isinstance(sc, SparkContext):
-            raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
-        if not isinstance(path, basestring):
-            raise TypeError("path should be a basestring, got type %s" % type(path))
-        self._java_model.save(sc._jsc.sc(), path)
+        if maxTermsPerTopic is None:
+            topics = self.call("describeTopics")
+        else:
+            topics = self.call("describeTopics", maxTermsPerTopic)
+        return topics
 
     @classmethod
+    @since('1.5.0')
     def load(cls, sc, path):
         """Load the LDAModel from disk.
 
-        :param sc: SparkContext
-        :param path: str, path to where the model is stored.
+        :param sc:
+          SparkContext.
+        :param path:
+          Path to where the model is stored.
         """
         if not isinstance(sc, SparkContext):
             raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
-        java_model = sc._jvm.org.apache.spark.mllib.clustering.DistributedLDAModel.load(
-            sc._jsc.sc(), path)
-        return cls(java_model)
+        model = callMLlibFunc("loadLDAModel", sc, path)
+        return LDAModel(model)
 
 
 class LDA(object):
+    """
+    .. versionadded:: 1.5.0
+    """
 
     @classmethod
+    @since('1.5.0')
     def train(cls, rdd, k=10, maxIterations=20, docConcentration=-1.0,
               topicConcentration=-1.0, seed=None, checkpointInterval=10, optimizer="em"):
         """Train a LDA model.
 
-        :param rdd:                 RDD of data points
-        :param k:                   Number of clusters you want
-        :param maxIterations:       Number of iterations. Default to 20
-        :param docConcentration:    Concentration parameter (commonly named "alpha")
-            for the prior placed on documents' distributions over topics ("theta").
-        :param topicConcentration:  Concentration parameter (commonly named "beta" or "eta")
-            for the prior placed on topics' distributions over terms.
-        :param seed:                Random Seed
-        :param checkpointInterval:  Period (in iterations) between checkpoints.
-        :param optimizer:           LDAOptimizer used to perform the actual calculation.
-            Currently "em", "online" are supported. Default to "em".
+        :param rdd:
+          RDD of documents, which are tuples of document IDs and term
+          (word) count vectors. The term count vectors are "bags of
+          words" with a fixed-size vocabulary (where the vocabulary size
+          is the length of the vector). Document IDs must be unique
+          and >= 0.
+        :param k:
+          Number of topics to infer, i.e., the number of soft cluster
+          centers.
+          (default: 10)
+        :param maxIterations:
+          Maximum number of iterations allowed.
+          (default: 20)
+        :param docConcentration:
+          Concentration parameter (commonly named "alpha") for the prior
+          placed on documents' distributions over topics ("theta").
+          (default: -1.0)
+        :param topicConcentration:
+          Concentration parameter (commonly named "beta" or "eta") for
+          the prior placed on topics' distributions over terms.
+          (default: -1.0)
+        :param seed:
+          Random seed for cluster initialization. Set as None to generate
+          seed based on system time.
+          (default: None)
+        :param checkpointInterval:
+          Period (in iterations) between checkpoints.
+          (default: 10)
+        :param optimizer:
+          LDAOptimizer used to perform the actual calculation. Currently
+          "em", "online" are supported.
+          (default: "em")
         """
         model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
                               docConcentration, topicConcentration, seed,

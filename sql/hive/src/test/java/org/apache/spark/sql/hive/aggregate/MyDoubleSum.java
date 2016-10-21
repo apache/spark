@@ -41,11 +41,11 @@ public class MyDoubleSum extends UserDefinedAggregateFunction {
   private DataType _returnDataType;
 
   public MyDoubleSum() {
-    List<StructField> inputFields = new ArrayList<StructField>();
+    List<StructField> inputFields = new ArrayList<>();
     inputFields.add(DataTypes.createStructField("inputDouble", DataTypes.DoubleType, true));
     _inputDataType = DataTypes.createStructType(inputFields);
 
-    List<StructField> bufferFields = new ArrayList<StructField>();
+    List<StructField> bufferFields = new ArrayList<>();
     bufferFields.add(DataTypes.createStructField("bufferDouble", DataTypes.DoubleType, true));
     _bufferSchema = DataTypes.createStructType(bufferFields);
 

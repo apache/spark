@@ -20,13 +20,13 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Throwables
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.flume.sink._
 
 /**
  * This class implements the core functionality of [[FlumePollingReceiver]]. When started it
  * pulls data from Flume, stores it to Spark and then sends an Ack or Nack. This class should be
- * run via an [[java.util.concurrent.Executor]] as this implements [[Runnable]]
+ * run via a [[java.util.concurrent.Executor]] as this implements [[Runnable]]
  *
  * @param receiver The receiver that owns this instance.
  */
@@ -77,7 +77,7 @@ private[flume] class FlumeBatchFetcher(receiver: FlumePollingReceiver) extends R
 
   /**
    * Gets a batch of events from the specified client. This method does not handle any exceptions
-   * which will be propogated to the caller.
+   * which will be propagated to the caller.
    * @param client Client to get events from
    * @return [[Some]] which contains the event batch if Flume sent any events back, else [[None]]
    */
@@ -96,8 +96,8 @@ private[flume] class FlumeBatchFetcher(receiver: FlumePollingReceiver) extends R
   }
 
   /**
-   * Store the events in the buffer to Spark. This method will not propogate any exceptions,
-   * but will propogate any other errors.
+   * Store the events in the buffer to Spark. This method will not propagate any exceptions,
+   * but will propagate any other errors.
    * @param buffer The buffer to store
    * @return true if the data was stored without any exception being thrown, else false
    */

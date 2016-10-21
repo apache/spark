@@ -19,23 +19,20 @@ package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrix, SparseMatrix, Vectors}
+import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
- * Represents an entry in an distributed matrix.
+ * Represents an entry in a distributed matrix.
  * @param i row index
  * @param j column index
  * @param value value of the entry
  */
 @Since("1.0.0")
-@Experimental
 case class MatrixEntry(i: Long, j: Long, value: Double)
 
 /**
- * :: Experimental ::
  * Represents a matrix in coordinate format.
  *
  * @param entries matrix entries
@@ -45,7 +42,6 @@ case class MatrixEntry(i: Long, j: Long, value: Double)
  *              columns will be determined by the max column index plus one.
  */
 @Since("1.0.0")
-@Experimental
 class CoordinateMatrix @Since("1.0.0") (
     @Since("1.0.0") val entries: RDD[MatrixEntry],
     private var nRows: Long,

@@ -19,22 +19,23 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.types.{StructField, StructType}
 
-class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
-    val slicer = new VectorSlicer
+    val slicer = new VectorSlicer().setInputCol("feature")
     ParamsSuite.checkParams(slicer)
     assert(slicer.getIndices.length === 0)
     assert(slicer.getNames.length === 0)
     withClue("VectorSlicer should not have any features selected by default") {
       intercept[IllegalArgumentException] {
-        slicer.validateParams()
+        slicer.transformSchema(StructType(Seq(StructField("feature", new VectorUDT, true))))
       }
     }
   }
@@ -53,8 +54,6 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Test vector slicer") {
-    val sqlContext = new SQLContext(sc)
-
     val data = Array(
       Vectors.sparse(5, Seq((0, -2.0), (1, 2.3))),
       Vectors.dense(-2.0, 2.3, 0.0, 0.0, 1.0),
@@ -80,7 +79,7 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val resultAttrGroup = new AttributeGroup("expected", resultAttrs.asInstanceOf[Array[Attribute]])
 
     val rdd = sc.parallelize(data.zip(expected)).map { case (a, b) => Row(a, b) }
-    val df = sqlContext.createDataFrame(rdd,
+    val df = spark.createDataFrame(rdd,
       StructType(Array(attrGroup.toStructField(), resultAttrGroup.toStructField())))
 
     val vectorSlicer = new VectorSlicer().setInputCol("features").setOutputCol("result")
@@ -105,5 +104,14 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     vectorSlicer.setIndices(Array.empty).setNames(Array("f1", "f4"))
     validateResults(vectorSlicer.transform(df))
+  }
+
+  test("read/write") {
+    val t = new VectorSlicer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setIndices(Array(1, 3))
+      .setNames(Array("a", "d"))
+    testDefaultReadWrite(t)
   }
 }

@@ -18,20 +18,23 @@
 package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
+import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config._
 
 private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], racks: Array[String])
 
 /**
  * This strategy is calculating the optimal locality preferences of YARN containers by considering
  * the node ratio of pending tasks, number of required cores/containers and and locality of current
- * existing containers. The target of this algorithm is to maximize the number of tasks that
- * would run locally.
+ * existing and pending allocated containers. The target of this algorithm is to maximize the number
+ * of tasks that would run locally.
  *
  * Consider a situation in which we have 20 tasks that require (host1, host2, host3)
  * and 10 tasks that require (host1, host2, host4), besides each container has 2 cores
@@ -82,15 +85,17 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
     val yarnConf: Configuration,
     val resource: Resource) {
 
-  // Number of CPUs per task
-  private val CPUS_PER_TASK = sparkConf.getInt("spark.task.cpus", 1)
-
   /**
    * Calculate each container's node locality and rack locality
    * @param numContainer number of containers to calculate
    * @param numLocalityAwareTasks number of locality required tasks
    * @param hostToLocalTaskCount a map to store the preferred hostname and possible task
    *                             numbers running on it, used as hints for container allocation
+   * @param allocatedHostToContainersMap host to allocated containers map, used to calculate the
+   *                                     expected locality preference by considering the existing
+   *                                     containers
+   * @param localityMatchedPendingAllocations A sequence of pending container request which
+   *                                          matches the localities of current required tasks.
    * @return node localities and rack localities, each locality is an array of string,
    *         the length of localities is the same as number of containers
    */
@@ -98,10 +103,12 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       numContainer: Int,
       numLocalityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
-      allocatedHostToContainersMap: HashMap[String, Set[ContainerId]]
+      allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
+      localityMatchedPendingAllocations: Seq[ContainerRequest]
     ): Array[ContainerLocalityPreferences] = {
     val updatedHostToContainerCount = expectedHostToContainerCount(
-      numLocalityAwareTasks, hostToLocalTaskCount, allocatedHostToContainersMap)
+      numLocalityAwareTasks, hostToLocalTaskCount, allocatedHostToContainersMap,
+        localityMatchedPendingAllocations)
     val updatedLocalityAwareContainerNum = updatedHostToContainerCount.values.sum
 
     // The number of containers to allocate, divided into two groups, one with preferred locality,
@@ -150,7 +157,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
    */
   private def numExecutorsPending(numTasksPending: Int): Int = {
     val coresPerExecutor = resource.getVirtualCores
-    (numTasksPending * CPUS_PER_TASK + coresPerExecutor - 1) / coresPerExecutor
+    (numTasksPending * sparkConf.get(CPUS_PER_TASK) + coresPerExecutor - 1) / coresPerExecutor
   }
 
   /**
@@ -158,25 +165,60 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
    * @param localityAwareTasks number of locality aware tasks
    * @param hostToLocalTaskCount a map to store the preferred hostname and possible task
    *                             numbers running on it, used as hints for container allocation
+   * @param allocatedHostToContainersMap host to allocated containers map, used to calculate the
+   *                                     expected locality preference by considering the existing
+   *                                     containers
+   * @param localityMatchedPendingAllocations A sequence of pending container request which
+   *                                          matches the localities of current required tasks.
    * @return a map with hostname as key and required number of containers on this host as value
    */
   private def expectedHostToContainerCount(
       localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
-      allocatedHostToContainersMap: HashMap[String, Set[ContainerId]]
+      allocatedHostToContainersMap: HashMap[String, Set[ContainerId]],
+      localityMatchedPendingAllocations: Seq[ContainerRequest]
     ): Map[String, Int] = {
     val totalLocalTaskNum = hostToLocalTaskCount.values.sum
+    val pendingHostToContainersMap = pendingHostToContainerCount(localityMatchedPendingAllocations)
+
     hostToLocalTaskCount.map { case (host, count) =>
       val expectedCount =
         count.toDouble * numExecutorsPending(localityAwareTasks) / totalLocalTaskNum
-      val existedCount = allocatedHostToContainersMap.get(host)
-        .map(_.size)
-        .getOrElse(0)
+      // Take the locality of pending containers into consideration
+      val existedCount = allocatedHostToContainersMap.get(host).map(_.size).getOrElse(0) +
+        pendingHostToContainersMap.getOrElse(host, 0.0)
 
       // If existing container can not fully satisfy the expected number of container,
       // the required container number is expected count minus existed count. Otherwise the
       // required container number is 0.
       (host, math.max(0, (expectedCount - existedCount).ceil.toInt))
     }
+  }
+
+  /**
+   * According to the locality ratio and number of container requests, calculate the host to
+   * possible number of containers for pending allocated containers.
+   *
+   * If current locality ratio of hosts is: Host1 : Host2 : Host3 = 20 : 20 : 10,
+   * and pending container requests is 3, so the possible number of containers on
+   * Host1 : Host2 : Host3 will be 1.2 : 1.2 : 0.6.
+   * @param localityMatchedPendingAllocations A sequence of pending container request which
+   *                                          matches the localities of current required tasks.
+   * @return a Map with hostname as key and possible number of containers on this host as value
+   */
+  private def pendingHostToContainerCount(
+      localityMatchedPendingAllocations: Seq[ContainerRequest]): Map[String, Double] = {
+    val pendingHostToContainerCount = new HashMap[String, Int]()
+    localityMatchedPendingAllocations.foreach { cr =>
+      cr.getNodes.asScala.foreach { n =>
+        val count = pendingHostToContainerCount.getOrElse(n, 0) + 1
+        pendingHostToContainerCount(n) = count
+      }
+    }
+
+    val possibleTotalContainerNum = pendingHostToContainerCount.values.sum
+    val localityMatchedPendingNum = localityMatchedPendingAllocations.size.toDouble
+    pendingHostToContainerCount.mapValues(_ * localityMatchedPendingNum / possibleTotalContainerNum)
+      .toMap
   }
 }

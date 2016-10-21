@@ -19,12 +19,11 @@ package org.apache.spark.mllib.stat
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
  * Kernel density estimation. Given a sample from a population, estimate its probability density
  * function at each of the given evaluation points using kernels. Only Gaussian kernel is supported.
  *
@@ -39,7 +38,6 @@ import org.apache.spark.rdd.RDD
  * }}}
  */
 @Since("1.4.0")
-@Experimental
 class KernelDensity extends Serializable {
 
   import KernelDensity._

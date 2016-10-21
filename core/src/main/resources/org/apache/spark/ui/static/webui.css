@@ -16,14 +16,9 @@
  */
 
 .navbar {
-  height: 50px;
   font-size: 15px;
   margin-bottom: 15px;
-  min-width: 1200px
-}
-
-.navbar .navbar-inner {
-  height: 50px;
+  min-width: 600px;
 }
 
 .navbar .brand {
@@ -46,6 +41,7 @@
 .navbar-text {
   height: 50px;
   line-height: 3.3;
+  white-space: nowrap;
 }
 
 table.sortable thead {
@@ -110,21 +106,22 @@ pre {
   line-height: 18px;
   padding: 6px;
   margin: 0;
+  word-break: break-word;
   border-radius: 3px;
 }
 
 .stage-details {
-  max-height: 100px;
   overflow-y: auto;
   margin: 0;
+  display: block;
   transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stage-details.collapsed {
-  max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
   border: none;
+  display: none;
 }
 
 .description-input {
@@ -147,17 +144,18 @@ pre {
   max-height: 300px;
   overflow-y: auto;
   margin: 0;
+  display: block;
   transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stacktrace-details.collapsed {
-  max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
   border: none;
+  display: none;
 }
 
-span.expand-additional-metrics, span.expand-dag-viz {
+span.expand-additional-metrics, span.expand-dag-viz, span.collapse-table {
   cursor: pointer;
 }
 
@@ -165,7 +163,7 @@ span.additional-metric-title {
   cursor: pointer;
 }
 
-.additional-metrics.collapsed {
+.additional-metrics.collapsed, .collapsible-table.collapsed {
   display: none;
 }
 
@@ -225,10 +223,27 @@ a.expandbutton {
   cursor: pointer;
 }
 
-.executor-thread {
-  background: #E6E6E6;
+.threaddump-td-mouseover {
+  background-color: #49535a !important;
+  color: white;
+  cursor:pointer;
 }
 
-.non-executor-thread {
-  background: #FAFAFA;
+.table-head-clickable th a, .table-head-clickable th a:hover {
+  /* Make the entire header clickable, not just the text label */
+  display: block;
+  width: 100%;
+  /* Suppress the default link styling */
+  color: #333;
+  text-decoration: none;
+}
+
+.log-more-btn, .log-new-btn {
+  width: 100%
+}
+
+.no-new-alert {
+  text-align: center;
+  margin: 0;
+  padding: 4px 0;
 }

@@ -19,14 +19,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
+import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.Utils
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
@@ -43,7 +46,6 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expression, catalystValue, inputRow)
-    checkEvaluationWithGeneratedProjection(expression, catalystValue, inputRow)
     if (GenerateUnsafeProjection.canSupport(expression.dataType)) {
       checkEvalutionWithUnsafeProjection(expression, catalystValue, inputRow)
     }
@@ -52,15 +54,22 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
   /**
    * Check the equality between result of expression and expected value, it will handle
-   * Array[Byte] and Spread[Double].
+   * Array[Byte], Spread[Double], and MapData.
    */
   protected def checkResult(result: Any, expected: Any): Boolean = {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
-      case (result: Double, expected: Spread[Double]) =>
-        expected.isWithin(result)
-      case _ => result == expected
+      case (result: Double, expected: Spread[Double @unchecked]) =>
+        expected.asInstanceOf[Spread[Double]].isWithin(result)
+      case (result: MapData, expected: MapData) =>
+        result.keyArray() == expected.keyArray() && result.valueArray() == expected.valueArray()
+      case (result: Double, expected: Double) =>
+        if (expected.isNaN) result.isNaN else expected == result
+      case (result: Float, expected: Float) =>
+        if (expected.isNaN) result.isNaN else expected == result
+      case _ =>
+        result == expected
     }
   }
 
@@ -83,7 +92,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
           s"""
             |Code generation of $expression failed:
             |$e
-            |${e.getStackTraceString}
+            |${Utils.exceptionString(e)}
           """.stripMargin)
     }
   }
@@ -110,7 +119,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       inputRow: InternalRow = EmptyRow): Unit = {
 
     val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
 
     val actual = plan(inputRow).get(0, expression.dataType)
@@ -120,49 +129,17 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  protected def checkEvaluationWithGeneratedProjection(
-      expression: Expression,
-      expected: Any,
-      inputRow: InternalRow = EmptyRow): Unit = {
-
-    val plan = generateProject(
-      GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
-
-    val actual = plan(inputRow)
-    val expectedRow = InternalRow(expected)
-
-    // We reimplement hashCode in generated `SpecificRow`, make sure it's consistent with our
-    // interpreted version.
-    if (actual.hashCode() != expectedRow.hashCode()) {
-      val ctx = new CodeGenContext
-      val evaluated = expression.gen(ctx)
-      fail(
-        s"""
-          |Mismatched hashCodes for values: $actual, $expectedRow
-          |Hash Codes: ${actual.hashCode()} != ${expectedRow.hashCode()}
-          |Expressions: $expression
-          |Code: $evaluated
-        """.stripMargin)
-    }
-
-    if (actual != expectedRow) {
-      val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
-      fail("Incorrect Evaluation in codegen mode: " +
-        s"$expression, actual: $actual, expected: $expectedRow$input")
-    }
-    if (actual.copy() != expectedRow) {
-      fail(s"Copy of generated Row is wrong: actual: ${actual.copy()}, expected: $expectedRow")
-    }
-  }
-
   protected def checkEvalutionWithUnsafeProjection(
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-
+    // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
+    // some expression is reusing variable names across different instances.
+    // This behavior is tested in ExpressionEvalHelperSuite.
     val plan = generateProject(
-      GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
+      UnsafeProjection.create(
+        Alias(expression, s"Optimized($expression)1")() ::
+          Alias(expression, s"Optimized($expression)2")() :: Nil),
       expression)
 
     val unsafeRow = plan(inputRow)
@@ -170,13 +147,14 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
     if (expected == null) {
       if (!unsafeRow.isNullAt(0)) {
-        val expectedRow = InternalRow(expected)
+        val expectedRow = InternalRow(expected, expected)
         fail("Incorrect evaluation in unsafe mode: " +
           s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
       }
     } else {
-      val lit = InternalRow(expected)
-      val expectedRow = UnsafeProjection.create(Array(expression.dataType)).apply(lit)
+      val lit = InternalRow(expected, expected)
+      val expectedRow =
+        UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
       if (unsafeRow != expectedRow) {
         fail("Incorrect evaluation in unsafe mode: " +
           s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
@@ -189,7 +167,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer.execute(plan)
+    val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
   }
 
@@ -202,7 +180,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     checkEvaluationWithOptimization(expression, expected)
 
     var plan = generateProject(
-      GenerateProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
     var actual = plan(inputRow).get(0, expression.dataType)
     assert(checkResult(actual, expected))
@@ -295,7 +273,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
 
     val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil)(),
+      GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil),
       expr)
     val codegen = plan(inputRow).get(0, expr.dataType)
 
@@ -312,13 +290,37 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
-      case (result: Double, expected: Spread[Double]) =>
-        expected.isWithin(result)
       case (result: Double, expected: Double) if result.isNaN && expected.isNaN =>
         true
+      case (result: Double, expected: Double) =>
+        relativeErrorComparison(result, expected)
       case (result: Float, expected: Float) if result.isNaN && expected.isNaN =>
         true
       case _ => result == expected
+    }
+  }
+
+  /**
+   * Private helper function for comparing two values using relative tolerance.
+   * Note that if x or y is extremely close to zero, i.e., smaller than Double.MinPositiveValue,
+   * the relative tolerance is meaningless, so the exception will be raised to warn users.
+   *
+   * TODO: this duplicates functions in spark.ml.util.TestingUtils.relTol and
+   * spark.mllib.util.TestingUtils.relTol, they could be moved to common utils sub module for the
+   * whole spark project which does not depend on other modules. See more detail in discussion:
+   * https://github.com/apache/spark/pull/15059#issuecomment-246940444
+   */
+  private def relativeErrorComparison(x: Double, y: Double, eps: Double = 1E-8): Boolean = {
+    val absX = math.abs(x)
+    val absY = math.abs(y)
+    val diff = math.abs(x - y)
+    if (x == y) {
+      true
+    } else if (absX < Double.MinPositiveValue || absY < Double.MinPositiveValue) {
+      throw new TestFailedException(
+        s"$x or $y is extremely close to zero, so the relative tolerance is meaningless.", 0)
+    } else {
+      diff < eps * math.min(absX, absY)
     }
   }
 }

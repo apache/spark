@@ -17,8 +17,9 @@
 package org.apache.spark.streaming.flume.sink
 
 import java.net.InetSocketAddress
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{TimeUnit, CountDownLatch, Executors}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -36,11 +37,11 @@ import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 // Spark core main, which has too many dependencies to require here manually.
 // For this reason, we continue to use FunSuite and ignore the scalastyle checks
 // that fail if this is detected.
-//scalastyle:off
+// scalastyle:off
 import org.scalatest.FunSuite
 
 class SparkSinkSuite extends FunSuite {
-//scalastyle:on
+// scalastyle:on
 
   val eventsPerBatch = 1000
   val channelCapacity = 5000
@@ -184,7 +185,8 @@ class SparkSinkSuite extends FunSuite {
   private def putEvents(ch: MemoryChannel, count: Int): Unit = {
     val tx = ch.getTransaction
     tx.begin()
-    (1 to count).foreach(x => ch.put(EventBuilder.withBody(x.toString.getBytes)))
+    (1 to count).foreach(x =>
+      ch.put(EventBuilder.withBody(x.toString.getBytes(StandardCharsets.UTF_8))))
     tx.commit()
     tx.close()
   }

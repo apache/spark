@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_gateway import Py4JJavaError
+from py4j.protocol import Py4JJavaError
 
 from pyspark.serializers import PairDeserializer, NoOpSerializer
 from pyspark.storagelevel import StorageLevel
@@ -74,16 +74,14 @@ class KinesisUtils(object):
 
         try:
             # Use KinesisUtilsPythonHelper to access Scala's KinesisUtils
-            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
-                .loadClass("org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper")
-            helper = helperClass.newInstance()
-            jstream = helper.createStream(ssc._jssc, kinesisAppName, streamName, endpointUrl,
-                                          regionName, initialPositionInStream, jduration, jlevel,
-                                          awsAccessKeyId, awsSecretKey)
-        except Py4JJavaError as e:
-            if 'ClassNotFoundException' in str(e.java_exception):
+            helper = ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
+        except TypeError as e:
+            if str(e) == "'JavaPackage' object is not callable":
                 KinesisUtils._printErrorMsg(ssc.sparkContext)
-            raise e
+            raise
+        jstream = helper.createStream(ssc._jssc, kinesisAppName, streamName, endpointUrl,
+                                      regionName, initialPositionInStream, jduration, jlevel,
+                                      awsAccessKeyId, awsSecretKey)
         stream = DStream(jstream, ssc, NoOpSerializer())
         return stream.map(lambda v: decoder(v))
 

@@ -23,13 +23,12 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
 import org.apache.spark.ml.regression.{RandomForestRegressionModel, RandomForestRegressor}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 
 /**
@@ -37,7 +36,7 @@ import org.apache.spark.sql.DataFrame
  * {{{
  * ./bin/run-example ml.RandomForestExample [options]
  * }}}
- * Decision Trees and ensembles can take a large amount of memory.  If the run-example command
+ * Decision Trees and ensembles can take a large amount of memory. If the run-example command
  * above fails, try running via spark-submit and specifying the amount of memory as at least 1g.
  * For local mode, run
  * {{{
@@ -94,7 +93,7 @@ object RandomForestExample {
         s" default: ${defaultParams.numTrees}")
         .action((x, c) => c.copy(featureSubsetStrategy = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        .text(s"fraction of data to hold out for testing. If given option testInput, " +
         s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[Boolean]("cacheNodeIds")
@@ -115,7 +114,7 @@ object RandomForestExample {
         s"default: ${defaultParams.checkpointInterval}")
         .action((x, c) => c.copy(checkpointInterval = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+        .text(s"input path to test dataset. If given, option fracTest is ignored." +
         s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")
@@ -134,32 +133,34 @@ object RandomForestExample {
       }
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"RandomForestExample with $params")
-    val sc = new SparkContext(conf)
-    params.checkpointDir.foreach(sc.setCheckpointDir)
+  def run(params: Params): Unit = {
+    val spark = SparkSession
+      .builder
+      .appName(s"RandomForestExample with $params")
+      .getOrCreate()
+
+    params.checkpointDir.foreach(spark.sparkContext.setCheckpointDir)
     val algo = params.algo.toLowerCase
 
     println(s"RandomForestExample with parameters:\n$params")
 
     // Load training and test data and cache it.
-    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(sc, params.input,
+    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(params.input,
       params.dataFormat, params.testInput, algo, params.fracTest)
 
-    // Set up Pipeline
+    // Set up Pipeline.
     val stages = new mutable.ArrayBuffer[PipelineStage]()
     // (1) For classification, re-index classes.
     val labelColName = if (algo == "classification") "indexedLabel" else "label"
     if (algo == "classification") {
       val labelIndexer = new StringIndexer()
-        .setInputCol("labelString")
+        .setInputCol("label")
         .setOutputCol(labelColName)
       stages += labelIndexer
     }
@@ -170,7 +171,7 @@ object RandomForestExample {
       .setOutputCol("indexedFeatures")
       .setMaxCategories(10)
     stages += featuresIndexer
-    // (3) Learn Random Forest
+    // (3) Learn Random Forest.
     val dt = algo match {
       case "classification" =>
         new RandomForestClassifier()
@@ -201,13 +202,13 @@ object RandomForestExample {
     stages += dt
     val pipeline = new Pipeline().setStages(stages.toArray)
 
-    // Fit the Pipeline
+    // Fit the Pipeline.
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
-    // Get the trained Random Forest from the fitted PipelineModel
+    // Get the trained Random Forest from the fitted PipelineModel.
     algo match {
       case "classification" =>
         val rfModel = pipelineModel.stages.last.asInstanceOf[RandomForestClassificationModel]
@@ -226,7 +227,7 @@ object RandomForestExample {
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    // Evaluate model on training, test data
+    // Evaluate model on training, test data.
     algo match {
       case "classification" =>
         println("Training data results:")
@@ -242,7 +243,7 @@ object RandomForestExample {
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

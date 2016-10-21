@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -73,7 +76,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
     }
-    val mutableProj = GenerateMutableProjection.generate(exprs)()
+    val mutableProj = GenerateMutableProjection.generate(exprs)
     val row1 = mutableProj(result)
     assert(result === row1)
     val row2 = mutableProj(result)
@@ -97,5 +100,26 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     val safeProj = FromUnsafeProjection(fields)
     val row2 = safeProj(unsafeRow)
     assert(row2 === row)
+  }
+
+  test("padding bytes should be zeroed out") {
+    val types = Seq(BooleanType, ByteType, ShortType, IntegerType, FloatType, BinaryType,
+      StringType)
+    val struct = StructType(types.map(StructField("", _, true)))
+    val fields = Array[DataType](StringType, struct)
+    val unsafeProj = UnsafeProjection.create(fields)
+
+    val innerRow = InternalRow(false, 1.toByte, 2.toShort, 3, 4.0f,
+      "".getBytes(StandardCharsets.UTF_8),
+      UTF8String.fromString(""))
+    val row1 = InternalRow(UTF8String.fromString(""), innerRow)
+    val unsafe1 = unsafeProj(row1).copy()
+    // create a Row with long String before the inner struct
+    val row2 = InternalRow(UTF8String.fromString("a_long_string").repeat(10), innerRow)
+    val unsafe2 = unsafeProj(row2).copy()
+    assert(unsafe1.getStruct(1, 7) === unsafe2.getStruct(1, 7))
+    val unsafe3 = unsafeProj(row1).copy()
+    assert(unsafe1 === unsafe3)
+    assert(unsafe1.getStruct(1, 7) === unsafe3.getStruct(1, 7))
   }
 }

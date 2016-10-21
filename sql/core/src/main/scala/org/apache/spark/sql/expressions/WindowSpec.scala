@@ -17,24 +17,22 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{Column, catalyst}
+import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions._
 
-
 /**
- * :: Experimental ::
  * A window specification that defines the partitioning, ordering, and frame boundaries.
  *
  * Use the static methods in [[Window]] to create a [[WindowSpec]].
  *
  * @since 1.4.0
  */
-@Experimental
+@InterfaceStability.Stable
 class WindowSpec private[sql](
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frame: catalyst.expressions.WindowFrame) {
+    frame: WindowFrame) {
 
   /**
    * Defines the partitioning columns in a [[WindowSpec]].
@@ -87,12 +85,17 @@ class WindowSpec private[sql](
    * "current row", while "-1" means the row before the current row, and "5" means the fifth row
    * after the current row.
    *
-   * @param start boundary start, inclusive.
-   *              The frame is unbounded if this is the minimum long value.
-   * @param end boundary end, inclusive.
-   *            The frame is unbounded if this is the maximum long value.
+   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
+   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * values directly.
+   *
+   * @param start boundary start, inclusive. The frame is unbounded if this is
+   *              the minimum long value ([[Window.unboundedPreceding]]).
+   * @param end boundary end, inclusive. The frame is unbounded if this is the
+   *            maximum long value  ([[Window.unboundedFollowing]]).
    * @since 1.4.0
    */
+  // Note: when updating the doc for this method, also update Window.rowsBetween.
   def rowsBetween(start: Long, end: Long): WindowSpec = {
     between(RowFrame, start, end)
   }
@@ -104,12 +107,17 @@ class WindowSpec private[sql](
    * while "-1" means one off before the current row, and "5" means the five off after the
    * current row.
    *
-   * @param start boundary start, inclusive.
-   *              The frame is unbounded if this is the minimum long value.
-   * @param end boundary end, inclusive.
-   *            The frame is unbounded if this is the maximum long value.
+   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
+   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * values directly.
+   *
+   * @param start boundary start, inclusive. The frame is unbounded if this is
+   *              the minimum long value ([[Window.unboundedPreceding]]).
+   * @param end boundary end, inclusive. The frame is unbounded if this is the
+   *            maximum long value  ([[Window.unboundedFollowing]]).
    * @since 1.4.0
    */
+  // Note: when updating the doc for this method, also update Window.rangeBetween.
   def rangeBetween(start: Long, end: Long): WindowSpec = {
     between(RangeFrame, start, end)
   }
@@ -139,37 +147,7 @@ class WindowSpec private[sql](
    * Converts this [[WindowSpec]] into a [[Column]] with an aggregate expression.
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
-    val windowExpr = aggregate.expr match {
-      case Average(child) => WindowExpression(
-        UnresolvedWindowFunction("avg", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Sum(child) => WindowExpression(
-        UnresolvedWindowFunction("sum", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Count(child) => WindowExpression(
-        UnresolvedWindowFunction("count", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case First(child) => WindowExpression(
-        // TODO this is a hack for Hive UDAF first_value
-        UnresolvedWindowFunction("first_value", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Last(child) => WindowExpression(
-        // TODO this is a hack for Hive UDAF last_value
-        UnresolvedWindowFunction("last_value", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Min(child) => WindowExpression(
-        UnresolvedWindowFunction("min", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Max(child) => WindowExpression(
-        UnresolvedWindowFunction("max", child :: Nil),
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case wf: WindowFunction => WindowExpression(
-        wf,
-        WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case x =>
-        throw new UnsupportedOperationException(s"$x is not supported in window operation.")
-    }
-    new Column(windowExpr)
+    val spec = WindowSpecDefinition(partitionSpec, orderSpec, frame)
+    new Column(WindowExpression(aggregate.expr, spec))
   }
-
 }

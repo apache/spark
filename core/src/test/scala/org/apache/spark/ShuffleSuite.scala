@@ -17,13 +17,18 @@
 
 package org.apache.spark
 
+import java.util.Properties
+import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService}
+
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
+import org.apache.spark.shuffle.ShuffleWriter
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId}
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -247,11 +252,13 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
         .setMaster("local")
         .set("spark.shuffle.spill.compress", shuffleSpillCompress.toString)
         .set("spark.shuffle.compress", shuffleCompress.toString)
-        .set("spark.shuffle.memoryFraction", "0.001")
       resetSparkContext()
       sc = new SparkContext(myConf)
+      val diskBlockManager = sc.env.blockManager.diskBlockManager
       try {
-        sc.parallelize(0 until 100000).map(i => (i / 4, i)).groupByKey().collect()
+        assert(diskBlockManager.getAllFiles().isEmpty)
+        sc.parallelize(0 until 10).map(i => (i / 4, i)).groupByKey().collect()
+        assert(diskBlockManager.getAllFiles().nonEmpty)
       } catch {
         case e: Exception =>
           val errMsg = s"Failed with spark.shuffle.spill.compress=$shuffleSpillCompress," +
@@ -315,6 +322,104 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(metrics.bytesWritten === metrics.byresRead)
     assert(metrics.bytesWritten > 0)
   }
+
+  test("multiple simultaneous attempts for one task (SPARK-8029)") {
+    sc = new SparkContext("local", "test", conf)
+    val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    val manager = sc.env.shuffleManager
+
+    val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0L)
+    val metricsSystem = sc.env.metricsSystem
+    val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+
+    // first attempt -- its successful
+    val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0,
+      new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem))
+    val data1 = (1 to 10).map { x => x -> x}
+
+    // second attempt -- also successful.  We'll write out different data,
+    // just to simulate the fact that the records may get written differently
+    // depending on what gets spilled, what gets combined, etc.
+    val writer2 = manager.getWriter[Int, Int](shuffleHandle, 0,
+      new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, new Properties, metricsSystem))
+    val data2 = (11 to 20).map { x => x -> x}
+
+    // interleave writes of both attempts -- we want to test that both attempts can occur
+    // simultaneously, and everything is still OK
+
+    def writeAndClose(
+      writer: ShuffleWriter[Int, Int])(
+      iter: Iterator[(Int, Int)]): Option[MapStatus] = {
+      val files = writer.write(iter)
+      writer.stop(true)
+    }
+    val interleaver = new InterleaveIterators(
+      data1, writeAndClose(writer1), data2, writeAndClose(writer2))
+    val (mapOutput1, mapOutput2) = interleaver.run()
+
+    // check that we can read the map output and it has the right data
+    assert(mapOutput1.isDefined)
+    assert(mapOutput2.isDefined)
+    assert(mapOutput1.get.location === mapOutput2.get.location)
+    assert(mapOutput1.get.getSizeForBlock(0) === mapOutput1.get.getSizeForBlock(0))
+
+    // register one of the map outputs -- doesn't matter which one
+    mapOutput1.foreach { case mapStatus =>
+      mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))
+    }
+
+    val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1,
+      new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem))
+    val readData = reader.read().toIndexedSeq
+    assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
+
+    manager.unregisterShuffle(0)
+  }
+}
+
+/**
+ * Utility to help tests make sure that we can process two different iterators simultaneously
+ * in different threads.  This makes sure that in your test, you don't completely process data1 with
+ * f1 before processing data2 with f2 (or vice versa).  It adds a barrier so that the functions only
+ * process one element, before pausing to wait for the other function to "catch up".
+ */
+class InterleaveIterators[T, R](
+  data1: Seq[T],
+  f1: Iterator[T] => R,
+  data2: Seq[T],
+  f2: Iterator[T] => R) {
+
+  require(data1.size == data2.size)
+
+  val barrier = new CyclicBarrier(2)
+  class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
+    def hasNext: Boolean = sub.hasNext
+
+    def next: E = {
+      barrier.await()
+      sub.next()
+    }
+  }
+
+  val c1 = new Callable[R] {
+    override def call(): R = f1(new BarrierIterator(1, data1.iterator))
+  }
+  val c2 = new Callable[R] {
+    override def call(): R = f2(new BarrierIterator(2, data2.iterator))
+  }
+
+  val e: ExecutorService = Executors.newFixedThreadPool(2)
+
+  def run(): (R, R) = {
+    val future1 = e.submit(c1)
+    val future2 = e.submit(c2)
+    val r1 = future1.get()
+    val r2 = future2.get()
+    e.shutdown()
+    (r1, r2)
+  }
 }
 
 object ShuffleSuite {
@@ -342,14 +447,10 @@ object ShuffleSuite {
     @volatile var bytesRead: Long = 0
     val listener = new SparkListener {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-        taskEnd.taskMetrics.shuffleWriteMetrics.foreach { m =>
-          recordsWritten += m.shuffleRecordsWritten
-          bytesWritten += m.shuffleBytesWritten
-        }
-        taskEnd.taskMetrics.shuffleReadMetrics.foreach { m =>
-          recordsRead += m.recordsRead
-          bytesRead += m.totalBytesRead
-        }
+        recordsWritten += taskEnd.taskMetrics.shuffleWriteMetrics.recordsWritten
+        bytesWritten += taskEnd.taskMetrics.shuffleWriteMetrics.bytesWritten
+        recordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
+        bytesRead += taskEnd.taskMetrics.shuffleReadMetrics.totalBytesRead
       }
     }
     sc.addSparkListener(listener)

@@ -20,7 +20,7 @@ if sys.version >= "3":
     from io import BytesIO
 else:
     from StringIO import StringIO
-from py4j.java_gateway import Py4JJavaError
+from py4j.protocol import Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import PairDeserializer, NoOpSerializer, UTF8Deserializer, read_int
@@ -40,7 +40,7 @@ class FlumeUtils(object):
 
     @staticmethod
     def createStream(ssc, hostname, port,
-                     storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
+                     storageLevel=StorageLevel.MEMORY_AND_DISK_2,
                      enableDecompression=False,
                      bodyDecoder=utf8_decoder):
         """
@@ -55,22 +55,13 @@ class FlumeUtils(object):
         :return: A DStream object
         """
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
-
-        try:
-            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
-                .loadClass("org.apache.spark.streaming.flume.FlumeUtilsPythonHelper")
-            helper = helperClass.newInstance()
-            jstream = helper.createStream(ssc._jssc, hostname, port, jlevel, enableDecompression)
-        except Py4JJavaError as e:
-            if 'ClassNotFoundException' in str(e.java_exception):
-                FlumeUtils._printErrorMsg(ssc.sparkContext)
-            raise e
-
+        helper = FlumeUtils._get_helper(ssc._sc)
+        jstream = helper.createStream(ssc._jssc, hostname, port, jlevel, enableDecompression)
         return FlumeUtils._toPythonDStream(ssc, jstream, bodyDecoder)
 
     @staticmethod
     def createPollingStream(ssc, addresses,
-                            storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
+                            storageLevel=StorageLevel.MEMORY_AND_DISK_2,
                             maxBatchSize=1000,
                             parallelism=5,
                             bodyDecoder=utf8_decoder):
@@ -95,18 +86,9 @@ class FlumeUtils(object):
         for (host, port) in addresses:
             hosts.append(host)
             ports.append(port)
-
-        try:
-            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-                .loadClass("org.apache.spark.streaming.flume.FlumeUtilsPythonHelper")
-            helper = helperClass.newInstance()
-            jstream = helper.createPollingStream(
-                ssc._jssc, hosts, ports, jlevel, maxBatchSize, parallelism)
-        except Py4JJavaError as e:
-            if 'ClassNotFoundException' in str(e.java_exception):
-                FlumeUtils._printErrorMsg(ssc.sparkContext)
-            raise e
-
+        helper = FlumeUtils._get_helper(ssc._sc)
+        jstream = helper.createPollingStream(
+            ssc._jssc, hosts, ports, jlevel, maxBatchSize, parallelism)
         return FlumeUtils._toPythonDStream(ssc, jstream, bodyDecoder)
 
     @staticmethod
@@ -125,6 +107,15 @@ class FlumeUtils(object):
             body = bodyDecoder(event[1])
             return (headers, body)
         return stream.map(func)
+
+    @staticmethod
+    def _get_helper(sc):
+        try:
+            return sc._jvm.org.apache.spark.streaming.flume.FlumeUtilsPythonHelper()
+        except TypeError as e:
+            if str(e) == "'JavaPackage' object is not callable":
+                FlumeUtils._printErrorMsg(sc)
+            raise
 
     @staticmethod
     def _printErrorMsg(sc):

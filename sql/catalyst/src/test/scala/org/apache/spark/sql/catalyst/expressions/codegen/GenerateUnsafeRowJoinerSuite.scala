@@ -74,8 +74,9 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
 
   private def testConcatOnce(numFields1: Int, numFields2: Int, candidateTypes: Seq[DataType]) {
     info(s"schema size $numFields1, $numFields2")
-    val schema1 = RandomDataGenerator.randomSchema(numFields1, candidateTypes)
-    val schema2 = RandomDataGenerator.randomSchema(numFields2, candidateTypes)
+    val random = new Random()
+    val schema1 = RandomDataGenerator.randomSchema(random, numFields1, candidateTypes)
+    val schema2 = RandomDataGenerator.randomSchema(random, numFields2, candidateTypes)
 
     // Create the converters needed to convert from external row to internal row and to UnsafeRows.
     val internalConverter1 = CatalystTypeConverters.createToCatalystConverter(schema1)

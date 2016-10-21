@@ -18,10 +18,11 @@
 # Worker daemon
 
 rLibDir <- Sys.getenv("SPARKR_RLIBDIR")
-script <- paste(rLibDir, "SparkR/worker/worker.R", sep = "/")
+dirs <- strsplit(rLibDir, ",")[[1]]
+script <- file.path(dirs[[1]], "SparkR", "worker", "worker.R")
 
 # preload SparkR package, speedup worker
-.libPaths(c(rLibDir, .libPaths()))
+.libPaths(c(dirs, .libPaths()))
 suppressPackageStartupMessages(library(SparkR))
 
 port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
@@ -43,7 +44,7 @@ while (TRUE) {
     if (inherits(p, "masterProcess")) {
       close(inputCon)
       Sys.setenv(SPARKR_WORKER_PORT = port)
-      source(script)
+      try(source(script))
       # Set SIGUSR1 so that child can exit
       tools::pskill(Sys.getpid(), tools::SIGUSR1)
       parallel:::mcexit(0L)

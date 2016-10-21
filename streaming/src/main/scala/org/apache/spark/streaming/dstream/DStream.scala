@@ -25,14 +25,15 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{CallSite, MetadataCleaner, Utils}
+import org.apache.spark.util.{CallSite, Utils}
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -51,7 +52,7 @@ import org.apache.spark.util.{CallSite, MetadataCleaner, Utils}
  * `join`. These operations are automatically available on any DStream of pairs
  * (e.g., DStream[(Int, Int)] through implicit conversions.
  *
- * DStreams internally is characterized by a few basic properties:
+ * A DStream internally is characterized by a few basic properties:
  *  - A list of other DStreams that the DStream depends on
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval
@@ -82,7 +83,7 @@ abstract class DStream[T: ClassTag] (
 
   // RDDs generated, marked as private[streaming] so that testsuites can access it
   @transient
-  private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
+  private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]]()
 
   // Time zero for the DStream
   private[streaming] var zeroTime: Time = null
@@ -97,11 +98,13 @@ abstract class DStream[T: ClassTag] (
   private[streaming] val mustCheckpoint = false
   private[streaming] var checkpointDuration: Duration = null
   private[streaming] val checkpointData = new DStreamCheckpointData(this)
+  @transient
+  private var restoredFromCheckpointData = false
 
   // Reference to whole DStream graph
   private[streaming] var graph: DStreamGraph = null
 
-  private[streaming] def isInitialized = (zeroTime != null)
+  private[streaming] def isInitialized = zeroTime != null
 
   // Duration for which the DStream requires its parent DStream to remember each RDD created
   private[streaming] def parentRememberDuration = rememberDuration
@@ -154,7 +157,7 @@ abstract class DStream[T: ClassTag] (
   def persist(level: StorageLevel): DStream[T] = {
     if (this.isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change storage level of an DStream after streaming context has started")
+        "Cannot change storage level of a DStream after streaming context has started")
     }
     this.storageLevel = level
     this
@@ -173,7 +176,7 @@ abstract class DStream[T: ClassTag] (
   def checkpoint(interval: Duration): DStream[T] = {
     if (isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change checkpoint interval of an DStream after streaming context has started")
+        "Cannot change checkpoint interval of a DStream after streaming context has started")
     }
     persist()
     checkpointDuration = interval
@@ -187,15 +190,15 @@ abstract class DStream[T: ClassTag] (
    */
   private[streaming] def initialize(time: Time) {
     if (zeroTime != null && zeroTime != time) {
-      throw new SparkException("ZeroTime is already initialized to " + zeroTime
-        + ", cannot initialize it again to " + time)
+      throw new SparkException(s"ZeroTime is already initialized to $zeroTime"
+        + s", cannot initialize it again to $time")
     }
     zeroTime = time
 
     // Set the checkpoint interval to be slideDuration or 10 seconds, which ever is larger
     if (mustCheckpoint && checkpointDuration == null) {
       checkpointDuration = slideDuration * math.ceil(Seconds(10) / slideDuration).toInt
-      logInfo("Checkpoint interval automatically set to " + checkpointDuration)
+      logInfo(s"Checkpoint interval automatically set to $checkpointDuration")
     }
 
     // Set the minimum value of the rememberDuration if not already set
@@ -232,7 +235,7 @@ abstract class DStream[T: ClassTag] (
 
     require(
       !mustCheckpoint || checkpointDuration != null,
-      "The checkpoint interval for " + this.getClass.getSimpleName + " has not been set." +
+      s"The checkpoint interval for ${this.getClass.getSimpleName} has not been set." +
         " Please use DStream.checkpoint() to set the interval."
     )
 
@@ -243,65 +246,53 @@ abstract class DStream[T: ClassTag] (
 
     require(
       checkpointDuration == null || checkpointDuration >= slideDuration,
-      "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
-        checkpointDuration + " which is lower than its slide time (" + slideDuration + "). " +
-        "Please set it to at least " + slideDuration + "."
+      s"The checkpoint interval for ${this.getClass.getSimpleName} has been set to " +
+        s"$checkpointDuration which is lower than its slide time ($slideDuration). " +
+        s"Please set it to at least $slideDuration."
     )
 
     require(
       checkpointDuration == null || checkpointDuration.isMultipleOf(slideDuration),
-      "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
-        checkpointDuration + " which not a multiple of its slide time (" + slideDuration + "). " +
-        "Please set it to a multiple of " + slideDuration + "."
+      s"The checkpoint interval for ${this.getClass.getSimpleName} has been set to " +
+        s" $checkpointDuration which not a multiple of its slide time ($slideDuration). " +
+        s"Please set it to a multiple of $slideDuration."
     )
 
     require(
       checkpointDuration == null || storageLevel != StorageLevel.NONE,
-      "" + this.getClass.getSimpleName + " has been marked for checkpointing but the storage " +
+      s"${this.getClass.getSimpleName} has been marked for checkpointing but the storage " +
         "level has not been set to enable persisting. Please use DStream.persist() to set the " +
         "storage level to use memory for better checkpointing performance."
     )
 
     require(
       checkpointDuration == null || rememberDuration > checkpointDuration,
-      "The remember duration for " + this.getClass.getSimpleName + " has been set to " +
-        rememberDuration + " which is not more than the checkpoint interval (" +
-        checkpointDuration + "). Please set it to higher than " + checkpointDuration + "."
-    )
-
-    val metadataCleanerDelay = MetadataCleaner.getDelaySeconds(ssc.conf)
-    logInfo("metadataCleanupDelay = " + metadataCleanerDelay)
-    require(
-      metadataCleanerDelay < 0 || rememberDuration.milliseconds < metadataCleanerDelay * 1000,
-      "It seems you are doing some DStream window operation or setting a checkpoint interval " +
-        "which requires " + this.getClass.getSimpleName + " to remember generated RDDs for more " +
-        "than " + rememberDuration.milliseconds / 1000 + " seconds. But Spark's metadata cleanup" +
-        "delay is set to " + metadataCleanerDelay + " seconds, which is not sufficient. Please " +
-        "set the Java cleaner delay to more than " +
-        math.ceil(rememberDuration.milliseconds / 1000.0).toInt + " seconds."
+      s"The remember duration for ${this.getClass.getSimpleName} has been set to " +
+        s" $rememberDuration which is not more than the checkpoint interval" +
+        s" ($checkpointDuration). Please set it to a value higher than $checkpointDuration."
     )
 
     dependencies.foreach(_.validateAtStart())
 
-    logInfo("Slide time = " + slideDuration)
-    logInfo("Storage level = " + storageLevel)
-    logInfo("Checkpoint interval = " + checkpointDuration)
-    logInfo("Remember duration = " + rememberDuration)
-    logInfo("Initialized and validated " + this)
+    logInfo(s"Slide time = $slideDuration")
+    logInfo(s"Storage level = ${storageLevel.description}")
+    logInfo(s"Checkpoint interval = $checkpointDuration")
+    logInfo(s"Remember interval = $rememberDuration")
+    logInfo(s"Initialized and validated $this")
   }
 
   private[streaming] def setContext(s: StreamingContext) {
     if (ssc != null && ssc != s) {
-      throw new SparkException("Context is already set in " + this + ", cannot set it again")
+      throw new SparkException(s"Context must not be set again for $this")
     }
     ssc = s
-    logInfo("Set context for " + this)
+    logInfo(s"Set context for $this")
     dependencies.foreach(_.setContext(ssc))
   }
 
   private[streaming] def setGraph(g: DStreamGraph) {
     if (graph != null && graph != g) {
-      throw new SparkException("Graph is already set in " + this + ", cannot set it again")
+      throw new SparkException(s"Graph must not be set again for $this")
     }
     graph = g
     dependencies.foreach(_.setGraph(graph))
@@ -310,7 +301,7 @@ abstract class DStream[T: ClassTag] (
   private[streaming] def remember(duration: Duration) {
     if (duration != null && (rememberDuration == null || duration > rememberDuration)) {
       rememberDuration = duration
-      logInfo("Duration for remembering RDDs set to " + rememberDuration + " for " + this)
+      logInfo(s"Duration for remembering RDDs set to $rememberDuration for $this")
     }
     dependencies.foreach(_.remember(parentRememberDuration))
   }
@@ -320,11 +311,11 @@ abstract class DStream[T: ClassTag] (
     if (!isInitialized) {
       throw new SparkException (this + " has not been initialized")
     } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
-      logInfo("Time " + time + " is invalid as zeroTime is " + zeroTime +
-        " and slideDuration is " + slideDuration + " and difference is " + (time - zeroTime))
+      logInfo(s"Time $time is invalid as zeroTime is $zeroTime" +
+        s" , slideDuration is $slideDuration and difference is ${time - zeroTime}")
       false
     } else {
-      logDebug("Time " + time + " is valid")
+      logDebug(s"Time $time is valid")
       true
     }
   }
@@ -341,7 +332,7 @@ abstract class DStream[T: ClassTag] (
       // of RDD generation, else generate nothing.
       if (isTimeValid(time)) {
 
-        val rddOption = createRDDWithLocalProperties(time) {
+        val rddOption = createRDDWithLocalProperties(time, displayInnerRDDOps = false) {
           // Disable checks for existing output directories in jobs launched by the streaming
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details. We need to have this call here because
@@ -373,27 +364,52 @@ abstract class DStream[T: ClassTag] (
   /**
    * Wrap a body of code such that the call site and operation scope
    * information are passed to the RDDs created in this body properly.
+   * @param body RDD creation code to execute with certain local properties.
+   * @param time Current batch time that should be embedded in the scope names
+   * @param displayInnerRDDOps Whether the detailed callsites and scopes of the inner RDDs generated
+   *                           by `body` will be displayed in the UI; only the scope and callsite
+   *                           of the DStream operation that generated `this` will be displayed.
    */
-  protected def createRDDWithLocalProperties[U](time: Time)(body: => U): U = {
+  protected[streaming] def createRDDWithLocalProperties[U](
+      time: Time,
+      displayInnerRDDOps: Boolean)(body: => U): U = {
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val scopeNoOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
     // Pass this DStream's operation scope and creation site information to RDDs through
     // thread-local properties in our SparkContext. Since this method may be called from another
     // DStream, we need to temporarily store any old scope and creation site information to
     // restore them later after setting our own.
-    val prevCallSite = ssc.sparkContext.getCallSite()
+    val prevCallSite = CallSite(
+      ssc.sparkContext.getLocalProperty(CallSite.SHORT_FORM),
+      ssc.sparkContext.getLocalProperty(CallSite.LONG_FORM)
+    )
     val prevScope = ssc.sparkContext.getLocalProperty(scopeKey)
     val prevScopeNoOverride = ssc.sparkContext.getLocalProperty(scopeNoOverrideKey)
 
     try {
-      ssc.sparkContext.setCallSite(creationSite)
+      if (displayInnerRDDOps) {
+        // Unset the short form call site, so that generated RDDs get their own
+        ssc.sparkContext.setLocalProperty(CallSite.SHORT_FORM, null)
+        ssc.sparkContext.setLocalProperty(CallSite.LONG_FORM, null)
+      } else {
+        // Set the callsite, so that the generated RDDs get the DStream's call site and
+        // the internal RDD call sites do not get displayed
+        ssc.sparkContext.setCallSite(creationSite)
+      }
+
       // Use the DStream's base scope for this RDD so we can (1) preserve the higher level
       // DStream operation name, and (2) share this scope with other DStreams created in the
       // same operation. Disallow nesting so that low-level Spark primitives do not show up.
       // TODO: merge callsites with scopes so we can just reuse the code there
       makeScope(time).foreach { s =>
         ssc.sparkContext.setLocalProperty(scopeKey, s.toJson)
-        ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, "true")
+        if (displayInnerRDDOps) {
+          // Allow inner RDDs to add inner scopes
+          ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, null)
+        } else {
+          // Do not allow inner RDDs to override the scope set by DStream
+          ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, "true")
+        }
       }
 
       body
@@ -413,13 +429,12 @@ abstract class DStream[T: ClassTag] (
    */
   private[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
-      case Some(rdd) => {
+      case Some(rdd) =>
         val jobFunc = () => {
           val emptyFunc = { (iterator: Iterator[T]) => {} }
           context.sparkContext.runJob(rdd, emptyFunc)
         }
         Some(new Job(time, jobFunc))
-      }
       case None => None
     }
   }
@@ -437,20 +452,20 @@ abstract class DStream[T: ClassTag] (
       oldRDDs.map(x => s"${x._1} -> ${x._2.id}").mkString(", ") + "]")
     generatedRDDs --= oldRDDs.keys
     if (unpersistData) {
-      logDebug("Unpersisting old RDDs: " + oldRDDs.values.map(_.id).mkString(", "))
+      logDebug(s"Unpersisting old RDDs: ${oldRDDs.values.map(_.id).mkString(", ")}")
       oldRDDs.values.foreach { rdd =>
         rdd.unpersist(false)
         // Explicitly remove blocks of BlockRDD
         rdd match {
           case b: BlockRDD[_] =>
-            logInfo("Removing blocks of RDD " + b + " of time " + time)
+            logInfo(s"Removing blocks of RDD $b of time $time")
             b.removeBlocks()
           case _ =>
         }
       }
     }
-    logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
-      (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
+    logDebug(s"Cleared ${oldRDDs.size} RDDs that were older than " +
+      s"${time - rememberDuration}: ${oldRDDs.keys.mkString(", ")}")
     dependencies.foreach(_.clearMetadata(time))
   }
 
@@ -462,10 +477,10 @@ abstract class DStream[T: ClassTag] (
    * this method to save custom checkpoint data.
    */
   private[streaming] def updateCheckpointData(currentTime: Time) {
-    logDebug("Updating checkpoint data for time " + currentTime)
+    logDebug(s"Updating checkpoint data for time $currentTime")
     checkpointData.update(currentTime)
     dependencies.foreach(_.updateCheckpointData(currentTime))
-    logDebug("Updated checkpoint data for time " + currentTime + ": " + checkpointData)
+    logDebug(s"Updated checkpoint data for time $currentTime: $checkpointData")
   }
 
   private[streaming] def clearCheckpointData(time: Time) {
@@ -482,22 +497,25 @@ abstract class DStream[T: ClassTag] (
    * override the updateCheckpointData() method would also need to override this method.
    */
   private[streaming] def restoreCheckpointData() {
-    // Create RDDs from the checkpoint data
-    logInfo("Restoring checkpoint data")
-    checkpointData.restore()
-    dependencies.foreach(_.restoreCheckpointData())
-    logInfo("Restored checkpoint data")
+    if (!restoredFromCheckpointData) {
+      // Create RDDs from the checkpoint data
+      logInfo("Restoring checkpoint data")
+      checkpointData.restore()
+      dependencies.foreach(_.restoreCheckpointData())
+      restoredFromCheckpointData = true
+      logInfo("Restored checkpoint data")
+    }
   }
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    logDebug(this.getClass().getSimpleName + ".writeObject used")
+    logDebug(s"${this.getClass().getSimpleName}.writeObject used")
     if (graph != null) {
       graph.synchronized {
         if (graph.checkpointInProgress) {
           oos.defaultWriteObject()
         } else {
-          val msg = "Object of " + this.getClass.getName + " is being serialized " +
+          val msg = s"Object of ${this.getClass.getName} is being serialized " +
             " possibly as a part of closure of an RDD operation. This is because " +
             " the DStream object is being referred to from within the closure. " +
             " Please rewrite the RDD operation inside this DStream to avoid this. " +
@@ -514,9 +532,9 @@ abstract class DStream[T: ClassTag] (
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
-    logDebug(this.getClass().getSimpleName + ".readObject used")
+    logDebug(s"${this.getClass().getSimpleName}.readObject used")
     ois.defaultReadObject()
-    generatedRDDs = new HashMap[Time, RDD[T]] ()
+    generatedRDDs = new HashMap[Time, RDD[T]]()
   }
 
   // =======================================================================
@@ -532,7 +550,7 @@ abstract class DStream[T: ClassTag] (
    * Return a new DStream by applying a function to all elements of this DStream,
    * and then flattening the results
    */
-  def flatMap[U: ClassTag](flatMapFunc: T => Traversable[U]): DStream[U] = ssc.withScope {
+  def flatMap[U: ClassTag](flatMapFunc: T => TraversableOnce[U]): DStream[U] = ssc.withScope {
     new FlatMappedDStream(this, context.sparkContext.clean(flatMapFunc))
   }
 
@@ -575,7 +593,7 @@ abstract class DStream[T: ClassTag] (
    * of this DStream.
    */
   def reduce(reduceFunc: (T, T) => T): DStream[T] = ssc.withScope {
-    this.map(x => (null, x)).reduceByKey(reduceFunc, 1).map(_._2)
+    this.map((null, _)).reduceByKey(reduceFunc, 1).map(_._2)
   }
 
   /**
@@ -597,29 +615,7 @@ abstract class DStream[T: ClassTag] (
    */
   def countByValue(numPartitions: Int = ssc.sc.defaultParallelism)(implicit ord: Ordering[T] = null)
       : DStream[(T, Long)] = ssc.withScope {
-    this.map(x => (x, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
-  }
-
-  /**
-   * Apply a function to each RDD in this DStream. This is an output operator, so
-   * 'this' DStream will be registered as an output stream and therefore materialized.
-   *
-   * @deprecated As of 0.9.0, replaced by `foreachRDD`.
-   */
-  @deprecated("use foreachRDD", "0.9.0")
-  def foreach(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
-    this.foreachRDD(foreachFunc)
-  }
-
-  /**
-   * Apply a function to each RDD in this DStream. This is an output operator, so
-   * 'this' DStream will be registered as an output stream and therefore materialized.
-   *
-   * @deprecated As of 0.9.0, replaced by `foreachRDD`.
-   */
-  @deprecated("use foreachRDD", "0.9.0")
-  def foreach(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
-    this.foreachRDD(foreachFunc)
+    this.map((_, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
   }
 
   /**
@@ -628,7 +624,7 @@ abstract class DStream[T: ClassTag] (
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
     val cleanedF = context.sparkContext.clean(foreachFunc, false)
-    this.foreachRDD((r: RDD[T], t: Time) => cleanedF(r))
+    foreachRDD((r: RDD[T], _: Time) => cleanedF(r), displayInnerRDDOps = true)
   }
 
   /**
@@ -639,7 +635,23 @@ abstract class DStream[T: ClassTag] (
     // because the DStream is reachable from the outer object here, and because
     // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
-    new ForEachDStream(this, context.sparkContext.clean(foreachFunc, false)).register()
+    foreachRDD(foreachFunc, displayInnerRDDOps = true)
+  }
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   * @param foreachFunc foreachRDD function
+   * @param displayInnerRDDOps Whether the detailed callsites and scopes of the RDDs generated
+   *                           in the `foreachFunc` to be displayed in the UI. If `false`, then
+   *                           only the scopes and callsites of `foreachRDD` will override those
+   *                           of the RDDs on the display.
+   */
+  private def foreachRDD(
+      foreachFunc: (RDD[T], Time) => Unit,
+      displayInnerRDDOps: Boolean): Unit = {
+    new ForEachDStream(this,
+      context.sparkContext.clean(foreachFunc, false), displayInnerRDDOps).register()
   }
 
   /**
@@ -651,7 +663,7 @@ abstract class DStream[T: ClassTag] (
     // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = context.sparkContext.clean(transformFunc, false)
-    transform((r: RDD[T], t: Time) => cleanedF(r))
+    transform((r: RDD[T], _: Time) => cleanedF(r))
   }
 
   /**
@@ -722,7 +734,7 @@ abstract class DStream[T: ClassTag] (
         val firstNum = rdd.take(num + 1)
         // scalastyle:off println
         println("-------------------------------------------")
-        println("Time: " + time)
+        println(s"Time: $time")
         println("-------------------------------------------")
         firstNum.take(num).foreach(println)
         if (firstNum.length > num) println("...")
@@ -730,7 +742,7 @@ abstract class DStream[T: ClassTag] (
         // scalastyle:on println
       }
     }
-    new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
+    foreachRDD(context.sparkContext.clean(foreachFunc), displayInnerRDDOps = false)
   }
 
   /**
@@ -757,7 +769,7 @@ abstract class DStream[T: ClassTag] (
   /**
    * Return a new DStream in which each RDD has a single element generated by reducing all
    * elements in a sliding window over this DStream.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -780,8 +792,9 @@ abstract class DStream[T: ClassTag] (
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
    *  This is more efficient than reduceByWindow without "inverse reduce" function.
    *  However, it is applicable to only "invertible reduce functions".
-   * @param reduceFunc associative reduce function
-   * @param invReduceFunc inverse reduce function
+   * @param reduceFunc associative and commutative reduce function
+   * @param invReduceFunc inverse reduce function; such that for all y, invertible x:
+   *                      `invReduceFunc(reduceFunc(x, y), x) = y`
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -794,7 +807,7 @@ abstract class DStream[T: ClassTag] (
       windowDuration: Duration,
       slideDuration: Duration
     ): DStream[T] = ssc.withScope {
-      this.map(x => (1, x))
+      this.map((1, _))
           .reduceByKeyAndWindow(reduceFunc, invReduceFunc, windowDuration, slideDuration, 1)
           .map(_._2)
   }
@@ -833,7 +846,7 @@ abstract class DStream[T: ClassTag] (
       numPartitions: Int = ssc.sc.defaultParallelism)
       (implicit ord: Ordering[T] = null)
       : DStream[(T, Long)] = ssc.withScope {
-    this.map(x => (x, 1L)).reduceByKeyAndWindow(
+    this.map((_, 1L)).reduceByKeyAndWindow(
       (x: Long, y: Long) => x + y,
       (x: Long, y: Long) => x - y,
       windowDuration,
@@ -869,25 +882,23 @@ abstract class DStream[T: ClassTag] (
     val alignedToTime = if ((toTime - zeroTime).isMultipleOf(slideDuration)) {
       toTime
     } else {
-      logWarning("toTime (" + toTime + ") is not a multiple of slideDuration ("
-          + slideDuration + ")")
-        toTime.floor(slideDuration, zeroTime)
+      logWarning(s"toTime ($toTime) is not a multiple of slideDuration ($slideDuration)")
+      toTime.floor(slideDuration, zeroTime)
     }
 
     val alignedFromTime = if ((fromTime - zeroTime).isMultipleOf(slideDuration)) {
       fromTime
     } else {
-      logWarning("fromTime (" + fromTime + ") is not a multiple of slideDuration ("
-      + slideDuration + ")")
+      logWarning(s"fromTime ($fromTime) is not a multiple of slideDuration ($slideDuration)")
       fromTime.floor(slideDuration, zeroTime)
     }
 
-    logInfo("Slicing from " + fromTime + " to " + toTime +
-      " (aligned to " + alignedFromTime + " and " + alignedToTime + ")")
+    logInfo(s"Slicing from $fromTime to $toTime" +
+      s" (aligned to $alignedFromTime and $alignedToTime)")
 
-    alignedFromTime.to(alignedToTime, slideDuration).flatMap(time => {
+    alignedFromTime.to(alignedToTime, slideDuration).flatMap { time =>
       if (time >= zeroTime) getOrCompute(time) else None
-    })
+    }
   }
 
   /**
@@ -900,7 +911,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsObjectFile(file)
     }
-    this.foreachRDD(saveFunc)
+    this.foreachRDD(saveFunc, displayInnerRDDOps = false)
   }
 
   /**
@@ -913,7 +924,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsTextFile(file)
     }
-    this.foreachRDD(saveFunc)
+    this.foreachRDD(saveFunc, displayInnerRDDOps = false)
   }
 
   /**

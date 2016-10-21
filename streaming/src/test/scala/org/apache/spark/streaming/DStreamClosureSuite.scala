@@ -33,13 +33,18 @@ class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var ssc: StreamingContext = null
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     val sc = new SparkContext("local", "test")
     ssc = new StreamingContext(sc, Seconds(1))
   }
 
   override def afterAll(): Unit = {
-    ssc.stop(stopSparkContext = true)
-    ssc = null
+    try {
+      ssc.stop(stopSparkContext = true)
+      ssc = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("user provided closures are actually cleaned") {
@@ -51,7 +56,6 @@ class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
     testFilter(dstream)
     testMapPartitions(dstream)
     testReduce(dstream)
-    testForeach(dstream)
     testForeachRDD(dstream)
     testTransform(dstream)
     testTransformWith(dstream)
@@ -100,12 +104,6 @@ class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
   private def testReduce(ds: DStream[Int]): Unit = expectCorrectException {
     ds.reduce { case (_, _) => return; 1 }
-  }
-  private def testForeach(ds: DStream[Int]): Unit = {
-    val foreachF1 = (rdd: RDD[Int], t: Time) => return
-    val foreachF2 = (rdd: RDD[Int]) => return
-    expectCorrectException { ds.foreach(foreachF1) }
-    expectCorrectException { ds.foreach(foreachF2) }
   }
   private def testForeachRDD(ds: DStream[Int]): Unit = {
     val foreachRDDF1 = (rdd: RDD[Int], t: Time) => return

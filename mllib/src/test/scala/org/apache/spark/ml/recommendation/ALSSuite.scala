@@ -22,32 +22,36 @@ import java.util.Random
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import org.apache.commons.io.FileUtils
+import org.apache.commons.io.filefilter.TrueFileFilter
 
-import org.apache.spark.{Logging, SparkException, SparkFunSuite}
+import org.apache.spark._
+import org.apache.spark.internal.Logging
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.recommendation.ALS._
-import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types.{FloatType, IntegerType}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
-class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
-
-  private var tempDir: File = _
+class ALSSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    tempDir = Utils.createTempDir()
     sc.setCheckpointDir(tempDir.getAbsolutePath)
   }
 
   override def afterAll(): Unit = {
-    Utils.deleteRecursively(tempDir)
     super.afterAll()
   }
 
@@ -186,7 +190,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     assert(compressed.dstPtrs.toSeq === Seq(0, 2, 3, 4, 5))
     var decompressed = ArrayBuffer.empty[(Int, Int, Int, Float)]
     var i = 0
-    while (i < compressed.srcIds.size) {
+    while (i < compressed.srcIds.length) {
       var j = compressed.dstPtrs(i)
       while (j < compressed.dstPtrs(i + 1)) {
         val dstEncodedIndex = compressed.dstEncodedIndices(j)
@@ -255,37 +259,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
       rank: Int,
       noiseStd: Double = 0.0,
       seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
-    // The assumption of the implicit feedback model is that unobserved ratings are more likely to
-    // be negatives.
-    val positiveFraction = 0.8
-    val negativeFraction = 1.0 - positiveFraction
-    val trainingFraction = 0.6
-    val testFraction = 0.3
-    val totalFraction = trainingFraction + testFraction
-    val random = new Random(seed)
-    val userFactors = genFactors(numUsers, rank, random)
-    val itemFactors = genFactors(numItems, rank, random)
-    val training = ArrayBuffer.empty[Rating[Int]]
-    val test = ArrayBuffer.empty[Rating[Int]]
-    for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
-      val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
-      val threshold = if (rating > 0) positiveFraction else negativeFraction
-      val observed = random.nextDouble() < threshold
-      if (observed) {
-        val x = random.nextDouble()
-        if (x < totalFraction) {
-          if (x < trainingFraction) {
-            val noise = noiseStd * random.nextGaussian()
-            training += Rating(userId, itemId, rating + noise.toFloat)
-          } else {
-            test += Rating(userId, itemId, rating)
-          }
-        }
-      }
-    }
-    logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
-      s"and ${test.size} for test.")
-    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+    ALSSuite.genImplicitTestData(sc, numUsers, numItems, rank, noiseStd, seed)
   }
 
   /**
@@ -303,14 +277,7 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
       random: Random,
       a: Float = -1.0f,
       b: Float = 1.0f): Seq[(Int, Array[Float])] = {
-    require(size > 0 && size < Int.MaxValue / 3)
-    require(b > a)
-    val ids = mutable.Set.empty[Int]
-    while (ids.size < size) {
-      ids += random.nextInt()
-    }
-    val width = b - a
-    ids.toSeq.sorted.map(id => (id, Array.fill(rank)(a + random.nextFloat() * width)))
+    ALSSuite.genFactors(size, rank, random, a, b)
   }
 
   /**
@@ -335,8 +302,8 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
       numUserBlocks: Int = 2,
       numItemBlocks: Int = 3,
       targetRMSE: Double = 0.05): Unit = {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)
@@ -346,11 +313,10 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
       .setSeed(0)
     val alpha = als.getAlpha
     val model = als.fit(training.toDF())
-    val predictions = model.transform(test.toDF())
-      .select("rating", "prediction")
-      .map { case Row(rating: Float, prediction: Float) =>
+    val predictions = model.transform(test.toDF()).select("rating", "prediction").rdd.map {
+      case Row(rating: Float, prediction: Float) =>
         (rating.toDouble, prediction.toDouble)
-      }
+    }
     val rmse =
       if (implicitPrefs) {
         // TODO: Use a better (rank-based?) evaluation metric for implicit feedback.
@@ -482,5 +448,352 @@ class ALSSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
     ALS.train(ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2, seed = 0)
     ALS.train(ratings, rank = 1, maxIter = 50, numUserBlocks = 2, numItemBlocks = 2,
       implicitPrefs = true, seed = 0)
+  }
+
+  test("read/write") {
+    import ALSSuite._
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    val als = new ALS()
+    allEstimatorParamSettings.foreach { case (p, v) =>
+      als.set(als.getParam(p), v)
+    }
+    val spark = this.spark
+    import spark.implicits._
+    val model = als.fit(ratings.toDF())
+
+    // Test Estimator save/load
+    val als2 = testDefaultReadWrite(als)
+    allEstimatorParamSettings.foreach { case (p, v) =>
+      val param = als.getParam(p)
+      assert(als.get(param).get === als2.get(param).get)
+    }
+
+    // Test Model save/load
+    val model2 = testDefaultReadWrite(model)
+    allModelParamSettings.foreach { case (p, v) =>
+      val param = model.getParam(p)
+      assert(model.get(param).get === model2.get(param).get)
+    }
+    assert(model.rank === model2.rank)
+    def getFactors(df: DataFrame): Set[(Int, Array[Float])] = {
+      df.select("id", "features").collect().map { case r =>
+        (r.getInt(0), r.getAs[Array[Float]](1))
+      }.toSet
+    }
+    assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
+    assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
+  }
+
+  test("input type validation") {
+    val spark = this.spark
+    import spark.implicits._
+
+    // check that ALS can handle all numeric types for rating column
+    // and user/item columns (when the user/item ids are within Int range)
+    val als = new ALS().setMaxIter(1).setRank(1)
+    Seq(("user", IntegerType), ("item", IntegerType), ("rating", FloatType)).foreach {
+      case (colName, sqlType) =>
+        MLTestingUtils.checkNumericTypesALS(als, spark, colName, sqlType) {
+          (ex, act) =>
+            ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
+        } { (ex, act, _) =>
+          ex.transform(_: DataFrame).select("prediction").first.getFloat(0) ~==
+            act.transform(_: DataFrame).select("prediction").first.getFloat(0) absTol 1e-6
+        }
+    }
+    // check user/item ids falling outside of Int range
+    val big = Int.MaxValue.toLong + 1
+    val small = Int.MinValue.toDouble - 1
+    val df = Seq(
+      (0, 0L, 0d, 1, 1L, 1d, 3.0),
+      (0, big, small, 0, big, small, 2.0),
+      (1, 1L, 1d, 0, 0L, 0d, 5.0)
+    ).toDF("user", "user_big", "user_small", "item", "item_big", "item_small", "rating")
+    withClue("fit should fail when ids exceed integer range. ") {
+      assert(intercept[SparkException] {
+        als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
+      }.getCause.getMessage.contains("was out of Integer range"))
+    }
+    withClue("transform should fail when ids exceed integer range. ") {
+      val model = als.fit(df)
+      assert(intercept[SparkException] {
+        model.transform(df.select(df("user_big").as("user"), df("item"))).first
+      }.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        model.transform(df.select(df("user_small").as("user"), df("item"))).first
+      }.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        model.transform(df.select(df("item_big").as("item"), df("user"))).first
+      }.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        model.transform(df.select(df("item_small").as("item"), df("user"))).first
+      }.getMessage.contains("was out of Integer range"))
+    }
+  }
+}
+
+class ALSCleanerSuite extends SparkFunSuite {
+  test("ALS shuffle cleanup standalone") {
+    val conf = new SparkConf()
+    val localDir = Utils.createTempDir()
+    val checkpointDir = Utils.createTempDir()
+    def getAllFiles: Set[File] =
+      FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    try {
+      conf.set("spark.local.dir", localDir.getAbsolutePath)
+      val sc = new SparkContext("local[2]", "test", conf)
+      try {
+        sc.setCheckpointDir(checkpointDir.getAbsolutePath)
+        // Test checkpoint and clean parents
+        val input = sc.parallelize(1 to 1000)
+        val keyed = input.map(x => (x % 20, 1))
+        val shuffled = keyed.reduceByKey(_ + _)
+        val keysOnly = shuffled.keys
+        val deps = keysOnly.dependencies
+        keysOnly.count()
+        ALS.cleanShuffleDependencies(sc, deps, true)
+        val resultingFiles = getAllFiles
+        assert(resultingFiles === Set())
+        // Ensure running count again works fine even if we kill the shuffle files.
+        keysOnly.count()
+      } finally {
+        sc.stop()
+      }
+    } finally {
+      Utils.deleteRecursively(localDir)
+      Utils.deleteRecursively(checkpointDir)
+    }
+  }
+
+  test("ALS shuffle cleanup in algorithm") {
+    val conf = new SparkConf()
+    val localDir = Utils.createTempDir()
+    val checkpointDir = Utils.createTempDir()
+    def getAllFiles: Set[File] =
+      FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    try {
+      conf.set("spark.local.dir", localDir.getAbsolutePath)
+      val sc = new SparkContext("local[2]", "test", conf)
+      try {
+        sc.setCheckpointDir(checkpointDir.getAbsolutePath)
+        // Generate test data
+        val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
+        // Implicitly test the cleaning of parents during ALS training
+        val spark = SparkSession.builder
+          .master("local[2]")
+          .appName("ALSCleanerSuite")
+          .sparkContext(sc)
+          .getOrCreate()
+        import spark.implicits._
+        val als = new ALS()
+          .setRank(1)
+          .setRegParam(1e-5)
+          .setSeed(0)
+          .setCheckpointInterval(1)
+          .setMaxIter(7)
+        val model = als.fit(training.toDF())
+        val resultingFiles = getAllFiles
+        // We expect the last shuffles files, block ratings, user factors, and item factors to be
+        // around but no more.
+        val pattern = "shuffle_(\\d+)_.+\\.data".r
+        val rddIds = resultingFiles.flatMap { f =>
+          pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
+        assert(rddIds.size === 4)
+      } finally {
+        sc.stop()
+      }
+    } finally {
+      Utils.deleteRecursively(localDir)
+      Utils.deleteRecursively(checkpointDir)
+    }
+  }
+}
+
+class ALSStorageSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
+
+  test("invalid storage params") {
+    intercept[IllegalArgumentException] {
+      new ALS().setIntermediateStorageLevel("foo")
+    }
+    intercept[IllegalArgumentException] {
+      new ALS().setIntermediateStorageLevel("NONE")
+    }
+    intercept[IllegalArgumentException] {
+      new ALS().setFinalStorageLevel("foo")
+    }
+  }
+
+  test("default and non-default storage params set correct RDD StorageLevels") {
+    val spark = this.spark
+    import spark.implicits._
+    val data = Seq(
+      (0, 0, 1.0),
+      (0, 1, 2.0),
+      (1, 2, 3.0),
+      (1, 0, 2.0)
+    ).toDF("user", "item", "rating")
+    val als = new ALS().setMaxIter(1).setRank(1)
+    // add listener to check intermediate RDD default storage levels
+    val defaultListener = new IntermediateRDDStorageListener
+    sc.addSparkListener(defaultListener)
+    val model = als.fit(data)
+    // check final factor RDD default storage levels
+    val defaultFactorRDDs = sc.getPersistentRDDs.collect {
+      case (id, rdd) if rdd.name == "userFactors" || rdd.name == "itemFactors" =>
+        rdd.name -> (id, rdd.getStorageLevel)
+    }.toMap
+    defaultFactorRDDs.foreach { case (_, (id, level)) =>
+      assert(level == StorageLevel.MEMORY_AND_DISK)
+    }
+    defaultListener.storageLevels.foreach(level => assert(level == StorageLevel.MEMORY_AND_DISK))
+
+    // add listener to check intermediate RDD non-default storage levels
+    val nonDefaultListener = new IntermediateRDDStorageListener
+    sc.addSparkListener(nonDefaultListener)
+    val nonDefaultModel = als
+      .setFinalStorageLevel("MEMORY_ONLY")
+      .setIntermediateStorageLevel("DISK_ONLY")
+      .fit(data)
+    // check final factor RDD non-default storage levels
+    val levels = sc.getPersistentRDDs.collect {
+      case (id, rdd) if rdd.name == "userFactors" && rdd.id != defaultFactorRDDs("userFactors")._1
+        || rdd.name == "itemFactors" && rdd.id != defaultFactorRDDs("itemFactors")._1 =>
+        rdd.getStorageLevel
+    }
+    levels.foreach(level => assert(level == StorageLevel.MEMORY_ONLY))
+    nonDefaultListener.storageLevels.foreach(level => assert(level == StorageLevel.DISK_ONLY))
+  }
+}
+
+private class IntermediateRDDStorageListener extends SparkListener {
+
+  val storageLevels: mutable.ArrayBuffer[StorageLevel] = mutable.ArrayBuffer()
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+    val stageLevels = stageCompleted.stageInfo.rddInfos.collect {
+      case info if info.name.contains("Blocks") || info.name.contains("Factors-") =>
+        info.storageLevel
+    }
+    storageLevels ++= stageLevels
+  }
+
+}
+
+object ALSSuite extends Logging {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allModelParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPredictionCol"
+  )
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allEstimatorParamSettings: Map[String, Any] = allModelParamSettings ++ Map(
+    "maxIter" -> 1,
+    "rank" -> 1,
+    "regParam" -> 0.01,
+    "numUserBlocks" -> 2,
+    "numItemBlocks" -> 2,
+    "implicitPrefs" -> true,
+    "alpha" -> 0.9,
+    "nonnegative" -> true,
+    "checkpointInterval" -> 20,
+    "intermediateStorageLevel" -> "MEMORY_ONLY",
+    "finalStorageLevel" -> "MEMORY_AND_DISK_SER"
+  )
+
+  // Helper functions to generate test data we share between ALS test suites
+
+  /**
+   * Generates random user/item factors, with i.i.d. values drawn from U(a, b).
+   * @param size number of users/items
+   * @param rank number of features
+   * @param random random number generator
+   * @param a min value of the support (default: -1)
+   * @param b max value of the support (default: 1)
+   * @return a sequence of (ID, factors) pairs
+   */
+  private def genFactors(
+      size: Int,
+      rank: Int,
+      random: Random,
+      a: Float = -1.0f,
+      b: Float = 1.0f): Seq[(Int, Array[Float])] = {
+    require(size > 0 && size < Int.MaxValue / 3)
+    require(b > a)
+    val ids = mutable.Set.empty[Int]
+    while (ids.size < size) {
+      ids += random.nextInt()
+    }
+    val width = b - a
+    ids.toSeq.sorted.map(id => (id, Array.fill(rank)(a + random.nextFloat() * width)))
+  }
+
+  /**
+   * Generates an implicit feedback dataset for testing ALS.
+   *
+   * @param sc SparkContext
+   * @param numUsers number of users
+   * @param numItems number of items
+   * @param rank rank
+   * @param noiseStd the standard deviation of additive Gaussian noise on training data
+   * @param seed random seed
+   * @return (training, test)
+   */
+  def genImplicitTestData(
+      sc: SparkContext,
+      numUsers: Int,
+      numItems: Int,
+      rank: Int,
+      noiseStd: Double = 0.0,
+      seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
+    // The assumption of the implicit feedback model is that unobserved ratings are more likely to
+    // be negatives.
+    val positiveFraction = 0.8
+    val negativeFraction = 1.0 - positiveFraction
+    val trainingFraction = 0.6
+    val testFraction = 0.3
+    val totalFraction = trainingFraction + testFraction
+    val random = new Random(seed)
+    val userFactors = genFactors(numUsers, rank, random)
+    val itemFactors = genFactors(numItems, rank, random)
+    val training = ArrayBuffer.empty[Rating[Int]]
+    val test = ArrayBuffer.empty[Rating[Int]]
+    for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
+      val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
+      val threshold = if (rating > 0) positiveFraction else negativeFraction
+      val observed = random.nextDouble() < threshold
+      if (observed) {
+        val x = random.nextDouble()
+        if (x < totalFraction) {
+          if (x < trainingFraction) {
+            val noise = noiseStd * random.nextGaussian()
+            training += Rating(userId, itemId, rating + noise.toFloat)
+          } else {
+            test += Rating(userId, itemId, rating)
+          }
+        }
+      }
+    }
+    logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
+      s"and ${test.size} for test.")
+    (sc.parallelize(training, 2), sc.parallelize(test, 2))
   }
 }

@@ -17,16 +17,12 @@
 # limitations under the License.
 #
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
-
-. "$sbin/spark-config.sh"
-
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
-
-# do before the below calls as they exec
-if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
-  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon killAll tachyon.worker.Worker
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
-"$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/stop-slave.sh
+. "${SPARK_HOME}/sbin/spark-config.sh"
+
+. "${SPARK_HOME}/bin/load-spark-env.sh"
+
+"${SPARK_HOME}/sbin/slaves.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin"/stop-slave.sh

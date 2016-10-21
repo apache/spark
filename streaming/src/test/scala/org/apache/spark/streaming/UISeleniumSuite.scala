@@ -38,14 +38,19 @@ class UISeleniumSuite
   implicit var webDriver: WebDriver = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     webDriver = new HtmlUnitDriver {
       getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
     }
   }
 
   override def afterAll(): Unit = {
-    if (webDriver != null) {
-      webDriver.quit()
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
@@ -117,11 +122,11 @@ class UISeleniumSuite
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
           List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
-            "Status")
+            "Output Ops: Succeeded/Total", "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
           List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
-            "Total Delay (?)")
+            "Total Delay (?)", "Output Ops: Succeeded/Total")
         }
 
         val batchLinks =
@@ -138,8 +143,9 @@ class UISeleniumSuite
         summaryText should contain ("Total delay:")
 
         findAll(cssSelector("""#batch-job-table th""")).map(_.text).toSeq should be {
-          List("Output Op Id", "Description", "Duration", "Job Id", "Duration",
-            "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total", "Error")
+          List("Output Op Id", "Description", "Output Op Duration", "Status", "Job Id",
+            "Job Duration", "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total",
+            "Error")
         }
 
         // Check we have 2 output op ids
@@ -155,17 +161,17 @@ class UISeleniumSuite
         jobLinks.size should be (4)
 
         // Check stage progress
-        findAll(cssSelector(""".stage-progress-cell""")).map(_.text).toSeq should be
-          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+        findAll(cssSelector(""".stage-progress-cell""")).map(_.text).toList should be (
+          List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
 
         // Check job progress
-        findAll(cssSelector(""".progress-cell""")).map(_.text).toSeq should be
-          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+        findAll(cssSelector(""".progress-cell""")).map(_.text).toList should be (
+          List("4/4", "4/4", "4/4", "0/4 (1 failed)"))
 
         // Check stacktrace
-        val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.text).toSeq
+        val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.underlying).toSeq
         errorCells should have size 1
-        errorCells(0) should include("java.lang.RuntimeException: Oops")
+        // Can't get the inner (invisible) text without running JS
 
         // Check the job link in the batch page is right
         go to (jobLinks(0))

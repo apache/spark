@@ -31,23 +31,6 @@ if sys.version < '3':
     import Queue
 else:
     import queue as Queue
-if sys.version_info >= (2, 7):
-    subprocess_check_output = subprocess.check_output
-else:
-    # SPARK-8763
-    # backported from subprocess module in Python 2.7
-    def subprocess_check_output(*popenargs, **kwargs):
-        if 'stdout' in kwargs:
-            raise ValueError('stdout argument not allowed, it will be overridden.')
-        process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)
-        output, unused_err = process.communicate()
-        retcode = process.poll()
-        if retcode:
-            cmd = kwargs.get("args")
-            if cmd is None:
-                cmd = popenargs[0]
-            raise subprocess.CalledProcessError(retcode, cmd, output=output)
-        return output
 
 
 # Append `SPARK_HOME/dev` to the Python path so that we can import the sparktestsupport module
@@ -55,7 +38,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../de
 
 
 from sparktestsupport import SPARK_HOME  # noqa (suppress pep8 warnings)
-from sparktestsupport.shellutils import which  # noqa
+from sparktestsupport.shellutils import which, subprocess_check_output  # noqa
 from sparktestsupport.modules import all_modules  # noqa
 
 
@@ -70,10 +53,25 @@ LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
 
+# Find out where the assembly jars are located.
+for scala in ["2.11", "2.10"]:
+    build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
+    if os.path.isdir(build_dir):
+        SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
+        break
+else:
+    raise Exception("Cannot find assembly build directory, please build Spark first.")
+
 
 def run_individual_python_test(test_name, pyspark_python):
     env = dict(os.environ)
-    env.update({'SPARK_TESTING': '1', 'PYSPARK_PYTHON': which(pyspark_python)})
+    env.update({
+        'SPARK_DIST_CLASSPATH': SPARK_DIST_CLASSPATH,
+        'SPARK_TESTING': '1',
+        'SPARK_PREPEND_CLASSES': '1',
+        'PYSPARK_PYTHON': which(pyspark_python),
+        'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
+    })
     LOGGER.debug("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
@@ -167,12 +165,13 @@ def main():
         if module_name in python_modules:
             modules_to_test.append(python_modules[module_name])
         else:
-            print("Error: unrecognized module %s" % module_name)
+            print("Error: unrecognized module '%s'. Supported modules: %s" %
+                  (module_name, ", ".join(python_modules)))
             sys.exit(-1)
     LOGGER.info("Will test against the following Python executables: %s", python_execs)
     LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
 
-    task_queue = Queue.Queue()
+    task_queue = Queue.PriorityQueue()
     for python_exec in python_execs:
         python_implementation = subprocess_check_output(
             [python_exec, "-c", "import platform; print(platform.python_implementation())"],
@@ -183,12 +182,17 @@ def main():
         for module in modules_to_test:
             if python_implementation not in module.blacklisted_python_implementations:
                 for test_goal in module.python_test_goals:
-                    task_queue.put((python_exec, test_goal))
+                    if test_goal in ('pyspark.streaming.tests', 'pyspark.mllib.tests',
+                                     'pyspark.tests', 'pyspark.sql.tests'):
+                        priority = 0
+                    else:
+                        priority = 100
+                    task_queue.put((priority, (python_exec, test_goal)))
 
     def process_queue(task_queue):
         while True:
             try:
-                (python_exec, test_goal) = task_queue.get_nowait()
+                (priority, (python_exec, test_goal)) = task_queue.get_nowait()
             except Queue.Empty:
                 break
             try:

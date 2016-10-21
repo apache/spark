@@ -17,8 +17,6 @@
 
 package org.apache.spark.util
 
-import java.lang.ref.WeakReference
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -33,10 +31,6 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
   // Test TimeStampedHashMap basic functionality
   testMap(new TimeStampedHashMap[String, String]())
   testMapThreadSafety(new TimeStampedHashMap[String, String]())
-
-  // Test TimeStampedWeakValueHashMap basic functionality
-  testMap(new TimeStampedWeakValueHashMap[String, String]())
-  testMapThreadSafety(new TimeStampedWeakValueHashMap[String, String]())
 
   test("TimeStampedHashMap - clearing by timestamp") {
     // clearing by insertion time
@@ -66,86 +60,6 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
     map1.clearOldValues(threshTime1) // should only clear k1
     assert(map1.get("k1") === None)
     assert(map1.get("k2").isDefined)
-  }
-
-  test("TimeStampedWeakValueHashMap - clearing by timestamp") {
-    // clearing by insertion time
-    val map = new TimeStampedWeakValueHashMap[String, String](updateTimeStampOnGet = false)
-    map("k1") = "v1"
-    assert(map("k1") === "v1")
-    Thread.sleep(10)
-    val threshTime = System.currentTimeMillis
-    assert(map.getTimestamp("k1").isDefined)
-    assert(map.getTimestamp("k1").get < threshTime)
-    map.clearOldValues(threshTime)
-    assert(map.get("k1") === None)
-
-    // clearing by modification time
-    val map1 = new TimeStampedWeakValueHashMap[String, String](updateTimeStampOnGet = true)
-    map1("k1") = "v1"
-    map1("k2") = "v2"
-    assert(map1("k1") === "v1")
-    Thread.sleep(10)
-    val threshTime1 = System.currentTimeMillis
-    Thread.sleep(10)
-    assert(map1("k2") === "v2")     // access k2 to update its access time to > threshTime
-    assert(map1.getTimestamp("k1").isDefined)
-    assert(map1.getTimestamp("k1").get < threshTime1)
-    assert(map1.getTimestamp("k2").isDefined)
-    assert(map1.getTimestamp("k2").get >= threshTime1)
-    map1.clearOldValues(threshTime1) // should only clear k1
-    assert(map1.get("k1") === None)
-    assert(map1.get("k2").isDefined)
-  }
-
-  test("TimeStampedWeakValueHashMap - clearing weak references") {
-    var strongRef = new Object
-    val weakRef = new WeakReference(strongRef)
-    val map = new TimeStampedWeakValueHashMap[String, Object]
-    map("k1") = strongRef
-    map("k2") = "v2"
-    map("k3") = "v3"
-    val isEquals = map("k1") == strongRef
-    assert(isEquals)
-
-    // clear strong reference to "k1"
-    strongRef = null
-    val startTime = System.currentTimeMillis
-    System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
-    System.runFinalization()  // Make a best effort to call finalizer on all cleaned objects.
-    while(System.currentTimeMillis - startTime < 10000 && weakRef.get != null) {
-      System.gc()
-      System.runFinalization()
-      Thread.sleep(100)
-    }
-    assert(map.getReference("k1").isDefined)
-    val ref = map.getReference("k1").get
-    assert(ref.get === null)
-    assert(map.get("k1") === None)
-
-    // operations should only display non-null entries
-    assert(map.iterator.forall { case (k, v) => k != "k1" })
-    assert(map.filter { case (k, v) => k != "k2" }.size === 1)
-    assert(map.filter { case (k, v) => k != "k2" }.head._1 === "k3")
-    assert(map.toMap.size === 2)
-    assert(map.toMap.forall { case (k, v) => k != "k1" })
-    val buffer = new ArrayBuffer[String]
-    map.foreach { case (k, v) => buffer += v.toString }
-    assert(buffer.size === 2)
-    assert(buffer.forall(_ != "k1"))
-    val plusMap = map + (("k4", "v4"))
-    assert(plusMap.size === 3)
-    assert(plusMap.forall { case (k, v) => k != "k1" })
-    val minusMap = map - "k2"
-    assert(minusMap.size === 1)
-    assert(minusMap.head._1 == "k3")
-
-    // clear null values - should only clear k1
-    map.clearNullValues()
-    assert(map.getReference("k1") === None)
-    assert(map.get("k1") === None)
-    assert(map.get("k2").isDefined)
-    assert(map.get("k2").get === "v2")
   }
 
   /** Test basic operations of a Scala mutable Map. */
@@ -257,8 +171,8 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
     })
 
     test(name + " - threading safety test")  {
-      threads.map(_.start)
-      threads.map(_.join)
+      threads.foreach(_.start())
+      threads.foreach(_.join())
       assert(!error)
     }
   }

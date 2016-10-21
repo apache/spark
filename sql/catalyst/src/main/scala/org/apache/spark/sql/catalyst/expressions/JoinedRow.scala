@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-
 
 /**
  * A mutable wrapper that makes two rows appear as a single concatenated row.  Designed to
@@ -122,6 +122,22 @@ class JoinedRow extends InternalRow {
   }
 
   override def anyNull: Boolean = row1.anyNull || row2.anyNull
+
+  override def setNullAt(i: Int): Unit = {
+    if (i < row1.numFields) {
+      row1.setNullAt(i)
+    } else {
+      row2.setNullAt(i - row1.numFields)
+    }
+  }
+
+  override def update(i: Int, value: Any): Unit = {
+    if (i < row1.numFields) {
+      row1.update(i, value)
+    } else {
+      row2.update(i - row1.numFields, value)
+    }
+  }
 
   override def copy(): InternalRow = {
     val copy1 = row1.copy()

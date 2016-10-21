@@ -32,8 +32,8 @@ import org.apache.spark.util.Utils
 private[spark] class ParallelCollectionPartition[T: ClassTag](
     var rddId: Long,
     var slice: Int,
-    var values: Seq[T])
-    extends Partition with Serializable {
+    var values: Seq[T]
+  ) extends Partition with Serializable {
 
   def iterator: Iterator[T] = values.iterator
 
@@ -121,15 +121,15 @@ private object ParallelCollectionRDD {
     // Sequences need to be sliced at the same set of index positions for operations
     // like RDD.zip() to behave as expected
     def positions(length: Long, numSlices: Int): Iterator[(Int, Int)] = {
-      (0 until numSlices).iterator.map(i => {
+      (0 until numSlices).iterator.map { i =>
         val start = ((i * length) / numSlices).toInt
         val end = (((i + 1) * length) / numSlices).toInt
         (start, end)
-      })
+      }
     }
     seq match {
-      case r: Range => {
-        positions(r.length, numSlices).zipWithIndex.map({ case ((start, end), index) =>
+      case r: Range =>
+        positions(r.length, numSlices).zipWithIndex.map { case ((start, end), index) =>
           // If the range is inclusive, use inclusive range for the last slice
           if (r.isInclusive && index == numSlices - 1) {
             new Range.Inclusive(r.start + start * r.step, r.end, r.step)
@@ -137,9 +137,8 @@ private object ParallelCollectionRDD {
           else {
             new Range(r.start + start * r.step, r.start + end * r.step, r.step)
           }
-        }).toSeq.asInstanceOf[Seq[Seq[T]]]
-      }
-      case nr: NumericRange[_] => {
+        }.toSeq.asInstanceOf[Seq[Seq[T]]]
+      case nr: NumericRange[_] =>
         // For ranges of Long, Double, BigInteger, etc
         val slices = new ArrayBuffer[Seq[T]](numSlices)
         var r = nr
@@ -149,14 +148,11 @@ private object ParallelCollectionRDD {
           r = r.drop(sliceSize)
         }
         slices
-      }
-      case _ => {
+      case _ =>
         val array = seq.toArray // To prevent O(n^2) operations for List etc
-        positions(array.length, numSlices).map({
-          case (start, end) =>
+        positions(array.length, numSlices).map { case (start, end) =>
             array.slice(start, end).toSeq
-        }).toSeq
-      }
+        }.toSeq
     }
   }
 }

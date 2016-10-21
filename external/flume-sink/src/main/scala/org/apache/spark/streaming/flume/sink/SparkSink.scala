@@ -88,23 +88,23 @@ class SparkSink extends AbstractSink with Logging with Configurable {
     // dependencies which are being excluded in the build. In practice,
     // Netty dependencies are already available on the JVM as Flume would have pulled them in.
     serverOpt = Option(new NettyServer(responder, new InetSocketAddress(hostname, port)))
-    serverOpt.foreach(server => {
+    serverOpt.foreach { server =>
       logInfo("Starting Avro server for sink: " + getName)
       server.start()
-    })
+    }
     super.start()
   }
 
   override def stop() {
     logInfo("Stopping Spark Sink: " + getName)
-    handler.foreach(callbackHandler => {
+    handler.foreach { callbackHandler =>
       callbackHandler.shutdown()
-    })
-    serverOpt.foreach(server => {
+    }
+    serverOpt.foreach { server =>
       logInfo("Stopping Avro Server for sink: " + getName)
       server.close()
       server.join()
-    })
+    }
     blockingLatch.countDown()
     super.stop()
   }
