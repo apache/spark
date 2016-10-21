@@ -44,6 +44,10 @@ class PartitionProviderCompatibilitySuite
 
   private def verifyIsLegacyTable(tableName: String): Unit = {
     val unsupportedCommands = Seq(
+      s"ALTER TABLE $tableName ADD PARTITION (partcol=1)",
+      s"ALTER TABLE $tableName RENAME PARTITION (partcol=1)",
+      s"ALTER TABLE $tableName DROP PARTITION (partcol=1)",
+      s"TRUNCATE TABLE $tableName PARTITION (partcol=1)",
       s"DESCRIBE $tableName PARTITION (partcol1=1)",
       s"SHOW PARTITIONS $tableName")
 
