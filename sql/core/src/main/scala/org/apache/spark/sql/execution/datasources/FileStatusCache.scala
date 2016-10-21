@@ -59,7 +59,7 @@ object FileStatusCache {
   private var sharedCache: SharedInMemoryCache = null
 
   /**
-   * @return a new FileStatusCache sized based on session configuration. Cache memory quota is
+   * @return a new FileStatusCache based on session configuration. Cache memory quota is
    *         shared across all clients.
    */
   def newCache(session: SparkSession): FileStatusCache = {
@@ -116,7 +116,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
 
   /**
    * @return a FileStatusCache that does not share any entries with any other client, but does
-   *         shared memory resources for the purpose of cache eviction.
+   *         share memory resources for the purpose of cache eviction.
    */
   def getForNewClient(): FileStatusCache = new FileStatusCache {
     val clientId = new Object()
