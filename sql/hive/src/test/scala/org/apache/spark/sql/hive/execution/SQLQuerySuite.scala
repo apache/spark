@@ -254,10 +254,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase",
       "Extended Usage:",
-      "upper(str)",
       "Arguments:",
-      "str - string type or any type expression that can be implicitly converted",
-      "to string type.",
+      "str - a string expression.",
       "Examples:",
       "> SELECT upper('SparkSql');",
       "SPARKSQL")

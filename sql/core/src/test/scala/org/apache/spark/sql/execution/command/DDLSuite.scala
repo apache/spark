@@ -1455,7 +1455,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("DESCRIBE FUNCTION log"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Logarithm") ::
         Row("Function: log") ::
-        Row("Usage: log(expr1, expr2) - Returns the logarithm of expr1 with base expr2.") :: Nil
+        Row("Usage: log(base, expr) - Returns the logarithm of expr with base.") :: Nil
     )
     // predicate operator
     checkAnswer(
@@ -1498,15 +1498,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
         Row(
           """Extended Usage:
-            |    expr1 ^ expr2
+            |    Arguments:
+            |      expr1 - a numeric expression.
+            |      expr2 - a numeric expression.
             |
-            |      Arguments:
-            |        expr1 - any intergal numeric type expression.
-            |        expr2 - any intergal numeric type expression.
-            |
-            |      Examples:
-            |        > SELECT 3 ^ 5;
-            |         2
+            |    Examples:
+            |      > SELECT 3 ^ 5;
+            |       2
             |  """.stripMargin) ::
         Row("Function: ^") ::
         Row("Usage: expr1 ^ expr2 - Bitwise exclusive OR.") :: Nil

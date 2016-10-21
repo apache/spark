@@ -872,11 +872,11 @@ case class Pow(left: Expression, right: Expression)
  * @param right number of bits to left shift.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Bitwise left shift.",
+  usage = "_FUNC_(base, expr) - Bitwise left shift.",
   extended = """
     Arguments:
-      expr1 - a numeric expression.
-      expr2 - a numeric expression.
+      base - a numeric expression that defines the base number to shift.
+      expr - a numeric expression.
 
     Examples:
       > SELECT _FUNC_(2, 1);
@@ -909,11 +909,11 @@ case class ShiftLeft(left: Expression, right: Expression)
  * @param right number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Bitwise right shift.",
+  usage = "_FUNC_(base, expr) - Bitwise right shift.",
   extended = """
     Arguments:
-      expr1 - a numeric expression.
-      expr2 - a numeric expression.
+      base - a numeric expression that defines the base number to shift.
+      expr - a numeric expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);
@@ -946,11 +946,11 @@ case class ShiftRight(left: Expression, right: Expression)
  * @param right the number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Bitwise unsigned right shift.",
+  usage = "_FUNC_(base, expr) - Bitwise unsigned right shift.",
   extended = """
     Arguments:
-      expr1 - a numeric expression.
-      expr2 - a numeric expression.
+      base - a numeric expression that defines the base number to shift.
+      expr - a numeric expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);
@@ -998,11 +998,11 @@ case class Hypot(left: Expression, right: Expression)
  * @param right the number to compute the logarithm of.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the logarithm of expr1 with base expr2.",
+  usage = "_FUNC_(base, expr) - Returns the logarithm of expr with base.",
   extended = """
     Arguments:
-      expr1 - a numeric expression.
-      expr2 - a numeric expression.
+      base - a numeric expression that represents the logarithm base.
+      expr - a numeric expression.
 
     Examples:
       > SELECT _FUNC_(10, 100);
@@ -1232,11 +1232,11 @@ abstract class RoundBase(child: Expression, scale: Expression,
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Round expr1 to expr2 decimal places using HALF_UP rounding mode.",
+  usage = "_FUNC_(expr, d) - Round expr to d decimal places using HALF_UP rounding mode.",
   extended = """
     Arguments:
-      expr1 - a numeric expression.
-      expr2 - a numeric expression.
+      expr - a numeric expression.
+      d - a numeric expression that defines tge decimal places using HALF_UP rounding mode.
 
     Examples:
       > SELECT _FUNC_(2.5, 0);
@@ -1256,11 +1256,11 @@ case class Round(child: Expression, scale: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Round expr1 to expr2 decimal places using HALF_EVEN rounding mode.",
+  usage = "_FUNC_(expr, d) - Round expr to d decimal places using HALF_EVEN rounding mode.",
   extended = """
     Arguments:
-      expr1 - a numeric expression.
-      expr2 - a numeric expression.
+      expr - a numeric expression.
+      d - a numeric expression that defines decimal places using HALF_EVEN rounding mode.
 
     Examples:
       > SELECT _FUNC_(2.5, 0);
