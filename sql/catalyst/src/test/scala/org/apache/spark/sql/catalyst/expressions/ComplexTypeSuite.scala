@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -132,6 +132,18 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CreateArray(longWithNull), longSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(strWithNull), strSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
+  }
+
+  test("SPARK-16714: CreateArray with Decimals") {
+    val array1 = CreateArray(Seq(Literal(Decimal(0.001)), Literal(Decimal(0.02))))
+    val array2 = CreateArray(Seq(Literal(Decimal(0.02)), Literal(Decimal(0.001))))
+
+    assert(array1.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+    assert(array2.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+    assert(array1.dataType == array2.dataType)
+
+    checkEvaluation(array1, Seq(Decimal(0.001), Decimal(0.02)))
+    checkEvaluation(array2, Seq(Decimal(0.02), Decimal(0.001)))
   }
 
   test("CreateMap") {
