@@ -21,8 +21,14 @@ import java.{util => ju}
 
 import scala.collection.JavaConverters._
 
+import org.json4s._
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.streaming.StreamingQueryStatus.indent
+import org.apache.spark.util.JsonProtocol
 
 /**
  * :: Experimental ::
@@ -47,8 +53,22 @@ class SourceStatus private(
     val processingRate: Double,
     val triggerDetails: ju.Map[String, String]) {
 
+  /** The compact JSON representation of this status. */
+  def json: String = compact(render(jsonValue))
+
+  /** The pretty (i.e. indented) JSON representation of this status. */
+  def prettyJson: String = pretty(render(jsonValue))
+
   override def toString: String =
-    "SourceStatus:" + indent(prettyString)
+    "Status of source " + indent(prettyString).trim
+
+  private[sql] def jsonValue: JValue = {
+    ("description" -> JString(description)) ~
+    ("offsetDesc" -> JString(offsetDesc)) ~
+    ("inputRate" -> JDouble(inputRate)) ~
+    ("processingRate" -> JDouble(processingRate)) ~
+    ("triggerDetails" -> JsonProtocol.mapToJson(triggerDetails.asScala))
+  }
 
   private[sql] def prettyString: String = {
     val triggerDetailsLines =
@@ -59,7 +79,6 @@ class SourceStatus private(
        |Processing rate: $processingRate rows/sec
        |Trigger details:
        |""".stripMargin + indent(triggerDetailsLines)
-
   }
 }
 
