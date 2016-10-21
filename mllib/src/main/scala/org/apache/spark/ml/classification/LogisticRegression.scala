@@ -482,17 +482,17 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         if (initialModelIsValid) {
-          // TODO: change indexing copy row major initialmodel to col major
           val initialCoefWithInterceptArray = initialCoefficientsWithIntercept.toArray
           val providedCoef = optInitialModel.get.coefficientMatrix
           providedCoef.foreachActive { (row, col, value) =>
-            val flatIndex = row * numFeaturesPlusIntercept + col
+            // convert matrix to column major for training
+            val flatIndex = col * numCoefficientSets + row
             // We need to scale the coefficients since they will be trained in the scaled space
             initialCoefWithInterceptArray(flatIndex) = value * featuresStd(col)
           }
           if ($(fitIntercept)) {
             optInitialModel.get.interceptVector.foreachActive { (index, value) =>
-              val coefIndex = (index + 1) * numFeaturesPlusIntercept - 1
+              val coefIndex = numCoefficientSets * numFeatures + index
               initialCoefWithInterceptArray(coefIndex) = value
             }
           }
@@ -569,12 +569,16 @@ class LogisticRegression @Since("1.2.0") (
         /*
            The coefficients are trained in the scaled space; we're converting them back to
            the original space.
+
+           Additionally, the coefficients are laid out in column major order during training to
+           avoid extra computation that is unnecessary. Here, we convert them back to row major,
+           which is optimal for prediction.
+
            Note that the intercept in scaled space and original space is the same;
            as a result, no scaling is needed.
          */
         val rawCoefficients = state.x.toArray.clone()
         val coefficientArray = Array.tabulate(numCoefficientSets * numFeatures) { i =>
-          // TODO: comment
           val colMajorIndex = (i % numFeatures) * numCoefficientSets + i / numFeatures
           val featureIndex = i % numFeatures
           if (featuresStd(featureIndex) != 0.0) {
