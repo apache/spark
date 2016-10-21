@@ -308,7 +308,7 @@ object PartitioningAwareFileCatalog extends Logging {
   private def listLeafFilesInParallel(
       paths: Seq[Path],
       hadoopConf: Configuration,
-      sparkSession: SparkSession): Map[Path, Seq[FileStatus]] = {
+      sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
     assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
@@ -368,7 +368,7 @@ object PartitioningAwareFileCatalog extends Logging {
           blockLocations)
       }
       (new Path(path), statuses)
-    }.toMap
+    }
   }
 
   /**
