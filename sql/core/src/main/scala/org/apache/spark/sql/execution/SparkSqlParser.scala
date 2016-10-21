@@ -1058,10 +1058,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         if (conf.convertCTAS && !hasStorageProperties) {
           // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
           // are empty Maps.
+          // For data source tables, table properties is only used to store schema and
+          // system-generated metadata. All user-specified properties/options will be stored
+          // in serde properties.
           val optionsWithPath = if (location.isDefined) {
-            Map("path" -> location.get)
+            properties ++ Map("path" -> location.get)
           } else {
-            Map.empty[String, String]
+            properties
           }
 
           val newTableDesc = tableDesc.copy(

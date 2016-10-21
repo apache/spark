@@ -1044,6 +1044,20 @@ class HiveDDLSuite
     }
   }
 
+  test("CTAS - converted to Data Source Table but lost table properties") {
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t TBLPROPERTIES('prop1' = 'c', 'prop2' = 'd') AS SELECT 1 as a, 1 as b")
+        val tableDesc = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(tableDesc.properties.get("prop1").isEmpty)
+        assert(tableDesc.properties.get("prop2").isEmpty)
+        assert(tableDesc.storage.properties.get("prop1") == Option("c"))
+        assert(tableDesc.storage.properties.get("prop2") == Option("d"))
+        checkAnswer(spark.table("t"), Row(1, 1) :: Nil)
+      }
+    }
+  }
+
   test("desc table for data source table - partitioned bucketed table") {
     withTable("t1") {
       spark
