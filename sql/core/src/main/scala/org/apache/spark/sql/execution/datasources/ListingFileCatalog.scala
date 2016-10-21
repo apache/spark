@@ -47,7 +47,7 @@ class ListingFileCatalog(
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
-  refresh0(false)
+  refresh0()
 
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
@@ -66,18 +66,16 @@ class ListingFileCatalog(
   }
 
   override def refresh(): Unit = {
-    refresh0(true)
+    refresh0()
+    fileStatusCache.invalidateAll()
   }
 
-  private def refresh0(invalidateSharedCache: Boolean): Unit = {
+  private def refresh0(): Unit = {
     val files = listLeafFiles(rootPaths)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
     cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
     cachedPartitionSpec = null
-    if (invalidateSharedCache) {
-      fileStatusCache.invalidateAll()
-    }
   }
 
   override def equals(other: Any): Boolean = other match {
