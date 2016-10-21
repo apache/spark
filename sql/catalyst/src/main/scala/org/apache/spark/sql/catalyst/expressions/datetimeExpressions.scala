@@ -968,6 +968,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
 /**
  * Returns number of months between dates date1 and date2.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between dates expr1 and expr2.",
   extended = """
@@ -979,6 +980,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
        3.94959677
   """)
+// scalastyle:on line.size.limit
 case class MonthsBetween(date1: Expression, date2: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
