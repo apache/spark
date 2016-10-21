@@ -205,7 +205,7 @@ private[csv] class CsvOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        new Path(stagingDir, path)
+        new Path(path)
       }
     }.getRecordWriter(context)
   }
