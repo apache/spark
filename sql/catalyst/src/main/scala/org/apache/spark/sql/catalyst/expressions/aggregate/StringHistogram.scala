@@ -60,10 +60,10 @@ case class StringHistogram(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!numBinsExpression.foldable) {
-      TypeCheckFailure(s"The maximum number of bins provided must be a constant literal")
+      TypeCheckFailure("The maximum number of bins provided must be a constant literal")
     } else if (numBins <= 0) {
       TypeCheckFailure(
-        s"The maximum number of bins provided must be a positive integer literal (current value" +
+        "The maximum number of bins provided must be a positive integer literal (current value" +
           s" = $numBins)")
     } else {
       TypeCheckSuccess
@@ -150,13 +150,19 @@ object StringHistogram {
 
   /**
    * StringHistogramInfo maintains frequency of each distinct value.
-   * @param invalid This is to mark the HashMap as invalid when its size (ndv of the column)
-   *                exceeds numBins, because we won't generate string histograms in that case.
    * @param bins A HashMap to maintain frequency of each distinct value.
    */
-  case class StringHistogramInfo(
-      var invalid: Boolean = false,
-      bins: mutable.HashMap[UTF8String, Long] = mutable.HashMap.empty[UTF8String, Long])
+  class StringHistogramInfo(
+      val bins: mutable.HashMap[UTF8String, Long] = mutable.HashMap.empty[UTF8String, Long]) {
+    // This is to mark the HashMap as invalid when its size (ndv of the column) exceeds numBins,
+    // because we won't generate string histograms in that case.
+    var invalid: Boolean = false
+
+    def this(bins: mutable.HashMap[UTF8String, Long], invalid: Boolean) = {
+      this(bins)
+      this.invalid = invalid
+    }
+  }
 
   class StringHistogramInfoSerializer {
 
@@ -201,7 +207,7 @@ object StringHistogram {
         bins.put(UTF8String.fromBytes(bytes), value)
         i += 1
       }
-      StringHistogramInfo(invalid, bins)
+      new StringHistogramInfo(bins, invalid)
     }
   }
 
