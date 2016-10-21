@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
@@ -165,12 +166,16 @@ object WriteOutput extends Logging {
       new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
     }
 
-    val committer = new MapReduceFileCommitterProtocol(newOutputCommitter(
-      description.outputFormatClass, taskAttemptContext, description.path, description.isAppend))
+    val committer = newOutputCommitter(
+      description.outputFormatClass, taskAttemptContext, description.path, description.isAppend)
     committer.setupTask(taskAttemptContext)
 
     // Figure out where we need to write data to for staging.
-    val stagingPath = committer.stagingDir.getOrElse(description.path)
+    // For FileOutputCommitter it has its own staging path called "work path".
+    val stagingPath = committer match {
+      case f: FileOutputCommitter => f.getWorkPath.toString
+      case _ => description.path
+    }
 
     val writeTask =
       if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
@@ -181,10 +186,12 @@ object WriteOutput extends Logging {
 
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-        // Execute the task to write rows out, and then commit the task
+        // Execute the task to write rows out
         writeTask.execute(iterator)
         writeTask.releaseResources()
-        committer.commitTask(taskAttemptContext)
+
+        // Commit the task
+        SparkHadoopMapRedUtil.commitTask(committer, taskAttemptContext, jobId.getId, taskId.getId)
       })(catchBlock = {
         // If there is an error, release resource and then abort the task
         try {
