@@ -3331,7 +3331,7 @@ setMethod("randomSplit",
 
 # A global singleton for an empty SparkR DataFrame.
 getEmptySparkRDataFrame <- function() {
-  if (is.null(.sparkREnv$.emptyDataFrame)) {
+  if (!exists(".emptyDataFrame", envir=.sparkREnv)) {
     .sparkREnv$.emptyDataFrame <- as.DataFrame(data.frame(0))
   }
   .sparkREnv$.emptyDataFrame
