@@ -108,6 +108,45 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.clusterCenters.length === 2)
   }
 
+  test("unique cluster centers") {
+    val rng = new scala.util.Random(42)
+    val points = (0 until 10).map(i => Vectors.dense(Array.fill(3)(rng.nextDouble)))
+    val data = sc.parallelize(
+      points.flatMap { point =>
+        Array.fill(rng.nextInt(4))(point)
+      }, 2
+    )
+    val norms = data.map(Vectors.norm(_, 2.0))
+    val zippedData = data.zip(norms).map { case (v, norm) =>
+      new VectorWithNorm(v, norm)
+    }
+    // less centers than k
+    val km = new KMeans().setK(50)
+      .setMaxIterations(10)
+      .setInitializationMode("k-means||")
+      .setInitializationSteps(10)
+      .setSeed(42)
+    val initialCenters = km.initKMeansParallel(zippedData).map(_.vector)
+    assert(initialCenters.length === initialCenters.distinct.length)
+
+    val model = km.run(data)
+    val finalCenters = model.clusterCenters
+    assert(finalCenters.length === finalCenters.distinct.length)
+
+    // run local k-means
+    val km2 = new KMeans().setK(10)
+      .setMaxIterations(10)
+      .setInitializationMode("k-means||")
+      .setInitializationSteps(10)
+      .setSeed(42)
+    val initialCenters2 = km2.initKMeansParallel(zippedData).map(_.vector)
+    assert(initialCenters2.length === initialCenters2.distinct.length)
+
+    val model2 = km.run(data)
+    val finalCenters2 = model2.clusterCenters
+    assert(finalCenters2.length === finalCenters2.distinct.length)
+  }
+
   test("deterministic initialization") {
     // Create a large-ish set of points for clustering
     val points = List.tabulate(1000)(n => Vectors.dense(n, n))
