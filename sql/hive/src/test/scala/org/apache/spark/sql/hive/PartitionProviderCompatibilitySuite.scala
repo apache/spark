@@ -55,12 +55,6 @@ class PartitionProviderCompatibilitySuite
     }
   }
 
-  private def verifyIsNewTable(tableName: String): Unit = {
-    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
-      spark.sql(s"show partitions $tableName").count()  // check does not throw
-    }
-  }
-
   test("convert partition provider to hive with repair table") {
     withTable("test") {
       withTempDir { dir =>
@@ -71,7 +65,7 @@ class PartitionProviderCompatibilitySuite
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
           verifyIsLegacyTable("test")
           spark.sql("msck repair table test")
-          verifyIsNewTable("test")
+          spark.sql("show partitions test").count()  // check we are a new table
 
           // sanity check table performance
           HiveCatalogMetrics.reset()
@@ -88,7 +82,7 @@ class PartitionProviderCompatibilitySuite
       withTempDir { dir =>
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
           setupPartitionedDatasourceTable("test", dir)
-          verifyIsNewTable("test")
+          spark.sql("show partitions test").count()  // check we are a new table
           assert(spark.sql("select * from test").count() == 0)  // needs repair
           spark.sql("msck repair table test")
           assert(spark.sql("select * from test").count() == 5)
