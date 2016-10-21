@@ -43,7 +43,7 @@ class TableFileCatalog(
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf
 
-  private val fileStatusCache = FileStatusCache.getOrInitializeShared(new Object(), sparkSession)
+  private val fileStatusCache = FileStatusCache.newCache(sparkSession)
 
   private val externalCatalog = sparkSession.sharedState.externalCatalog
 

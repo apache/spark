@@ -273,7 +273,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("sort_array function") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
-      (Array[Int](), Array[String]()),
+      (Array.empty[Int], Array.empty[String]),
       (null, null)
     ).toDF("a", "b")
     checkAnswer(

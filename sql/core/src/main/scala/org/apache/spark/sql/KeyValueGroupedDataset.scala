@@ -67,6 +67,48 @@ class KeyValueGroupedDataset[K, V] private[sql](
       groupingAttributes)
 
   /**
+   * Returns a new [[KeyValueGroupedDataset]] where the given function `func` has been applied
+   * to the data. The grouping key is unchanged by this.
+   *
+   * {{{
+   *   // Create values grouped by key from a Dataset[(K, V)]
+   *   ds.groupByKey(_._1).mapValues(_._2) // Scala
+   * }}}
+   *
+   * @since 2.1.0
+   */
+  def mapValues[W : Encoder](func: V => W): KeyValueGroupedDataset[K, W] = {
+    val withNewData = AppendColumns(func, dataAttributes, logicalPlan)
+    val projected = Project(withNewData.newColumns ++ groupingAttributes, withNewData)
+    val executed = sparkSession.sessionState.executePlan(projected)
+
+    new KeyValueGroupedDataset(
+      encoderFor[K],
+      encoderFor[W],
+      executed,
+      withNewData.newColumns,
+      groupingAttributes)
+  }
+
+  /**
+   * Returns a new [[KeyValueGroupedDataset]] where the given function `func` has been applied
+   * to the data. The grouping key is unchanged by this.
+   *
+   * {{{
+   *   // Create Integer values grouped by String key from a Dataset<Tuple2<String, Integer>>
+   *   Dataset<Tuple2<String, Integer>> ds = ...;
+   *   KeyValueGroupedDataset<String, Integer> grouped =
+   *     ds.groupByKey(t -> t._1, Encoders.STRING()).mapValues(t -> t._2, Encoders.INT()); // Java 8
+   * }}}
+   *
+   * @since 2.1.0
+   */
+  def mapValues[W](func: MapFunction[V, W], encoder: Encoder[W]): KeyValueGroupedDataset[K, W] = {
+    implicit val uEnc = encoder
+    mapValues { (v: V) => func.call(v) }
+  }
+
+  /**
    * Returns a [[Dataset]] that contains each unique key. This is equivalent to doing mapping
    * over the Dataset to extract the keys and then running a distinct operation on those.
    *
