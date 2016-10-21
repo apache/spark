@@ -19,14 +19,14 @@ package org.apache.spark.scheduler.cluster
 import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.serializer.JavaSerializer
 
-class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar {
+class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with LocalSparkContext {
 
   test("RequestExecutors reflects node blacklist and is serializable") {
-    val sc = new SparkContext("local", "YarnSchedulerBackendSuite")
+    sc = new SparkContext("local", "YarnSchedulerBackendSuite")
     val sched = mock[TaskSchedulerImpl]
     when(sched.sc).thenReturn(sc)
     val yarnSchedulerBackend = new YarnSchedulerBackend(sched, sc) {
