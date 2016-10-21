@@ -40,6 +40,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.{ParentClassLoader, Utils}
+import org.apache.spark.sql.catalyst.util.DelegateClassLoader
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -615,11 +616,8 @@ class CodegenContext {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
-      // We can't know how many bytecode will be generated, so use the length of source code
-      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
-      // also not be too small, or it will have many function calls (for wide table), see the
-      // results in BenchmarkWideTable.
-      if (blockBuilder.length > 1024) {
+      // We can't know how many byte code will be generated, so use number of bytes as limit
+      if (blockBuilder.length > 60 * 1000) {
         blocks += blockBuilder.toString()
         blockBuilder.clear()
       }
@@ -874,7 +872,7 @@ object CodeGenerator extends Logging {
     // find other possible classes (see org.codehaus.janinoClassLoaderIClassLoader's
     // findIClass method). Please also see https://issues.apache.org/jira/browse/SPARK-15622 and
     // https://issues.apache.org/jira/browse/SPARK-11636.
-    val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
+    val parentClassLoader = new DelegateClassLoader(Utils.getContextOrSparkClassLoader, "org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
