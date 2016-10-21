@@ -238,7 +238,7 @@ class Analyzer(
      *  We need to get all of its subsets for a given GROUPBY expression, the subsets are
      *  represented as sequence of expressions.
      */
-    def cubeExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs match {
+    def cubeExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.toList match {
       case x :: xs =>
         val initial = cubeExprs(xs)
         initial.map(x +: _) ++ initial
@@ -409,9 +409,12 @@ class Analyzer(
         failAnalysis(
           s"${VirtualColumn.hiveGroupingIdName} is deprecated; use grouping_id() instead")
 
-      case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
+      // Ensure group by expressions and aggregate expressions have been resolved.
+      case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child)
+        if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         constructAggregate(cubeExprs(groupByExprs), groupByExprs, aggregateExpressions, child)
-      case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
+      case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child)
+        if (groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         constructAggregate(rollupExprs(groupByExprs), groupByExprs, aggregateExpressions, child)
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
