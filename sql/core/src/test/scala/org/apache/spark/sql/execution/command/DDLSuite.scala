@@ -665,16 +665,27 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     createDatabase(catalog, "dbx")
     createDatabase(catalog, "dby")
     createTable(catalog, tableIdent1)
+
     assert(catalog.listTables("dbx") == Seq(tableIdent1))
-    sql("ALTER TABLE dbx.tab1 RENAME TO tab2")
+    sql("ALTER TABLE dbx.tab1 RENAME TO dbx.tab2")
     assert(catalog.listTables("dbx") == Seq(tableIdent2))
+
+    // The database in destination table name can be omitted, and we will use the database of source
+    // table for it.
+    sql("ALTER TABLE dbx.tab2 RENAME TO tab1")
+    assert(catalog.listTables("dbx") == Seq(tableIdent1))
+
     catalog.setCurrentDatabase("dbx")
     // rename without explicitly specifying database
-    sql("ALTER TABLE tab2 RENAME TO tab1")
-    assert(catalog.listTables("dbx") == Seq(tableIdent1))
+    sql("ALTER TABLE tab1 RENAME TO tab2")
+    assert(catalog.listTables("dbx") == Seq(tableIdent2))
     // table to rename does not exist
     intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.does_not_exist RENAME TO tab2")
+      sql("ALTER TABLE dbx.does_not_exist RENAME TO dbx.tab2")
+    }
+    // destination database is different
+    intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.tab1 RENAME TO dby.tab2")
     }
   }
 
@@ -694,6 +705,31 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(spark.catalog.isCached("teachers"))
     assert(spark.table("students").collect().isEmpty)
     assert(spark.table("teachers").collect().toSeq == df.collect().toSeq)
+  }
+
+  test("rename temporary table - destination table with database name") {
+    withTempView("tab1") {
+      sql(
+        """
+          |CREATE TEMPORARY TABLE tab1
+          |USING org.apache.spark.sql.sources.DDLScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10',
+          |  Table 'test1'
+          |)
+        """.stripMargin)
+
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE tab1 RENAME TO default.tab2")
+      }
+      assert(e.getMessage.contains(
+        "RENAME TEMPORARY TABLE from '`tab1`' to '`default`.`tab2`': " +
+          "cannot specify database name 'default' in the destination table"))
+
+      val catalog = spark.sessionState.catalog
+      assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
+    }
   }
 
   test("rename temporary table") {
@@ -736,7 +772,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql("ALTER TABLE tab1 RENAME TO tab2")
       }
       assert(e.getMessage.contains(
-        "RENAME TEMPORARY TABLE from '`tab1`' to 'tab2': destination table already exists"))
+        "RENAME TEMPORARY TABLE from '`tab1`' to '`tab2`': destination table already exists"))
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
@@ -1711,6 +1747,23 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(sql("show system functions").count() === numFunctions)
       assert(sql("show all functions").count() === numFunctions + 1L)
       assert(sql("show user functions").count() === 1L)
+    }
+  }
+
+  test("show columns - negative test") {
+    // When case sensitivity is true, the user supplied database name in table identifier
+    // should match the supplied database name in case sensitive way.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTempDatabase { db =>
+        val tabName = s"$db.showcolumn"
+        withTable(tabName) {
+          sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
+          val message = intercept[AnalysisException] {
+            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase}")
+          }.getMessage
+          assert(message.contains("SHOW COLUMNS with conflicting databases"))
+        }
+      }
     }
   }
 }

@@ -185,9 +185,10 @@ class CacheManager extends Logging {
     plan match {
       case lr: LogicalRelation => lr.relation match {
         case hr: HadoopFsRelation =>
+          val prefixToInvalidate = qualifiedPath.toString
           val invalidate = hr.location.rootPaths
-            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-            .contains(qualifiedPath)
+            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory).toString)
+            .exists(_.startsWith(prefixToInvalidate))
           if (invalidate) hr.location.refresh()
           invalidate
         case _ => false
