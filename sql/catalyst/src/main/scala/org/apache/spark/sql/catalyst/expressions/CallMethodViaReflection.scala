@@ -56,7 +56,6 @@ import org.apache.spark.util.Utils
       Examples:
         > SELECT _FUNC_('java.util.UUID', 'randomUUID');
          c33fb387-8500-4bfa-81d2-6e0e3e930df2
-
         > SELECT _FUNC_('java.util.UUID', 'fromString', 'a5cf6c42-0c85-418f-af6c-3e4e5b1328f2');
          a5cf6c42-0c85-418f-af6c-3e4e5b1328f2
   """)
