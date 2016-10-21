@@ -78,6 +78,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
@@ -215,6 +216,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
