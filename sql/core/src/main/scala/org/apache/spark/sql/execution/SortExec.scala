@@ -45,6 +45,8 @@ case class SortExec(
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
 
+  // sort performed is local within a given partition so will retain
+  // child operator's partitioning
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] =
