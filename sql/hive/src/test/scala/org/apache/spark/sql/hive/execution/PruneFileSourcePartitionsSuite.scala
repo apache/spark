@@ -49,7 +49,7 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
           spark,
           tableMeta.database,
           tableMeta.identifier.table,
-          Some(tableMeta.partitionSchema),
+          tableMeta.partitionSchema,
           0)
 
         val dataSchema = StructType(tableMeta.schema.filterNot { f =>
