@@ -103,6 +103,8 @@ case class WindowExec(
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
   /**
    * Create a bound ordering object for a given frame type and offset. A bound ordering object is
    * used to determine which input row lies within the frame boundaries of an output row.

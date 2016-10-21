@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.util.Utils
 
-
 /**
  * Take the first `limit` elements and collect them to a single partition.
  *
@@ -96,6 +95,7 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
  */
 case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 /**
@@ -103,6 +103,7 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
  */
 case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 /**

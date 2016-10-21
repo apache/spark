@@ -62,6 +62,7 @@ case class HashAggregateExec(
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
