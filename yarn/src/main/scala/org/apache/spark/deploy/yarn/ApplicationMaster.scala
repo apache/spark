@@ -228,7 +228,9 @@ private[spark] class ApplicationMaster(
 
         if (!unregistered) {
           // we only want to unregister if we don't want the RM to retry
-          if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
+          if (finalStatus == FinalApplicationStatus.SUCCEEDED ||
+            exitCode == ApplicationMaster.EXIT_EARLY ||
+            exitCode == ApplicationMaster.EXIT_EXCEPTION_USER_CLASS || isLastAttempt) {
             unregister(finalStatus, finalMsg)
             cleanupStagingDir(fs)
           }
