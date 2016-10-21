@@ -42,18 +42,13 @@ class StopAfterExecSuite extends QueryTest with SharedSQLContext {
   }
 
   test("StopAfter on bucketed and sorted table") {
-    val schema = new StructType()
-      .add("a", IntegerType, nullable = false)
-      .add("b", IntegerType, nullable = false)
-    val inputData = Seq(1, 2, 3).flatMap(i => (1 to 10).map(j => Row(i, j)))
-    val df = spark.createDataFrame(sparkContext.parallelize(inputData, 10), schema)
-
     withTable("table") {
-      df.write.format("parquet").bucketBy(1, "a").sortBy("b").saveAsTable("table")
-      val table = spark.table("table")
-      table.show()
-      val sorted = table.filter("b < 5")
-      println(sorted.queryExecution.executedPlan)
+      val df = (0 until 16).map(i => (i % 8, i * 2, i.toString)).toDF("i", "j", "k").coalesce(1)
+      df.write.bucketBy(8, "j", "k").sortBy("j", "k").saveAsTable("table")
+      val filtered = spark.table("table").filter("j < 5")
+      checkIfStopAfterExists(filtered, shouldBeStopAfter = true)
+      checkAnswer(filtered,
+        Row(0, 0, "0") :: Row(1, 2, "1") :: Row(2, 4, "2") :: Nil)
     }
   }
 
@@ -219,18 +214,21 @@ class StopAfterExecSuite extends QueryTest with SharedSQLContext {
     df.unpersist()
   }
 
-  test("No StopAfter if data contains null") {
+  test("Don't affect StopAfter if data contains null") {
     val df = Seq((new JavaInteger(1), 2), (null, 3))
       .toDF("a", "b").sort("a", "b").persist()
 
     val output = df.queryExecution.executedPlan.output
 
-    // attribute "a" is nullable. Can't apply StopAfter with predicate on it.
+    // attribute "a" is nullable. We can still apply StopAfter with predicate on it.
     assert(output(0).name.equalsIgnoreCase("a"))
     assert(output(0).nullable == true)
 
-    checkIfStopAfterExists(df.filter("a < 2"), shouldBeStopAfter = false)
-    checkIfStopAfterExists(df.filter("a < 2 AND b < 2"), shouldBeStopAfter = false)
+    checkIfStopAfterExists(df.filter("a < 2"), shouldBeStopAfter = true)
+    checkIfStopAfterExists(df.filter("a < 2 AND b < 2"), shouldBeStopAfter = true)
+
+    checkAnswer(df.filter("a < 2"), Row(1, 2) :: Nil)
+    checkAnswer(df.filter("a < 2 AND b < 2"), Seq[Row]())
 
     df.unpersist()
   }

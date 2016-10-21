@@ -107,7 +107,8 @@ abstract class FilterExecBase extends UnaryExecNode with CodegenSupport with Pre
       ctx: CodegenContext,
       input: Seq[ExprCode],
       otherPreds: Seq[Expression],
-      generatedNullChecks: Array[Boolean]): String = {
+      generatedNullChecks: Array[Boolean],
+      injectedCode: String = ""): String = {
 
     otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
@@ -125,6 +126,7 @@ abstract class FilterExecBase extends UnaryExecNode with CodegenSupport with Pre
       // enforced them with the IsNotNull checks above.
       s"""
          |$nullChecks
+         |$injectedCode
          |${genPredicate(ctx, c, input, output)}
        """.stripMargin.trim
     }.mkString("\n")
@@ -238,10 +240,16 @@ case class StopAfterExec(
       generatedNullChecks: Array[Boolean]): String = {
     val condPassed = ctx.freshName("condPassed")
     ctx.addMutableState(s"boolean", condPassed, s"$condPassed = true;")
+    // The code to reset the state whether the stop after conditions are passed or not.
+    // We inject the code below null checking of the attributes in stop after conditions.
+    // So we won't change the state if the attributes are null.
+    // E.g., if the data is sorted by only one attribute a in ascending way like [null, 1, 2, 3]
+    // and stop after condition is a < 2. Then the first null value won't affect the stop after
+    // logic.
+    val injectedCode = s"$condPassed = false;"
     s"""
        |if (!$condPassed) break;
-       |$condPassed = false;
-       |${genOtherPredicate(ctx, input, stopAfterConditions, generatedNullChecks)}
+       |${genOtherPredicate(ctx, input, stopAfterConditions, generatedNullChecks, injectedCode)}
        |$condPassed = true;
        |${genOtherPredicate(ctx, input, otherCondNotNullConds, generatedNullChecks)}
      """.stripMargin
@@ -291,9 +299,7 @@ object FilterExecBase extends PredicateHelper {
     // Take the first expression that the child output is ordered by.
     // E.g., if the child.outputOrdering is [a, b, c + 1, d], the expression is [a].
     //       if the child.outputOrdering is [a + 1, b], the expression is [a + 1].
-    // This expression must be non-nullable.
-    // TODO: Can we utilize `NullOrdering` to adapt for nullable expression?
-    val orderingExpression = child.outputOrdering.take(1).map(_.child).filter(!_.nullable)
+    val orderingExpression = child.outputOrdering.take(1).map(_.child)
     if (orderingExpression.isEmpty) {
       return (None, Some(condition))
     }
