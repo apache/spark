@@ -18,13 +18,13 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.StringType
