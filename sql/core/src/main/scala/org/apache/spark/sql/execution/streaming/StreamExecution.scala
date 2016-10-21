@@ -347,11 +347,13 @@ class StreamExecution(
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
         logInfo(s"Committed offsets for batch $currentBatchId.")
 
+        // NOTE: The following code is correct because runBatches() processes exactly one
+        // batch at a time. If we add pipeline parallelism (multiple batches in flight at
+        // the same time), this cleanup logic will need to change.
+
         // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
-        // sources to discard data from *before* the previous batch.
-        // The scheduler might still request the previous batch from a source in some cases
-        // if a crash and recovery occured.
-        val prevBatchOff = offsetLog.get(currentBatchId - 2)
+        // sources to discard data from the previous batch.
+        val prevBatchOff = offsetLog.get(currentBatchId - 1)
         if (prevBatchOff.isDefined) {
           prevBatchOff.get.toStreamProgress(sources).foreach {
             case (src, off) => src.commit(off)
@@ -361,8 +363,6 @@ class StreamExecution(
         // Now that we have logged the new batch, no further processing will happen for
         // the batch before the previous batch, and it is safe to discard the old metadata.
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
-        // NOTE: If StreamExecution implements pipeline parallelism (multiple batches in
-        // flight at the same time), this cleanup logic will need to change.
         offsetLog.purge(currentBatchId - 1)
       }
     } else {

@@ -44,7 +44,7 @@ trait Source  {
    *
    * Higher layers will always call this method with a value of `start` greater than or equal
    * to the last value passed to `commit` and a value of `end` less than or equal to the
-   * last value returned by `getMaxOffset`
+   * last value returned by `getOffset`
    */
   def getBatch(start: Option[Offset], end: Offset): DataFrame
 
