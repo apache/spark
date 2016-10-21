@@ -103,6 +103,10 @@
       <artifactId>scala-library</artifactId>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty</artifactId>
+    </dependency>
   </dependencies>
 
   <build>
