@@ -25,10 +25,8 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the maximum value of expr.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any type expression.
+    Arguments:
+      expr - an expression of any type.
   """)
 case class Max(child: Expression) extends DeclarativeAggregate {
 

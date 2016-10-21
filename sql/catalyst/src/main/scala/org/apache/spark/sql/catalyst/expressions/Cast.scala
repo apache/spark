@@ -114,17 +114,15 @@ object Cast {
 
 /** Cast the child expression to the target data type. */
 @ExpressionDescription(
-  usage = "_FUNC_(expr AS type) - Cast value expr to the target data type.",
+  usage = "_FUNC_(expr AS type) - Casts value expr to the target data type.",
   extended = """
-    _FUNC_(expr AS type)
+    Arguments:
+      expr - an expression of any type.
+      type - data type.
 
-      Arguments:
-        expr - any type expression.
-        type - data type.
-
-      Examples:
-        > SELECT _FUNC_('10' as int);
-         10
+    Examples:
+      > SELECT _FUNC_('10' as int);
+       10
   """)
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
 

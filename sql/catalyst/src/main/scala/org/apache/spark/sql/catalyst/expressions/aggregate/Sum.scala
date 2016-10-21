@@ -25,11 +25,8 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+      expr - a numeric expression.
   """)
 case class Sum(child: Expression) extends DeclarativeAggregate {
 

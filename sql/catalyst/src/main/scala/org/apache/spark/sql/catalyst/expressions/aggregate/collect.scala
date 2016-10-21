@@ -88,10 +88,8 @@ abstract class Collect extends ImperativeAggregate {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-         expr - any type expression that represents data to collect.
+    Arguments:
+     expr - an expression of any type that represents data to collect as a list.
   """)
 case class CollectList(
     child: Expression,
@@ -117,10 +115,8 @@ case class CollectList(
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-         expr - any type expression that represents data to collect.
+    Arguments:
+     expr - an expression of any type that represents data to collect as a set.
   """)
 case class CollectSet(
     child: Expression,

@@ -40,15 +40,12 @@ import org.apache.spark.unsafe.Platform
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns an MD5 128-bit checksum as a hex string of expr.",
   extended = """
-    _FUNC_(expr)
+    Arguments:
+      expr - a binary expression.
 
-      Arguments:
-        expr - binary type or any type expression that can be implicitly converted to
-          binary type.
-
-      Examples:
-        > SELECT _FUNC_('Spark');
-         8cde774d6f7333752ed72cacddb05126
+    Examples:
+      > SELECT _FUNC_('Spark');
+       8cde774d6f7333752ed72cacddb05126
   """)
 case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -80,17 +77,14 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
       SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256.
   """,
   extended = """
-    _FUNC_(expr, bitLength)
+    Arguments:
+      expr - a string expression.
+      bitLength - a numeric expression that defines the length of bit. Available values are 224,
+        256, 384 and 512.
 
-      Arguments:
-        expr - string type or any type expression that can be implicitly converted to
-          string type.
-        bitLength - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
-
-      Examples:
-        > SELECT _FUNC_('Spark', 0);
-         529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b
+    Examples:
+      > SELECT _FUNC_('Spark', 256);
+       529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b
   """)
 // scalastyle:on line.size.limit
 case class Sha2(left: Expression, right: Expression)
@@ -161,15 +155,12 @@ case class Sha2(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a sha1 hash value as a hex string of the expr.",
   extended = """
-    _FUNC_(expr)
+    Arguments:
+      expr - a binary expression.
 
-      Arguments:
-        expr - binary type or any type expression that that can be implicitly converted to
-          binary type.
-
-      Examples:
-        > SELECT _FUNC_('Spark');
-         85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c
+    Examples:
+      > SELECT _FUNC_('Spark');
+       85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c
   """)
 case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -194,15 +185,12 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a cyclic redundancy check value as a bigint of the expr.",
   extended = """
-    _FUNC_(expr)
+    Arguments:
+      expr - a binary expression.
 
-      Arguments:
-        expr - binary type or any type expression that that can be implicitly converted to
-          binary type.
-
-      Examples:
-        > SELECT _FUNC_('Spark');
-         1557323817
+    Examples:
+      > SELECT _FUNC_('Spark');
+       1557323817
   """)
 case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -535,14 +523,12 @@ abstract class InterpretedHashFunction {
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
   extended = """
-    _FUNC_(expr)
+    Arguments:
+      expr - an expression of any type.
 
-      Arguments:
-        expr - any type expression.
-
-      Examples:
-        > SELECT _FUNC_('Spark', array(123), 2);
-          -1321691492
+    Examples:
+      > SELECT _FUNC_('Spark', array(123), 2);
+        -1321691492
   """)
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)
@@ -599,15 +585,12 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Throw an exception if expr is not true.",
   extended = """
-    _FUNC_(expr)
+    Arguments:
+      expr - a boolean expression
 
-      Arguments:
-        expr - boolean type or any type expression that can be implicitly converted to
-         boolean type.
-
-      Examples:
-        > SELECT _FUNC_(0 < 1);
-         NULL
+    Examples:
+      > SELECT _FUNC_(0 < 1);
+       NULL
   """)
 case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -678,11 +661,9 @@ object XxHash64Function extends InterpretedHashFunction {
 @ExpressionDescription(
   usage = "_FUNC_() - Returns the current database.",
   extended = """
-    _FUNC_()
-
-      Examples:
-        > SELECT _FUNC_();
-         default
+    Examples:
+      > SELECT _FUNC_();
+       default
   """)
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
@@ -703,10 +684,8 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
   extended = """
-    _FUNC_(expr1, expr2, ...)
-
-      Arguments:
-        expr - any type expression.
+    Arguments:
+      expr - an expression of any type.
   """)
 case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override val seed = 0

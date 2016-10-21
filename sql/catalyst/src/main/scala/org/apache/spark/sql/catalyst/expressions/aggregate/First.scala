@@ -30,23 +30,14 @@ import org.apache.spark.sql.types._
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the first value of expr for a group of rows.
-
-    _FUNC_(expr, isIgnoreNull) - Returns the first value of expr for a group of rows.
+    _FUNC_(expr[, isIgnoreNull]) - Returns the first value of expr for a group of rows.
       If isIgnoreNull is true, returns only non-null values.
   """,
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any type expression that represents data to collect the first.
-
-    _FUNC_(expr, isIgnoreNull)
-
-      Arguments:
-        expr - any type expression that represents data to collect the first.
-        isIgnoreNull - boolean type literal. If isIgnoreNull is true, returns only non-null
-          values. Default is false.
+    Arguments:
+      expr - an expression of any type that represents data to collect the first.
+      isIgnoreNull - a boolean literal. If isIgnoreNull is true, returns only non-null
+        values. Default is false.
   """)
 case class First(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
 

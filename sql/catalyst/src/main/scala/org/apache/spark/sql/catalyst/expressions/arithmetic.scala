@@ -27,10 +27,8 @@ import org.apache.spark.unsafe.types.CalendarInterval
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negative value of expr.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any numeric type or interval type expression.
+    Arguments:
+      expr - a numeric or interval expression.
   """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
@@ -70,10 +68,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the positive value of expr.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any numeric type or interval type expression.
+    Arguments:
+      expr - a numeric or interval expression.
   """)
 case class UnaryPositive(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
@@ -97,14 +93,12 @@ case class UnaryPositive(child: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric value.",
   extended = """
-    _FUNC_(expr)
+    Arguments:
+      expr - a numeric expression.
 
-      Arguments:
-        expr - any numeric type expression.
-
-      Examples:
-        > SELECT _FUNC_(-1);
-         1
+    Examples:
+      > SELECT _FUNC_(-1);
+       1
   """)
 case class Abs(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
@@ -154,13 +148,9 @@ object BinaryArithmetic {
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns expr1+expr2.",
   extended = """
-    expr1 _FUNC_ expr2
-
-      Arguments:
-        expr1 - any numeric type, interval type or any nonnumeric type expression that
-          can be implicitly converted to numeric type.
-        expr2 - any numeric type, interval type or any nonnumeric type expression that
-          can be implicitly converted to numeric type.
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
   """)
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
@@ -194,13 +184,9 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns expr1-expr2.",
   extended = """
-    expr1 _FUNC_ expr2
-
-      Arguments:
-        expr1 - any numeric type, interval type or any nonnumeric type expression that
-          can be implicitly converted to numeric type.
-        expr2 - any numeric type, interval type or any nonnumeric type expression that
-          can be implicitly converted to numeric type.
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
   """)
 case class Subtract(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
@@ -235,13 +221,9 @@ case class Subtract(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Multiplies expr1 by expr2.",
   extended = """
-    expr1 _FUNC_ expr2
-
-      Arguments:
-        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
-        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
   """)
 case class Multiply(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
@@ -259,17 +241,13 @@ case class Multiply(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Divides expr1 by expr2.",
   extended = """
-    expr1 _FUNC_ expr2
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
 
-      Arguments:
-        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
-        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
-
-      Examples:
-        > SELECT 3 _FUNC_ 2;
-         1.5
+    Examples:
+      > SELECT 3 _FUNC_ 2;
+       1.5
   """)
 case class Divide(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
@@ -348,13 +326,9 @@ case class Divide(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the remainder when dividing expr1 by expr2.",
   extended = """
-    expr1 _FUNC_ expr2
-
-       Arguments:
-         expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-           converted to numeric type.
-         expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-           converted to numeric type.
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
   """)
 case class Remainder(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
@@ -438,17 +412,13 @@ case class Remainder(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the positive modulo.",
   extended = """
-    _FUNC_(expr1, expr2)
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
 
-      Arguments:
-        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
-        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
-
-      Examples:
-        > SELECT _FUNC_(10, 3);
-         1
+    Examples:
+      > SELECT _FUNC_(10, 3);
+       1
   """)
 case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
@@ -554,14 +524,12 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic wi
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns the least value of all parameters, skipping null values.",
   extended = """
-    _FUNC_(expr, ...)
+    Arguments:
+      expr - an expression of any type except struct, map and array.
 
-      Arguments:
-        expr - any type expression except struct/map/array type.
-
-      Examples:
-        > SELECT _FUNC_(10, 9, 2, 4, 3);
-         2
+    Examples:
+      > SELECT _FUNC_(10, 9, 2, 4, 3);
+       2
   """)
 case class Least(children: Seq[Expression]) extends Expression {
 
@@ -624,14 +592,12 @@ case class Least(children: Seq[Expression]) extends Expression {
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns the greatest value of all parameters, skipping null values.",
   extended = """
-    _FUNC_(expr, ...)
+    Arguments:
+      expr - an expression of any type except struct, map and array.
 
-      Arguments:
-        expr - any type expression except struct/map/array type.
-
-      Examples:
-        > SELECT _FUNC_(10, 9, 2, 4, 3);
-         10
+    Examples:
+      > SELECT _FUNC_(10, 9, 2, 4, 3);
+       10
   """)
 case class Greatest(children: Seq[Expression]) extends Expression {
 

@@ -32,13 +32,9 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.",
   extended = """
-    _FUNC_(expr1, expr2)
-
-      Arguments:
-        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
-        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
   """)
 // scalastyle:on line.size.limit
 case class Corr(x: Expression, y: Expression) extends DeclarativeAggregate {

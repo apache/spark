@@ -44,20 +44,18 @@ import org.apache.spark.util.Utils
  *                 and the remaining are input arguments to the Java method.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) calls method with reflection",
+  usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - Calls method with reflection.",
   extended = """
-    _FUNC_(class, method[, arg1[, arg2 ..]])
+    Arguments:
+      class - a string literal that represents full-qualified class name.
+      method - a string literal that represents method name.
+      arg - a string literal that represents arguments for the method.
 
-      Arguments:
-        class - string type literal that represents full-qualified class name.
-        method - string type literal that represents method name.
-        arg - string type literal that represents arguments for the method.
-
-      Examples:
-        > SELECT _FUNC_('java.util.UUID', 'randomUUID');
-         c33fb387-8500-4bfa-81d2-6e0e3e930df2
-        > SELECT _FUNC_('java.util.UUID', 'fromString', 'a5cf6c42-0c85-418f-af6c-3e4e5b1328f2');
-         a5cf6c42-0c85-418f-af6c-3e4e5b1328f2
+    Examples:
+      > SELECT _FUNC_('java.util.UUID', 'randomUUID');
+       c33fb387-8500-4bfa-81d2-6e0e3e930df2
+      > SELECT _FUNC_('java.util.UUID', 'fromString', 'a5cf6c42-0c85-418f-af6c-3e4e5b1328f2');
+       a5cf6c42-0c85-418f-af6c-3e4e5b1328f2
   """)
 case class CallMethodViaReflection(children: Seq[Expression])
   extends Expression with CodegenFallback {

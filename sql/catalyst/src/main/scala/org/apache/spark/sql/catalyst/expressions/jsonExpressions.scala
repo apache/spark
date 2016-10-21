@@ -111,15 +111,13 @@ private[this] object SharedFactory {
 @ExpressionDescription(
   usage = "_FUNC_(json_txt, path) - Extracts a json object from path.",
   extended = """
-    _FUNC_(json_txt, path)
+    Arguments:
+      json_txt - a string expression that represents JSON document.
+      path - a string expression that represents path for JSON document.
 
-      Arguments:
-        json_txt - string type expression that represents JSON document.
-        path - string type expression that represents path for JSON document.
-
-      Examples:
-        > SELECT _FUNC_('{"a":"b"}', '$.a');
-         b
+    Examples:
+      > SELECT _FUNC_('{"a":"b"}', '$.a');
+       b
   """)
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
@@ -338,15 +336,13 @@ case class GetJsonObject(json: Expression, path: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - like get_json_object, but it takes multiple names and return a tuple. All the input parameters and output column types are string.",
   extended = """
-    _FUNC_(jsonStr, p1, p2, ..., pn)
+    Arguments:
+      json_txt - a string expression that represents JSON document.
+      p - a string expression that represents key name for JSON document.
 
-      Arguments:
-        json_txt - string type expression that represents JSON document.
-        p - string type expression that represents key name for JSON document.
-
-      Examples:
-        > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
-         1  2
+    Examples:
+      > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
+       1  2
   """)
 // scalastyle:on line.size.limit
 case class JsonTuple(children: Seq[Expression])

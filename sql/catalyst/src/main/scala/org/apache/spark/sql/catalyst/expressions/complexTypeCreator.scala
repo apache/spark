@@ -30,14 +30,12 @@ import org.apache.spark.unsafe.types.UTF8String
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
   extended = """
-    _FUNC_(expr, ...)
+    Arguments:
+      expr - an expression of any type.
 
-      Arguments:
-        expr - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(1, 2, 3);
-         [1,2,3]
+    Examples:
+      > SELECT _FUNC_(1, 2, 3);
+       [1,2,3]
   """)
 case class CreateArray(children: Seq[Expression]) extends Expression {
 
@@ -94,15 +92,13 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 @ExpressionDescription(
   usage = "_FUNC_(key0, value0, key1, value1...) - Creates a map with the given key/value pairs.",
   extended = """
-    _FUNC_(key0, value0, key1, value1...)
+    Arguments:
+      key - an expression of any type.
+      value - an expression of any type.
 
-      Arguments:
-        key - any type expression.
-        value - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(1.0, '2', 3.0, '4');
-         {1.0:"2",3.0:"4"}
+    Examples:
+      > SELECT _FUNC_(1.0, '2', 3.0, '4');
+       {1.0:"2",3.0:"4"}
   """)
 case class CreateMap(children: Seq[Expression]) extends Expression {
   lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
@@ -198,14 +194,12 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr2 ...) - Creates a struct with the given field values.",
   extended = """
-    _FUNC_(expr1, expr2, expr2 ...)
+    Arguments:
+      expr - an expression of any type.
 
-      Arguments:
-        expr - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(1, 2, 3);
-         {"col1":1,"col2":2,"col3":3}
+    Examples:
+      > SELECT _FUNC_(1, 2, 3);
+       {"col1":1,"col2":2,"col3":3}
   """)
 case class CreateStruct(children: Seq[Expression]) extends Expression {
 
@@ -267,15 +261,13 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 @ExpressionDescription(
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
   extended = """
-    _FUNC_(name1, val1, name2, val2, ...)
+    Arguments:
+      name - a string expression literal that represents the field name.
+      val - an expression of any type.
 
-      Arguments:
-        name - string type expression that allows constant folding and represents the field name.
-        val - any type expression.
-
-      Examples:
-        > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
-         {"a":1,"b":2,"c":3}
+    Examples:
+      > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
+       {"a":1,"b":2,"c":3}
   """)
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
@@ -443,16 +435,14 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
 @ExpressionDescription(
   usage = "_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
   extended = """
-    _FUNC_(text[, pairDelim, keyValueDelim])
+    Arguments:
+      text - a string expression that represents data to convert into map.
+      pairDelim - a string literal that defines the delimiter to separate each pair.For example, ",".
+      keyValueDelim - a string literal that defines the delimiter to separate key and value in the pair. For example, ":".
 
-      Arguments:
-        text - string type expression that represents data to convert into map.
-        pairDelim - string type expression that allows constant folding.
-        keyValueDelim - string type expression that allows constant folding.
-
-      Examples:
-       > SELECT _FUNC_('a:1,b:2,c:3',',',':');
-        map("a":"1","b":"2","c":"3")
+    Examples:
+     > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
+      map("a":"1","b":"2","c":"3")
   """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)

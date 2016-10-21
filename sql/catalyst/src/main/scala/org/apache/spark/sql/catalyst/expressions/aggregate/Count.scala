@@ -31,15 +31,8 @@ import org.apache.spark.sql.types._
     _FUNC_(DISTINCT expr[, expr...]) - Returns the number of rows for which the supplied expression(s) are unique and non-NULL.
   """,
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any type expression that represents data to count.
-
-    _FUNC_(DISTINCT expr[, expr...])
-
-      Arguments:
-        expr - any type expression that represents data to count.
+    Arguments:
+      expr - an expression of any type that represents data to count.
   """)
 // scalastyle:on line.size.limit
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {

@@ -134,11 +134,8 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the population standard deviation calculated from values of a group.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+      expr - a numeric expression.
   """)
 // scalastyle:on line.size.limit
 case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
@@ -158,11 +155,8 @@ case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sample standard deviation calculated from values of a group.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+     expr - a numeric expression.
   """)
 // scalastyle:on line.size.limit
 case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
@@ -182,11 +176,8 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the population variance calculated from values of a group.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+     expr - a numeric expression.
   """)
 case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
@@ -204,11 +195,8 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sample variance calculated from values of a group.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+     expr - a numeric expression.
   """)
 case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
@@ -226,11 +214,8 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the skewness value calculated from values of a group.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+     expr - a numeric expression.
   """)
 case class Skewness(expr: Expression) extends CentralMomentAgg(expr) {
 
@@ -248,11 +233,8 @@ case class Skewness(expr: Expression) extends CentralMomentAgg(expr) {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the kurtosis value calculated from values of a group.",
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+     expr - a numeric expression.
   """)
 case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 

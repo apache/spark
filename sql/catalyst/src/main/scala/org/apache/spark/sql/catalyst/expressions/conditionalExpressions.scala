@@ -29,9 +29,9 @@ import org.apache.spark.sql.types._
     _FUNC_(expr1, expr2, expr3)
 
       Arguments:
-        expr1 - boolean type expression.
-        expr2 - any type expression that represents the return value when expr1 is TRUE.
-        expr3 - any type expression that represents the return value when expr1 is FALSE.
+        expr1 - a boolean expression.
+        expr2 - an expression of any type that represents the return value when expr1 is TRUE.
+        expr3 - an expression of any type that represents the return value when expr1 is FALSE.
 
       Examples:
         > SELECT _FUNC_(1 < 2, 'a', 'b');

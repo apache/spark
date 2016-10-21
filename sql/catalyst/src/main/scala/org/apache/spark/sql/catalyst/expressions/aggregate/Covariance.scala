@@ -79,13 +79,9 @@ abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggre
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.",
   extended = """
-    _FUNC_(expr1, expr2)
-
-      Arguments:
-        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
-        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
   """)
 case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
@@ -98,13 +94,9 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.",
   extended = """
-    _FUNC_(expr1, expr2)
-
-      Arguments:
-        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
-        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type.
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
   """)
 case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {

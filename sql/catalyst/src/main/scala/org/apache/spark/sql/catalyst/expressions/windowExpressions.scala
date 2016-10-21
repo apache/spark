@@ -391,13 +391,10 @@ abstract class OffsetWindowFunction
       does not have any subsequent row), 'default' is returned.
   """,
   extended = """
-    _FUNC_(input[, offset[, default]])
-
-      Arguments:
-        input - any type expression.
-        offset - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type. Default is 1.
-        default - any type expression. Defualt is NULL.
+    Arguments:
+      input - an expression of any type.
+      offset - a numeric expression. Default is 1.
+      default - an expression of any type. Defualt is NULL.
   """)
 case class Lead(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
@@ -431,13 +428,10 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
       does not have any previous row), 'default' is returned.
   """,
   extended = """
-    _FUNC_(input[, offset[, default]])
-
-      Arguments:
-        input - any type expression.
-        offset - any numeric type or any nonnumeric type expression that can be implicitly
-          converted to numeric type. Default is 1.
-        default - any type expression. Defualt is NULL.
+    Arguments:
+      input - an expression of any type.
+      offset - a numeric expression. Default is 1.
+      default - an expression of any type. Defualt is NULL.
   """)
 case class Lag(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
@@ -549,14 +543,12 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - The NTILE(n) function divides the rows for each window partition
+    _FUNC_(n) - The NTILE(n) function divides the rows for each window partition
       into 'n' buckets ranging from 1 to at most 'n'.
   """,
   extended = """
-    _FUNC_(expr)
-
-      Arguments:
-        expr - integer type expression that allows constant folding.
+    Arguments:
+      n - an integer literal. Default is 1.
   """)
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
@@ -680,7 +672,7 @@ abstract class RankLike extends AggregateWindowFunction {
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_() -  RANK() computes the rank of a value in a group of values. The result
+    _FUNC_() - RANK() computes the rank of a value in a group of values. The result
       is one plus the number of rows preceding or equal to the current row in the
       ordering of the partition. Tie values will produce gaps in the sequence.
   """)

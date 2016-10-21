@@ -38,14 +38,12 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns the first non-null argument if exists. Otherwise, NULL.",
   extended = """
-    _FUNC_(expr1, expr2, ...)
+    Arguments:
+      expr - an expression of any type.
 
-      Arguments:
-        expr - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(NULL, 1, NULL);
-         1
+    Examples:
+      > SELECT _FUNC_(NULL, 1, NULL);
+       1
   """)
 // scalastyle:on line.size.limit
 case class Coalesce(children: Seq[Expression]) extends Expression {
@@ -101,15 +99,13 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns expr2 if expr1 is null, or expr1 otherwise.",
   extended = """
-    _FUNC_(expr1, expr2)
+    Arguments:
+      expr1 - an expression of any type.
+      expr2 - an expression of any type.
 
-      Arguments:
-        expr1 - any type expression.
-        expr2 - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(NULL, array('2'));
-         ["2"]
+    Examples:
+      > SELECT _FUNC_(NULL, array('2'));
+       ["2"]
   """)
 case class IfNull(left: Expression, right: Expression) extends RuntimeReplaceable {
   override def children: Seq[Expression] = Seq(left, right)
@@ -130,15 +126,13 @@ case class IfNull(left: Expression, right: Expression) extends RuntimeReplaceabl
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if expr1 equals to expr2, or expr1 otherwise.",
   extended = """
-    _FUNC_(expr1, expr2)
+   Arguments:
+      expr1 - an expression of any type.
+      expr2 - an expression of any type.
 
-      Arguments:
-        expr1 - any type expression.
-        expr2 - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(2, 2);
-         NULL
+   Examples:
+     > SELECT _FUNC_(2, 2);
+      NULL
   """)
 case class NullIf(left: Expression, right: Expression) extends RuntimeReplaceable {
   override def children: Seq[Expression] = Seq(left, right)
@@ -161,15 +155,13 @@ case class NullIf(left: Expression, right: Expression) extends RuntimeReplaceabl
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns expr2 if expr1 is null, or expr1 otherwise.",
   extended = """
-    _FUNC_(expr1, expr2)
+    Arguments:
+      expr1 - an expression of any type.
+      expr2 - an expression of any type.
 
-      Arguments:
-        expr1 - any type expression.
-        expr2 - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(NULL, array('2'));
-         ["2"]
+    Examples:
+      > SELECT _FUNC_(NULL, array('2'));
+       ["2"]
   """)
 case class Nvl(left: Expression, right: Expression) extends RuntimeReplaceable {
   override def children: Seq[Expression] = Seq(left, right)
@@ -191,16 +183,14 @@ case class Nvl(left: Expression, right: Expression) extends RuntimeReplaceable {
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - Returns expr2 if expr1 is not null, or expr3 otherwise.",
   extended = """
-    _FUNC_(expr1, expr2, expr3)
+    Arguments:
+      expr1 - an expression of any type.
+      expr2 - an expression of any type.
+      expr3 - an expression of any type.
 
-      Arguments:
-        expr1 - any type expression.
-        expr2 - any type expression.
-        expr3 - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(NULL, 2, 1);
-         1
+    Examples:
+      > SELECT _FUNC_(NULL, 2, 1);
+       1
   """)
 // scalastyle:on line.size.limit
 case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression)
@@ -227,15 +217,12 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if expr is NaN and false otherwise.",
   extended = """
-    _FUNC_(expr)
+    Arguments:
+      expr - a numeric expression.
 
-      Arguments:
-        expr - any numeric type or any nonnumeric type expression that can be implicitly
-         converted to numeric type.
-
-      Examples:
-        > SELECT _FUNC_(cast('NaN' as double));
-         true
+    Examples:
+      > SELECT _FUNC_(cast('NaN' as double));
+       true
   """)
 case class IsNaN(child: Expression) extends UnaryExpression
   with Predicate with ImplicitCastInputTypes {
@@ -276,17 +263,13 @@ case class IsNaN(child: Expression) extends UnaryExpression
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns expr1 if it's not NaN, or expr2 otherwise.",
   extended = """
-    _FUNC_(expr1, expr2)
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
 
-      Arguments:
-        expr1 - any numeric type or any nonnumeric type expression that can be implicitly
-         converted to numeric type.
-        expr2 - any numeric type or any nonnumeric type expression that can be implicitly
-         converted to numeric type.
-
-      Examples:
-        > SELECT _FUNC_(cast('NaN' as double), 123);
-         123.0
+    Examples:
+      > SELECT _FUNC_(cast('NaN' as double), 123);
+       123.0
   """)
 case class NaNvl(left: Expression, right: Expression)
     extends BinaryExpression with ImplicitCastInputTypes {
@@ -344,14 +327,12 @@ case class NaNvl(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if expr is NULL and false otherwise.",
   extended = """
-    _FUNC_(expr)
+    Arguments:
+      expr - an expression of any type.
 
-      Arguments:
-        expr - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(1);
-         false
+    Examples:
+      > SELECT _FUNC_(1);
+       false
   """)
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
@@ -375,14 +356,12 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if expr is not NULL and false otherwise.",
   extended = """
-    _FUNC_(expr)
+    Arguments:
+      expr - an expression of any type.
 
-      Arguments:
-        expr - any type expression.
-
-      Examples:
-        > SELECT _FUNC_(1);
-         true
+    Examples:
+      > SELECT _FUNC_(1);
+       true
   """)
 case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false

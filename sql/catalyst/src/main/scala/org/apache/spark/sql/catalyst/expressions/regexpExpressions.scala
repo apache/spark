@@ -70,13 +70,9 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
 @ExpressionDescription(
   usage = "str _FUNC_ pattern - Returns true if str matches pattern and false otherwise.",
   extended = """
-    str _FUNC_ pattern
-
-      Arguments:
-        str - string type or any type expression that can be implicitly converted
-          to string type.
-        pattern - string type or any type expression that can be implicitly converted
-          to string type.
+    Arguments:
+      str - a string expression.
+      pattern - a string expression.
   """)
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
@@ -132,13 +128,9 @@ case class Like(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "str _FUNC_ regexp - Returns true if str matches regexp and false otherwise.",
   extended = """
-    str _FUNC_ regexp
-
-      Arguments:
-        str - string type or any type expression that can be implicitly converted
-          to string type.
-        regexp - string type or any type expression that can be implicitly converted
-          to string type.
+    Arguments:
+      str - a string expression.
+      regexp - a string expression.
   """)
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
@@ -195,17 +187,13 @@ case class RLike(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(str, regex) - Splits str around occurrences that match regex.",
   extended = """
-    _FUNC_(str, regex)
+    Arguments:
+      str - a string expression.
+      regex - a string expression.
 
-      Arguments:
-        str - string type or any type expression that can be implicitly converted
-          to string type.
-        regex - string type or any type expression that can be implicitly converted
-          to string type.
-
-      Examples:
-        > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
-         ["one","two","three",""]
+    Examples:
+      > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
+       ["one","two","three",""]
   """)
 case class StringSplit(str: Expression, pattern: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -239,19 +227,14 @@ case class StringSplit(str: Expression, pattern: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp, rep) - Replaces all substrings of str that match regexp with rep.",
   extended = """
-    _FUNC_(str, regex, rep)
+    Arguments:
+      str - a string expression.
+      regexp - a string expression.
+      rep - a string expression.
 
-      Arguments:
-        str - string type or any type expression that can be implicitly converted
-          to string type.
-        regexp - string type or any type expression that can be implicitly converted
-          to string type.
-        rep - string type or any type expression that can be implicitly converted
-          to string type.
-
-      Examples:
-        > SELECT _FUNC_('100-200', '(\d+)', 'num');
-         num-num
+    Examples:
+      > SELECT _FUNC_('100-200', '(\d+)', 'num');
+       num-num
   """)
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -355,19 +338,14 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches regexp.",
   extended = """
-    _FUNC_(str, regexp[, idx])
+    Arguments:
+      str - a string expression.
+      regexp - a string expression.
+      idx - a numeric expression that defines the index of a capturing group in regexp.
 
-      Arguments:
-        str - string type or any type expression that can be implicitly converted
-          to string type.
-        regexp - string type or any type expression that can be implicitly converted
-          to string type.
-        idx - any numeric type or any nonnumeric tpye expression that can be implicitly converted
-          to numeric type.
-
-      Examples:
-        > SELECT _FUNC_('100-200', '(\d+)-(\d+)', 1);
-         100
+    Examples:
+      > SELECT _FUNC_('100-200', '(\d+)-(\d+)', 1);
+       100
   """)
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
