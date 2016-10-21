@@ -60,6 +60,7 @@ case class GenerateExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)

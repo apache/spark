@@ -523,7 +523,9 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
 
   override def output: Seq[Attribute] = child.output
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def sameResult(o: SparkPlan): Boolean = o match {

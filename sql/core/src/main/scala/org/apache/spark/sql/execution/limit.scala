@@ -53,8 +53,7 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
 trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   val limit: Int
   override def output: Seq[Attribute] = child.output
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
   }
@@ -104,6 +103,7 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
   override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
@@ -122,8 +122,6 @@ case class TakeOrderedAndProjectExec(
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
   }
-
-  override def outputPartitioning: Partitioning = SinglePartition
 
   override def executeCollect(): Array[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
@@ -160,6 +158,8 @@ case class TakeOrderedAndProjectExec(
   }
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
+
+  override def outputPartitioning: Partitioning = SinglePartition
 
   override def simpleString: String = {
     val orderByString = Utils.truncatedString(sortOrder, "[", ",", "]")
