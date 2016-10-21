@@ -65,5 +65,4 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metrics.ndcgAt(1) ~== 0.5 absTol eps)
     assert(metrics.ndcgAt(2) ~== 0.30657 absTol eps)
   }
-
 }
