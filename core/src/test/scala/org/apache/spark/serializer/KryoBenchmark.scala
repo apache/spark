@@ -58,24 +58,21 @@ class KryoBenchmark extends SparkFunSuite {
   }
 
   private def runBenchmark(useUnsafe: Boolean): Unit = {
-    def addBenchmark(name: String, values: Long)(f: => Long): Unit = {
-      benchmark.addCase(s"$name unsafe:$useUnsafe") { _ =>
-        f
-      }
-    }
-
     def check[T: ClassTag](t: T, ser: SerializerInstance): Int = {
       if (ser.deserialize[T](ser.serialize(t)) === t) 1 else 0
     }
 
-    val N1 = 1000000
-    def basicTypes[T: ClassTag](name: String, fn: () => T): Unit = {
+    // Benchmark Primitives
+    val basicTypeCount = 1000000
+    def basicTypes[T: ClassTag](name: String, gen: () => T): Unit = {
       lazy val ser = createSerializer(useUnsafe)
-      addBenchmark(s"basicTypes: $name", N1) {
+      val arrayOfBasicType: Array[T] = Array.fill(basicTypeCount)(gen())
+
+      benchmark.addCase(s"basicTypes: $name with unsafe:$useUnsafe") { _ =>
         var sum = 0L
         var i = 0
-        while (i < N1) {
-          sum += check(fn(), ser)
+        while (i < basicTypeCount) {
+          sum += check(arrayOfBasicType(i), ser)
           i += 1
         }
         sum
@@ -86,14 +83,18 @@ class KryoBenchmark extends SparkFunSuite {
     basicTypes("Float", Random.nextFloat)
     basicTypes("Double", Random.nextDouble)
 
-    val N2 = 10000
-    def basicTypeArray[T: ClassTag](name: String, fn: () => T): Unit = {
+    // Benchmark Array of Primitives
+    val arrayCount = 10000
+    def basicTypeArray[T: ClassTag](name: String, gen: () => T): Unit = {
       lazy val ser = createSerializer(useUnsafe)
-      addBenchmark(s"Array: $name", N2) {
+      val arrayOfArrays: Array[Array[T]] =
+        Array.fill(arrayCount)(Array.fill[T](Random.nextInt(arrayCount))(gen()))
+
+      benchmark.addCase(s"Array: $name with unsafe:$useUnsafe") { _ =>
         var sum = 0L
         var i = 0
-        while (i < N2) {
-          val arr = Array.fill[T](i)(fn())
+        while (i < arrayCount) {
+          val arr = arrayOfArrays(i)
           sum += check(arr, ser)
           i += 1
         }
@@ -105,19 +106,24 @@ class KryoBenchmark extends SparkFunSuite {
     basicTypeArray("Float", Random.nextFloat)
     basicTypeArray("Double", Random.nextDouble)
 
-    {
-      val N3 = 1000
-      lazy val ser = createSerializer(useUnsafe)
-      addBenchmark("Map of string->Double", N3) {
-        var sum = 0L
-        var i = 0
-        while (i < N3) {
-          val map = Array.fill(i)((Random.nextString(i / 10), Random.nextDouble())).toMap
-          sum += check(map, ser)
-          i += 1
-        }
-        sum
+    // Benchmark Maps
+    val mapsCount = 1000
+    lazy val ser = createSerializer(useUnsafe)
+    val arrayOfMaps: Array[Map[String, Double]] = Array.fill(mapsCount) {
+      Array.fill(Random.nextInt(mapsCount)) {
+        (Random.nextString(mapsCount / 10), Random.nextDouble())
+      }.toMap
+    }
+
+    benchmark.addCase(s"Map of string->Double  with unsafe:$useUnsafe") { _ =>
+      var sum = 0L
+      var i = 0
+      while (i < mapsCount) {
+        val map = arrayOfMaps(i)
+        sum += check(map, ser)
+        i += 1
       }
+      sum
     }
   }
 
