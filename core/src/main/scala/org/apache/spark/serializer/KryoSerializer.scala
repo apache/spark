@@ -197,11 +197,8 @@ class KryoSerializationStream(
     useUnsafe: Boolean) extends SerializationStream {
 
   private[this] var output: KryoOutput =
-    if (useUnsafe) {
-      new KryoUnsafeOutput(outStream)
-    } else {
-      new KryoOutput(outStream)
-    }
+    if (useUnsafe) new KryoUnsafeOutput(outStream) else new KryoOutput(outStream)
+
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
   override def writeObject[T: ClassTag](t: T): SerializationStream = {
@@ -235,11 +232,9 @@ class KryoDeserializationStream(
     inStream: InputStream,
     useUnsafe: Boolean) extends DeserializationStream {
 
-  private[this] var input: KryoInput = if (useUnsafe) {
-    new KryoUnsafeInput(inStream)
-  } else {
-    new KryoInput(inStream)
-  }
+  private[this] var input: KryoInput =
+    if (useUnsafe) new KryoUnsafeInput(inStream) else new KryoInput(inStream)
+
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
   override def readObject[T: ClassTag](): T = {
@@ -266,9 +261,8 @@ class KryoDeserializationStream(
   }
 }
 
-private[spark] class KryoSerializerInstance(
-    ks: KryoSerializer,
-    useUnsafe: Boolean) extends SerializerInstance {
+private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boolean)
+  extends SerializerInstance {
   /**
    * A re-used [[Kryo]] instance. Methods will borrow this instance by calling `borrowKryo()`, do
    * their work, then release the instance by calling `releaseKryo()`. Logically, this is a caching
