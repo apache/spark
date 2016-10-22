@@ -1059,9 +1059,11 @@ private[spark] class Client(
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
+            cleanupStagingDir(appId)
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
           case NonFatal(e) =>
             logError(s"Failed to contact YARN for application $appId.", e)
+            cleanupStagingDir(appId)
             return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
         }
       val state = report.getYarnApplicationState
