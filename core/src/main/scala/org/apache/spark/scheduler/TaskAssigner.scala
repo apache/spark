@@ -26,7 +26,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
 /** Tracks the current state of the workers with available cores and assigned task list. */
-class OfferState(val workOffer: WorkerOffer) {
+private[scheduler] class OfferState(val workOffer: WorkerOffer) {
   /** The current remaining cores that can be allocated to tasks. */
   var coresAvailable: Int = workOffer.cores
   /** The list of tasks that are assigned to this WorkerOffer. */
@@ -38,7 +38,7 @@ class OfferState(val workOffer: WorkerOffer) {
  * extended to implement different task scheduling algorithms.
  * Together with [[org.apache.spark.scheduler.TaskScheduler TaskScheduler]], TaskAssigner
  * is used to assign tasks to workers with available cores. Internally, when TaskScheduler
- * perform task assignment given available workers, it first sorts the candidate tasksets,
+ * performs task assignment given available workers, it first sorts the candidate tasksets,
  * and then for each taskset, it takes a number of rounds to request TaskAssigner for task
  * assignment with different locality restrictions until there is either no qualified
  * workers or no valid tasks to be assigned.
@@ -50,7 +50,7 @@ class OfferState(val workOffer: WorkerOffer) {
  * First, TaskScheduler invokes construct() of TaskAssigner to initialize the its internal
  * worker states at the beginning of resource offering.
  *
- * Second, before each round of task assignment for a taskset, TaskScheduler invoke the init()
+ * Second, before each round of task assignment for a taskset, TaskScheduler invokes the init()
  * of TaskAssigner to initialize the data structure for the round.
  *
  * Third, when performing real task assignment, hasNext()/getNext() is used by TaskScheduler
@@ -83,9 +83,9 @@ private[scheduler] abstract class TaskAssigner {
   def init(): Unit
 
   /**
-   * Tests Whether there is offer available to be used inside of one round of Taskset assignment.
-   *  @return  `true` if a subsequent call to `next` will yield an element,
-   *           `false` otherwise.
+   * Tests whether there is offer available to be used inside of one round of Taskset assignment.
+   * @return  `true` if a subsequent call to `next` will yield an element,
+   *          `false` otherwise.
    */
   def hasNext: Boolean
 
@@ -152,7 +152,7 @@ class RoundRobinAssigner extends TaskAssigner {
 }
 
 /**
- * Assign the task to workers with the most available cores. It other words, BalancedAssigner tries
+ * Assign the task to workers with the most available cores. In other words, BalancedAssigner tries
  * to distribute the task across workers in a balanced way. Potentially, it may alleviate the
  * workers' memory pressure as less tasks running on the same workers, which also indicates that
  * the task itself can make use of more computation resources, e.g., hyper-thread, across clusters.
