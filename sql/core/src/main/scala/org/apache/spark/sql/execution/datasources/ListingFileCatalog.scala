@@ -38,14 +38,16 @@ class ListingFileCatalog(
     sparkSession: SparkSession,
     override val rootPaths: Seq[Path],
     parameters: Map[String, String],
-    partitionSchema: Option[StructType])
-  extends PartitioningAwareFileCatalog(sparkSession, parameters, partitionSchema) {
+    partitionSchema: Option[StructType],
+    fileStatusCache: FileStatusCache = NoopCache)
+  extends PartitioningAwareFileCatalog(
+    sparkSession, parameters, partitionSchema, fileStatusCache) {
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
-  refresh()
+  refresh0()
 
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
@@ -64,6 +66,11 @@ class ListingFileCatalog(
   }
 
   override def refresh(): Unit = {
+    refresh0()
+    fileStatusCache.invalidateAll()
+  }
+
+  private def refresh0(): Unit = {
     val files = listLeafFiles(rootPaths)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
