@@ -121,7 +121,7 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.writeLegacyParquetFormat.toString)
 
     // Sets compression scheme
-    conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodec)
+    conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
     // SPARK-15719: Disables writing Parquet summary files by default.
     if (conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {

@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.datasources.text
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
+import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
+import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -128,12 +130,17 @@ class TextOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter {
 
+  override val path: String = {
+    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
+    new Path(stagingDir, fileNamePrefix + ".txt" + compressionExtension).toString
+  }
+
   private[this] val buffer = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        new Path(stagingDir, s"$fileNamePrefix.txt$extension")
+        new Path(path)
       }
     }.getRecordWriter(context)
   }
@@ -148,5 +155,19 @@ class TextOutputWriter(
 
   override def close(): Unit = {
     recordWriter.close(context)
+  }
+}
+
+
+object TextOutputWriter {
+  /** Returns the compression codec extension to be used in a file name, e.g. ".gzip"). */
+  def getCompressionExtension(context: TaskAttemptContext): String = {
+    // Set the compression extension, similar to code in TextOutputFormat.getDefaultWorkFile
+    if (FileOutputFormat.getCompressOutput(context)) {
+      val codecClass = FileOutputFormat.getOutputCompressorClass(context, classOf[GzipCodec])
+      ReflectionUtils.newInstance(codecClass, context.getConfiguration).getDefaultExtension
+    } else {
+      ""
+    }
   }
 }

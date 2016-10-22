@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
@@ -49,6 +50,8 @@ class CommitFailureTestSource extends SimpleTextSource {
             failed = true
             SimpleTextRelation.callbackCalled = true
           }
+
+          override val path: String = new Path(stagingDir, fileNamePrefix).toString
 
           override def write(row: Row): Unit = {
             if (SimpleTextRelation.failWriter) {
