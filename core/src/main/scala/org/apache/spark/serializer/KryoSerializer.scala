@@ -27,6 +27,7 @@ import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
+import com.esotericsoftware.kryo.io.{UnsafeInput => KryoUnsafeInput, UnsafeOutput => KryoUnsafeOutput}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
 import org.apache.avro.generic.{GenericData, GenericRecord}
@@ -78,8 +79,15 @@ class KryoSerializer(conf: SparkConf)
     .filter(!_.isEmpty)
 
   private val avroSchemas = conf.getAvroSchema
+  // whether to use unsafe based IO for serialization
+  private val useUnsafe = conf.getBoolean("spark.kryo.unsafe", false)
 
-  def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+  def newKryoOutput(): KryoOutput =
+    if (useUnsafe) {
+      new KryoUnsafeOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+    } else {
+      new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+    }
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
@@ -172,7 +180,7 @@ class KryoSerializer(conf: SparkConf)
   }
 
   override def newInstance(): SerializerInstance = {
-    new KryoSerializerInstance(this)
+    new KryoSerializerInstance(this, useUnsafe)
   }
 
   private[spark] override lazy val supportsRelocationOfSerializedObjects: Boolean = {
@@ -186,9 +194,12 @@ class KryoSerializer(conf: SparkConf)
 private[spark]
 class KryoSerializationStream(
     serInstance: KryoSerializerInstance,
-    outStream: OutputStream) extends SerializationStream {
+    outStream: OutputStream,
+    useUnsafe: Boolean) extends SerializationStream {
 
-  private[this] var output: KryoOutput = new KryoOutput(outStream)
+  private[this] var output: KryoOutput =
+    if (useUnsafe) new KryoUnsafeOutput(outStream) else new KryoOutput(outStream)
+
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
   override def writeObject[T: ClassTag](t: T): SerializationStream = {
@@ -219,9 +230,12 @@ class KryoSerializationStream(
 private[spark]
 class KryoDeserializationStream(
     serInstance: KryoSerializerInstance,
-    inStream: InputStream) extends DeserializationStream {
+    inStream: InputStream,
+    useUnsafe: Boolean) extends DeserializationStream {
 
-  private[this] var input: KryoInput = new KryoInput(inStream)
+  private[this] var input: KryoInput =
+    if (useUnsafe) new KryoUnsafeInput(inStream) else new KryoInput(inStream)
+
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
   override def readObject[T: ClassTag](): T = {
@@ -248,8 +262,8 @@ class KryoDeserializationStream(
   }
 }
 
-private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
-
+private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boolean)
+  extends SerializerInstance {
   /**
    * A re-used [[Kryo]] instance. Methods will borrow this instance by calling `borrowKryo()`, do
    * their work, then release the instance by calling `releaseKryo()`. Logically, this is a caching
@@ -288,7 +302,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
 
   // Make these lazy vals to avoid creating a buffer unless we use them.
   private lazy val output = ks.newKryoOutput()
-  private lazy val input = new KryoInput()
+  private lazy val input = if (useUnsafe) new KryoUnsafeInput() else new KryoInput()
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
     output.clear()
@@ -329,11 +343,11 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
   }
 
   override def serializeStream(s: OutputStream): SerializationStream = {
-    new KryoSerializationStream(this, s)
+    new KryoSerializationStream(this, s, useUnsafe)
   }
 
   override def deserializeStream(s: InputStream): DeserializationStream = {
-    new KryoDeserializationStream(this, s)
+    new KryoDeserializationStream(this, s, useUnsafe)
   }
 
   /**
