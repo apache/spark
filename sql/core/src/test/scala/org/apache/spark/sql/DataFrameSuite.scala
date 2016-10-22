@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.util.UUID
 
 import scala.util.Random
@@ -1614,5 +1615,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
       qe.assertAnalyzed()
     }
+  }
+
+  test("SPARK-17123: Performing set operations that combine non-scala native types") {
+    val dates = Seq(
+      (new Date(0), BigDecimal.valueOf(1), new Timestamp(2)),
+      (new Date(3), BigDecimal.valueOf(4), new Timestamp(5))
+    ).toDF("date", "timestamp", "decimal")
+
+    val widenTypedRows = Seq(
+      (new Timestamp(2), 10.5D, "string")
+    ).toDF("date", "timestamp", "decimal")
+
+    dates.union(widenTypedRows).collect()
+    dates.except(widenTypedRows).collect()
+    dates.intersect(widenTypedRows).collect()
   }
 }
