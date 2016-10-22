@@ -838,11 +838,12 @@ case class TimeAdd(start: Expression, interval: Expression)
 }
 
 /**
- * Assumes given timestamp is UTC and converts to given timezone.
+ * Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
+ * that corresponds to the same time of day in the given timezone.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, timezone) - Assumes given timestamp is UTC and converts to given timezone.",
+  usage = "_FUNC_(timestamp, timezone) - Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp that corresponds to the same time of day in the given timezone.",
   extended = """
     Arguments:
       timestamp - a timestamp expression.
@@ -1006,11 +1007,12 @@ case class MonthsBetween(date1: Expression, date2: Expression)
 }
 
 /**
- * Assumes given timestamp is in given timezone and converts to UTC.
+ * Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
+ * another timestamp that corresponds to the same time of day in UTC.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, timezone) - Assumes given timestamp is in given timezone and converts to UTC.",
+  usage = "_FUNC_(timestamp, timezone) - Given a timestamp, which corresponds to a certain time of day in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.",
   extended = """
     Arguments:
       timestamp - a timestamp expression.

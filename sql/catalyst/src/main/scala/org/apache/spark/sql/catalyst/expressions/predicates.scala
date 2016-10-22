@@ -459,7 +459,7 @@ case class EqualTo(left: Expression, right: Expression)
 
 @ExpressionDescription(
   usage = """
-    expr1 _FUNC_ expr2 - Returns same result with EQUAL(=) operator for non-null operands.
+    expr1 _FUNC_ expr2 - Returns same result as the EQUAL(=) operator for non-null operands.
       but returns TRUE if both are NULL, FALSE if one of the them is NULL.
   """,
   extended = """
@@ -525,7 +525,7 @@ case class LessThan(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns TRUE if expr1 is not greater than expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns TRUE if expr1 is less than or equal to expr2.",
   extended = """
     Arguments:
       expr1 - an expression of any type.
@@ -563,7 +563,7 @@ case class GreaterThan(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns TRUE if expr1 is not smaller than expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns TRUE if expr1 is greater than or equal to expr2.",
   extended = """
     Arguments:
       expr1 - an expression of any type.

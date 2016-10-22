@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the negative value of expr.",
+  usage = "_FUNC_(expr) - Returns the negated value of expr.",
   extended = """
     Arguments:
       expr - a numeric or interval expression.
@@ -66,7 +66,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the positive value of expr.",
+  usage = "_FUNC_(expr) - Returns the value of expr.",
   extended = """
     Arguments:
       expr - a numeric or interval expression.
@@ -219,7 +219,7 @@ case class Subtract(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Multiplies expr1 by expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns expr1*expr2.",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -239,7 +239,7 @@ case class Multiply(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Divides expr1 by expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns expr1/expr2. It always performs floating point division.",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -248,6 +248,9 @@ case class Multiply(left: Expression, right: Expression)
     Examples:
       > SELECT 3 _FUNC_ 2;
        1.5
+    Examples:
+      > SELECT 2L _FUNC_ 2L;
+       1.0
   """)
 case class Divide(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
@@ -324,11 +327,15 @@ case class Divide(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns the remainder when dividing expr1 by expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns the remainder after expr1/expr2.",
   extended = """
     Arguments:
       expr1 - a numeric expression.
       expr2 - a numeric expression.
+
+    Examples:
+      > SELECT 2 _FUNC_ 1.8;
+       0.2
   """)
 case class Remainder(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
@@ -419,6 +426,8 @@ case class Remainder(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(10, 3);
        1
+      > SELECT _FUNC_(-10, 3);
+       2
   """)
 case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 

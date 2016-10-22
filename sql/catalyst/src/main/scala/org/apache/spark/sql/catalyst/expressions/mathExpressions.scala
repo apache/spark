@@ -139,7 +139,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
  * evaluated by the optimizer during constant folding.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns Euler's number, E.",
+  usage = "_FUNC_() - Returns Euler's number, e.",
   extended = """
     Examples:
       > SELECT _FUNC_();
@@ -152,7 +152,7 @@ case class EulerNumber() extends LeafMathExpression(math.E, "E")
  * evaluated by the optimizer during constant folding.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns PI.",
+  usage = "_FUNC_() - Returns pi.",
   extended = """
     Examples:
       > SELECT _FUNC_();
@@ -166,8 +166,9 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the arc cosine of expr if -1<=expr<=1 or NaN otherwise.",
+  usage = "_FUNC_(expr) - Returns the inverse cosine (a.k.a. arccosine) of expr if -1<=expr<=1 or NaN otherwise.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -178,10 +179,12 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
       > SELECT _FUNC_(2);
        NaN
   """)
+// scalastyle:on line.size.limit
 case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the arc sin of expr if -1<=expr<=1 or NaN otherwise.",
+  usage = "_FUNC_(expr) - Returns the inverse sine (a.k.a. arcsine) the arc sin of expr if -1<=expr<=1 or NaN otherwise.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -192,10 +195,12 @@ case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS"
       > SELECT _FUNC_(2);
        NaN
   """)
+// scalastyle:on line.size.limit
 case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the arc tangent.",
+  usage = "_FUNC_(expr) - Returns the inverse tangent (a.k.a. arctangent).",
   extended = """
       Arguments:
         expr - a numeric expression.
@@ -204,10 +209,11 @@ case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN"
         > SELECT _FUNC_(0);
          0.0
   """)
+// scalastyle:on line.size.limit
 case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the cube root of a double value.",
+  usage = "_FUNC_(expr) - Returns the cube root of expr.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -465,7 +471,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the natural logarithm of x with base expr.",
+  usage = "_FUNC_(expr) - Returns the natural logarithm (base e) of expr.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -544,7 +550,7 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the sign of expr.",
+  usage = "_FUNC_(expr) - Returns -1.0, 0.0 or 1.0 as expr is negative, 0 or positive.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -643,8 +649,9 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   override def funcName: String = "toRadians"
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns expr in binary.",
+  usage = "_FUNC_(expr) - Returns the string representation of the long value `expr` represented in binary.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -652,7 +659,12 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
     Examples:
       > SELECT _FUNC_(13);
        1101
+      > SELECT _FUNC_(-13);
+       1111111111111111111111111111111111111111111111111111111111110011
+      > SELECT _FUNC_(13.3);
+       1101
   """)
+// scalastyle:on line.size.limit
 case class Bin(child: Expression)
   extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
@@ -822,8 +834,9 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the arc tangent2.",
+  usage = "_FUNC_(expr1, expr2) - Returns the angle in radians between the positive x-axis of a plane and the point given by the coordinates (expr1, expr2).",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -833,6 +846,7 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
       > SELECT _FUNC_(0, 0);
        0.0
   """)
+// scalastyle:on line.size.limit
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
@@ -875,8 +889,8 @@ case class Pow(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise left shift.",
   extended = """
     Arguments:
-      base - a numeric expression that defines the base number to shift.
-      expr - a numeric expression.
+      base - a integral numeric expression that defines the base number to shift.
+      expr - a integral numeric expression.
 
     Examples:
       > SELECT _FUNC_(2, 1);
@@ -904,17 +918,17 @@ case class ShiftLeft(left: Expression, right: Expression)
 
 
 /**
- * Bitwise right shift.
+ * Bitwise (signed) right shift.
  *
  * @param left the base number to shift.
  * @param right number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(base, expr) - Bitwise right shift.",
+  usage = "_FUNC_(base, expr) - Bitwise (signed) right shift.",
   extended = """
     Arguments:
-      base - a numeric expression that defines the base number to shift.
-      expr - a numeric expression.
+      base - a integral numeric expression that defines the base number to shift.
+      expr - a integral numeric expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);
@@ -951,8 +965,8 @@ case class ShiftRight(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise unsigned right shift.",
   extended = """
     Arguments:
-      base - a numeric expression that defines the base number to shift.
-      expr - a numeric expression.
+      base - a integral numeric expression that defines the base number to shift.
+      expr - a integral numeric expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);

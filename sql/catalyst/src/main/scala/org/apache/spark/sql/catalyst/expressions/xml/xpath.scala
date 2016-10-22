@@ -206,7 +206,7 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns a string array of values within xml nodes that match the XPath expression",
+  usage = "_FUNC_(xml, xpath) - Returns a string array of values within the nodes of xml that match the XPath expression.",
   extended = """
     Arguments:
       xml - a string expression that represents XML document.

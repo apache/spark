@@ -1151,10 +1151,10 @@ case class StringReverse(child: Expression) extends UnaryExpression with String2
 }
 
 /**
- * Returns a n spaces string.
+ * Returns a string consisting of n spaces.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n) - Returns a n spaces string.",
+  usage = "_FUNC_(n) - Returns a string consisting of n spaces.",
   extended = """
     Arguments:
       n - a numeric expression that defines the number of spaces.
@@ -1300,10 +1300,10 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 }
 
 /**
- * A function that return soundex code of the given string expression.
+ * A function that return Soundex code of the given string expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Returns soundex code of the string.",
+  usage = "_FUNC_(str) - Returns Soundex code of the string.",
   extended = """
     Arguments:
       str - a string expression.

@@ -183,7 +183,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
  * For input of type [[BinaryType]]
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns a cyclic redundancy check value as a bigint of the expr.",
+  usage = "_FUNC_(expr) - Returns a cyclic redundancy check value of the expr as a bigint.",
   extended = """
     Arguments:
       expr - a binary expression.
