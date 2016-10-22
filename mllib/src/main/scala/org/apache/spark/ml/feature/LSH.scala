@@ -236,8 +236,6 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
    * @param datasetB Another dataset to join
    * @param threshold The threshold for the distance of record pairs
    * @param distCol Output column for storing the distance between each result record and the key
-   * @param leftColName The alias of all columns of datasetA in the output Dataset
-   * @param rightColName The alias of all columns of datasetB in the output Dataset
    * @return A joined dataset containing pairs of records. A distCol is added to show the distance
    *         between each pair of records.
    */
@@ -246,10 +244,10 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
       datasetA: Dataset[_],
       datasetB: Dataset[_],
       threshold: Double,
-      distCol: String,
-      leftColName: String,
-      rightColName: String): Dataset[_] = {
+      distCol: String): Dataset[_] = {
 
+    val leftColName = "datasetA"
+    val rightColName = "datasetB"
     val explodeCols = Seq("entry", "hashValue")
     val explodedA = processDataset(datasetA, leftColName, explodeCols)
 
@@ -277,15 +275,14 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
   }
 
   /**
-   * Overloaded method for approxSimilarityJoin. Use "distCol" as default distCol, "leftCol" as
-   * default leftCol, rightCol as default rightCol
+   * Overloaded method for approxSimilarityJoin. Use "distCol" as default distCol.
    */
   @Since("2.1.0")
   def approxSimilarityJoin(
       datasetA: Dataset[_],
       datasetB: Dataset[_],
       threshold: Double): Dataset[_] = {
-    approxSimilarityJoin(datasetA, datasetB, threshold, "distCol", "leftCol", "rightCol")
+    approxSimilarityJoin(datasetA, datasetB, threshold, "distCol")
   }
 }
 
