@@ -22,7 +22,7 @@ class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
   // This test suite should run all tests in KryoSerializerSuite with kryo unsafe.
 
   override def beforeAll() {
-    super.beforeAll()
     conf.set("spark.kryo.unsafe", "true")
+    super.beforeAll()
   }
 }
