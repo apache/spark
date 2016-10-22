@@ -151,6 +151,10 @@ object BinaryArithmetic {
     Arguments:
       expr1 - a numeric expression.
       expr2 - a numeric expression.
+
+    Examples:
+      > SELECT 1 _FUNC_ 2;
+       3
   """)
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
@@ -187,6 +191,10 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
     Arguments:
       expr1 - a numeric expression.
       expr2 - a numeric expression.
+
+    Examples:
+      > SELECT 2 _FUNC_ 1;
+       1
   """)
 case class Subtract(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
@@ -224,6 +232,10 @@ case class Subtract(left: Expression, right: Expression)
     Arguments:
       expr1 - a numeric expression.
       expr2 - a numeric expression.
+
+    Examples:
+      > SELECT 2 _FUNC_ 3;
+       6
   """)
 case class Multiply(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {

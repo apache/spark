@@ -55,6 +55,7 @@ import org.apache.spark.sql.types._
     Arguments:
       expr - an expression of any type that represents data to count.
       relativeSD - a numeric literal that defines the maximum estimation error allowed.
+        Default is 0.05.
   """)
 case class HyperLogLogPlusPlus(
     child: Expression,

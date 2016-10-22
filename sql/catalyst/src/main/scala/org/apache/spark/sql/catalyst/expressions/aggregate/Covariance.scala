@@ -76,6 +76,7 @@ abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggre
   }
 }
 
+
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.",
   extended = """
@@ -90,6 +91,7 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
   }
   override def prettyName: String = "covar_pop"
 }
+
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.",
