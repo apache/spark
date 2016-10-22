@@ -219,9 +219,8 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
-          case (l, r) => l.dataType == r.dataType }
+          case (l, r) => l.dataType.asNullable == r.dataType.asNullable }
       )
-
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
