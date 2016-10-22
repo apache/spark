@@ -216,9 +216,18 @@ private[orc] class OrcOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private[this] val conf = context.getConfiguration
+  override val path: String = {
+    val compressionExtension: String = {
+      val name = context.getConfiguration.get(OrcRelation.ORC_COMPRESSION)
+      OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
+    }
+    // It has the `.orc` extension at the end because (de)compression tools
+    // such as gunzip would not be able to decompress this as the compression
+    // is not applied on this whole file but on each "stream" in ORC format.
+    new Path(stagingDir, fileNamePrefix + compressionExtension + ".orc").toString
+  }
 
-  private[this] val serializer = new OrcSerializer(dataSchema, conf)
+  private[this] val serializer = new OrcSerializer(dataSchema, context.getConfiguration)
 
   // `OrcRecordWriter.close()` creates an empty file if no rows are written at all.  We use this
   // flag to decide whether `OrcRecordWriter.close()` needs to be called.
@@ -226,20 +235,10 @@ private[orc] class OrcOutputWriter(
 
   private lazy val recordWriter: RecordWriter[NullWritable, Writable] = {
     recordWriterInstantiated = true
-
-    val compressionExtension = {
-      val name = conf.get(OrcRelation.ORC_COMPRESSION)
-      OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
-    }
-    // It has the `.orc` extension at the end because (de)compression tools
-    // such as gunzip would not be able to decompress this as the compression
-    // is not applied on this whole file but on each "stream" in ORC format.
-    val filename = s"$fileNamePrefix$compressionExtension.orc"
-
     new OrcOutputFormat().getRecordWriter(
-      new Path(stagingDir, filename).getFileSystem(conf),
-      conf.asInstanceOf[JobConf],
-      new Path(stagingDir, filename).toString,
+      new Path(path).getFileSystem(context.getConfiguration),
+      context.getConfiguration.asInstanceOf[JobConf],
+      path,
       Reporter.NULL
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
