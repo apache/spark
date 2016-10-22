@@ -27,7 +27,7 @@ import org.apache.spark.util.Benchmark
 class KryoBenchmark extends SparkFunSuite {
   val benchmark = new Benchmark("Benchmark Kryo Unsafe vs safe Serialization", 1024 * 1024 * 15, 10)
 
-  ignore(s"Benchmark Kryo Unsafe vs safe Serialization") {
+  test(s"Benchmark Kryo Unsafe vs safe Serialization") {
     Seq (true, false).foreach (runBenchmark)
     benchmark.run()
 
@@ -35,24 +35,24 @@ class KryoBenchmark extends SparkFunSuite {
     /*
       Benchmark Kryo Unsafe vs safe Serialization: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       ------------------------------------------------------------------------------------------------
-      basicTypes: Int unsafe:true                    160 /  178         98.5          10.1       1.0X
-      basicTypes: Long unsafe:true                   210 /  218         74.9          13.4       0.8X
-      basicTypes: Float unsafe:true                  203 /  213         77.5          12.9       0.8X
-      basicTypes: Double unsafe:true                 226 /  235         69.5          14.4       0.7X
-      Array: Int unsafe:true                        1087 / 1101         14.5          69.1       0.1X
-      Array: Long unsafe:true                       2758 / 2844          5.7         175.4       0.1X
-      Array: Float unsafe:true                      1511 / 1552         10.4          96.1       0.1X
-      Array: Double unsafe:true                     2942 / 2972          5.3         187.0       0.1X
-      Map of string->Double unsafe:true             2645 / 2739          5.9         168.2       0.1X
-      basicTypes: Int unsafe:false                   211 /  218         74.7          13.4       0.8X
-      basicTypes: Long unsafe:false                  247 /  253         63.6          15.7       0.6X
-      basicTypes: Float unsafe:false                 211 /  216         74.5          13.4       0.8X
-      basicTypes: Double unsafe:false                227 /  233         69.2          14.4       0.7X
-      Array: Int unsafe:false                       3012 / 3032          5.2         191.5       0.1X
-      Array: Long unsafe:false                      4463 / 4515          3.5         283.8       0.0X
-      Array: Float unsafe:false                     2788 / 2868          5.6         177.2       0.1X
-      Array: Double unsafe:false                    3558 / 3752          4.4         226.2       0.0X
-      Map of string->Double unsafe:false            2806 / 2933          5.6         178.4       0.1X
+      basicTypes: Int with unsafe:true               151 /  170        104.2           9.6       1.0X
+      basicTypes: Long with unsafe:true              175 /  191         89.8          11.1       0.9X
+      basicTypes: Float with unsafe:true             177 /  184         88.8          11.3       0.9X
+      basicTypes: Double with unsafe:true            193 /  216         81.4          12.3       0.8X
+      Array: Int with unsafe:true                    513 /  587         30.7          32.6       0.3X
+      Array: Long with unsafe:true                  1211 / 1358         13.0          77.0       0.1X
+      Array: Float with unsafe:true                  890 /  964         17.7          56.6       0.2X
+      Array: Double with unsafe:true                1335 / 1428         11.8          84.9       0.1X
+      Map of string->Double  with unsafe:true        931 /  988         16.9          59.2       0.2X
+      basicTypes: Int with unsafe:false              197 /  217         79.9          12.5       0.8X
+      basicTypes: Long with unsafe:false             219 /  240         71.8          13.9       0.7X
+      basicTypes: Float with unsafe:false            208 /  217         75.7          13.2       0.7X
+      basicTypes: Double with unsafe:false           208 /  225         75.6          13.2       0.7X
+      Array: Int with unsafe:false                  2559 / 2681          6.1         162.7       0.1X
+      Array: Long with unsafe:false                 3425 / 3516          4.6         217.8       0.0X
+      Array: Float with unsafe:false                2025 / 2134          7.8         128.7       0.1X
+      Array: Double with unsafe:false               2241 / 2358          7.0         142.5       0.1X
+      Map of string->Double  with unsafe:false      1044 / 1085         15.1          66.4       0.1X
     */
     // scalastyle:on
   }
