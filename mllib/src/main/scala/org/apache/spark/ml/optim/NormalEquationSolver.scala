@@ -23,6 +23,16 @@ import scala.collection.mutable
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vectors}
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 
+/**
+ * A class to hold the solution to the normal equations A^T^ W A x = A^T^ W b.
+ *
+ * @param coefficients The least squares coefficients. The last element in the coefficients
+ *                     is the intercept when bias is added to A.
+ * @param aaInv An option containing the upper triangular part of (A^T^ W A)^-1^, in column major
+ *              format. None when an optimization program is used to solve the normal equations.
+ * @param objectiveHistory Option containing the objective history when an optimization program is
+ *                         used to solve the normal equations. None when an analytic solver is used.
+ */
 private[ml] class NormalEquationSolution(
     val coefficients: Array[Double],
     val aaInv: Option[Array[Double]],
@@ -65,7 +75,7 @@ private[ml] class CholeskySolver extends NormalEquationSolver {
  * A class for solving the normal equations using Quasi-Newton optimization methods.
  */
 private[ml] class QuasiNewtonSolver(
-    val fitIntercept: Boolean,
+    fitIntercept: Boolean,
     maxIter: Int,
     tol: Double,
     l1RegFunc: Option[(Int) => Double]) extends NormalEquationSolver {
@@ -135,7 +145,7 @@ private[ml] class QuasiNewtonSolver(
       BLAS.dspmv(numFeaturesPlusIntercept, 1.0, aa, coef, 1.0, aax)
       // loss = 1/2 (b^T W b - 2 x^T A^T W b + x^T A^T W A x)
       val loss = 0.5 * bbBar - BLAS.dot(ab, coef) + 0.5 * BLAS.dot(coef, aax)
-      // -gradient = A^T W A x - A^T W b
+      // gradient = A^T W A x - A^T W b
       BLAS.axpy(-1.0, ab, aax)
       (loss, aax.asBreeze.toDenseVector)
     }

@@ -63,8 +63,8 @@ private[ml] class WeightedLeastSquaresModel(
  *       control whether regularization is applied in the original space or the scaled space.
  * @param fitIntercept whether to fit intercept. If false, z is 0.0.
  * @param regParam Regularization parameter (lambda).
- * @param elasticNetParam the ElasticNet mixing parameter.
- * @param standardizeFeatures whether to standardize features. If true, sigma_,,j,, is the
+ * @param elasticNetParam the ElasticNet mixing parameter (alpha).
+ * @param standardizeFeatures whether to standardize features. If true, sigma,,j,, is the
  *                            population standard deviation of the j-th column of A. Otherwise,
  *                            sigma,,j,, is 1.0.
  * @param standardizeLabel whether to standardize label. If true, delta is the population standard
@@ -289,7 +289,7 @@ private[ml] class WeightedLeastSquares(
     }
   }
 
-  /** Construct A^T^ B from summary statistics. */
+  /** Construct A^T^ b from summary statistics. */
   private def getAtB(abBar: Array[Double], bBar: Double): DenseVector = {
     if (fitIntercept) {
       new DenseVector(Array.concat(abBar, Array(bBar)))
