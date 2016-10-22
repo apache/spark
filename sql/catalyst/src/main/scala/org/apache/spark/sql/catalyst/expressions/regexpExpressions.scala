@@ -72,7 +72,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
   extended = """
     Arguments:
       str - a string expression.
-      pattern - a string expression.
+      pattern - a string expression that defines a regular expression pattern.
   """)
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
@@ -130,7 +130,7 @@ case class Like(left: Expression, right: Expression)
   extended = """
     Arguments:
       str - a string expression.
-      regexp - a string expression.
+      regexp - a string expression that defines a regular expression pattern.
   """)
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
@@ -189,7 +189,7 @@ case class RLike(left: Expression, right: Expression)
   extended = """
     Arguments:
       str - a string expression.
-      regex - a string expression.
+      regex - a string expression that defines a regular expression pattern.
 
     Examples:
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
@@ -229,8 +229,8 @@ case class StringSplit(str: Expression, pattern: Expression)
   extended = """
     Arguments:
       str - a string expression.
-      regexp - a string expression.
-      rep - a string expression.
+      regexp - a string expression that defines a regular expression pattern.
+      rep - a string expression that defines the replacement.
 
     Examples:
       > SELECT _FUNC_('100-200', '(\d+)', 'num');
@@ -340,7 +340,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   extended = """
     Arguments:
       str - a string expression.
-      regexp - a string expression.
+      regexp - a string expression that defines a regular expression pattern.
       idx - a numeric expression that defines the index of a capturing group in regexp.
 
     Examples:

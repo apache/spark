@@ -400,11 +400,11 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, fmt) - Converts expr to a value of string in the format specified by the date format fmt.",
+  usage = "_FUNC_(timestamp, fmt) - Converts timestamp to a value of string in the format specified by the date format fmt.",
   extended = """
     Arguments:
       timestamp - a timestamp expression.
-      fmt - string type expression that represents date/timestamp format used in java.text.SimpleDateFormat.
+      fmt - string type expression that represents the date/timestamp format available in java.text.SimpleDateFormat.
 
     Examples:
       > SELECT _FUNC_('2016-04-08', 'y');
@@ -443,7 +443,7 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
   extended = """
     Arguments:
       expr - a date, string or timestamp expression.
-      pattern - a string expression that represents date/timestamp format used in
+      pattern - a string expression that represents the date/timestamp format available in
         java.text.SimpleDateFormat.
 
     Examples:
@@ -476,7 +476,7 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends Unix
   extended = """
     Arguments:
       expr - a date, string or timestamp expression.
-      pattern - a string expression that represents date/timestamp format used in
+      pattern - a string expression that represents the date/timestamp format available in
         java.text.SimpleDateFormat.
 
     Examples:
@@ -613,7 +613,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
   extended = """
     Arguments:
       unix_time - a numeric expression.
-      format - a string expression that represents date/timestamp format used in
+      format - a string expression that represents the date/timestamp format available in
         java.text.SimpleDateFormat.
 
     Examples:
@@ -846,7 +846,7 @@ case class TimeAdd(start: Expression, interval: Expression)
   extended = """
     Arguments:
       timestamp - a timestamp expression.
-      timezone - a string expression that represents time zone (e.g., 'Asia/Seoul').
+      timezone - a string expression that represents time zone. For example, 'Asia/Seoul'.
 
     Examples:
       > SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul');
@@ -970,7 +970,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between dates expr1 and expr2.",
+  usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between dates timestamp1 and timestamp2.",
   extended = """
     Arguments:
       timestamp1 - a timestamp expression.
@@ -1014,7 +1014,7 @@ case class MonthsBetween(date1: Expression, date2: Expression)
   extended = """
     Arguments:
       timestamp - a timestamp expression.
-      timezone - a string expression that represents time zone (e.g., 'Asia/Seoul').
+      timezone - a string expression that represents time zone. For example, 'Asia/Seoul'.
 
     Examples:
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
@@ -1070,7 +1070,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
  * Returns the date part of a timestamp or string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Extracts the date part of the date or datetime expression expr.",
+  usage = "_FUNC_(date) - Extracts the date part of the date or timestamp expression.",
   extended = """
     Arguments:
       date - a date expression.
@@ -1184,7 +1184,7 @@ case class TruncDate(date: Expression, format: Expression)
  * Returns the number of days from startDate to endDate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(date1, date2) - Returns the number of days between expr1 and expr2.",
+  usage = "_FUNC_(date1, date2) - Returns the number of days between date1 and date2.",
   extended = """
     Arguments:
       date1 - a date expression.

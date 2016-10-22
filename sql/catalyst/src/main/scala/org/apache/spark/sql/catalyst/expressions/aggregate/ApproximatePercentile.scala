@@ -56,13 +56,15 @@ import org.apache.spark.sql.types._
       controls approximation accuracy at the cost of memory. Higher value of `accuracy` yields
       better accuracy, `1.0/accuracy` is the relative error of the approximation.
       When percentage is an array, each value of the percentage array must be between 0.0 and 1.0.
+      In this case, returns the approximate percentile array of column `col` at the given
+      percentage array.
   """,
   extended = """
     Arguments:
       col - a numeric expression.
       percentage - a numeric literal or an array literal of numeric type that defines the
-        percentile. For example, 0.5 means 50-percentile.
-      accuracy - a numeric literal.
+        percentile between 0.0 and 1.0. For example, 0.5 means 50-percentile.
+      accuracy - a numeric literal of approximation accuracy.
 
     Examples:
       > SELECT percentile_approx(10.0, array(0.5, 0.4, 0.1), 100);

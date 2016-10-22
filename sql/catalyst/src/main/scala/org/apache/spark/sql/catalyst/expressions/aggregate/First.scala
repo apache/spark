@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr[, isIgnoreNull]) - Returns the first value of expr for a group of rows.
+    _FUNC_(expr[, isIgnoreNull]) - Returns the first value of `expr` for a group of rows.
       If isIgnoreNull is true, returns only non-null values.
   """,
   extended = """

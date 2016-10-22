@@ -26,16 +26,14 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - If expr1 is TRUE then IF() returns expr2; otherwise it returns expr3.",
   extended = """
-    _FUNC_(expr1, expr2, expr3)
+    Arguments:
+      expr1 - a boolean expression.
+      expr2 - an expression of any type that represents the return value when expr1 is TRUE.
+      expr3 - an expression of any type that represents the return value when expr1 is FALSE.
 
-      Arguments:
-        expr1 - a boolean expression.
-        expr2 - an expression of any type that represents the return value when expr1 is TRUE.
-        expr3 - an expression of any type that represents the return value when expr1 is FALSE.
-
-      Examples:
-        > SELECT _FUNC_(1 < 2, 'a', 'b');
-         a
+    Examples:
+      > SELECT _FUNC_(1 < 2, 'a', 'b');
+       a
   """)
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)

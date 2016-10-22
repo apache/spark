@@ -47,8 +47,8 @@ import org.apache.spark.util.Utils
   usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - Calls method with reflection.",
   extended = """
     Arguments:
-      class - a string literal that represents full-qualified class name.
-      method - a string literal that represents method name.
+      class - a string literal that represents a fully-qualified class name.
+      method - a string literal that represents a method name.
       arg - a string literal that represents arguments for the method.
 
     Examples:
