@@ -38,22 +38,20 @@ import org.apache.spark.util.SerializableConfiguration
  * It provides the necessary methods to parse partition data based on a set of files.
  *
  * @param parameters as set of options to control partition discovery
- * @param givenPartitionSchema an optional partition schema that will be use to provide types for
+ * @param userPartitionSchema an optional partition schema that will be use to provide types for
  *                             the discovered partitions
  */
 abstract class PartitioningAwareFileCatalog(
     sparkSession: SparkSession,
     parameters: Map[String, String],
-    givenPartitionSchema: Option[StructType],
+    userPartitionSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache) extends FileCatalog with Logging {
   import PartitioningAwareFileCatalog.BASE_PATH_PARAM
 
   /** Returns the specification of the partitions inferred from the data. */
   def partitionSpec(): PartitionSpec
 
-  override def partitionSchema: StructType = {
-    givenPartitionSchema.getOrElse(partitionSpec().partitionColumns)
-  }
+  override def partitionSchema: StructType = partitionSpec().partitionColumns
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
@@ -126,7 +124,7 @@ abstract class PartitioningAwareFileCatalog(
     val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
       files.exists(f => isDataPath(f.getPath))
     }.keys.toSeq
-    givenPartitionSchema match {
+    userPartitionSchema match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
           leafDirs,
