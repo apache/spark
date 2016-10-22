@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils {
@@ -28,16 +29,18 @@ object StringUtils {
     val in = str.toIterator
     val out = new StringBuilder()
 
+    def fail(message: String) = throw new AnalysisException(
+      s"the pattern '$str' is invalid, $message")
+
     while (in.hasNext) {
       in.next match {
         case '\\' if in.hasNext =>
-          in.next match {
-            case '\\' => out ++= Pattern.quote("\\")
-            case '_' => out ++= Pattern.quote("_")
-            case '%' => out ++= Pattern.quote("%")
-            // escape before non-escapable character treated literally
-            case c => out ++= Pattern.quote("\\" + c)
+          val c = in.next
+          c match {
+            case '_' | '%' | '\\' => out ++= Pattern.quote(Character.toString(c))
+            case _ => fail(s"the escape character is not allowed to precede '$c'")
           }
+        case '\\' => fail("it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
         case c => out ++= Pattern.quote(Character.toString(c))

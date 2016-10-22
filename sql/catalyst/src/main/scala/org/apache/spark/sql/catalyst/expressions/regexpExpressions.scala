@@ -71,16 +71,16 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
   usage = "str _FUNC_ pattern - Returns true if str matches pattern, " +
     "null if any arguments are null, false otherwise.",
   extended =
-    "The pattern is a string which is matched literally, with exception to the " +
-    "following special symbols:\n\n" +
+    "The pattern is a string which is matched literally, with exception to the following " +
+    "special symbols:\n\n" +
     "    _ matches any one character in the input (similar to . in posix " +
     "regular expressions)\n\n" +
     "    % matches zero ore more characters in the input (similar to .* in " +
-    "posix regular expressions\n\n" +
-    "The default escape character is '\\'. If an escape character precedes a special symbol or " +
-    "another escape character, the following character is matched literally, otherwise the " +
-     "escape character is treated literally. I.e. '\\%' would match '%', whereas '\\a' matches " +
-     "'\\a'.\n\n" +
+    "posix regular expressions)\n\n" +
+    "The escape character is '\\'. If an escape character precedes a special symbol or " +
+    "another escape character, the following character is matched literally, For example, " +
+    "the expression `<path> like \\%SystemDrive\\%\\\\Users%` will match any `<path>` that " +
+    "starts with '%SystemDrive%\\Users'. It is invalid to escape any other character.\n\n" +
     "Use RLIKE to match with standard regular expressions.")
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {

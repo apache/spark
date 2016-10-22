@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
@@ -77,9 +78,13 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("a\u20ACa" like "_€_", true)
     // scalastyle:on nonascii
 
-    // escaping non-escapable should match literally
-    checkEvaluation("""\a""" like """\a""", true)
-    checkEvaluation("""a\""" like """a\""", true)
+    // invalid escaping
+    intercept[AnalysisException] {
+      evaluate("""a""" like """\a""")
+    }
+    intercept[AnalysisException] {
+      evaluate("""a""" like """a\""")
+    }
 
     // case
     checkEvaluation("A" like "a%", false)
@@ -125,9 +130,13 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation("a\u20ACa" like regEx, true, create_row("_€_"))
     // scalastyle:on nonascii
 
-    // escaping non-escapable should match literally
-    checkEvaluation("""\a""" like regEx, true, create_row("""\a"""))
-    checkEvaluation("""a\""" like regEx, true, create_row("""a\"""))
+    // invalid escaping
+    intercept[AnalysisException] {
+      evaluate("""a""" like regEx, create_row("""\a"""))
+    }
+    intercept[AnalysisException] {
+      evaluate("""a""" like regEx, create_row("""a\"""))
+    }
 
     checkEvaluation("A" like regEx, false, create_row("a%"))
     checkEvaluation("a" like regEx, false, create_row("A%"))
