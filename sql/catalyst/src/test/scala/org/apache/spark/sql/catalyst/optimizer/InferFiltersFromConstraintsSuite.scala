@@ -27,11 +27,9 @@ import org.apache.spark.sql.catalyst.rules._
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("InferAndPushDownFilters", FixedPoint(100),
-      PushPredicateThroughJoin,
-      PushDownPredicate,
-      InferFiltersFromConstraints,
-      CombineFilters) :: Nil
+    val batches = Batch("InferFilters", FixedPoint(5), InferFiltersFromConstraints) ::
+      Batch("PredicatePushdown", FixedPoint(5), PushPredicateThroughJoin) ::
+      Batch("CombineFilters", FixedPoint(5), CombineFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -119,20 +117,6 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       x.join(y, Inner, Some("x.a".attr === "y.a".attr)).where("x.a".attr > 5).analyze
     val correctAnswer = x.where(IsNotNull('a) && 'a.attr > 5)
       .join(y.where(IsNotNull('a) && 'a.attr > 5), Inner, Some("x.a".attr === "y.a".attr)).analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("inner join: infer filters on multiple alias output") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
-
-    val originalQuery = x.select('a.as('a1), 'b.as('b1)).as("x")
-      .join(y, Inner, Some("x.a1".attr === "y.b".attr && "x.b1".attr === "y.b".attr)).analyze
-    val correctAnswer = x.where('b === 'a && IsNotNull('b) && IsNotNull('a))
-      .select('a.as('a1), 'b.as('b1)).as("x")
-      .join(y.where(IsNotNull('b)), Inner,
-        Some("x.a1".attr === "y.b".attr && "x.b1".attr === "y.b".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
