@@ -265,16 +265,26 @@ object SQLConf {
   val HIVE_METASTORE_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
-           "unmatching partitions can be eliminated earlier.")
+           "unmatching partitions can be eliminated earlier. This only affects Hive tables " +
+           "not converted to filesource relations (see HiveUtils.CONVERT_METASTORE_PARQUET and " +
+           "HiveUtils.CONVERT_METASTORE_ORC for more information).")
       .booleanConf
       .createWithDefault(true)
 
   val HIVE_FILESOURCE_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.hive.filesourcePartitionPruning")
-      .doc("When true, enable metastore partition pruning for file source tables as well. " +
+      .doc("When true, enable metastore partition pruning for filesource relations as well. " +
            "This is currently implemented for converted Hive tables only.")
       .booleanConf
       .createWithDefault(true)
+
+  val HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE =
+    SQLConfigBuilder("spark.sql.hive.filesourcePartitionFileCacheSize")
+      .doc("When nonzero, enable caching of partition file metadata in memory. All table share " +
+           "a cache that can use up to specified num bytes for file metadata. This conf only " +
+           "applies if filesource partition pruning is also enabled.")
+      .longConf
+      .createWithDefault(250 * 1024 * 1024)
 
   val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
@@ -669,6 +679,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
   def filesourcePartitionPruning: Boolean = getConf(HIVE_FILESOURCE_PARTITION_PRUNING)
+
+  def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
