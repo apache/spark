@@ -189,9 +189,7 @@ object ApproximatePercentile {
    * @param isCompressed An internal flag from class [[QuantileSummaries]] to indicate whether the
    *                   underlying quantileSummaries is compressed.
    */
-  class PercentileDigest(
-      private var summaries: QuantileSummaries,
-      private var isCompressed: Boolean) {
+  class PercentileDigest(var summaries: QuantileSummaries, var isCompressed: Boolean) {
 
     // Trigger compression if the QuantileSummaries's buffer length exceeds
     // compressThresHoldBufferLength. The buffer length can be get by
@@ -270,7 +268,7 @@ object ApproximatePercentile {
    */
   class PercentileDigestSerializer {
 
-    private final def length(summaries: QuantileSummaries): Int = {
+    final def length(summaries: QuantileSummaries): Int = {
       // summaries.compressThreshold, summary.relativeError, summary.count
       Ints.BYTES + Doubles.BYTES + Longs.BYTES +
       // length of summary.sampled
