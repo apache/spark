@@ -387,13 +387,8 @@ class AnalysisSuite extends AnalysisTest {
       AttributeReference("a",
         StructType(Seq(StructField("a", IntegerType, nullable = false))), nullable = false)())
 
-    val unionPlan = Union(firstTable, secondTable)
-    assertAnalysisSuccess(unionPlan)
-
-    val r1 = Except(firstTable, secondTable)
-    val r2 = Intersect(firstTable, secondTable)
-
-    assertAnalysisSuccess(r1)
-    assertAnalysisSuccess(r2)
+    assertAnalysisSuccess(Union(firstTable, secondTable))
+    assertAnalysisSuccess(Except(firstTable, secondTable))
+    assertAnalysisSuccess(Intersect(firstTable, secondTable))
   }
 }

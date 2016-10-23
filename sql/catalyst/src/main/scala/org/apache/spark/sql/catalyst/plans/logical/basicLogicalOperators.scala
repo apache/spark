@@ -131,7 +131,8 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
   override lazy val resolved: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
+      left.output.zip(right.output).forall {
+        case (l, r) => l.dataType.asNullable == r.dataType.asNullable } &&
       duplicateResolved
 }
 
