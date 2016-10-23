@@ -2022,22 +2022,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("rollup overlapping columns") {
-    checkAnswer(
-      sql("select a + b, b, sum(a - b) from testData2 group by a + b, b with rollup"),
-      Row(2, 1, 0) :: Row(3, 2, -1) :: Row(3, 1, 1) :: Row(4, 2, 0) :: Row(4, 1, 2) :: Row(5, 2, 1)
-        :: Row(2, null, 0) :: Row(3, null, 0) :: Row(4, null, 2) :: Row(5, null, 1)
-        :: Row(null, null, 3) :: Nil
-    )
-
-    checkAnswer(
-      sql("select a, b, sum(b) from testData2 group by a, b with rollup"),
-      Row(1, 1, 1) :: Row(1, 2, 2) :: Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 1) :: Row(3, 2, 2)
-        :: Row(1, null, 3) :: Row(2, null, 3) :: Row(3, null, 3)
-        :: Row(null, null, 9) :: Nil
-    )
-  }
-
   test("grouping sets when aggregate functions containing groupBy columns") {
     checkAnswer(
       sql("select course, sum(earnings) as sum from courseSales group by course, earnings " +
@@ -2080,24 +2064,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(null, 2012, 35000.0) ::
         Row(null, 2013, 78000.0) ::
         Row(null, null, 113000.0) :: Nil
-    )
-  }
-
-  test("cube overlapping columns") {
-    checkAnswer(
-      sql("select a + b, b, sum(a - b) from testData2 group by a + b, b with cube"),
-      Row(2, 1, 0) :: Row(3, 2, -1) :: Row(3, 1, 1) :: Row(4, 2, 0) :: Row(4, 1, 2) :: Row(5, 2, 1)
-        :: Row(2, null, 0) :: Row(3, null, 0) :: Row(4, null, 2) :: Row(5, null, 1)
-        :: Row(null, 1, 3) :: Row(null, 2, 0)
-        :: Row(null, null, 3) :: Nil
-    )
-
-    checkAnswer(
-      sql("select a, b, sum(b) from testData2 group by a, b with cube"),
-      Row(1, 1, 1) :: Row(1, 2, 2) :: Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 1) :: Row(3, 2, 2)
-        :: Row(1, null, 3) :: Row(2, null, 3) :: Row(3, null, 3)
-        :: Row(null, 1, 3) :: Row(null, 2, 6)
-        :: Row(null, null, 9) :: Nil
     )
   }
 
