@@ -201,6 +201,10 @@ fi
 # Copy data files
 cp -r "$SPARK_HOME/data" "$DISTDIR"
 
+# Make pip package
+cd python
+python setup.py sdist
+
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
