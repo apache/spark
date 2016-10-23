@@ -45,6 +45,12 @@ object ExecutorExitCode {
    */
   val HEARTBEAT_FAILURE = 56
 
+  /** Unknown allocation strategy for DiskStore. */
+  val DISK_STORE_UNKNOWN_ALLOCATION_STRATEGY = 57
+
+  /** DiskStore failed to build tiered storage. */
+  val DISK_STORE_FAILED_TO_BUILD_TIERED_STORAGE = 58
+
   def explainExitCode(exitCode: Int): String = {
     exitCode match {
       case UNCAUGHT_EXCEPTION => "Uncaught exception"
@@ -59,6 +65,10 @@ object ExecutorExitCode {
         "ExternalBlockStore failed to create a local temporary directory."
       case HEARTBEAT_FAILURE =>
         "Unable to send heartbeats to driver."
+      case DISK_STORE_UNKNOWN_ALLOCATION_STRATEGY =>
+        "Unknown allocation strategy for DiskStore."
+      case DISK_STORE_FAILED_TO_BUILD_TIERED_STORAGE =>
+        "DiskStore failed to build tiered storage."
       case _ =>
         "Unknown executor exit code (" + exitCode + ")" + (
           if (exitCode > 128) {

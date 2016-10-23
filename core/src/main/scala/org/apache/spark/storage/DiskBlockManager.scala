@@ -88,14 +88,20 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   }
 
   /** Looks up a file by tier way in different speed storage devices. */
-  private val tiersConf = conf.getenv("SPARK_DISKSTORE_TIERS")
   private class TieredAllocator extends FileAllocationStrategy {
     case class Tier(id: Int, dirs: Array[File], threshold: Array[Double])
-    val tiersIDs = tiersConf.trim.split("")
-    if (localDirs.length != tiersIDs.length) {
-      logError("Incorrect tiers desc.")
-      System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
+    val tiersEnvConf = conf.getenv("SPARK_DISKSTORE_TIERS")
+    if (tiersEnvConf == null) {
+      logError("SPARK_DISKSTORE_TIERS is not configured.")
+      System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_BUILD_TIERED_STORAGE)
     }
+    val tiersIDs = tiersEnvConf.trim.split("")
+    if (localDirs.length != tiersIDs.length) {
+      logError(s"Incorrect SPARK_DISKSTORE_TIERS setting," +
+        s"SPARK_DISKSTORE_TIERS = '$tiersEnvConf'.")
+      System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_BUILD_TIERED_STORAGE)
+    }
+
     val tieredDirs: Seq[(String, Array[File])] = (localDirs zip tiersIDs).
       groupBy(_._2).mapValues(_.map(_._1)).toSeq.sortBy(_._1)
     val tiers = tieredDirs.map {
@@ -127,15 +133,19 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     }
   }
 
-  private val fileAllocator: FileAllocationStrategy =
-    if (tiersConf != null && !conf.getBoolean("spark.shuffle.service.enabled", false)) {
-      logInfo(s"Tiered allocator for blocks is enabled")
-      new TieredAllocator
-    }
-    else {
-      logInfo(s"Hash allocator for blocks is enabled")
-      hashAllocator
-    }
+  private val allocationStrategy = conf.get("spark.diskStore.allocation", "HASH")
+  private var fileAllocator: FileAllocationStrategy = _
+  allocationStrategy.toUpperCase match {
+    case "HASH" =>
+      logInfo(s"Hash allocator for blocks is enabled.")
+      fileAllocator = hashAllocator
+    case "TIERED" if !conf.getBoolean("spark.shuffle.service.enabled", false) =>
+      logInfo(s"Tiered allocator for blocks is enabled.")
+      fileAllocator = new TieredAllocator
+    case _ =>
+      logError("Unknown allocation strategy in DiskStore.")
+      System.exit(ExecutorExitCode.DISK_STORE_UNKNOWN_ALLOCATION_STRATEGY)
+  }
 
   def getFile(filename: String): File = fileAllocator(filename)
 
