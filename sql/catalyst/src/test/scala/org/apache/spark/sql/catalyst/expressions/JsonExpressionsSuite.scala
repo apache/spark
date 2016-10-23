@@ -352,14 +352,4 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       """{"a":1}"""
     )
   }
-
-  test("to_json - invalid type") {
-    val schema = StructType(StructField("a", CalendarIntervalType) :: Nil)
-    val struct = Literal.create(create_row(1), schema)
-    val e = intercept[RuntimeException]{
-      // Unsupported type throws an exception
-      checkEvaluation(StructToJson(Map.empty, struct), null)
-    }
-    assert(e.getCause.getMessage.contains("Failed to convert value 1"))
-  }
 }

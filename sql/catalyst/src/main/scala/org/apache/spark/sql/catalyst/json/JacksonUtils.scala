@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.json
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.types._
+
 object JacksonUtils {
   /**
    * Advance the parser until a null or a specific token is found
@@ -28,5 +31,29 @@ object JacksonUtils {
       case null => false
       case x => x != stopOn
     }
+  }
+
+  /**
+   * Verify if the schema is supported in JSON parsing.
+   */
+  def verifySchema(schema: StructType): Unit = {
+    def verifyType(dataType: DataType): Unit = dataType match {
+      case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType |
+           DoubleType | StringType | TimestampType | DateType | BinaryType | _: DecimalType =>
+
+      case st: StructType => st.map(_.dataType).foreach(verifyType)
+
+      case at: ArrayType => verifyType(at.elementType)
+
+      case mt: MapType => verifyType(mt.keyType)
+
+      case udt: UserDefinedType[_] => verifyType(udt.sqlType)
+
+      case _ =>
+        throw new AnalysisException(
+          s"JSON conversion does not support to process ${dataType.simpleString} type.")
+    }
+
+    schema.foreach(field => verifyType(field.dataType))
   }
 }

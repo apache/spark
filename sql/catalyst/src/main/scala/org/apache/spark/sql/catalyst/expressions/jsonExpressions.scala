@@ -23,10 +23,11 @@ import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions, SparkSQLJsonProcessingException}
+import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.ParseModes
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -511,6 +512,21 @@ case class StructToJson(options: Map[String, String], child: Expression)
 
   override def dataType: DataType = StringType
   override def children: Seq[Expression] = child :: Nil
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (StructType.acceptsType(child.dataType)) {
+      try {
+        JacksonUtils.verifySchema(child.dataType.asInstanceOf[StructType])
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: AnalysisException =>
+          TypeCheckResult.TypeCheckFailure(e.message)
+      }
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName requires that the expression is a struct expression.")
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     gen.write(child.eval(input).asInstanceOf[InternalRow])

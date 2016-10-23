@@ -31,7 +31,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("alice", "5"))
   }
 
-
   val tuples: Seq[(String, String)] =
     ("1", """{"f1": "value1", "f2": "value2", "f3": 3, "f5": 5.23}""") ::
     ("2", """{"f1": "value12", "f3": "value3", "f2": 2, "f4": 4.01}""") ::
@@ -135,10 +134,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   test("to_json unsupported type") {
     val df = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
       .select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
-    val e = intercept[RuntimeException]{
+    val e = intercept[AnalysisException]{
       // Unsupported type throws an exception
       df.select(to_json($"c")).collect()
     }
-    assert(e.getMessage.contains("Failed to convert value interval -3 months 7 hours"))
+    assert(e.getMessage.contains(
+      "JSON conversion does not support to process calendarinterval type"))
   }
 }
