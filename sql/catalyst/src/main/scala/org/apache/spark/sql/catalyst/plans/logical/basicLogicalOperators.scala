@@ -522,24 +522,30 @@ case class Window(
 
 object Expand {
   /**
-   * Build bit mask from attributes of selected grouping set.
+   * Build bit mask from attributes of selected grouping set. A bit in the bitmask is corresponding
+   * to an attribute in group by attributes sequence, the selected attribute has corresponding bit
+   * set to 0 and otherwise set to 1. For example, if we have GroupBy attributes (a, b, c, d), the
+   * bitmask 5(whose binary form is 0101) represents grouping set (a, c).
    *
    * @param groupingSetAttrs The attributes of selected grouping set
    * @param attrMap Mapping group by attributes to its index in attributes sequence
    * @return The bitmask which represents the selected attributes out of group by attributes.
-   *         A bit in the bitmask is corresponding to an attribute in group by attributes sequence,
-   *         the selected attribute has corresponding bit set to 0 and otherwise set to 1.
    */
   private def buildBitmask(
     groupingSetAttrs: Seq[Attribute],
     attrMap: Map[Attribute, Int]): Int = {
     val numAttributes = attrMap.size
     val mask = (1 << numAttributes) - 1
-    (mask +: groupingSetAttrs.map(attrMap).map(index =>
+    // Calculate the attrbute masks of selected grouping set. For example, if we have GroupBy
+    // attributes (a, b, c, d), grouping set (a, c) will produce the following sequence:
+    // (15, 7, 13), whose binary form is (1111, 0111, 1101)
+    val masks = (mask +: groupingSetAttrs.map(attrMap).map(index =>
       // 0 means that the column at the given index is a grouping column, 1 means it is not,
       // so we unset the bit in bitmap.
       ~(1 << (numAttributes - 1 - index))
-    )).reduce(_ & _)
+    ))
+    // Reduce masks to generate an bitmask for the selected grouping set.
+    masks.reduce(_ & _)
   }
 
   /**

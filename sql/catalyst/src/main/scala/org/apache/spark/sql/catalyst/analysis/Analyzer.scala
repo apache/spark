@@ -306,18 +306,18 @@ class Analyzer(
       // GROUPING SETS ((a,b), a), we do not need to change the nullability of a, but we
       // should change the nullabilty of b to be TRUE.
       // TODO: For Cube/Rollup just set nullability to be `true`.
-      val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
-        if (selectedGroupByExprs.exists(!_.contains(a.child))) {
-          a.toAttribute.withNullability(true)
+      val expandedAttributes = groupByAliases.map { alias =>
+        if (selectedGroupByExprs.exists(!_.contains(alias.child))) {
+          alias.toAttribute.withNullability(true)
         } else {
-          a.toAttribute
+          alias.toAttribute
         }
       }
 
       val groupingSetsAttributes = selectedGroupByExprs.map { groupingSetExprs =>
         groupingSetExprs.map { expr =>
           val alias = groupByAliases.find(_.child.semanticEquals(expr)).getOrElse(
-            failAnalysis(s"$expr doesn't show up in the GROUP BY list"))
+            failAnalysis(s"$expr doesn't show up in the GROUP BY list $groupByAliases"))
           // Map alias to expanded attribute.
           expandedAttributes.find(_.semanticEquals(alias.toAttribute)).getOrElse(
             alias.toAttribute)
@@ -335,7 +335,7 @@ class Analyzer(
         aggregations: Seq[NamedExpression],
         groupByAliases: Seq[Alias],
         groupingAttrs: Seq[Expression],
-        gid: Attribute): Seq[NamedExpression] = aggregations.map { case expr =>
+        gid: Attribute): Seq[NamedExpression] = aggregations.map {
       // collect all the found AggregateExpression, so we can check an expression is part of
       // any AggregateExpression or not.
       val aggsBuffer = ArrayBuffer[Expression]()
@@ -343,7 +343,7 @@ class Analyzer(
       def isPartOfAggregation(e: Expression): Boolean = {
         aggsBuffer.exists(a => a.find(_ eq e).isDefined)
       }
-      replaceGroupingFunc(expr, groupByExprs, gid).transformDown {
+      replaceGroupingFunc(_, groupByExprs, gid).transformDown {
         // AggregateExpression should be computed on the unmodified value of its argument
         // expressions, so we should not replace any references to grouping expression
         // inside it.
