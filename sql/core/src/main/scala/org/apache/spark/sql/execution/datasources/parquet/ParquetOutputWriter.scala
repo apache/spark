@@ -22,11 +22,12 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.hadoop.{ParquetOutputFormat, ParquetRecordWriter}
+import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{BucketingUtils, OutputWriter, OutputWriterFactory, WriterContainer}
+import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -80,7 +81,7 @@ private[parquet] class ParquetOutputWriterFactory(
       sqlConf.writeLegacyParquetFormat.toString)
 
     // Sets compression scheme
-    conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodec)
+    conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
     new SerializableConfiguration(conf)
   }
 
@@ -88,7 +89,7 @@ private[parquet] class ParquetOutputWriterFactory(
    * Returns a [[OutputWriter]] that writes data to the give path without using
    * [[OutputCommitter]].
    */
-  override def newWriter(path: String): OutputWriter = new OutputWriter {
+  override def newWriter(path1: String): OutputWriter = new OutputWriter {
 
     // Create TaskAttemptContext that is used to pass on Configuration to the ParquetRecordWriter
     private val hadoopTaskAttemptId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
@@ -97,6 +98,8 @@ private[parquet] class ParquetOutputWriterFactory(
 
     // Instance of ParquetRecordWriter that does not use OutputCommitter
     private val recordWriter = createNoCommitterRecordWriter(path, hadoopAttemptContext)
+
+    override def path: String = path1
 
     override def write(row: Row): Unit = {
       throw new UnsupportedOperationException("call writeInternal")
@@ -122,13 +125,12 @@ private[parquet] class ParquetOutputWriterFactory(
   }
 
   /** Disable the use of the older API. */
-  def newInstance(
+  override def newInstance(
       path: String,
-      bucketId: Option[Int],
+      fileNamePrefix: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    throw new UnsupportedOperationException(
-      "this version of newInstance not supported for " +
+    throw new UnsupportedOperationException("this version of newInstance not supported for " +
         "ParquetOutputWriterFactory")
   }
 }
@@ -136,38 +138,22 @@ private[parquet] class ParquetOutputWriterFactory(
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
 private[parquet] class ParquetOutputWriter(
-    path: String,
-    bucketId: Option[Int],
+    stagingDir: String,
+    fileNamePrefix: String,
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private val recordWriter: RecordWriter[Void, InternalRow] = {
-    val outputFormat = {
-      new ParquetOutputFormat[InternalRow]() {
-        // Here we override `getDefaultWorkFile` for two reasons:
-        //
-        //  1. To allow appending.  We need to generate unique output file names to avoid
-        //     overwriting existing files (either exist before the write job, or are just written
-        //     by other tasks within the same write job).
-        //
-        //  2. To allow dynamic partitioning.  Default `getDefaultWorkFile` uses
-        //     `FileOutputCommitter.getWorkPath()`, which points to the base directory of all
-        //     partitions in the case of dynamic partitioning.
-        override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-          val configuration = context.getConfiguration
-          val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
-          val taskAttemptId = context.getTaskAttemptID
-          val split = taskAttemptId.getTaskID.getId
-          val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-          // It has the `.parquet` extension at the end because (de)compression tools
-          // such as gunzip would not be able to decompress this as the compression
-          // is not applied on this whole file but on each "page" in Parquet format.
-          new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
-        }
-      }
-    }
+  override val path: String = {
+    val filename = fileNamePrefix + CodecConfig.from(context).getCodec.getExtension + ".parquet"
+    new Path(stagingDir, filename).toString
+  }
 
-    outputFormat.getRecordWriter(context)
+  private val recordWriter: RecordWriter[Void, InternalRow] = {
+    new ParquetOutputFormat[InternalRow]() {
+      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+        new Path(path)
+      }
+    }.getRecordWriter(context)
   }
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")

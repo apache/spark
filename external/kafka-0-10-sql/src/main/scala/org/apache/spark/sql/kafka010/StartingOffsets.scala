@@ -15,20 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.sql.kafka010
 
-import org.apache.spark.SparkFunSuite
+import org.apache.kafka.common.TopicPartition
 
-class SessionFileCatalogSuite extends SparkFunSuite {
+/*
+ * Values that can be specified for config startingOffsets
+ */
+private[kafka010] sealed trait StartingOffsets
 
-  test("file filtering") {
-    assert(!SessionFileCatalog.shouldFilterOut("abcd"))
-    assert(SessionFileCatalog.shouldFilterOut(".ab"))
-    assert(SessionFileCatalog.shouldFilterOut("_cd"))
+private[kafka010] case object EarliestOffsets extends StartingOffsets
 
-    assert(!SessionFileCatalog.shouldFilterOut("_metadata"))
-    assert(!SessionFileCatalog.shouldFilterOut("_common_metadata"))
-    assert(SessionFileCatalog.shouldFilterOut("_ab_metadata"))
-    assert(SessionFileCatalog.shouldFilterOut("_cd_common_metadata"))
-  }
-}
+private[kafka010] case object LatestOffsets extends StartingOffsets
+
+private[kafka010] case class SpecificOffsets(
+  partitionOffsets: Map[TopicPartition, Long]) extends StartingOffsets
