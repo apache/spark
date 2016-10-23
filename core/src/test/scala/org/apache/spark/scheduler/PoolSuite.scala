@@ -31,6 +31,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   val LOCAL = "local"
   val APP_NAME = "PoolSuite"
   val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
+  val TEST_POOL = "testPool"
 
   def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
     : TaskSetManager = {
@@ -201,6 +202,97 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     verifyPool(rootPool, "pool_with_surrounded_whitespace", 3, 2, FAIR)
   }
 
+  test("FIFO Scheduler just uses root pool") {
+    sc = new SparkContext("local", "PoolSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    val rootPool = new Pool("", SchedulingMode.FIFO, initMinShare = 0, initWeight = 0)
+    val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
+
+    val taskSetManager0 = createTaskSetManager(stageId = 0, numTasks = 1, taskScheduler)
+    val taskSetManager1 = createTaskSetManager(stageId = 1, numTasks = 1, taskScheduler)
+
+    val properties = new Properties()
+    properties.setProperty("spark.scheduler.pool", TEST_POOL)
+
+    // FIFOSchedulableBuilder just uses rootPool so even if properties are set, related pool
+    // (testPool) is not created and TaskSetManagers are added to rootPool
+    schedulableBuilder.addTaskSetManager(taskSetManager0, properties)
+    schedulableBuilder.addTaskSetManager(taskSetManager1, properties)
+
+    assert(rootPool.getSchedulableByName(TEST_POOL) == null)
+    assert(rootPool.schedulableQueue.size == 2)
+    assert(rootPool.getSchedulableByName(taskSetManager0.name) eq taskSetManager0)
+    assert(rootPool.getSchedulableByName(taskSetManager1.name) eq taskSetManager1)
+  }
+
+  test("FAIR Scheduler uses default pool when spark.scheduler.pool property is not set") {
+    sc = new SparkContext("local", "PoolSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    val rootPool = new Pool("", SchedulingMode.FAIR, initMinShare = 0, initWeight = 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    schedulableBuilder.buildPools()
+
+    // FAIR Scheduler uses default pool when pool properties are null
+    val taskSetManager0 = createTaskSetManager(stageId = 0, numTasks = 1, taskScheduler)
+
+    schedulableBuilder.addTaskSetManager(taskSetManager0, null)
+
+    val defaultPool = rootPool.getSchedulableByName(schedulableBuilder.DEFAULT_POOL_NAME)
+    assert(defaultPool != null)
+    assert(defaultPool.schedulableQueue.size == 1)
+    assert(defaultPool.getSchedulableByName(taskSetManager0.name) eq taskSetManager0)
+
+    // FAIR Scheduler uses default pool when spark.scheduler.pool property is not set
+    val taskSetManager1 = createTaskSetManager(stageId = 1, numTasks = 1, taskScheduler)
+
+    schedulableBuilder.addTaskSetManager(taskSetManager1, new Properties())
+
+    assert(defaultPool.schedulableQueue.size == 2)
+    assert(defaultPool.getSchedulableByName(taskSetManager1.name) eq taskSetManager1)
+
+    // FAIR Scheduler uses default pool when spark.scheduler.pool property is set as default pool
+    val taskSetManager2 = createTaskSetManager(stageId = 2, numTasks = 1, taskScheduler)
+
+    val properties = new Properties()
+    properties.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, schedulableBuilder
+      .DEFAULT_POOL_NAME)
+
+    schedulableBuilder.addTaskSetManager(taskSetManager2, properties)
+
+    assert(defaultPool.schedulableQueue.size == 3)
+    assert(defaultPool.getSchedulableByName(taskSetManager2.name) eq taskSetManager2)
+  }
+
+  test("FAIR Scheduler creates a new pool when spark.scheduler.pool property points non-existent") {
+    sc = new SparkContext("local", "PoolSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    val rootPool = new Pool("", SchedulingMode.FAIR, initMinShare = 0, initWeight = 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
+    schedulableBuilder.buildPools()
+
+    assert(rootPool.getSchedulableByName(TEST_POOL) == null)
+
+    val taskSetManager = createTaskSetManager(stageId = 0, numTasks = 1, taskScheduler)
+
+    val properties = new Properties()
+    properties.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, TEST_POOL)
+
+    // FAIR Scheduler creates a new pool with default values when spark.scheduler.pool property
+    // points non-existent pool. This can be happened when scheduler allocation file is not set or
+    // it does not contain related pool
+    schedulableBuilder.addTaskSetManager(taskSetManager, properties)
+
+    val testPool = rootPool.getSchedulableByName(TEST_POOL)
+    assert(testPool != null)
+    assert(testPool.schedulingMode == schedulableBuilder.DEFAULT_SCHEDULING_MODE)
+    assert(testPool.minShare == schedulableBuilder.DEFAULT_MINIMUM_SHARE)
+    assert(testPool.weight == schedulableBuilder.DEFAULT_WEIGHT)
+    assert(testPool.getSchedulableByName(taskSetManager.name) eq taskSetManager)
+  }
+
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
                          expectedInitWeight: Int, expectedSchedulingMode: SchedulingMode): Unit = {
     assert(rootPool.getSchedulableByName(poolName) != null)
@@ -208,5 +300,5 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     assert(rootPool.getSchedulableByName(poolName).weight === expectedInitWeight)
     assert(rootPool.getSchedulableByName(poolName).schedulingMode === expectedSchedulingMode)
   }
-
+  
 }
