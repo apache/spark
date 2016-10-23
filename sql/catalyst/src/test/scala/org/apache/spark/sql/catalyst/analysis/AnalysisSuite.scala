@@ -377,4 +377,18 @@ class AnalysisSuite extends AnalysisTest {
     assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
   }
+
+  test("SPARK-18058: union and set operations shall not care about the nullability" +
+    " when comparing column types") {
+    val firstTable = LocalRelation(
+      AttributeReference("a",
+        StructType(Seq(StructField("a", IntegerType, nullable = true))), nullable = false)())
+    val secondTable = LocalRelation(
+      AttributeReference("a",
+        StructType(Seq(StructField("a", IntegerType, nullable = false))), nullable = false)())
+
+    assertAnalysisSuccess(Union(firstTable, secondTable))
+    assertAnalysisSuccess(Except(firstTable, secondTable))
+    assertAnalysisSuccess(Intersect(firstTable, secondTable))
+  }
 }
