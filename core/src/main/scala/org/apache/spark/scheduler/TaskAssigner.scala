@@ -31,6 +31,12 @@ private[scheduler] class OfferState(val workOffer: WorkerOffer) {
   var coresAvailable: Int = workOffer.cores
   /** The list of tasks that are assigned to this WorkerOffer. */
   val tasks = new ArrayBuffer[TaskDescription](coresAvailable)
+
+  def assignTask(task: TaskDescription, cpu: Int): Unit = {
+    tasks += task
+    coresAvailable -= cpu
+    assert(coresAvailable >= 0)
+  }
 }
 
 /**
@@ -39,7 +45,7 @@ private[scheduler] class OfferState(val workOffer: WorkerOffer) {
  * Together with [[org.apache.spark.scheduler.TaskScheduler TaskScheduler]], TaskAssigner
  * is used to assign tasks to workers with available cores. Internally, when TaskScheduler
  * performs task assignment given available workers, it first sorts the candidate tasksets,
- * and then for each taskset, it takes a number of rounds to request TaskAssigner for task
+ * and then for each taskset, it takes multiple rounds to request TaskAssigner for task
  * assignment with different locality restrictions until there is either no qualified
  * workers or no valid tasks to be assigned.
  *
@@ -53,28 +59,33 @@ private[scheduler] class OfferState(val workOffer: WorkerOffer) {
  * Second, before each round of task assignment for a taskset, TaskScheduler invokes the init()
  * of TaskAssigner to initialize the data structure for the round.
  *
- * Third, when performing real task assignment, hasNext()/getNext() is used by TaskScheduler
+ * Third, when performing real task assignment, hasNext/next() is used by TaskScheduler
  * to check the worker availability and retrieve current offering from TaskAssigner.
  *
- * Fourth, then offerAccepted is used by TaskScheduler to notify the TaskAssigner so that
+ * Fourth, TaskScheduler calls offerAccepted() to notify the TaskAssigner so that
  * TaskAssigner can decide whether the current offer is valid or not for the next request.
  *
- * Fifth, After task assignment is done, TaskScheduler invokes the tasks() to
+ * Fifth, after task assignment is done, TaskScheduler invokes the function tasks to
  * retrieve all the task assignment information.
  */
 
-private[scheduler] abstract class TaskAssigner {
+private[scheduler] sealed abstract class TaskAssigner {
   protected var offer: Seq[OfferState] = _
   protected var cpuPerTask = 1
 
-  protected def withCpuPerTask(cpuPerTask: Int): Unit = {
+  protected def withCpuPerTask(cpuPerTask: Int): TaskAssigner = {
     this.cpuPerTask = cpuPerTask
+    this
   }
 
-  /** The final assigned offer returned to TaskScheduler. */
+  /** The currently assigned offers. */
   final def tasks: Seq[ArrayBuffer[TaskDescription]] = offer.map(_.tasks)
 
-  /** Invoked at the beginning of resource offering to construct the offer with the workoffers. */
+  /**
+   * Invoked at the beginning of resource offering to construct the offer with the workoffers.
+   * By default, offers is randomly shuffled to avoid always placing tasks on the same set of
+   * workers.
+   */
   def construct(workOffer: Seq[WorkerOffer]): Unit = {
     offer = Random.shuffle(workOffer.map(o => new OfferState(o)))
   }
@@ -99,8 +110,10 @@ private[scheduler] abstract class TaskAssigner {
   /**
    * Invoked by the TaskScheduler to indicate whether the current offer is accepted or not so that
    * the assigner can decide whether the current worker is valid for the next offering.
+   *
+   * @param isAccepted whether TaskScheduler assigns a task to current offer.
    */
-  def offerAccepted(assigned: Boolean): Unit
+  def offerAccepted(isAccepted: Boolean): Unit
 }
 
 object TaskAssigner extends Logging {
@@ -123,15 +136,13 @@ object TaskAssigner extends Logging {
     }
     // The className is valid. No need to catch exceptions.
     logInfo(s"Constructing TaskAssigner as $className")
-    val assigner = Utils.classForName(className)
-      .getConstructor().newInstance().asInstanceOf[TaskAssigner]
-    assigner.withCpuPerTask(cpuPerTask = conf.getInt("spark.task.cpus", 1))
-    assigner
+    Utils.classForName(className).getConstructor().newInstance().asInstanceOf[TaskAssigner]
+      .withCpuPerTask(cpuPerTask = conf.getInt("spark.task.cpus", 1))
   }
 }
 
 /**
- * Assign the task to workers with available cores in roundrobin manner.
+ * Assigns the task to workers with available cores in roundrobin manner.
  */
 class RoundRobinAssigner extends TaskAssigner {
   private var currentOfferIndex = 0
@@ -146,13 +157,13 @@ class RoundRobinAssigner extends TaskAssigner {
     offer(currentOfferIndex)
   }
 
-  override def offerAccepted(assigned: Boolean): Unit = {
+  override def offerAccepted(isAccepted: Boolean): Unit = {
     currentOfferIndex += 1
   }
 }
 
 /**
- * Assign the task to workers with the most available cores. In other words, BalancedAssigner tries
+ * Assigns the task to workers with the most available cores. In other words, BalancedAssigner tries
  * to distribute the task across workers in a balanced way. Potentially, it may alleviate the
  * workers' memory pressure as less tasks running on the same workers, which also indicates that
  * the task itself can make use of more computation resources, e.g., hyper-thread, across clusters.
@@ -178,8 +189,8 @@ class BalancedAssigner extends TaskAssigner {
     currentOffer
   }
 
-  override def offerAccepted(assigned: Boolean): Unit = {
-    if (currentOffer.coresAvailable >= cpuPerTask && assigned) {
+  override def offerAccepted(isAccepted: Boolean): Unit = {
+    if (currentOffer.coresAvailable >= cpuPerTask && isAccepted) {
       maxHeap.enqueue(currentOffer)
     }
   }
@@ -194,24 +205,24 @@ class BalancedAssigner extends TaskAssigner {
  * reservation for jobs, which over allocate resources than they need.
  */
 class PackedAssigner extends TaskAssigner {
-  private var sorted: Seq[OfferState] = _
+  private var sortedOffer: Seq[OfferState] = _
   private var currentOfferIndex = 0
   private var currentOffer: OfferState = _
 
   override def init(): Unit = {
     currentOfferIndex = 0
-    sorted = offer.filter(_.coresAvailable >= cpuPerTask).sortBy(_.coresAvailable)
+    sortedOffer = offer.filter(_.coresAvailable >= cpuPerTask).sortBy(_.coresAvailable)
   }
 
-  override def hasNext: Boolean = currentOfferIndex < sorted.size
+  override def hasNext: Boolean = currentOfferIndex < sortedOffer.size
 
   override def next(): OfferState = {
-    currentOffer = sorted(currentOfferIndex)
+    currentOffer = sortedOffer(currentOfferIndex)
     currentOffer
   }
 
-  override def offerAccepted(assigned: Boolean): Unit = {
-    if (currentOffer.coresAvailable < cpuPerTask || !assigned) {
+  override def offerAccepted(isAccepted: Boolean): Unit = {
+    if (currentOffer.coresAvailable < cpuPerTask || !isAccepted) {
       currentOfferIndex += 1
     }
   }

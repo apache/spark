@@ -255,22 +255,20 @@ private[spark] class TaskSchedulerImpl(
     var launchedTask = false
     taskAssigner.init()
     while (taskAssigner.hasNext) {
-      var assigned = false
+      var isAccepted = false
       val currentOffer = taskAssigner.next()
       val execId = currentOffer.workOffer.executorId
       val host = currentOffer.workOffer.host
       if (currentOffer.coresAvailable >= CPUS_PER_TASK) {
         try {
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
-            currentOffer.tasks += task
+            currentOffer.assignTask(task, CPUS_PER_TASK)
             val tid = task.taskId
             taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
             executorIdToTaskCount(execId) += 1
-            currentOffer.coresAvailable -= CPUS_PER_TASK
-            assert(currentOffer.coresAvailable >= 0)
             launchedTask = true
-            assigned = true
+            isAccepted = true
           }
         } catch {
           case e: TaskNotSerializableException =>
@@ -280,7 +278,7 @@ private[spark] class TaskSchedulerImpl(
             return launchedTask
         }
       }
-      taskAssigner.offerAccepted(assigned)
+      taskAssigner.offerAccepted(isAccepted)
     }
     return launchedTask
   }

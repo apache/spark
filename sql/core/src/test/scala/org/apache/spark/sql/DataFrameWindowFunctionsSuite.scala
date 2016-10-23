@@ -31,10 +31,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   test("reuse window partitionBy") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     val w = Window.partitionBy("key").orderBy("value")
-    val df1 = df.select(
-      lead("key", 1).over(w),
-      lead("value", 1).over(w))
-      df1.explain(true)
+
     checkAnswer(
       df.select(
         lead("key", 1).over(w),
