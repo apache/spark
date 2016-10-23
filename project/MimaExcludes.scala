@@ -864,6 +864,12 @@ object MimaExcludes {
       // [SPARK-12221] Add CPU time to metrics
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetrics.this"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this")
+    ) ++ Seq(
+      // [SPARK-16718] GBT model public changes to package-private class
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.GBTClassifier.getOldBoostingStrategy"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.GBTClassificationModel.getOldBoostingStrategy"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.regression.GBTRegressor.getOldBoostingStrategy"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.regression.GBTRegressionModel.getOldBoostingStrategy")
     )
   }
 
