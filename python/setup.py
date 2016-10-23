@@ -14,9 +14,7 @@ JARS_TARGET = "%s/jars" % TEMP_PATH
 
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
-# The py4j src file is used to check this since for pip installed we use the py4j libraries rather
-# than the source zip.
-in_spark = os.path.isfile("lib/py4j-0.10.3-src.zip")
+in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.scala")
 if (in_spark):
     # Construct links for setup
     try:
@@ -67,7 +65,7 @@ try:
         package_data={
             'pyspark.jars': ['*.jar'],
             'pyspark.bin': ['*'],
-            'pyspark.python.lib': ['pyspark.zip']},
+            'pyspark.python.lib': ['*.zip']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
         install_requires=['py4j==0.10.3'],
