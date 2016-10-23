@@ -1,3 +1,4 @@
 recursive-include deps/jars *.jar
 recursive-include deps/bin *
+include lib/pyspark.zip
 include find-spark-home.py
