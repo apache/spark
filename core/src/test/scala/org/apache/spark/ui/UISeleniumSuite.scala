@@ -674,10 +674,12 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   def getResponseCode(url: URL, method: String): Int = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod(method)
-    connection.connect()
-    val code = connection.getResponseCode()
-    connection.disconnect()
-    code
+    try {
+      connection.connect()
+      connection.getResponseCode()
+    } finally {
+      connection.disconnect()
+    }
   }
 
   def goToUi(sc: SparkContext, path: String): Unit = {
