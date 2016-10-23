@@ -1591,11 +1591,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val dates = Seq(
       (BigDecimal.valueOf(1), new Timestamp(2)),
       (BigDecimal.valueOf(4), new Timestamp(5))
-    ).toDF("timestamp", "decimal")
+    ).toDF("decimal", "timestamp")
 
     val widenTypedRows = Seq(
       (10.5D, "string")
-    ).toDF("timestamp", "decimal")
+    ).toDF("decimal", "timestamp")
 
     dates.union(widenTypedRows).collect()
     dates.except(widenTypedRows).collect()
