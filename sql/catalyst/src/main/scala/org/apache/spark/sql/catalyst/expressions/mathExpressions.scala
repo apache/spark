@@ -889,8 +889,8 @@ case class Pow(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise left shift.",
   extended = """
     Arguments:
-      base - a integral numeric expression that defines the base number to shift.
-      expr - a integral numeric expression.
+      base - an integral numeric expression that defines the base number to shift.
+      expr - an integral numeric expression.
 
     Examples:
       > SELECT _FUNC_(2, 1);
@@ -927,8 +927,8 @@ case class ShiftLeft(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise (signed) right shift.",
   extended = """
     Arguments:
-      base - a integral numeric expression that defines the base number to shift.
-      expr - a integral numeric expression.
+      base - an integral numeric expression that defines the base number to shift.
+      expr - an integral numeric expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);
@@ -965,8 +965,8 @@ case class ShiftRight(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise unsigned right shift.",
   extended = """
     Arguments:
-      base - a integral numeric expression that defines the base number to shift.
-      expr - a integral numeric expression.
+      base - an integral numeric expression that defines the base number to shift.
+      expr - an integral numeric expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);

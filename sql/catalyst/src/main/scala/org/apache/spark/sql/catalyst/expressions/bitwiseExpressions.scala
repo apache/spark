@@ -30,8 +30,8 @@ import org.apache.spark.sql.types._
   usage = "expr1 _FUNC_ expr2 - Bitwise AND.",
   extended = """
     Arguments:
-      expr1 - a integral numeric expression.
-      expr2 - a integral numeric expression.
+      expr1 - an integral numeric expression.
+      expr2 - an integral numeric expression.
 
     Examples:
       > SELECT 3 _FUNC_ 5;
@@ -66,8 +66,8 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
   usage = "expr1 _FUNC_ expr2 - Bitwise OR.",
   extended = """
     Arguments:
-      expr1 - a integral numeric expression.
-      expr2 - a integral numeric expression.
+      expr1 - an integral numeric expression.
+      expr2 - an integral numeric expression.
 
     Examples:
       > SELECT 3 _FUNC_ 5;
@@ -102,8 +102,8 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   usage = "expr1 _FUNC_ expr2 - Bitwise exclusive OR.",
   extended = """
     Arguments:
-      expr1 - a integral numeric expression.
-      expr2 - a integral numeric expression.
+      expr1 - an integral numeric expression.
+      expr2 - an integral numeric expression.
 
     Examples:
       > SELECT 3 _FUNC_ 5;
@@ -136,7 +136,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
   usage = "_FUNC_ expr - Bitwise NOT.",
   extended = """
     Arguments:
-      expr - a integral numeric expression.
+      expr - an integral numeric expression.
 
     Examples:
       > SELECT _FUNC_ 0;

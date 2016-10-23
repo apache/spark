@@ -49,7 +49,7 @@ import org.apache.spark.util.Utils
     Arguments:
       class - a string literal that represents a fully-qualified class name.
       method - a string literal that represents a method name.
-      arg - a string literal that represents arguments for the method.
+      arg - an expression of any type that represents arguments for the method.
 
     Examples:
       > SELECT _FUNC_('java.util.UUID', 'randomUUID');
