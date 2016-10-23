@@ -134,7 +134,7 @@ case class MapValues(child: Expression)
   extended = """
     Arguments:
       array - an array expression.
-      ascendingOrder - a boolean literal that represents ascending/descending order.
+      ascendingOrder - a boolean literal that represents ascending / descending order. Default is true.
 
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), true);

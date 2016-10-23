@@ -260,7 +260,6 @@ case class Multiply(left: Expression, right: Expression)
     Examples:
       > SELECT 3 _FUNC_ 2;
        1.5
-    Examples:
       > SELECT 2L _FUNC_ 2L;
        1.0
   """)

@@ -118,7 +118,7 @@ object Cast {
   extended = """
     Arguments:
       expr - an expression of any type.
-      type - data type to cast expr into.
+      type - any data type to cast expr into.
 
     Examples:
       > SELECT _FUNC_('10' as int);

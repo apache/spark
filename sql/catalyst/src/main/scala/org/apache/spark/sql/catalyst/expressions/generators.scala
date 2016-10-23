@@ -105,7 +105,7 @@ case class UserDefinedGenerator(
   usage = "_FUNC_(n, expr1, ..., exprk) - Separate expr1, ..., exprk into n rows.",
   extended = """
     Arguments:
-      n - a integer literal that represents the number of output rows.
+      n - an integer literal that represents the number of output rows.
       expr - an expression of any type.
 
     Examples:
@@ -235,10 +235,10 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Separates the elements of array a into multiple rows, or the elements of map a into multiple rows and columns.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns.",
   extended = """
     Arguments:
-      expr - an array expression that contains map or struct expression as the element.
+      expr - an array or map expression.
 
     Examples:
       > SELECT _FUNC_(array(10, 20));
@@ -259,10 +259,10 @@ case class Explode(child: Expression) extends ExplodeBase(child, position = fals
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Separates the elements of array a into multiple rows with positions, or the elements of a map into multiple rows and columns with positions.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of `expr` map into multiple rows and columns with positions.",
   extended = """
     Arguments:
-      expr - an array expression that contains map or struct expression as the element.
+      expr - an array or map expression.
 
     Examples:
       > SELECT _FUNC_(array(10,20));
