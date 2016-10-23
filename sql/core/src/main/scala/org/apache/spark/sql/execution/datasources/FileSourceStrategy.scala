@@ -99,15 +99,19 @@ object FileSourceStrategy extends Strategy with Logging {
         dataColumns
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
-      val outputSchema = if (fsRelation.sqlContext.conf.isParquetNestColumnPruning
-        && fsRelation.fileFormat.isInstanceOf[ParquetFileFormat]) {
-        val totalSchema = readDataColumns.toStructType
+      val outputSchema = if (
+          fsRelation.sqlContext.conf.parquetNestedColumnPruningEnabled &&
+          fsRelation.fileFormat.isInstanceOf[ParquetFileFormat]
+      ) {
+        val fullSchema = readDataColumns.toStructType
         val prunedSchema = StructType(
-          generateStructFieldsContainsNesting(projects, totalSchema))
+          generateStructFieldsContainsNesting(projects, fullSchema))
         // Merge schema in same StructType and merge with filterAttributes
         prunedSchema.fields.map(f => StructType(Array(f))).reduceLeft(_ merge _)
           .merge(filterAttributes.toSeq.toStructType)
-      } else readDataColumns.toStructType
+      } else {
+        readDataColumns.toStructType
+      }
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
@@ -137,10 +141,12 @@ object FileSourceStrategy extends Strategy with Logging {
     case _ => Nil
   }
 
-  private def generateStructFieldsContainsNesting(projects: Seq[Expression],
-                                      totalSchema: StructType) : Seq[StructField] = {
-    def generateStructField(curField: List[String],
-                             node: Expression) : Seq[StructField] = {
+  private def generateStructFieldsContainsNesting(
+      projects: Seq[Expression],
+      fullSchema: StructType) : Seq[StructField] = {
+    def generateStructField(
+        curField: List[String],
+        node: Expression) : Seq[StructField] = {
       node match {
         case ai: GetArrayItem =>
           // Here we drop the previous for simplify array and map support.
@@ -151,7 +157,7 @@ object FileSourceStrategy extends Strategy with Logging {
         case mv: GetMapValue =>
           generateStructField(List.empty[String], mv.child)
         case attr: AttributeReference =>
-          Seq(getFieldRecursively(totalSchema, attr.name :: curField))
+          Seq(getFieldRecursively(fullSchema, attr.name :: curField))
         case sf: GetStructField =>
           generateStructField(sf.name.get :: curField, sf.child)
         case _ =>
@@ -163,11 +169,12 @@ object FileSourceStrategy extends Strategy with Logging {
       }
     }
 
-    def getFieldRecursively(totalSchema: StructType,
-                            name: List[String]): StructField = {
+    def getFieldRecursively(
+        schema: StructType,
+        name: List[String]): StructField = {
       if (name.length > 1) {
         val curField = name.head
-        val curFieldType = totalSchema(curField)
+        val curFieldType = schema(curField)
         curFieldType.dataType match {
           case st: StructType =>
             val newField = getFieldRecursively(StructType(st.fields), name.drop(1))
@@ -177,7 +184,7 @@ object FileSourceStrategy extends Strategy with Logging {
             throw new IllegalArgumentException(s"""Field "$curField" is not struct field.""")
         }
       } else {
-        totalSchema(name.head)
+        schema(name.head)
       }
     }
 

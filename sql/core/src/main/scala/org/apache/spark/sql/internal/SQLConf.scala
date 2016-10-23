@@ -212,8 +212,8 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PARQUET_NEST_COLUMN_PRUNING = SQLConfigBuilder("spark.sql.parquet.nestColumnPruning")
-    .doc("When set this to true, we will tell parquet only read the nest column`s leaf fields ")
+  val PARQUET_NESTED_COLUMN_PRUNING = SQLConfigBuilder("spark.sql.parquet.nestedColumnPruning")
+    .doc("When true, Parquet column pruning also works for nested fields.")
     .booleanConf
     .createWithDefault(false)
 
@@ -666,7 +666,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
-  def isParquetNestColumnPruning: Boolean = getConf(PARQUET_NEST_COLUMN_PRUNING)
+  def parquetNestedColumnPruningEnabled: Boolean = getConf(PARQUET_NESTED_COLUMN_PRUNING)
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
