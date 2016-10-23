@@ -126,7 +126,7 @@ object EvaluatePython {
 
     case (javaMap: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
       ArrayBasedMapData(
-        javaMap = javaMap,
+        javaMap,
         (key: Any) => fromJava(key, keyType),
         (value: Any) => fromJava(value, valueType))
 

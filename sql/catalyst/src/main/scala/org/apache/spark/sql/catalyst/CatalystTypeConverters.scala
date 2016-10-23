@@ -415,10 +415,9 @@ object CatalystTypeConverters {
     case arr: Array[Any] => new GenericArrayData(arr.map(convertToCatalyst))
     case map: Map[_, _] =>
       ArrayBasedMapData(
-        map.iterator,
-        map.size,
-        (key) => convertToCatalyst(key),
-        (value) => convertToCatalyst(value))
+        map,
+        (key: Any) => convertToCatalyst(key),
+        (value: Any) => convertToCatalyst(value))
     case other => other
   }
 
