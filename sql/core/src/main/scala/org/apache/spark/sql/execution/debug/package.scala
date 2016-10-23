@@ -27,8 +27,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
 /**
@@ -161,6 +161,8 @@ package object debug {
         }
       }
     }
+
+    override def outputPartitioning: Partitioning = child.outputPartitioning
 
     override def inputRDDs(): Seq[RDD[InternalRow]] = {
       child.asInstanceOf[CodegenSupport].inputRDDs()
