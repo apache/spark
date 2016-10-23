@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
-class StringHistogramSuite extends SparkFunSuite {
+class HistogramEndpointsSuite extends SparkFunSuite {
 
   test("serialize and de-serialize") {
     def compareEquals(left: StringHistogramInfo, right: StringHistogramInfo): Boolean = {

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.test.SharedSQLContext
 
 
-class StringHistogramQuerySuite extends QueryTest with SharedSQLContext {
+class HistogramEndpointsQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private val table = "string_histogram_test"
