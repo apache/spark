@@ -126,9 +126,9 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
    * @param key Feature vector representing the item to search for
    * @param numNearestNeighbors The maximum number of nearest neighbors
    * @param singleProbing True for using Single Probing; false for multiple probing
-   * @param distCol Output column for storing the distance between each result record and the key
+   * @param distCol Output column for storing the distance between each result row and the key
    * @return A dataset containing at most k items closest to the key. A distCol is added to show
-   *         the distance between each record and the key.
+   *         the distance between each row and the key.
    */
   @Since("2.1.0")
   def approxNearestNeighbors(
@@ -227,17 +227,17 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
   }
 
   /**
-   * Join two dataset to approximately find all pairs of records whose distance are smaller than
+   * Join two dataset to approximately find all pairs of rows whose distance are smaller than
    * the threshold. If the [[outputCol]] is missing, the method will transform the data; if the
    * [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the transformed
    * data when necessary.
    *
    * @param datasetA One of the datasets to join
    * @param datasetB Another dataset to join
-   * @param threshold The threshold for the distance of record pairs
-   * @param distCol Output column for storing the distance between each result record and the key
-   * @return A joined dataset containing pairs of records. A distCol is added to show the distance
-   *         between each pair of records.
+   * @param threshold The threshold for the distance of row pairs
+   * @param distCol Output column for storing the distance between each result row and the key
+   * @return A joined dataset containing pairs of rows. The original rows are in columns
+   *         "datasetA" and "datasetB", and a distCol is added to show the distance of each pair
    */
   @Since("2.1.0")
   def approxSimilarityJoin(
@@ -264,7 +264,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
     val joinedDataset = explodedA.join(explodedB, explodeCols)
       .drop(explodeCols: _*).distinct()
 
-    // Add a new column to store the distance of the two records.
+    // Add a new column to store the distance of the two rows.
     val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y), DataTypes.DoubleType)
     val joinedDatasetWithDist = joinedDataset.select(col("*"),
       distUDF(col(s"$leftColName.${$(inputCol)}"), col(s"$rightColName.${$(inputCol)}")).as(distCol)
