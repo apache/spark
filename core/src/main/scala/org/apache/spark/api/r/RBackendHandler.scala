@@ -18,8 +18,9 @@
 package org.apache.spark.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.WeakHashMap
 import scala.language.existentials
 
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
@@ -261,13 +262,9 @@ private[r] class RBackendHandler(server: RBackend)
  */
 private[r] object JVMObjectTracker {
 
-  // TODO: This map should be thread-safe if we want to support multiple
-  // connections at the same time
-  private[this] val objMap = new HashMap[String, Object]
+  private[this] val objMap = new WeakHashMap[String, Object]
 
-  // TODO: We support only one connection now, so an integer is fine.
-  // Investigate using use atomic integer in the future.
-  private[this] var objCounter: Int = 0
+  private[this] val objCounter: AtomicLong = new AtomicLong(0L)
 
   def getObject(id: String): Object = {
     objMap(id)
@@ -279,7 +276,7 @@ private[r] object JVMObjectTracker {
 
   def put(obj: Object): String = {
     val objId = objCounter.toString
-    objCounter = objCounter + 1
+    objCounter.incrementAndGet()
     objMap.put(objId, obj)
     objId
   }
