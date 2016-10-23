@@ -355,6 +355,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("sort based aggregation with codegen") {
+    checkAnswer(Seq(("a", "10")).toDF("k", "v").groupBy("k").agg(max("v")), Row("a", "10") :: Nil)
+    checkAnswer(Seq(("a", "10"), ("b", "1"), ("b", "2"), ("c", "5"), ("c", "3")).
+      toDF("k", "v").groupBy("k").agg(max("v")),
+      Row("a", "10") :: Row("b", "2") :: Row("c", "5") :: Nil)
+    checkAnswer(Seq(("a", "10", 2), ("b", "1", 3), ("b", "2", 4), ("c", "5", 1), ("c", "3", 5)).
+      toDF("k", "v1", "v2").groupBy("k").agg(max("v1"), min("v2"), count("v2")),
+      Row("a", "10", 2, 1) :: Row("b", "2", 3, 2) :: Row("c", "5", 1, 2) :: Nil)
+    checkAnswer(Seq(("a", "3"), ("b", "20"), ("b", "2")).toDF("k", "v").agg(max("v")),
+      Row("3") :: Nil)
+    checkAnswer(Seq(("a", "10", 2), ("b", "1", 3), ("b", "2", 4), ("c", "5", 1), ("c", "3", 5)).
+      toDF("k", "v1", "v2").agg(max("v1"), min("v2"), count("v2")),
+      Row("5", 1, 5) :: Nil)
+    checkAnswer(
+      sql("SELECT key, max(value) FROM testData GROUP BY key"),
+      (1 to 100).map(i => Row(i, i.toString)))
+    checkAnswer(sql("SELECT max(value) FROM testData"), Row("99") :: Nil)
+  }
+
   test("Add Parser of SQL COALESCE()") {
     checkAnswer(
       sql("""SELECT COALESCE(1, 2)"""),

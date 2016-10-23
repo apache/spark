@@ -337,6 +337,20 @@ class CodegenContext {
   }
 
   /**
+   * Returns the code to update a variable for a given DataType.
+   */
+  def setValue(target: String, dataType: DataType, value: String): String = {
+    val jt = javaType(dataType)
+    val codes = dataType match {
+      case _ if isPrimitiveType(jt) => value
+      case StringType => s"$value.clone()"
+      case _: StructType | _: ArrayType | _: MapType => s"$value.copy()"
+      case _ => value
+    }
+    s"$target = $codes"
+  }
+
+  /**
    * Returns the specialized code to set a given value in a column vector for a given `DataType`.
    */
   def setValue(batch: String, row: String, dataType: DataType, ordinal: Int,
