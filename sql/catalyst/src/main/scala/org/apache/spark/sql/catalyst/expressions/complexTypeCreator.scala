@@ -427,18 +427,28 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     }
   }
 
-  override def nullSafeEval(str: Any, delim1: Any, delim2: Any): Any = {
-    val array = str.asInstanceOf[UTF8String]
-      .split(delim1.asInstanceOf[UTF8String], -1)
-      .map { kv =>
-        val arr = kv.split(delim2.asInstanceOf[UTF8String], 2)
-        if (arr.length < 2) {
-          Array(arr(0), null)
-        } else {
-          arr
-        }
+  override def nullSafeEval(
+      inputString: Any,
+      stringDelimiter: Any,
+      keyValueDelimiter: Any): Any = {
+    val keyValues =
+      inputString.asInstanceOf[UTF8String].split(stringDelimiter.asInstanceOf[UTF8String], -1)
+
+    val iterator = new Iterator[(UTF8String, UTF8String)] {
+      var index = 0
+      val keyValueDelimiterUTF8String = keyValueDelimiter.asInstanceOf[UTF8String]
+
+      override def hasNext: Boolean = {
+        keyValues.length > index
       }
-    ArrayBasedMapData(array.map(_ (0)), array.map(_ (1)))
+
+      override def next(): (UTF8String, UTF8String) = {
+        val keyValueArray = keyValues(index).split(keyValueDelimiterUTF8String, 2)
+        index += 1
+        (keyValueArray(0), if (keyValueArray.length < 2) null else keyValueArray(1))
+      }
+    }
+    ArrayBasedMapData(iterator, keyValues.size, identity, identity)
   }
 
   override def prettyName: String = "str_to_map"
