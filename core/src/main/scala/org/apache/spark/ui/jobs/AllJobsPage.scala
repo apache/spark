@@ -601,11 +601,10 @@ private[ui] class JobPagedTable(
       val killLinkUri = s"$basePathUri/jobs/job/kill/"
       <form action={killLinkUri} method="POST" style="display:inline">
         <input type="hidden" name="id" value={job.jobId.toString}/>
-        <input type="hidden" name="terminate" value="true"/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
        */
-      val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}&terminate=true"
+      val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
       <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
     }
 
