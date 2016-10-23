@@ -519,8 +519,8 @@ case class StructToJson(options: Map[String, String], child: Expression)
         JacksonUtils.verifySchema(child.dataType.asInstanceOf[StructType])
         TypeCheckResult.TypeCheckSuccess
       } catch {
-        case e: AnalysisException =>
-          TypeCheckResult.TypeCheckFailure(e.message)
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     } else {
       TypeCheckResult.TypeCheckFailure(

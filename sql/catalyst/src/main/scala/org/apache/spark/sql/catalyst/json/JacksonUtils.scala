@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.json
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types._
 
 object JacksonUtils {
@@ -50,7 +49,7 @@ object JacksonUtils {
       case udt: UserDefinedType[_] => verifyType(udt.sqlType)
 
       case _ =>
-        throw new AnalysisException(
+        throw new UnsupportedOperationException(
           s"JSON conversion does not support to process ${dataType.simpleString} type.")
     }
 
