@@ -365,7 +365,7 @@ setMethod("colnames<-",
 
             # Check if the column names have . in it
             if (any(regexec(".", value, fixed = TRUE)[[1]][1] != -1)) {
-              stop("Colum names cannot contain the '.' symbol.")
+              stop("Column names cannot contain the '.' symbol.")
             }
 
             sdf <- callJMethod(x@sdf, "toDF", as.list(value))
