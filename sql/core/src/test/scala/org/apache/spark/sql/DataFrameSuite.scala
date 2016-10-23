@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.util.UUID
 
 import scala.language.postfixOps
@@ -1584,5 +1585,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         }
       }
     }
+  }
+
+  test("SPARK-17123: Performing set operations that combine non-scala native types") {
+    val dates = Seq(
+      (BigDecimal.valueOf(1), new Timestamp(2)),
+      (BigDecimal.valueOf(4), new Timestamp(5))
+    ).toDF("decimal", "timestamp")
+
+    val widenTypedRows = Seq(
+      (10.5D, "string")
+    ).toDF("decimal", "timestamp")
+
+    dates.union(widenTypedRows).collect()
+    dates.except(widenTypedRows).collect()
+    dates.intersect(widenTypedRows).collect()
   }
 }
