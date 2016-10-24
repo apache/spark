@@ -60,7 +60,7 @@ abstract class XPathExtract extends BinaryExpression with ExpectsInputTypes with
   extended = """
     Arguments:
       xml - a string expression that represents XML document.
-      xpath - a string literal that represents XPath literal.
+      xpath - a string literal that represents XPath expression.
 
     Examples:
       > SELECT _FUNC_('<a><b>1</b></a>','a/b');
@@ -81,7 +81,7 @@ case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract 
   extended = """
     Arguments:
       xml - a string expression that represents XML document.
-      xpath - a string literal that represents XPath literal.
+      xpath - a string literal that represents XPath expression.
 
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -102,7 +102,7 @@ case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
   extended = """
     Arguments:
       xml - a string expression that represents XML document.
-      xpath - a string literal that represents XPath literal.
+      xpath - a string literal that represents XPath expression.
 
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -123,7 +123,7 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
   extended = """
     Arguments:
       xml - a string expression that represents XML document.
-      xpath - a string literal that represents XPath literal.
+      xpath - a string literal that represents XPath expression.
 
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -144,7 +144,7 @@ case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
   extended = """
     Arguments:
       xml - a string expression that represents XML document.
-      xpath - a string literal that represents XPath literal.
+      xpath - a string literal that represents XPath expression.
 
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -165,7 +165,7 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   extended = """
     Arguments:
       xml - a string expression that represents XML document.
-      xpath - a string literal that represents XPath literal.
+      xpath - a string literal that represents XPath expression.
 
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
@@ -187,7 +187,7 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   extended = """
     Arguments:
       xml - a string expression that represents XML document.
-      path - a string literal that represents XPath literal.
+      path - a string literal that represents XPath expression.
 
     Examples:
       > SELECT _FUNC_('<a><b>b</b><c>cc</c></a>','a/c');
@@ -210,7 +210,7 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   extended = """
     Arguments:
       xml - a string expression that represents XML document.
-      path - a string literal that represents XPath literal.
+      path - a string literal that represents XPath expression.
 
     Examples:
       > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
