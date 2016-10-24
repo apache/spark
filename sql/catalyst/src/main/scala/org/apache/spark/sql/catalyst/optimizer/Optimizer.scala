@@ -1342,6 +1342,14 @@ object DecimalAggregates extends Rule[LogicalPlan] {
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
             DecimalType(prec + 4, scale + 4))
 
+        case Max(e @ DecimalType.Expression(prec, scale)) if prec <= MAX_LONG_DIGITS =>
+          MakeDecimal(we.copy(windowFunction = ae.copy(
+            aggregateFunction = Max(UnscaledValue(e)))), prec, scale)
+
+        case Min(e @ DecimalType.Expression(prec, scale)) if prec <= MAX_LONG_DIGITS =>
+          MakeDecimal(we.copy(windowFunction = ae.copy(
+            aggregateFunction = Min(UnscaledValue(e)))), prec, scale)
+
         case _ => we
       }
       case ae @ AggregateExpression(af, _, _, _) => af match {
@@ -1353,6 +1361,12 @@ object DecimalAggregates extends Rule[LogicalPlan] {
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
             DecimalType(prec + 4, scale + 4))
+
+        case Max(e @ DecimalType.Expression(prec, scale)) if prec <= MAX_LONG_DIGITS =>
+          MakeDecimal(ae.copy(aggregateFunction = Max(UnscaledValue(e))), prec, scale)
+
+        case Min(e @ DecimalType.Expression(prec, scale)) if prec <= MAX_LONG_DIGITS =>
+          MakeDecimal(ae.copy(aggregateFunction = Min(UnscaledValue(e))), prec, scale)
 
         case _ => ae
       }

@@ -184,9 +184,6 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   /** Attributes of fields in aggBufferSchema. */
   def aggBufferAttributes: Seq[AttributeReference]
 
-  /** Attributes of fields in aggBufferSchema used for group by. */
-  def aggBufferAttributesForGroup: Seq[AttributeReference] = aggBufferAttributes
-
   /**
    * Attributes of fields in input aggregation buffers (immutable aggregation buffers that are
    * merged with mutable aggregation buffers in the merge() function or merge expressions).
@@ -369,11 +366,6 @@ abstract class DeclarativeAggregate
    * Expressions for initializing empty aggregation buffers.
    */
   val initialValues: Seq[Expression]
-
-  /**
-   * Expressions for initializing empty aggregation buffers for group by.
-   */
-  def initialValuesForGroup: Seq[Expression] = initialValues
 
   /**
    * Expressions for updating the mutable aggregation buffer based on an input row.
