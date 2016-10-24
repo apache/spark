@@ -433,12 +433,12 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
+  usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
   extended = """
     Arguments:
       text - a string expression that represents data to convert into map.
-      pairDelim - a string literal that defines the delimiter to separate each pair. For example, ",".
-      keyValueDelim - a string literal that defines the delimiter to separate the key and value in the pair. For example, ":".
+      pairDelim - a string literal that defines the delimiter to separate each pair. For example, ",". Default is ",".
+      keyValueDelim - a string literal that defines the delimiter to separate the key and value in the pair. For example, ":". Default is ":".
 
     Examples:
      > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');

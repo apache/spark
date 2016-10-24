@@ -191,7 +191,7 @@ case class ConcatWs(children: Seq[Expression])
       str - a string expression.
 
     Examples:
-      > SELECT _FUNC_(1, 'scala', 'java') FROM src LIMIT 1;
+      > SELECT _FUNC_(1, 'scala', 'java');
        scala
   """)
 case class Elt(children: Seq[Expression])

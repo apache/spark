@@ -78,7 +78,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
   """,
   extended = """
     Arguments:
-      expr - a string expression.
+      expr - a binary expression.
       bitLength - a numeric expression that defines the length of bit. Available values are 224,
         256, 384 and 512.
 

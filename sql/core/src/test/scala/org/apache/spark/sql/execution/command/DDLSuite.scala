@@ -1499,8 +1499,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         Row(
           """Extended Usage:
             |    Arguments:
-            |      expr1 - an integral numeric expression.
-            |      expr2 - an integral numeric expression.
+            |      expr1 - an integral expression.
+            |      expr2 - an integral expression.
             |
             |    Examples:
             |      > SELECT 3 ^ 5;

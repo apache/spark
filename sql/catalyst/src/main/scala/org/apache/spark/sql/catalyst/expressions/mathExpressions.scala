@@ -889,8 +889,8 @@ case class Pow(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise left shift.",
   extended = """
     Arguments:
-      base - an integral numeric expression that defines the base number to shift.
-      expr - an integral numeric expression.
+      base - an integral expression that defines the base number to shift.
+      expr - an integral expression.
 
     Examples:
       > SELECT _FUNC_(2, 1);
@@ -927,8 +927,8 @@ case class ShiftLeft(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise (signed) right shift.",
   extended = """
     Arguments:
-      base - an integral numeric expression that defines the base number to shift.
-      expr - an integral numeric expression.
+      base - an integral expression that defines the base number to shift.
+      expr - an integral expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);
@@ -965,8 +965,8 @@ case class ShiftRight(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise unsigned right shift.",
   extended = """
     Arguments:
-      base - an integral numeric expression that defines the base number to shift.
-      expr - an integral numeric expression.
+      base - an integral expression that defines the base number to shift.
+      expr - an integral expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);
@@ -1248,11 +1248,11 @@ abstract class RoundBase(child: Expression, scale: Expression,
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, d) - Round expr to d decimal places using HALF_UP rounding mode.",
+  usage = "_FUNC_(expr, d) - Returns expr rounded to d decimal places using HALF_UP rounding mode.",
   extended = """
     Arguments:
       expr - a numeric expression.
-      d - a numeric expression that defines tge decimal places using HALF_UP rounding mode.
+      d - a numeric literal that defines tge decimal places using HALF_UP rounding mode.
 
     Examples:
       > SELECT _FUNC_(2.5, 0);
@@ -1272,11 +1272,11 @@ case class Round(child: Expression, scale: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, d) - Round expr to d decimal places using HALF_EVEN rounding mode.",
+  usage = "_FUNC_(expr, d) - Returns expr rounded to d decimal places using HALF_EVEN rounding mode.",
   extended = """
     Arguments:
       expr - a numeric expression.
-      d - a numeric expression that defines decimal places using HALF_EVEN rounding mode.
+      d - a numeric literal that defines decimal places using HALF_EVEN rounding mode.
 
     Examples:
       > SELECT _FUNC_(2.5, 0);

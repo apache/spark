@@ -64,7 +64,7 @@ import org.apache.spark.sql.types._
       col - a numeric expression.
       percentage - a numeric literal or an array literal of numeric type that defines the
         percentile between 0.0 and 1.0. For example, 0.5 means 50-percentile.
-      accuracy - a numeric literal that defines approximation accuracy.
+      accuracy - a numeric literal that defines approximation accuracy. Default is 10000.
 
     Examples:
       > SELECT percentile_approx(10.0, array(0.5, 0.4, 0.1), 100);
