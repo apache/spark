@@ -241,7 +241,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val res = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
             replayBus)
 
-          res.map { case (attemptInfo, envInfo) =>
+          res.map { case (_, envInfo) =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
             // make sure to set admin acls before view acls so they are properly picked up
@@ -401,19 +401,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private def mergeApplicationListing(fileStatus: FileStatus): Unit = {
     val newAttempts = try {
-        val bus = new ReplayListenerBus()
-
         val eventsFilter: ReplayEventsFilter = { eventString =>
           eventString.startsWith(APPL_START_EVENT_PREFIX) ||
             eventString.startsWith(APPL_END_EVENT_PREFIX)
         }
 
-        val res = replay(fileStatus, bus, eventsFilter)
+        val res = replay(fileStatus, new ReplayListenerBus(), eventsFilter)
 
-        res.map {
-          case (attempt, _) =>
+        res match {
+          case Some((attempt, _)) =>
             logDebug(s"Application log ${attempt.logPath} loaded successfully: $attempt")
-            attempt
+            Some(attempt)
+          case None =>
+            logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
+              "The application may have not started.")
+            None
         }
 
       } catch {
@@ -425,8 +427,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
     if (newAttempts.isEmpty) {
-      logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
-        "The application may have not started.")
       return
     }
 
@@ -614,6 +614,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logInput.close()
     }
   }
+
   /**
    * Return true when the application has completed.
    */
@@ -698,9 +699,9 @@ private[history] object FsHistoryProvider {
 
   private val SPARK_HISTORY_FS_NUM_REPLAY_THREADS = "spark.history.fs.numReplayThreads"
 
-  val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
+  private val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
 
-  val APPL_END_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationEnd\""
+  private val APPL_END_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationEnd\""
 }
 
 /**

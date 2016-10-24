@@ -55,7 +55,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
 
     var currentLine: String = null
-    var lineNumber: Int = -1
+    var lineNumber: Int = 0
 
     try {
       val lineEntries = Source.fromInputStream(logData)
@@ -68,7 +68,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
           val entry = lineEntries.next()
 
           currentLine = entry._1
-          lineNumber = entry._2
+          lineNumber = entry._2 + 1
 
           postToAll(JsonProtocol.sparkEventFromJson(parse(currentLine)))
         } catch {
@@ -80,7 +80,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
               throw jpe
             } else {
               logWarning(s"Got JsonParseException from log file $sourceName" +
-                s" at line ${lineNumber + 1}, the file might not have finished writing cleanly.")
+                s" at line $lineNumber, the file might not have finished writing cleanly.")
             }
         }
       }
@@ -89,7 +89,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
         throw ioe
       case e: Exception =>
         logError(s"Exception parsing Spark event log: $sourceName", e)
-        logError(s"Malformed line #${lineNumber + 1}: ${currentLine}\n")
+        logError(s"Malformed line #$lineNumber: $currentLine\n")
     }
   }
 
