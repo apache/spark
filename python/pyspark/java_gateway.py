@@ -32,6 +32,7 @@ from py4j.java_gateway import java_import, JavaGateway, GatewayClient
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int
 
+
 def launch_gateway(conf=None):
     """
     launch jvm gateway

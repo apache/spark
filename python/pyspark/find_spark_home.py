@@ -21,10 +21,13 @@
 # that Spark may have been installed on the system with pip.
 
 from __future__ import print_function
-import os, sys
+import os
+import sys
+
 
 def _find_spark_home():
     """Find the SPARK_HOME."""
+    # If the enviroment has SPARK_HOME set trust it.
     if "SPARK_HOME" in os.environ:
         return os.environ["SPARK_HOME"]
 
@@ -51,7 +54,7 @@ def _find_spark_home():
             True
 
     # Normalize the paths
-    paths = map(lambda path:os.path.abspath(path), paths)
+    paths = map(lambda path: os.path.abspath(path), paths)
 
     try:
         return next(path for path in paths if is_spark_home(path))
