@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.UnsupportedCharsetException
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.util.Locale
 
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
@@ -487,7 +488,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .select("date")
       .collect()
 
-    val dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm")
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.US)
     val expected =
       Seq(Seq(new Timestamp(dateFormat.parse("26/08/2015 18:00").getTime)),
         Seq(new Timestamp(dateFormat.parse("27/10/2014 18:30").getTime)),
@@ -509,7 +510,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .select("date")
       .collect()
 
-    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm", Locale.US)
     val expected = Seq(
       new Date(dateFormat.parse("26/08/2015 18:00").getTime),
       new Date(dateFormat.parse("27/10/2014 18:30").getTime),

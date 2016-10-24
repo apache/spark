@@ -21,7 +21,7 @@ import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.util.{Calendar, Locale}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
@@ -36,7 +36,7 @@ object TextSocketSource {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
   val SCHEMA_TIMESTAMP = StructType(StructField("value", StringType) ::
     StructField("timestamp", TimestampType) :: Nil)
-  val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+  val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 }
 
 /**
