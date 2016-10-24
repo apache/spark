@@ -147,7 +147,13 @@ private[spark] abstract class WebUI(
   }
 
   /** Return the url of web interface. Only valid after bind(). */
-  def webUrl: String = s"http://$publicHostName:$boundPort"
+  def webUrl: String = {
+    var protocol = "http"
+    if(conf.get("spark.ssl.enabled") == "true") {
+      protocol = "https"
+    }
+      s"$protocol://$publicHostName:$boundPort"
+  }
 
   /** Return the actual port to which this server is bound. Only valid after bind(). */
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
