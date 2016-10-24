@@ -19,12 +19,12 @@
 
 # Attempts to find a proper value for SPARK_HOME
 
-FIND_SPARK_HOME_PYTHON_SCRIPT="$(cd "`dirname "$0"`"; pwd)/find-spark-home.py"
+FIND_SPARK_HOME_PYTHON_SCRIPT="$(cd "`dirname "$0"`"; pwd)/find_spark_home.py"
 
 if [ ! -z "${SPARK_HOME}" ]; then
    exit 0
 elif [ ! -f $FIND_SPARK_HOME_PYTHON_SCRIPT ]; then
-  # If we are not in the same directory as find-spark-home.py we are not pip installed
+  # If we are not in the same directory as find_spark_home.py we are not pip installed
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 else
   # We are pip installed, use the Python script to resolve a reasonable SPARK_HOME

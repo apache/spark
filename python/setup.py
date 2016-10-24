@@ -30,11 +30,9 @@ try:
         os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
         os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
     else:
-        # We add find-spark-home.py to the bin directory we install so that pip installed PySpark
+        # We add find_spark_home.py to the bin directory we install so that pip installed PySpark
         # will search for SPARK_HOME with Python.
-        copyfile("find-spark-home.py", SCRIPTS_TARGET + "/find-spark-home.py")
-        # We also want to use find-spark-home from java_gateway
-        copyfile("find-spark-home.py", "pyspark/find-spark-home.py")
+        copyfile("pyspark/find_spark_home.py", SCRIPTS_TARGET + "/find_spark_home.py")
 
     if not os.path.isdir(SCRIPTS_TARGET):
         print("For packaging reasons you must first create a source dist and install that source dist.", file=sys.stderr)
@@ -43,7 +41,7 @@ try:
     # Scripts directive requires a list of each script path and does not take wild cards.
     script_names = os.listdir(SCRIPTS_TARGET)
     scripts = map(lambda script: SCRIPTS_TARGET + "/" + script, script_names)
-    scripts.append("find-spark-home.py")
+    scripts.append("find_spark_home.py")
 
     setup(
         name='pyspark',
