@@ -125,7 +125,8 @@ class PercentileSuite extends SparkFunSuite {
       assertEqual(percentile.checkInputDataTypes(), TypeCheckSuccess)
     }
 
-    val invalidDataTypes = Seq(BooleanType, StringType, DateType, TimestampType, CalendarIntervalType)
+    val invalidDataTypes = Seq(BooleanType, StringType, DateType, TimestampType,
+      CalendarIntervalType)
 
     invalidDataTypes.foreach { dataType =>
       val child = AttributeReference("a", dataType)()
