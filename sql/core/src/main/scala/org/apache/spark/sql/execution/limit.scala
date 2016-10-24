@@ -37,9 +37,10 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
-  override def executeCollect(): Array[InternalRow] = child match {
-    case e: Exchange => e.child.executeTake(limit)
-    case _ => child.executeTake(limit)
+  override def executeCollect(): Array[InternalRow] = {
+    child.collect {
+      case l: LocalLimitExec => l
+    }.head.child.executeTake(limit)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

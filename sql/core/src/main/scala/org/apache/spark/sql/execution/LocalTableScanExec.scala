@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 
@@ -28,10 +29,12 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class LocalTableScanExec(
     output: Seq[Attribute],
-    rows: Seq[InternalRow]) extends LeafExecNode {
+    rows: Seq[InternalRow]) extends LeafExecNode with CodegenSupport {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(rdd)
 
   private val unsafeRows: Array[InternalRow] = {
     if (rows.isEmpty) {
@@ -46,6 +49,22 @@ case class LocalTableScanExec(
     sqlContext.sparkContext.defaultParallelism)
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(unsafeRows, numParallelism)
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val input = ctx.freshName("input")
+    // Right now, LocalTableScanExec is only used when there is one upstream.
+    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val row = ctx.freshName("row")
+    s"""
+       | while ($input.hasNext()) {
+       |   InternalRow $row = (InternalRow) $input.next();
+       |   $numOutput.add(1);
+       |   ${consume(ctx, null, row).trim}
+       |   if (shouldStop()) return;
+       | }
+     """.stripMargin
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")

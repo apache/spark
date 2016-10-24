@@ -42,7 +42,12 @@ public abstract class BufferedRowIterator {
     if (!shouldStop()) {
       processNext();
     }
-    return !currentRows.isEmpty();
+    boolean hasNext = !currentRows.isEmpty();
+    // If no more data available, releases resource if necessary.
+    if (!hasNext) {
+      releaseResource();
+    }
+    return hasNext;
   }
 
   public InternalRow next() {
@@ -91,4 +96,9 @@ public abstract class BufferedRowIterator {
    * After it's called, if currentRow is still null, it means no more rows left.
    */
   protected abstract void processNext() throws IOException;
+
+  /**
+   * Releases resources if necessary. No-op in default.
+   */
+  protected void releaseResource() {}
 }
