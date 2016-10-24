@@ -27,7 +27,6 @@ import java.util
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.language.implicitConversions
-import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.mockito.Matchers.anyString

@@ -20,15 +20,15 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.udf
 
 class QuantileDiscretizerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("Test observed number of buckets and their sizes match expected values") {
-    val sqlCtx = SQLContext.getOrCreate(sc)
-    import sqlCtx.implicits._
+    val spark = this.spark
+    import spark.implicits._
 
     val datasetSize = 100000
     val numBuckets = 5
@@ -52,9 +52,49 @@ class QuantileDiscretizerSuite
       "Bucket sizes are not within expected relative error tolerance.")
   }
 
+  test("Test on data with high proportion of duplicated values") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val numBuckets = 5
+    val expectedNumBuckets = 3
+    val df = sc.parallelize(Array(1.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 2.0, 2.0, 2.0, 1.0, 3.0))
+      .map(Tuple1.apply).toDF("input")
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setOutputCol("result")
+      .setNumBuckets(numBuckets)
+    val result = discretizer.fit(df).transform(df)
+    val observedNumBuckets = result.select("result").distinct.count
+    assert(observedNumBuckets == expectedNumBuckets,
+      s"Observed number of buckets are not correct." +
+        s" Expected $expectedNumBuckets but found $observedNumBuckets")
+  }
+
+  test("Test transform on data with NaN value") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val numBuckets = 3
+    val df = sc.parallelize(Array(1.0, 1.0, 1.0, Double.NaN))
+      .map(Tuple1.apply).toDF("input")
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setOutputCol("result")
+      .setNumBuckets(numBuckets)
+
+    // Reserve extra one bucket for NaN
+    val expectedNumBuckets = discretizer.fit(df).getSplits.length - 1
+    val result = discretizer.fit(df).transform(df)
+    val observedNumBuckets = result.select("result").distinct.count
+    assert(observedNumBuckets == expectedNumBuckets,
+      s"Observed number of buckets are not correct." +
+        s" Expected $expectedNumBuckets but found $observedNumBuckets")
+  }
+
   test("Test transform method on unseen data") {
-    val sqlCtx = SQLContext.getOrCreate(sc)
-    import sqlCtx.implicits._
+    val spark = this.spark
+    import spark.implicits._
 
     val trainDF = sc.parallelize(1.0 to 100.0 by 1.0).map(Tuple1.apply).toDF("input")
     val testDF = sc.parallelize(-10.0 to 110.0 by 1.0).map(Tuple1.apply).toDF("input")
@@ -82,8 +122,8 @@ class QuantileDiscretizerSuite
   }
 
   test("Verify resulting model has parent") {
-    val sqlCtx = SQLContext.getOrCreate(sc)
-    import sqlCtx.implicits._
+    val spark = this.spark
+    import spark.implicits._
 
     val df = sc.parallelize(1 to 100).map(Tuple1.apply).toDF("input")
     val discretizer = new QuantileDiscretizer()

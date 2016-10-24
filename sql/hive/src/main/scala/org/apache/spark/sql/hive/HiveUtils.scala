@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
@@ -36,11 +35,11 @@ import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -96,17 +95,12 @@ private[spark] object HiveUtils extends Logging {
       .booleanConf
       .createWithDefault(false)
 
-  val CONVERT_CTAS = SQLConfigBuilder("spark.sql.hive.convertCTAS")
-    .doc("When true, a table created by a Hive CTAS statement (no USING clause) will be " +
-      "converted to a data source table, using the data source set by spark.sql.sources.default.")
-    .booleanConf
-    .createWithDefault(false)
-
   val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+    .internal()
     .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
       "the built in support.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
@@ -391,13 +385,20 @@ private[spark] object HiveUtils extends Logging {
     // Remote means that the metastore server is running in its own process.
     // When the mode is remote, configurations like "javax.jdo.option.ConnectionURL" will not be
     // used (because they are used by remote metastore server that talks to the database).
-    // Because execution Hive should always connects to a embedded derby metastore.
+    // Because execution Hive should always connects to an embedded derby metastore.
     // We have to remove the value of hive.metastore.uris. So, the execution Hive client connects
     // to the actual embedded derby metastore instead of the remote metastore.
     // You can search HiveConf.ConfVars.METASTOREURIS in the code of HiveConf (in Hive's repo).
     // Then, you will find that the local metastore mode is only set to true when
     // hive.metastore.uris is not set.
     propMap.put(ConfVars.METASTOREURIS.varname, "")
+
+    // The execution client will generate garbage events, therefore the listeners that are generated
+    // for the execution clients are useless. In order to not output garbage, we don't generate
+    // these listeners.
+    propMap.put(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
 
     propMap.toMap
   }

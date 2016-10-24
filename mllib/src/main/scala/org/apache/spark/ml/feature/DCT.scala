@@ -19,15 +19,14 @@ package org.apache.spark.ml.feature
 
 import edu.emory.mathcs.jtransforms.dct._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.BooleanParam
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.types.DataType
 
 /**
- * :: Experimental ::
  * A feature transformer that takes the 1D discrete cosine transform of a real vector. No zero
  * padding is performed on the input vector.
  * It returns a real vector of the same length representing the DCT. The return vector is scaled
@@ -35,10 +34,11 @@ import org.apache.spark.sql.types.DataType
  *
  * More information on [[https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia]].
  */
-@Experimental
-class DCT(override val uid: String)
+@Since("1.5.0")
+class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, DCT] with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("dct"))
 
   /**
@@ -46,13 +46,16 @@ class DCT(override val uid: String)
    * Default: false
    * @group param
    */
+  @Since("1.5.0")
   def inverse: BooleanParam = new BooleanParam(
     this, "inverse", "Set transformer to perform inverse DCT")
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInverse(value: Boolean): this.type = set(inverse, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getInverse: Boolean = $(inverse)
 
   setDefault(inverse -> false)

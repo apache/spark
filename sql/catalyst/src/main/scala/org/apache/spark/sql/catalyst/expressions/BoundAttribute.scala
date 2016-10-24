@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   extends LeafExpression {
 
-  override def toString: String = s"input[$ordinal, ${dataType.simpleString}]"
+  override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
@@ -82,16 +82,16 @@ object BindReferences extends Logging {
 
   def bindReference[A <: Expression](
       expression: A,
-      input: Seq[Attribute],
+      input: AttributeSeq,
       allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
-        val ordinal = input.indexWhere(_.exprId == a.exprId)
+        val ordinal = input.indexOf(a.exprId)
         if (ordinal == -1) {
           if (allowFailures) {
             a
           } else {
-            sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
+            sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
           }
         } else {
           BoundReference(ordinal, a.dataType, input(ordinal).nullable)

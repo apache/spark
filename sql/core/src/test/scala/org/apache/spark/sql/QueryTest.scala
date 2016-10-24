@@ -28,17 +28,17 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.streaming.MemoryPlan
-import org.apache.spark.sql.types.ObjectType
+import org.apache.spark.sql.types.{Metadata, ObjectType}
 
 
 abstract class QueryTest extends PlanTest {
 
-  protected def sqlContext: SQLContext
+  protected def spark: SparkSession
 
   // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
   TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -68,55 +68,81 @@ abstract class QueryTest extends PlanTest {
   /**
    * Evaluates a dataset to make sure that the result of calling collect matches the given
    * expected answer.
-   *  - Special handling is done based on whether the query plan should be expected to return
-   *    the results in sorted order.
-   *  - This function also checks to make sure that the schema for serializing the expected answer
-   *    matches that produced by the dataset (i.e. does manual construction of object match
-   *    the constructed encoder for cases like joins, etc).  Note that this means that it will fail
-   *    for cases where reordering is done on fields.  For such tests, user `checkDecoding` instead
-   *    which performs a subset of the checks done by this function.
    */
   protected def checkDataset[T](
-      ds: Dataset[T],
-      expectedAnswer: T*): Unit = {
-    checkAnswer(
-      ds.toDF(),
-      sqlContext.createDataset(expectedAnswer)(ds.unresolvedTEncoder).toDF().collect().toSeq)
-
-    checkDecoding(ds, expectedAnswer: _*)
-  }
-
-  protected def checkDecoding[T](
       ds: => Dataset[T],
       expectedAnswer: T*): Unit = {
-    val decoded = try ds.collect().toSet catch {
+    val result = getResult(ds)
+
+    if (!compare(result.toSeq, expectedAnswer)) {
+      fail(
+        s"""
+           |Decoded objects do not match expected objects:
+           |expected: $expectedAnswer
+           |actual:   ${result.toSeq}
+           |${ds.exprEnc.deserializer.treeString}
+         """.stripMargin)
+    }
+  }
+
+  /**
+   * Evaluates a dataset to make sure that the result of calling collect matches the given
+   * expected answer, after sort.
+   */
+  protected def checkDatasetUnorderly[T : Ordering](
+      ds: => Dataset[T],
+      expectedAnswer: T*): Unit = {
+    val result = getResult(ds)
+
+    if (!compare(result.toSeq.sorted, expectedAnswer.sorted)) {
+      fail(
+        s"""
+           |Decoded objects do not match expected objects:
+           |expected: $expectedAnswer
+           |actual:   ${result.toSeq}
+           |${ds.exprEnc.deserializer.treeString}
+         """.stripMargin)
+    }
+  }
+
+  private def getResult[T](ds: => Dataset[T]): Array[T] = {
+    val analyzedDS = try ds catch {
+      case ae: AnalysisException =>
+        if (ae.plan.isDefined) {
+          fail(
+            s"""
+               |Failed to analyze query: $ae
+               |${ae.plan.get}
+               |
+               |${stackTraceToString(ae)}
+             """.stripMargin)
+        } else {
+          throw ae
+        }
+    }
+    assertEmptyMissingInput(analyzedDS)
+
+    try ds.collect() catch {
       case e: Exception =>
         fail(
           s"""
              |Exception collecting dataset as objects
-             |${ds.resolvedTEncoder}
-             |${ds.resolvedTEncoder.deserializer.treeString}
+             |${ds.exprEnc}
+             |${ds.exprEnc.deserializer.treeString}
              |${ds.queryExecution}
            """.stripMargin, e)
     }
+  }
 
-    // Handle the case where the return type is an array
-    val isArray = decoded.headOption.map(_.getClass.isArray).getOrElse(false)
-    def normalEquality = decoded == expectedAnswer.toSet
-    def expectedAsSeq = expectedAnswer.map(_.asInstanceOf[Array[_]].toSeq).toSet
-    def decodedAsSeq = decoded.map(_.asInstanceOf[Array[_]].toSeq)
-
-    if (!((isArray && expectedAsSeq == decodedAsSeq) || normalEquality)) {
-      val expected = expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted
-      val actual = decoded.toSet.toSeq.map((a: Any) => a.toString).sorted
-
-      val comparison = sideBySide("expected" +: expected, "spark" +: actual).mkString("\n")
-      fail(
-        s"""Decoded objects do not match expected objects:
-            |$comparison
-            |${ds.resolvedTEncoder.deserializer.treeString}
-         """.stripMargin)
-    }
+  private def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
+    case (null, null) => true
+    case (null, _) => false
+    case (_, null) => false
+    case (a: Array[_], b: Array[_]) =>
+      a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a: Iterable[_], b: Iterable[_]) =>
+      a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a, b) => a == b
   }
 
   /**
@@ -141,9 +167,7 @@ abstract class QueryTest extends PlanTest {
         }
     }
 
-    checkJsonFormat(analyzedDF)
-
-    assertEmptyMissingInput(df)
+    assertEmptyMissingInput(analyzedDF)
 
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
@@ -201,134 +225,16 @@ abstract class QueryTest extends PlanTest {
         planWithCaching)
   }
 
-  private def checkJsonFormat(df: DataFrame): Unit = {
-    // Get the analyzed plan and rewrite the PredicateSubqueries in order to make sure that
-    // RDD and Data resolution does not break.
-    val logicalPlan = df.queryExecution.analyzed
-
-    // bypass some cases that we can't handle currently.
-    logicalPlan.transform {
-      case _: ObjectConsumer => return
-      case _: ObjectProducer => return
-      case _: AppendColumns => return
-      case _: LogicalRelation => return
-      case p if p.getClass.getSimpleName == "MetastoreRelation" => return
-      case _: MemoryPlan => return
-    }.transformAllExpressions {
-      case a: ImperativeAggregate => return
-      case _: TypedAggregateExpression => return
-      case Literal(_, _: ObjectType) => return
-    }
-
-    // bypass hive tests before we fix all corner cases in hive module.
-    if (this.getClass.getName.startsWith("org.apache.spark.sql.hive")) return
-
-    val jsonString = try {
-      logicalPlan.toJSON
-    } catch {
-      case NonFatal(e) =>
-        fail(
-          s"""
-             |Failed to parse logical plan to JSON:
-             |${logicalPlan.treeString}
-           """.stripMargin, e)
-    }
-
-    // scala function is not serializable to JSON, use null to replace them so that we can compare
-    // the plans later.
-    val normalized1 = logicalPlan.transformAllExpressions {
-      case udf: ScalaUDF => udf.copy(function = null)
-      case gen: UserDefinedGenerator => gen.copy(function = null)
-    }
-
-    // RDDs/data are not serializable to JSON, so we need to collect LogicalPlans that contains
-    // these non-serializable stuff, and use these original ones to replace the null-placeholders
-    // in the logical plans parsed from JSON.
-    val logicalRDDs = new ArrayDeque[LogicalRDD]()
-    val localRelations = new ArrayDeque[LocalRelation]()
-    val inMemoryRelations = new ArrayDeque[InMemoryRelation]()
-    def collectData: (LogicalPlan => Unit) = {
-      case l: LogicalRDD =>
-        logicalRDDs.offer(l)
-      case l: LocalRelation =>
-        localRelations.offer(l)
-      case i: InMemoryRelation =>
-        inMemoryRelations.offer(i)
-      case p =>
-        p.expressions.foreach {
-          _.foreach {
-            case s: SubqueryExpression =>
-              s.query.foreach(collectData)
-            case _ =>
-          }
-        }
-    }
-    logicalPlan.foreach(collectData)
-
-
-    val jsonBackPlan = try {
-      TreeNode.fromJSON[LogicalPlan](jsonString, sqlContext.sparkContext)
-    } catch {
-      case NonFatal(e) =>
-        fail(
-          s"""
-             |Failed to rebuild the logical plan from JSON:
-             |${logicalPlan.treeString}
-             |
-             |${logicalPlan.prettyJson}
-           """.stripMargin, e)
-    }
-
-    def renormalize: PartialFunction[LogicalPlan, LogicalPlan] = {
-      case l: LogicalRDD =>
-        val origin = logicalRDDs.pop()
-        LogicalRDD(l.output, origin.rdd)(sqlContext.sparkSession)
-      case l: LocalRelation =>
-        val origin = localRelations.pop()
-        l.copy(data = origin.data)
-      case l: InMemoryRelation =>
-        val origin = inMemoryRelations.pop()
-        InMemoryRelation(
-          l.output,
-          l.useCompression,
-          l.batchSize,
-          l.storageLevel,
-          origin.child,
-          l.tableName)(
-          origin.cachedColumnBuffers,
-          l._statistics,
-          origin._batchStats)
-      case p =>
-        p.transformExpressions {
-          case s: SubqueryExpression =>
-            s.withNewPlan(s.query.transformDown(renormalize))
-        }
-    }
-    val normalized2 = jsonBackPlan.transformDown(renormalize)
-
-    assert(logicalRDDs.isEmpty)
-    assert(localRelations.isEmpty)
-    assert(inMemoryRelations.isEmpty)
-
-    if (normalized1 != normalized2) {
-      fail(
-        s"""
-           |== FAIL: the logical plan parsed from json does not match the original one ===
-           |${sideBySide(logicalPlan.treeString, normalized2.treeString).mkString("\n")}
-          """.stripMargin)
-    }
-  }
-
   /**
    * Asserts that a given [[Dataset]] does not have missing inputs in all the analyzed plans.
    */
   def assertEmptyMissingInput(query: Dataset[_]): Unit = {
     assert(query.queryExecution.analyzed.missingInput.isEmpty,
-      s"The analyzed logical plan has missing inputs: ${query.queryExecution.analyzed}")
+      s"The analyzed logical plan has missing inputs:\n${query.queryExecution.analyzed}")
     assert(query.queryExecution.optimizedPlan.missingInput.isEmpty,
-      s"The optimized logical plan has missing inputs: ${query.queryExecution.optimizedPlan}")
+      s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
-      s"The physical plan has missing inputs: ${query.queryExecution.executedPlan}")
+      s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
   }
 }
 
@@ -341,10 +247,16 @@ object QueryTest {
    *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
+  def checkAnswer(
+      df: DataFrame,
+      expectedAnswer: Seq[Row],
+      checkToRDD: Boolean = true): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
-
+    if (checkToRDD) {
+      df.rdd.count()  // Also attempt to deserialize as an RDD [SPARK-15791]
+    }
 
     val sparkAnswer = try df.collect().toSeq catch {
       case e: Exception =>
@@ -362,6 +274,9 @@ object QueryTest {
     sameRows(expectedAnswer, sparkAnswer, isSorted).map { results =>
         s"""
         |Results do not match for query:
+        |Timezone: ${TimeZone.getDefault}
+        |Timezone Env: ${sys.env.getOrElse("TZ", "")}
+        |
         |${df.queryExecution}
         |== Results ==
         |$results
@@ -438,6 +353,14 @@ object QueryTest {
     checkAnswer(df, expectedAnswer.asScala) match {
       case Some(errorMessage) => errorMessage
       case None => null
+    }
+  }
+}
+
+class QueryTestSuite extends QueryTest with test.SharedSQLContext {
+  test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
+    intercept[org.scalatest.exceptions.TestFailedException] {
+      checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
     }
   }
 }

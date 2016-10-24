@@ -19,14 +19,17 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.clustering.
-  {BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -39,23 +42,27 @@ private[clustering] trait BisectingKMeansParams extends Params
   with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
 
   /**
-   * Set the number of clusters to create (k). Must be > 1. Default: 2.
+   * The desired number of leaf clusters. Must be > 1. Default: 4.
+   * The actual number could be smaller if there are no divisible leaf clusters.
    * @group param
    */
   @Since("2.0.0")
-  final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
+  final val k = new IntParam(this, "k", "The desired number of leaf clusters. " +
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("2.0.0")
   def getK: Int = $(k)
 
-  /** @group expertParam */
+  /**
+   * The minimum number of points (if >= 1.0) or the minimum proportion
+   * of points (if < 1.0) of a divisible cluster (default: 1.0).
+   * @group expertParam
+   */
   @Since("2.0.0")
-  final val minDivisibleClusterSize = new DoubleParam(
-    this,
-    "minDivisibleClusterSize",
-    "the minimum number of points (if >= 1.0) or the minimum proportion",
-    (value: Double) => value > 0)
+  final val minDivisibleClusterSize = new DoubleParam(this, "minDivisibleClusterSize",
+    "The minimum number of points (if >= 1.0) or the minimum proportion " +
+      "of points (if < 1.0) of a divisible cluster.", ParamValidators.gt(0.0))
 
   /** @group expertGetParam */
   @Since("2.0.0")
@@ -76,7 +83,7 @@ private[clustering] trait BisectingKMeansParams extends Params
  * :: Experimental ::
  * Model fitted by BisectingKMeans.
  *
- * @param parentModel a model trained by spark.mllib.clustering.BisectingKMeans.
+ * @param parentModel a model trained by [[org.apache.spark.mllib.clustering.BisectingKMeans]].
  */
 @Since("2.0.0")
 @Experimental
@@ -93,6 +100,7 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
@@ -105,7 +113,7 @@ class BisectingKMeansModel private[ml] (
   private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("2.0.0")
-  def clusterCenters: Array[Vector] = parentModel.clusterCenters
+  def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
 
   /**
    * Computes the sum of squared distances between the input points and their corresponding cluster
@@ -115,11 +123,34 @@ class BisectingKMeansModel private[ml] (
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
-    parentModel.computeCost(data)
+    parentModel.computeCost(data.map(OldVectors.fromML))
   }
 
   @Since("2.0.0")
   override def write: MLWriter = new BisectingKMeansModel.BisectingKMeansModelWriter(this)
+
+  private var trainingSummary: Option[BisectingKMeansSummary] = None
+
+  private[clustering] def setSummary(summary: BisectingKMeansSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /**
+   * Return true if there exists summary of model.
+   */
+  @Since("2.1.0")
+  def hasSummary: Boolean = trainingSummary.nonEmpty
+
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  @Since("2.1.0")
+  def summary: BisectingKMeansSummary = trainingSummary.getOrElse {
+    throw new SparkException(
+      s"No training summary available for the ${this.getClass.getSimpleName}")
+  }
 }
 
 object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
@@ -216,7 +247,13 @@ class BisectingKMeans @Since("2.0.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
-    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
+    transformSchema(dataset.schema, logging = true)
+    val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+      case Row(point: Vector) => OldVectors.fromML(point)
+    }
+
+    val instr = Instrumentation.create(this, rdd)
+    instr.logParams(featuresCol, predictionCol, k, maxIter, seed, minDivisibleClusterSize)
 
     val bkm = new MLlibBisectingKMeans()
       .setK($(k))
@@ -224,8 +261,13 @@ class BisectingKMeans @Since("2.0.0") (
       .setMinDivisibleClusterSize($(minDivisibleClusterSize))
       .setSeed($(seed))
     val parentModel = bkm.run(rdd)
-    val model = new BisectingKMeansModel(uid, parentModel)
-    copyValues(model.setParent(this))
+    val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
+    val summary = new BisectingKMeansSummary(
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+    model.setSummary(summary)
+    val m = model.setSummary(summary)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("2.0.0")
@@ -240,4 +282,42 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
 
   @Since("2.0.0")
   override def load(path: String): BisectingKMeans = super.load(path)
+}
+
+
+/**
+ * :: Experimental ::
+ * Summary of BisectingKMeans.
+ *
+ * @param predictions  [[DataFrame]] produced by [[BisectingKMeansModel.transform()]]
+ * @param predictionCol  Name for column of predicted clusters in `predictions`
+ * @param featuresCol  Name for column of features in `predictions`
+ * @param k  Number of clusters
+ */
+@Since("2.1.0")
+@Experimental
+class BisectingKMeansSummary private[clustering] (
+    @Since("2.1.0") @transient val predictions: DataFrame,
+    @Since("2.1.0") val predictionCol: String,
+    @Since("2.1.0") val featuresCol: String,
+    @Since("2.1.0") val k: Int) extends Serializable {
+
+  /**
+   * Cluster centers of the transformed data.
+   */
+  @Since("2.1.0")
+  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
+
+  /**
+   * Size of (number of data points in) each cluster.
+   */
+  @Since("2.1.0")
+  lazy val clusterSizes: Array[Long] = {
+    val sizes = Array.fill[Long](k)(0)
+    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
+      case Row(cluster: Int, count: Long) => sizes(cluster) = count
+    }
+    sizes
+  }
+
 }

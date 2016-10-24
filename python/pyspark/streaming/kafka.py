@@ -208,13 +208,13 @@ ________________________________________________________________________________
   1. Include the Kafka library and its dependencies with in the
      spark-submit command as
 
-     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka:%s ...
+     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka-0-8:%s ...
 
   2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
-     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-assembly, Version = %s.
+     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-0-8-assembly, Version = %s.
      Then, include the jar in the spark-submit command as
 
-     $ bin/spark-submit --jars <spark-streaming-kafka-assembly.jar> ...
+     $ bin/spark-submit --jars <spark-streaming-kafka-0-8-assembly.jar> ...
 
 ________________________________________________________________________________________________
 
@@ -228,7 +228,7 @@ class OffsetRange(object):
 
     def __init__(self, topic, partition, fromOffset, untilOffset):
         """
-        Create a OffsetRange to represent  range of offsets
+        Create an OffsetRange to represent range of offsets
         :param topic: Kafka topic name.
         :param partition: Kafka partition id.
         :param fromOffset: Inclusive starting offset.
@@ -286,6 +286,9 @@ class TopicAndPartition(object):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def __hash__(self):
+        return (self._topic, self._partition).__hash__()
 
 
 class Broker(object):

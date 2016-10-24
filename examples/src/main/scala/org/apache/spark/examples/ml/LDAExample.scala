@@ -20,57 +20,48 @@ package org.apache.spark.examples.ml
 // scalastyle:off println
 // $example on$
 import org.apache.spark.ml.clustering.LDA
-import org.apache.spark.mllib.linalg.{Vectors, VectorUDT}
-import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.types.{StructField, StructType}
 // $example off$
+import org.apache.spark.sql.SparkSession
 
 /**
- * An example demonstrating a LDA of ML pipeline.
+ * An example demonstrating LDA.
  * Run with
  * {{{
  * bin/run-example ml.LDAExample
  * }}}
  */
 object LDAExample {
-
-  final val FEATURES_COL = "features"
-
   def main(args: Array[String]): Unit = {
-
-    val input = "data/mllib/sample_lda_data.txt"
-    // Creates a Spark context and a SQL context
+    // Creates a SparkSession
     val spark = SparkSession
       .builder
       .appName(s"${this.getClass.getSimpleName}")
       .getOrCreate()
 
     // $example on$
-    // Loads data
-    val rowRDD = spark.read.text(input).rdd.filter(_.nonEmpty)
-      .map(_.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
-    val schema = StructType(Array(StructField(FEATURES_COL, new VectorUDT, false)))
-    val dataset = spark.createDataFrame(rowRDD, schema)
+    // Loads data.
+    val dataset = spark.read.format("libsvm")
+      .load("data/mllib/sample_lda_libsvm_data.txt")
 
-    // Trains a LDA model
-    val lda = new LDA()
-      .setK(10)
-      .setMaxIter(10)
-      .setFeaturesCol(FEATURES_COL)
+    // Trains a LDA model.
+    val lda = new LDA().setK(10).setMaxIter(10)
     val model = lda.fit(dataset)
-    val transformed = model.transform(dataset)
 
     val ll = model.logLikelihood(dataset)
     val lp = model.logPerplexity(dataset)
+    println(s"The lower bound on the log likelihood of the entire corpus: $ll")
+    println(s"The upper bound bound on perplexity: $lp")
 
-    // describeTopics
+    // Describe topics.
     val topics = model.describeTopics(3)
-
-    // Shows the result
+    println("The topics described by their top-weighted terms:")
     topics.show(false)
-    transformed.show(false)
 
+    // Shows the result.
+    val transformed = model.transform(dataset)
+    transformed.show(false)
     // $example off$
+
     spark.stop()
   }
 }

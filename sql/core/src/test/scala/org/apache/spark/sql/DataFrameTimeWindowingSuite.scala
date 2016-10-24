@@ -29,16 +29,6 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
 
   import testImplicits._
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-  }
-
-  override def afterEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(null)
-  }
-
   test("tumbling window groupBy statement") {
     val df = Seq(
       ("2016-03-27 19:39:34", 1, "a"),
@@ -245,18 +235,18 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     Seq(
       ("2016-03-27 19:39:34", 1),
       ("2016-03-27 19:39:56", 2),
-      ("2016-03-27 19:39:27", 4)).toDF("time", "value").registerTempTable(tableName)
+      ("2016-03-27 19:39:27", 4)).toDF("time", "value").createOrReplaceTempView(tableName)
     try {
       f(tableName)
     } finally {
-      sqlContext.dropTempTable(tableName)
+      spark.catalog.dropTempView(tableName)
     }
   }
 
   test("time window in SQL with single string expression") {
     withTempTable { table =>
       checkAnswer(
-        sqlContext.sql(s"""select window(time, "10 seconds"), value from $table""")
+        spark.sql(s"""select window(time, "10 seconds"), value from $table""")
           .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
         Seq(
           Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", 4),
@@ -270,7 +260,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
   test("time window in SQL with with two expressions") {
     withTempTable { table =>
       checkAnswer(
-        sqlContext.sql(
+        spark.sql(
           s"""select window(time, "10 seconds", 10000000), value from $table""")
           .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
         Seq(
@@ -285,7 +275,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
   test("time window in SQL with with three expressions") {
     withTempTable { table =>
       checkAnswer(
-        sqlContext.sql(
+        spark.sql(
           s"""select window(time, "10 seconds", 10000000, "5 seconds"), value from $table""")
           .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
         Seq(

@@ -18,11 +18,11 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -165,7 +165,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   }
 
   /**
-   * Transforms dataset by reading from [[featuresCol]], calling [[predict()]], and storing
+   * Transforms dataset by reading from [[featuresCol]], calling `predict`, and storing
    * the predictions as a new column [[predictionCol]].
    *
    * @param dataset input dataset

@@ -28,10 +28,16 @@ connExists <- function(env) {
   })
 }
 
-#' Stop the Spark context.
+#' Stop the Spark Session and Spark Context
 #'
-#' Also terminates the backend this R session is connected to
-sparkR.stop <- function() {
+#' Stop the Spark Session and Spark Context.
+#'
+#' Also terminates the backend this R session is connected to.
+#' @rdname sparkR.session.stop
+#' @name sparkR.session.stop
+#' @export
+#' @note sparkR.session.stop since 2.0.0
+sparkR.session.stop <- function() {
   env <- .sparkREnv
   if (exists(".sparkRCon", envir = env)) {
     if (exists(".sparkRjsc", envir = env)) {
@@ -39,12 +45,8 @@ sparkR.stop <- function() {
       callJMethod(sc, "stop")
       rm(".sparkRjsc", envir = env)
 
-      if (exists(".sparkRSQLsc", envir = env)) {
-        rm(".sparkRSQLsc", envir = env)
-      }
-
-      if (exists(".sparkRHivesc", envir = env)) {
-        rm(".sparkRHivesc", envir = env)
+      if (exists(".sparkRsession", envir = env)) {
+        rm(".sparkRsession", envir = env)
       }
     }
 
@@ -80,11 +82,17 @@ sparkR.stop <- function() {
   clearJobjs()
 }
 
-#' Initialize a new Spark Context.
+#' @rdname sparkR.session.stop
+#' @name sparkR.stop
+#' @export
+#' @note sparkR.stop since 1.4.0
+sparkR.stop <- function() {
+  sparkR.session.stop()
+}
+
+#' (Deprecated) Initialize a new Spark Context
 #'
-#' This function initializes a new SparkContext. For details on how to initialize
-#' and use SparkR, refer to SparkR programming guide at
-#' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparkcontext-sqlcontext}.
+#' This function initializes a new SparkContext.
 #'
 #' @param master The Spark master URL
 #' @param appName Application name to register with cluster manager
@@ -92,7 +100,9 @@ sparkR.stop <- function() {
 #' @param sparkEnvir Named list of environment variables to set on worker nodes
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
 #' @param sparkJars Character vector of jar files to pass to the worker nodes
-#' @param sparkPackages Character vector of packages from spark-packages.org
+#' @param sparkPackages Character vector of package coordinates
+#' @seealso \link{sparkR.session}
+#' @rdname sparkR.init-deprecated
 #' @export
 #' @examples
 #'\dontrun{
@@ -105,7 +115,7 @@ sparkR.stop <- function() {
 #'                  c("one.jar", "two.jar", "three.jar"),
 #'                  c("com.databricks:spark-avro_2.10:2.0.1"))
 #'}
-
+#' @note sparkR.init since 1.4.0
 sparkR.init <- function(
   master = "",
   appName = "SparkR",
@@ -114,20 +124,41 @@ sparkR.init <- function(
   sparkExecutorEnv = list(),
   sparkJars = "",
   sparkPackages = "") {
+  .Deprecated("sparkR.session")
+  sparkR.sparkContext(master,
+     appName,
+     sparkHome,
+     convertNamedListToEnv(sparkEnvir),
+     convertNamedListToEnv(sparkExecutorEnv),
+     sparkJars,
+     sparkPackages)
+}
+
+# Internal function to handle creating the SparkContext.
+sparkR.sparkContext <- function(
+  master = "",
+  appName = "SparkR",
+  sparkHome = Sys.getenv("SPARK_HOME"),
+  sparkEnvirMap = new.env(),
+  sparkExecutorEnvMap = new.env(),
+  sparkJars = "",
+  sparkPackages = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
     cat(paste("Re-using existing Spark Context.",
-              "Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n"))
+              "Call sparkR.session.stop() or restart R to create a new Spark Context\n"))
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
   jars <- processSparkJars(sparkJars)
   packages <- processSparkPackages(sparkPackages)
 
-  sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
-
   existingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
   if (existingPort != "") {
+    if (length(packages) != 0) {
+      warning(paste("sparkPackages has no effect when using spark-submit or sparkR shell",
+                    " please use the --packages commandline instead", sep = ","))
+    }
     backendPort <- existingPort
   } else {
     path <- tempfile(pattern = "backend_port")
@@ -183,7 +214,6 @@ sparkR.init <- function(
     sparkHome <- suppressWarnings(normalizePath(sparkHome))
   }
 
-  sparkExecutorEnvMap <- convertNamedListToEnv(sparkExecutorEnv)
   if (is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
     sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <-
       paste0("$LD_LIBRARY_PATH:", Sys.getenv("LD_LIBRARY_PATH"))
@@ -225,116 +255,235 @@ sparkR.init <- function(
   sc
 }
 
-#' Initialize a new SQLContext.
+#' (Deprecated) Initialize a new SQLContext
 #'
 #' This function creates a SparkContext from an existing JavaSparkContext and
 #' then uses it to initialize a new SQLContext
 #'
+#' Starting SparkR 2.0, a SparkSession is initialized and returned instead.
+#' This API is deprecated and kept for backward compatibility only.
+#'
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
+#' @seealso \link{sparkR.session}
+#' @rdname sparkRSQL.init-deprecated
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #'}
-
+#' @note sparkRSQL.init since 1.4.0
 sparkRSQL.init <- function(jsc = NULL) {
-  if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
-    return(get(".sparkRSQLsc", envir = .sparkREnv))
+  .Deprecated("sparkR.session")
+
+  if (exists(".sparkRsession", envir = .sparkREnv)) {
+    return(get(".sparkRsession", envir = .sparkREnv))
   }
 
-  # If jsc is NULL, create a Spark Context
-  sc <- if (is.null(jsc)) {
-    sparkR.init()
-  } else {
-    jsc
-  }
-
-  sqlContext <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                            "createSQLContext",
-                            sc)
-  assign(".sparkRSQLsc", sqlContext, envir = .sparkREnv)
-  sqlContext
+  # Default to without Hive support for backward compatibility.
+  sparkR.session(enableHiveSupport = FALSE)
 }
 
-#' Initialize a new HiveContext.
+#' (Deprecated) Initialize a new HiveContext
 #'
 #' This function creates a HiveContext from an existing JavaSparkContext
 #'
+#' Starting SparkR 2.0, a SparkSession is initialized and returned instead.
+#' This API is deprecated and kept for backward compatibility only.
+#'
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
+#' @seealso \link{sparkR.session}
+#' @rdname sparkRHive.init-deprecated
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRHive.init(sc)
 #'}
-
+#' @note sparkRHive.init since 1.4.0
 sparkRHive.init <- function(jsc = NULL) {
-  if (exists(".sparkRHivesc", envir = .sparkREnv)) {
-    return(get(".sparkRHivesc", envir = .sparkREnv))
+  .Deprecated("sparkR.session")
+
+  if (exists(".sparkRsession", envir = .sparkREnv)) {
+    return(get(".sparkRsession", envir = .sparkREnv))
   }
 
-  # If jsc is NULL, create a Spark Context
-  sc <- if (is.null(jsc)) {
-    sparkR.init()
+  # Default to without Hive support for backward compatibility.
+  sparkR.session(enableHiveSupport = TRUE)
+}
+
+#' Get the existing SparkSession or initialize a new SparkSession.
+#'
+#' SparkSession is the entry point into SparkR. \code{sparkR.session} gets the existing
+#' SparkSession or initializes a new SparkSession.
+#' Additional Spark properties can be set in \code{...}, and these named parameters take priority
+#' over values in \code{master}, \code{appName}, named lists of \code{sparkConfig}.
+#'
+#' For details on how to initialize and use SparkR, refer to SparkR programming guide at
+#' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
+#'
+#' @param master the Spark master URL.
+#' @param appName application name to register with cluster manager.
+#' @param sparkHome Spark Home directory.
+#' @param sparkConfig named list of Spark configuration to set on worker nodes.
+#' @param sparkJars character vector of jar files to pass to the worker nodes.
+#' @param sparkPackages character vector of package coordinates
+#' @param enableHiveSupport enable support for Hive, fallback if not built with Hive support; once
+#'        set, this cannot be turned off on an existing session
+#' @param ... named Spark properties passed to the method.
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- read.json(path)
+#'
+#' sparkR.session("local[2]", "SparkR", "/home/spark")
+#' sparkR.session("yarn-client", "SparkR", "/home/spark",
+#'                list(spark.executor.memory="4g"),
+#'                c("one.jar", "two.jar", "three.jar"),
+#'                c("com.databricks:spark-avro_2.10:2.0.1"))
+#' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
+#'}
+#' @note sparkR.session since 2.0.0
+sparkR.session <- function(
+  master = "",
+  appName = "SparkR",
+  sparkHome = Sys.getenv("SPARK_HOME"),
+  sparkConfig = list(),
+  sparkJars = "",
+  sparkPackages = "",
+  enableHiveSupport = TRUE,
+  ...) {
+
+  sparkConfigMap <- convertNamedListToEnv(sparkConfig)
+  namedParams <- list(...)
+  if (length(namedParams) > 0) {
+    paramMap <- convertNamedListToEnv(namedParams)
+    # Override for certain named parameters
+    if (exists("spark.master", envir = paramMap)) {
+      master <- paramMap[["spark.master"]]
+    }
+    if (exists("spark.app.name", envir = paramMap)) {
+      appName <- paramMap[["spark.app.name"]]
+    }
+    overrideEnvs(sparkConfigMap, paramMap)
+  }
+
+  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    retHome <- sparkCheckInstall(sparkHome, master)
+    if (!is.null(retHome)) sparkHome <- retHome
+    sparkExecutorEnvMap <- new.env()
+    sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
+       sparkJars, sparkPackages)
+    stopifnot(exists(".sparkRjsc", envir = .sparkREnv))
+  }
+
+  if (exists(".sparkRsession", envir = .sparkREnv)) {
+    sparkSession <- get(".sparkRsession", envir = .sparkREnv)
+    # Apply config to Spark Context and Spark Session if already there
+    # Cannot change enableHiveSupport
+    callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                "setSparkContextSessionConf",
+                sparkSession,
+                sparkConfigMap)
   } else {
-    jsc
+    jsc <- get(".sparkRjsc", envir = .sparkREnv)
+    sparkSession <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                                "getOrCreateSparkSession",
+                                jsc,
+                                sparkConfigMap,
+                                enableHiveSupport)
+    assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
-
-  ssc <- callJMethod(sc, "sc")
-  hiveCtx <- tryCatch({
-    newJObject("org.apache.spark.sql.hive.HiveContext", ssc)
-  },
-  error = function(err) {
-    stop("Spark SQL is not built with Hive support")
-  })
-
-  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
-  hiveCtx
+  sparkSession
 }
 
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
 #' different value or cleared.
 #'
-#' @param sc existing spark context
-#' @param groupid the ID to be assigned to job groups
-#' @param description description for the job group ID
-#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @param groupId the ID to be assigned to job groups.
+#' @param description description for the job group ID.
+#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation.
+#' @rdname setJobGroup
+#' @name setJobGroup
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' setJobGroup(sc, "myJobGroup", "My job group description", TRUE)
+#' sparkR.session()
+#' setJobGroup("myJobGroup", "My job group description", TRUE)
 #'}
+#' @note setJobGroup since 1.5.0
+#' @method setJobGroup default
+setJobGroup.default <- function(groupId, description, interruptOnCancel) {
+  sc <- getSparkContext()
+  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+}
 
 setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
-  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+  if (class(sc) == "jobj" && any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
+    .Deprecated("setJobGroup(groupId, description, interruptOnCancel)",
+                old = "setJobGroup(sc, groupId, description, interruptOnCancel)")
+    setJobGroup.default(groupId, description, interruptOnCancel)
+  } else {
+    # Parameter order is shifted
+    groupIdToUse <- sc
+    descriptionToUse <- groupId
+    interruptOnCancelToUse <- description
+    setJobGroup.default(groupIdToUse, descriptionToUse, interruptOnCancelToUse)
+  }
 }
 
 #' Clear current job group ID and its description
 #'
-#' @param sc existing spark context
+#' @rdname clearJobGroup
+#' @name clearJobGroup
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' clearJobGroup(sc)
+#' sparkR.session()
+#' clearJobGroup()
 #'}
-
-clearJobGroup <- function(sc) {
+#' @note clearJobGroup since 1.5.0
+#' @method clearJobGroup default
+clearJobGroup.default <- function() {
+  sc <- getSparkContext()
   callJMethod(sc, "clearJobGroup")
 }
 
+clearJobGroup <- function(sc) {
+  if (!missing(sc) &&
+      class(sc) == "jobj" &&
+      any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
+    .Deprecated("clearJobGroup()", old = "clearJobGroup(sc)")
+  }
+  clearJobGroup.default()
+}
+
+
 #' Cancel active jobs for the specified group
 #'
-#' @param sc existing spark context
 #' @param groupId the ID of job group to be cancelled
+#' @rdname cancelJobGroup
+#' @name cancelJobGroup
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' cancelJobGroup(sc, "myJobGroup")
+#' sparkR.session()
+#' cancelJobGroup("myJobGroup")
 #'}
+#' @note cancelJobGroup since 1.5.0
+#' @method cancelJobGroup default
+cancelJobGroup.default <- function(groupId) {
+  sc <- getSparkContext()
+  callJMethod(sc, "cancelJobGroup", groupId)
+}
 
 cancelJobGroup <- function(sc, groupId) {
-  callJMethod(sc, "cancelJobGroup", groupId)
+  if (class(sc) == "jobj" && any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
+    .Deprecated("cancelJobGroup(groupId)", old = "cancelJobGroup(sc, groupId)")
+    cancelJobGroup.default(groupId)
+  } else {
+    # Parameter order is shifted
+    groupIdToUse <- sc
+    cancelJobGroup.default(groupIdToUse)
+  }
 }
 
 sparkConfToSubmitOps <- new.env()
@@ -342,6 +491,10 @@ sparkConfToSubmitOps[["spark.driver.memory"]]           <- "--driver-memory"
 sparkConfToSubmitOps[["spark.driver.extraClassPath"]]   <- "--driver-class-path"
 sparkConfToSubmitOps[["spark.driver.extraJavaOptions"]] <- "--driver-java-options"
 sparkConfToSubmitOps[["spark.driver.extraLibraryPath"]] <- "--driver-library-path"
+sparkConfToSubmitOps[["spark.master"]] <- "--master"
+sparkConfToSubmitOps[["spark.yarn.keytab"]] <- "--keytab"
+sparkConfToSubmitOps[["spark.yarn.principal"]] <- "--principal"
+
 
 # Utility function that returns Spark Submit arguments as a string
 #
@@ -384,4 +537,36 @@ processSparkPackages <- function(packages) {
     warning("sparkPackages as a comma-separated string is deprecated, use character vector instead")
   }
   splittedPackages
+}
+
+# Utility function that checks and install Spark to local folder if not found
+#
+# Installation will not be triggered if it's called from sparkR shell
+# or if the master url is not local
+#
+# @param sparkHome directory to find Spark package.
+# @param master the Spark master URL, used to check local or remote mode.
+# @return NULL if no need to update sparkHome, and new sparkHome otherwise.
+sparkCheckInstall <- function(sparkHome, master) {
+  if (!isSparkRShell()) {
+    if (!is.na(file.info(sparkHome)$isdir)) {
+      msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
+      message(msg)
+      NULL
+    } else {
+      if (!nzchar(master) || isMasterLocal(master)) {
+        msg <- paste0("Spark not found in SPARK_HOME: ",
+                      sparkHome)
+        message(msg)
+        packageLocalDir <- install.spark()
+        packageLocalDir
+      } else {
+        msg <- paste0("Spark not found in SPARK_HOME: ",
+                      sparkHome, "\n", installInstruction("remote"))
+        stop(msg)
+      }
+    }
+  } else {
+    NULL
+  }
 }

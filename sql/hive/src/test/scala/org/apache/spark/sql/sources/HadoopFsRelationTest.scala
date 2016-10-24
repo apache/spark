@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
 
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import sqlContext.implicits._
+  import spark.implicits._
 
   val dataSourceName: String
 
@@ -91,8 +91,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         yield Row(s"val_$i", s"val_$i", s"val_$i", s"val_$i", 1, 1, 1, 1))
 
     // Self-join
-    df.registerTempTable("t")
-    withTempTable("t") {
+    df.createOrReplaceTempView("t")
+    withTempView("t") {
       checkAnswer(
         sql(
           """SELECT l.a, r.b, l.p1, r.p2
@@ -143,8 +143,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .add("index", IntegerType, nullable = false)
             .add("col", dataType, nullable = true)
           val rdd =
-            sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
-          val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+            spark.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
+          val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
 
           df.write
             .mode("overwrite")
@@ -153,7 +153,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .options(extraOptions)
             .save(path)
 
-          val loadedDF = sqlContext
+          val loadedDF = spark
             .read
             .format(dataSourceName)
             .option("dataSchema", df.schema.json)
@@ -174,7 +174,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("path", file.getCanonicalPath)
           .option("dataSchema", dataSchema.json)
           .load(),
@@ -188,7 +188,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       testDF.write.mode(SaveMode.Append).format(dataSourceName).save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath).orderBy("a"),
         testDF.union(testDF).orderBy("a").collect())
@@ -208,7 +208,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       testDF.write.mode(SaveMode.Ignore).format(dataSourceName).save(file.getCanonicalPath)
 
       val path = new Path(file.getCanonicalPath)
-      val fs = path.getFileSystem(sqlContext.sessionState.newHadoopConf())
+      val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
       assert(fs.listStatus(path).isEmpty)
     }
   }
@@ -222,7 +222,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(file.getCanonicalPath)
 
       checkQueries(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath))
     }
@@ -243,7 +243,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -265,7 +265,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.union(partitionedTestDF).collect())
@@ -287,7 +287,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(file.getCanonicalPath)
 
       checkAnswer(
-        sqlContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
@@ -323,7 +323,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), testDF.collect())
+      checkAnswer(spark.table("t"), testDF.collect())
     }
   }
 
@@ -332,14 +332,13 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), testDF.union(testDF).orderBy("a").collect())
+      checkAnswer(spark.table("t"), testDF.union(testDF).orderBy("a").collect())
     }
   }
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
-
-    withTempTable("t") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
       intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
       }
@@ -347,11 +346,10 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
-
-    withTempTable("t") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
-      assert(sqlContext.table("t").collect().isEmpty)
+      assert(spark.table("t").collect().isEmpty)
     }
   }
 
@@ -362,18 +360,18 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkQueries(sqlContext.table("t"))
+      checkQueries(spark.table("t"))
     }
   }
 
   test("saveAsTable()/load() - partitioned table - boolean type") {
-    sqlContext.range(2)
+    spark.range(2)
       .select('id, ('id % 2 === 0).as("b"))
       .write.partitionBy("b").saveAsTable("t")
 
     withTable("t") {
       checkAnswer(
-        sqlContext.table("t").sort('id),
+        spark.table("t").sort('id),
         Row(0, true) :: Row(1, false) :: Nil
       )
     }
@@ -395,7 +393,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
+      checkAnswer(spark.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -415,7 +413,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.union(partitionedTestDF).collect())
+      checkAnswer(spark.table("t"), partitionedTestDF.union(partitionedTestDF).collect())
     }
   }
 
@@ -435,7 +433,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.collect())
+      checkAnswer(spark.table("t"), partitionedTestDF.collect())
     }
   }
 
@@ -459,9 +457,9 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
-    withTempTable("t") {
+    withTempView("t") {
       intercept[AnalysisException] {
         partitionedTestDF.write
           .format(dataSourceName)
@@ -474,9 +472,9 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
-    withTempTable("t") {
+    withTempView("t") {
       partitionedTestDF.write
         .format(dataSourceName)
         .mode(SaveMode.Ignore)
@@ -484,7 +482,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .partitionBy("p1", "p2")
         .saveAsTable("t")
 
-      assert(sqlContext.table("t").collect().isEmpty)
+      assert(spark.table("t").collect().isEmpty)
     }
   }
 
@@ -516,7 +514,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       // Inferring schema should throw error as it should not find any file to infer
       val e = intercept[Exception] {
-        sqlContext.read.format(dataSourceName).load(dir.getCanonicalPath)
+        spark.read.format(dataSourceName).load(dir.getCanonicalPath)
       }
 
       e match {
@@ -533,7 +531,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       /** Test whether data is read with the given path matches the expected answer */
       def testWithPath(path: File, expectedAnswer: Seq[Row]): Unit = {
-        val df = sqlContext.read
+        val df = spark.read
           .format(dataSourceName)
           .schema(dataInDir.schema) // avoid schema inference for any format
           .load(path.getCanonicalPath)
@@ -618,7 +616,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       /** Check whether data is read with the given path matches the expected answer */
       def check(path: String, expectedDf: DataFrame): Unit = {
-        val df = sqlContext.read
+        val df = spark.read
           .format(dataSourceName)
           .schema(schema) // avoid schema inference for any format, expected to be same format
           .load(path)
@@ -654,7 +652,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           basePath: Option[String] = None
         ): Unit = {
         try {
-          val reader = sqlContext.read
+          val reader = spark.read
           basePath.foreach(reader.option("basePath", _))
           val testDf = reader
             .format(dataSourceName)
@@ -722,7 +720,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         'p3.cast(FloatType).as('pf1),
         'f)
 
-      withTempTable("t") {
+      withTempView("t") {
         input
           .write
           .format(dataSourceName)
@@ -739,7 +737,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
         val realData = input.collect()
 
-        checkAnswer(sqlContext.table("t"), realData ++ realData)
+        checkAnswer(spark.table("t"), realData ++ realData)
       }
     }
   }
@@ -754,7 +752,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t").select('b, 'c, 'a), df.select('b, 'c, 'a).collect())
+      checkAnswer(spark.table("t").select('b, 'c, 'a), df.select('b, 'c, 'a).collect())
     }
   }
 
@@ -766,7 +764,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   test("SPARK-8406: Avoids name collision while writing files") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      sqlContext
+      spark
         .range(10000)
         .repartition(250)
         .write
@@ -775,7 +773,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(path)
 
       assertResult(10000) {
-        sqlContext
+        spark
           .read
           .format(dataSourceName)
           .option("dataSchema", StructType(StructField("id", LongType) :: Nil).json)
@@ -794,7 +792,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         classOf[AlwaysFailParquetOutputCommitter].getName
     )
 
-    val df = sqlContext.range(1, 10).toDF("i")
+    val df = spark.range(1, 10).toDF("i")
     withTempPath { dir =>
       df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
       // Because there data already exists,
@@ -802,7 +800,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       // with file format and AlwaysFailOutputCommitter will not be used.
       df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
       checkAnswer(
-        sqlContext.read
+        spark.read
           .format(dataSourceName)
           .option("dataSchema", df.schema.json)
           .options(extraOptions)
@@ -850,20 +848,20 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     )
     withTempPath { dir =>
       val path = "file://" + dir.getCanonicalPath
-      val df1 = sqlContext.range(4)
+      val df1 = spark.range(4)
       df1.coalesce(1).write.mode("overwrite").options(options).format(dataSourceName).save(path)
       df1.coalesce(1).write.mode("append").options(options).format(dataSourceName).save(path)
 
       def checkLocality(): Unit = {
-        val df2 = sqlContext.read
+        val df2 = spark.read
           .format(dataSourceName)
           .option("dataSchema", df1.schema.json)
           .options(options)
           .load(path)
 
         val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
-          case scan: DataSourceScanExec if scan.rdd.isInstanceOf[FileScanRDD] =>
-            scan.rdd.asInstanceOf[FileScanRDD]
+          case scan: DataSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
+            scan.inputRDDs().head.asInstanceOf[FileScanRDD]
         }
 
         val partitions = fileScanRDD.partitions

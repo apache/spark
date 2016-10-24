@@ -25,6 +25,8 @@ To build Spark and its example programs, run:
     build/mvn -DskipTests clean package
 
 (You do not need to do this if you downloaded a pre-built package.)
+
+You can build Spark using more than one thread by using the -T option with Maven, see ["Parallel builds in Maven 3"](https://cwiki.apache.org/confluence/display/MAVEN/Parallel+builds+in+Maven+3).
 More detailed documentation is available from the project site, at
 ["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
 For developing Spark using an IDE, see [Eclipse](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-Eclipse)
@@ -95,3 +97,8 @@ building for particular Hive and Hive Thriftserver distributions.
 
 Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
+
+## Contributing
+
+Please review the [Contribution to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
+wiki for information on how to get started contributing to the project.

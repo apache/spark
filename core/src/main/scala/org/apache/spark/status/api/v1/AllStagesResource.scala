@@ -20,10 +20,10 @@ import java.util.{Arrays, Date, List => JList}
 import javax.ws.rs.{GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
+import org.apache.spark.ui.jobs.UIData.{InputMetricsUIData => InternalInputMetrics, OutputMetricsUIData => InternalOutputMetrics, ShuffleReadMetricsUIData => InternalShuffleReadMetrics, ShuffleWriteMetricsUIData => InternalShuffleWriteMetrics, TaskMetricsUIData => InternalTaskMetrics}
 import org.apache.spark.util.Distribution
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -101,6 +101,7 @@ private[v1] object AllStagesResource {
       numCompleteTasks = stageUiData.numCompleteTasks,
       numFailedTasks = stageUiData.numFailedTasks,
       executorRunTime = stageUiData.executorRunTime,
+      executorCpuTime = stageUiData.executorCpuTime,
       submissionTime = stageInfo.submissionTime.map(new Date(_)),
       firstTaskLaunchedTime,
       completionTime = stageInfo.completionTime.map(new Date(_)),
@@ -220,7 +221,9 @@ private[v1] object AllStagesResource {
     new TaskMetricDistributions(
       quantiles = quantiles,
       executorDeserializeTime = metricQuantiles(_.executorDeserializeTime),
+      executorDeserializeCpuTime = metricQuantiles(_.executorDeserializeCpuTime),
       executorRunTime = metricQuantiles(_.executorRunTime),
+      executorCpuTime = metricQuantiles(_.executorCpuTime),
       resultSize = metricQuantiles(_.resultSize),
       jvmGcTime = metricQuantiles(_.jvmGCTime),
       resultSerializationTime = metricQuantiles(_.resultSerializationTime),
@@ -241,7 +244,9 @@ private[v1] object AllStagesResource {
   def convertUiTaskMetrics(internal: InternalTaskMetrics): TaskMetrics = {
     new TaskMetrics(
       executorDeserializeTime = internal.executorDeserializeTime,
+      executorDeserializeCpuTime = internal.executorDeserializeCpuTime,
       executorRunTime = internal.executorRunTime,
+      executorCpuTime = internal.executorCpuTime,
       resultSize = internal.resultSize,
       jvmGcTime = internal.jvmGCTime,
       resultSerializationTime = internal.resultSerializationTime,

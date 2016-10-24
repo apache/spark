@@ -18,12 +18,13 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -38,6 +39,7 @@ class RandomForestClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import RandomForestClassifierSuite.compareAPIs
+  import testImplicits._
 
   private var orderedLabeledPoints50_1000: RDD[LabeledPoint] = _
   private var orderedLabeledPoints5_20: RDD[LabeledPoint] = _
@@ -46,8 +48,10 @@ class RandomForestClassifierSuite
     super.beforeAll()
     orderedLabeledPoints50_1000 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000))
+        .map(_.asML)
     orderedLabeledPoints5_20 =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 5, 20))
+        .map(_.asML)
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -155,7 +159,7 @@ class RandomForestClassifierSuite
   }
 
   test("Fitting without numClasses in metadata") {
-    val df: DataFrame = sqlContext.createDataFrame(TreeTests.featureImportanceData(sc))
+    val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val rf = new RandomForestClassifier().setMaxDepth(1).setNumTrees(1)
     rf.fit(df)
   }
@@ -189,7 +193,7 @@ class RandomForestClassifierSuite
   test("should support all NumericType labels and not support other types") {
     val rf = new RandomForestClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[RandomForestClassificationModel, RandomForestClassifier](
-      rf, isClassification = true, sqlContext) { (expected, actual) =>
+      rf, spark) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
   }
@@ -233,7 +237,8 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainClassifier(
-      data, oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
+      data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
+      rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.

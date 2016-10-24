@@ -126,7 +126,7 @@ private[fpm] object FPTree {
     def isRoot: Boolean = parent == null
   }
 
-  /** Summary of a item in an FP-Tree. */
+  /** Summary of an item in an FP-Tree. */
   private class Summary[T] extends Serializable {
     var count: Long = 0L
     val nodes: ListBuffer[Node[T]] = ListBuffer.empty

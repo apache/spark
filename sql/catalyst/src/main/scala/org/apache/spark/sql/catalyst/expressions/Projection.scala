@@ -69,10 +69,10 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
   })
 
   private[this] val exprArray = expressions.toArray
-  private[this] var mutableRow: MutableRow = new GenericMutableRow(exprArray.length)
+  private[this] var mutableRow: InternalRow = new GenericInternalRow(exprArray.length)
   def currentValue: InternalRow = mutableRow
 
-  override def target(row: MutableRow): MutableProjection = {
+  override def target(row: InternalRow): MutableProjection = {
     mutableRow = row
     this
   }
@@ -158,7 +158,7 @@ object UnsafeProjection {
 object FromUnsafeProjection {
 
   /**
-   * Returns an Projection for given StructType.
+   * Returns a Projection for given StructType.
    */
   def apply(schema: StructType): Projection = {
     apply(schema.fields.map(_.dataType))
@@ -172,7 +172,7 @@ object FromUnsafeProjection {
   }
 
   /**
-   * Returns an Projection for given sequence of Expressions (bounded).
+   * Returns a Projection for given sequence of Expressions (bounded).
    */
   private def create(exprs: Seq[Expression]): Projection = {
     GenerateSafeProjection.generate(exprs)

@@ -38,7 +38,10 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.StorageLevel._
 
 /** Testsuite that tests block replication in BlockManager */
-class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
+class BlockManagerReplicationSuite extends SparkFunSuite
+    with Matchers
+    with BeforeAndAfter
+    with LocalSparkContext {
 
   private val conf = new SparkConf(false).set("spark.app.id", "test")
   private var rpcEnv: RpcEnv = null
@@ -64,7 +67,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     conf.set("spark.testing.memory", maxMem.toString)
     conf.set("spark.memory.offHeap.size", maxMem.toString)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", numCores = 1)
+    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,
@@ -91,8 +94,10 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
     // to make cached peers refresh frequently
     conf.set("spark.storage.cachedPeersTtl", "10")
 
+    sc = new SparkContext("local", "test", conf)
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
-      new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
+      new BlockManagerMasterEndpoint(rpcEnv, true, conf,
+        new LiveListenerBus(sc))), conf, true)
     allStores.clear()
   }
 
@@ -340,6 +345,8 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
       assert(replicateAndGetNumCopies("a7", 3) === 3)
     }
   }
+
+
 
   /**
    * Test replication of blocks with different storage levels (various combinations of

@@ -176,6 +176,17 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     assert(model.predictions === Array(1, 2, 2))
   }
 
+  test("SPARK-16426 isotonic regression with duplicate features that produce NaNs") {
+    val trainRDD = sc.parallelize(Seq[(Double, Double, Double)]((2, 1, 1), (1, 1, 1), (0, 2, 1),
+                                                                (1, 2, 1), (0.5, 3, 1), (0, 3, 1)),
+                                  2)
+
+    val model = new IsotonicRegression().run(trainRDD)
+
+    assert(model.boundaries === Array(1.0, 3.0))
+    assert(model.predictions === Array(0.75, 0.75))
+  }
+
   test("isotonic regression prediction") {
     val model = runIsotonicRegression(Seq(1, 2, 7, 1, 2), true)
 

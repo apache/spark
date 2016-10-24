@@ -20,10 +20,10 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -50,7 +50,7 @@ private[spark] trait ClassifierParams
  * Single-label binary or multiclass classification.
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
- * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
+ * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam E  Concrete Estimator type
  * @tparam M  Concrete Model type
  */
@@ -83,7 +83,7 @@ abstract class Classifier[
       case Row(label: Double, features: Vector) =>
         require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
           s" dataset with invalid label $label.  Labels must be integers in range" +
-          s" [0, 1, ..., $numClasses), where numClasses=$numClasses.")
+          s" [0, $numClasses).")
         LabeledPoint(label, features)
     }
   }
@@ -134,7 +134,7 @@ abstract class Classifier[
  * Model produced by a [[Classifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
- * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
+ * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam M  Concrete Model type
  */
 @DeveloperApi
@@ -151,7 +151,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
    *  - predicted labels as [[predictionCol]] of type [[Double]]
-   *  - raw predictions (confidences) as [[rawPredictionCol]] of type [[Vector]].
+   *  - raw predictions (confidences) as [[rawPredictionCol]] of type `Vector`.
    *
    * @param dataset input dataset
    * @return transformed dataset

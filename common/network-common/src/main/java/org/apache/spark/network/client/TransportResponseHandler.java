@@ -38,7 +38,7 @@ import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.StreamFailure;
 import org.apache.spark.network.protocol.StreamResponse;
 import org.apache.spark.network.server.MessageHandler;
-import org.apache.spark.network.util.NettyUtils;
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportFrameDecoder;
 
 /**
@@ -48,7 +48,7 @@ import org.apache.spark.network.util.TransportFrameDecoder;
  * Concurrency: thread safe and can be called from multiple threads.
  */
 public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
-  private final Logger logger = LoggerFactory.getLogger(TransportResponseHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportResponseHandler.class);
 
   private final Channel channel;
 
@@ -122,7 +122,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   @Override
   public void channelInactive() {
     if (numOutstandingRequests() > 0) {
-      String remoteAddress = NettyUtils.getRemoteAddress(channel);
+      String remoteAddress = getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
         numOutstandingRequests(), remoteAddress);
       failOutstandingRequests(new IOException("Connection from " + remoteAddress + " closed"));
@@ -132,7 +132,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   @Override
   public void exceptionCaught(Throwable cause) {
     if (numOutstandingRequests() > 0) {
-      String remoteAddress = NettyUtils.getRemoteAddress(channel);
+      String remoteAddress = getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
         numOutstandingRequests(), remoteAddress);
       failOutstandingRequests(cause);
@@ -141,13 +141,12 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   @Override
   public void handle(ResponseMessage message) throws Exception {
-    String remoteAddress = NettyUtils.getRemoteAddress(channel);
     if (message instanceof ChunkFetchSuccess) {
       ChunkFetchSuccess resp = (ChunkFetchSuccess) message;
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Ignoring response for block {} from {} since it is not outstanding",
-          resp.streamChunkId, remoteAddress);
+          resp.streamChunkId, getRemoteAddress(channel));
         resp.body().release();
       } else {
         outstandingFetches.remove(resp.streamChunkId);
@@ -159,7 +158,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Ignoring response for block {} from {} ({}) since it is not outstanding",
-          resp.streamChunkId, remoteAddress, resp.errorString);
+          resp.streamChunkId, getRemoteAddress(channel), resp.errorString);
       } else {
         outstandingFetches.remove(resp.streamChunkId);
         listener.onFailure(resp.streamChunkId.chunkIndex, new ChunkFetchFailureException(
@@ -170,7 +169,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({} bytes) since it is not outstanding",
-          resp.requestId, remoteAddress, resp.body().size());
+          resp.requestId, getRemoteAddress(channel), resp.body().size());
       } else {
         outstandingRpcs.remove(resp.requestId);
         try {
@@ -184,7 +183,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({}) since it is not outstanding",
-          resp.requestId, remoteAddress, resp.errorString);
+          resp.requestId, getRemoteAddress(channel), resp.errorString);
       } else {
         outstandingRpcs.remove(resp.requestId);
         listener.onFailure(new RuntimeException(resp.errorString));

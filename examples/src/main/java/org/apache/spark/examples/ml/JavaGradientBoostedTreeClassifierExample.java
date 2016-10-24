@@ -75,11 +75,11 @@ public class JavaGradientBoostedTreeClassifierExample {
       .setOutputCol("predictedLabel")
       .setLabels(labelIndexer.labels());
 
-    // Chain indexers and GBT in a Pipeline
+    // Chain indexers and GBT in a Pipeline.
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[] {labelIndexer, featureIndexer, gbt, labelConverter});
 
-    // Train model.  This also runs the indexers.
+    // Train model. This also runs the indexers.
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
@@ -88,11 +88,11 @@ public class JavaGradientBoostedTreeClassifierExample {
     // Select example rows to display.
     predictions.select("predictedLabel", "label", "features").show(5);
 
-    // Select (prediction, true label) and compute test error
+    // Select (prediction, true label) and compute test error.
     MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
       .setLabelCol("indexedLabel")
       .setPredictionCol("prediction")
-      .setMetricName("precision");
+      .setMetricName("accuracy");
     double accuracy = evaluator.evaluate(predictions);
     System.out.println("Test Error = " + (1.0 - accuracy));
 

@@ -31,14 +31,15 @@ import org.apache.commons.io.filefilter.TrueFileFilter
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types.{FloatType, IntegerType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -205,7 +206,6 @@ class ALSSuite
 
   /**
    * Generates an explicit feedback dataset for testing ALS.
-   *
    * @param numUsers number of users
    * @param numItems number of items
    * @param rank rank
@@ -246,7 +246,6 @@ class ALSSuite
 
   /**
    * Generates an implicit feedback dataset for testing ALS.
-   *
    * @param numUsers number of users
    * @param numItems number of items
    * @param rank rank
@@ -265,7 +264,6 @@ class ALSSuite
 
   /**
    * Generates random user/item factors, with i.i.d. values drawn from U(a, b).
-   *
    * @param size number of users/items
    * @param rank number of features
    * @param random random number generator
@@ -284,7 +282,6 @@ class ALSSuite
 
   /**
    * Test ALS using the given training/test splits and parameters.
-   *
    * @param training training dataset
    * @param test test dataset
    * @param rank rank of the matrix factorization
@@ -305,8 +302,8 @@ class ALSSuite
       numUserBlocks: Int = 2,
       numItemBlocks: Int = 3,
       targetRMSE: Double = 0.05): Unit = {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)
@@ -460,8 +457,8 @@ class ALSSuite
     allEstimatorParamSettings.foreach { case (p, v) =>
       als.set(als.getParam(p), v)
     }
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     val model = als.fit(ratings.toDF())
 
     // Test Estimator save/load
@@ -485,6 +482,62 @@ class ALSSuite
     }
     assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
     assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
+  }
+
+  test("input type validation") {
+    val spark = this.spark
+    import spark.implicits._
+
+    // check that ALS can handle all numeric types for rating column
+    // and user/item columns (when the user/item ids are within Int range)
+    val als = new ALS().setMaxIter(1).setRank(1)
+    Seq(("user", IntegerType), ("item", IntegerType), ("rating", FloatType)).foreach {
+      case (colName, sqlType) =>
+        MLTestingUtils.checkNumericTypesALS(als, spark, colName, sqlType) {
+          (ex, act) =>
+            ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
+        } { (ex, act, _) =>
+          ex.transform(_: DataFrame).select("prediction").first.getFloat(0) ~==
+            act.transform(_: DataFrame).select("prediction").first.getFloat(0) absTol 1e-6
+        }
+    }
+    // check user/item ids falling outside of Int range
+    val big = Int.MaxValue.toLong + 1
+    val small = Int.MinValue.toDouble - 1
+    val df = Seq(
+      (0, 0L, 0d, 1, 1L, 1d, 3.0),
+      (0, big, small, 0, big, small, 2.0),
+      (1, 1L, 1d, 0, 0L, 0d, 5.0)
+    ).toDF("user", "user_big", "user_small", "item", "item_big", "item_small", "rating")
+    withClue("fit should fail when ids exceed integer range. ") {
+      assert(intercept[SparkException] {
+        als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
+      }.getCause.getMessage.contains("was out of Integer range"))
+    }
+    withClue("transform should fail when ids exceed integer range. ") {
+      val model = als.fit(df)
+      assert(intercept[SparkException] {
+        model.transform(df.select(df("user_big").as("user"), df("item"))).first
+      }.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        model.transform(df.select(df("user_small").as("user"), df("item"))).first
+      }.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        model.transform(df.select(df("item_big").as("item"), df("user"))).first
+      }.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
+        model.transform(df.select(df("item_small").as("item"), df("user"))).first
+      }.getMessage.contains("was out of Integer range"))
+    }
   }
 }
 
@@ -535,8 +588,12 @@ class ALSCleanerSuite extends SparkFunSuite {
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
-        val sqlContext = new SQLContext(sc)
-        import sqlContext.implicits._
+        val spark = SparkSession.builder
+          .master("local[2]")
+          .appName("ALSCleanerSuite")
+          .sparkContext(sc)
+          .getOrCreate()
+        import spark.implicits._
         val als = new ALS()
           .setRank(1)
           .setRegParam(1e-5)
@@ -550,7 +607,7 @@ class ALSCleanerSuite extends SparkFunSuite {
         val pattern = "shuffle_(\\d+)_.+\\.data".r
         val rddIds = resultingFiles.flatMap { f =>
           pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
-        assert(rddIds.toSet.size === 4)
+        assert(rddIds.size === 4)
       } finally {
         sc.stop()
       }
@@ -577,8 +634,8 @@ class ALSStorageSuite
   }
 
   test("default and non-default storage params set correct RDD StorageLevels") {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     val data = Seq(
       (0, 0, 1.0),
       (0, 1, 2.0),

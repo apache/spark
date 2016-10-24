@@ -19,12 +19,9 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.util.*;
 
-import org.apache.commons.lang.NotImplementedException;
-
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
-import org.apache.spark.sql.catalyst.expressions.MutableRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
@@ -93,7 +90,7 @@ public final class ColumnarBatch {
    * Adapter class to interop with existing components that expect internal row. A lot of
    * performance is lost with this translation.
    */
-  public static final class Row extends MutableRow {
+  public static final class Row extends InternalRow {
     protected int rowId;
     private final ColumnarBatch parent;
     private final int fixedLenRowSize;
@@ -131,7 +128,7 @@ public final class ColumnarBatch {
      * Revisit this. This is expensive. This is currently only used in test paths.
      */
     public InternalRow copy() {
-      GenericMutableRow row = new GenericMutableRow(columns.length);
+      GenericInternalRow row = new GenericInternalRow(columns.length);
       for (int i = 0; i < numFields(); i++) {
         if (isNullAt(i)) {
           row.setNullAt(i);
@@ -139,6 +136,10 @@ public final class ColumnarBatch {
           DataType dt = columns[i].dataType();
           if (dt instanceof BooleanType) {
             row.setBoolean(i, getBoolean(i));
+          } else if (dt instanceof ByteType) {
+            row.setByte(i, getByte(i));
+          } else if (dt instanceof ShortType) {
+            row.setShort(i, getShort(i));
           } else if (dt instanceof IntegerType) {
             row.setInt(i, getInt(i));
           } else if (dt instanceof LongType) {
@@ -156,6 +157,8 @@ public final class ColumnarBatch {
             row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
           } else if (dt instanceof DateType) {
             row.setInt(i, getInt(i));
+          } else if (dt instanceof TimestampType) {
+            row.setLong(i, getLong(i));
           } else {
             throw new RuntimeException("Not implemented. " + dt);
           }
@@ -166,7 +169,7 @@ public final class ColumnarBatch {
 
     @Override
     public boolean anyNull() {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -227,12 +230,12 @@ public final class ColumnarBatch {
 
     @Override
     public MapData getMap(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
     public Object get(int ordinal, DataType dataType) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -258,7 +261,7 @@ public final class ColumnarBatch {
           setDecimal(ordinal, Decimal.apply((BigDecimal) value, t.precision(), t.scale()),
               t.precision());
         } else {
-          throw new NotImplementedException("Datatype not supported " + dt);
+          throw new UnsupportedOperationException("Datatype not supported " + dt);
         }
       }
     }
@@ -430,7 +433,7 @@ public final class ColumnarBatch {
    */
   public void setColumn(int ordinal, ColumnVector column) {
     if (column instanceof OffHeapColumnVector) {
-      throw new NotImplementedException("Need to ref count columns.");
+      throw new UnsupportedOperationException("Need to ref count columns.");
     }
     columns[ordinal] = column;
   }

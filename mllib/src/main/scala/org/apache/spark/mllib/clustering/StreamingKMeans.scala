@@ -39,10 +39,14 @@ import org.apache.spark.util.random.XORShiftRandom
  * generalized to incorporate forgetfullness (i.e. decay).
  * The update rule (for each cluster) is:
  *
- * {{{
- * c_t+1 = [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t]
- * n_t+t = n_t * a + m_t
- * }}}
+ * <p><blockquote>
+ *    $$
+ *    \begin{align}
+ *     c_t+1 &= [(c_t * n_t * a) + (x_t * m_t)] / [n_t + m_t] \\
+ *     n_t+t &= n_t * a + m_t
+ *    \end{align}
+ *    $$
+ * </blockquote></p>
  *
  * Where c_t is the previously estimated centroid for that cluster,
  * n_t is the number of points assigned to it thus far, x_t is the centroid
@@ -135,8 +139,8 @@ class StreamingKMeansModel @Since("1.2.0") (
       while (j < dim) {
         val x = largestClusterCenter(j)
         val p = 1e-14 * math.max(math.abs(x), 1.0)
-        largestClusterCenter.toBreeze(j) = x + p
-        smallestClusterCenter.toBreeze(j) = x - p
+        largestClusterCenter.asBreeze(j) = x + p
+        smallestClusterCenter.asBreeze(j) = x - p
         j += 1
       }
     }

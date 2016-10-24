@@ -33,9 +33,9 @@ import org.apache.spark.sql.types.StringType
  */
 case class ShowDatabasesCommand(databasePattern: Option[String]) extends RunnableCommand {
 
-  // The result of SHOW DATABASES has one column called 'result'
+  // The result of SHOW DATABASES has one column called 'databaseName'
   override val output: Seq[Attribute] = {
-    AttributeReference("result", StringType, nullable = false)() :: Nil
+    AttributeReference("databaseName", StringType, nullable = false)() :: Nil
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -59,6 +59,4 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
     sparkSession.sessionState.catalog.setCurrentDatabase(databaseName)
     Seq.empty[Row]
   }
-
-  override val output: Seq[Attribute] = Seq.empty
 }

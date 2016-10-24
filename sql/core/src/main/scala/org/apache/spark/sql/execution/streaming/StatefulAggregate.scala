@@ -22,7 +22,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -56,7 +58,12 @@ case class StateStoreRestoreExec(
     child: SparkPlan)
   extends execution.UnaryExecNode with StatefulOperator {
 
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
   override protected def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
       operatorId = getStateId.operatorId,
@@ -69,11 +76,15 @@ case class StateStoreRestoreExec(
         iter.flatMap { row =>
           val key = getKey(row)
           val savedState = store.get(key)
+          numOutputRows += 1
           row +: savedState.toSeq
         }
     }
   }
+
   override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 /**
@@ -82,10 +93,20 @@ case class StateStoreRestoreExec(
 case class StateStoreSaveExec(
     keyExpressions: Seq[Attribute],
     stateId: Option[OperatorStateId],
+    returnAllStates: Option[Boolean],
     child: SparkPlan)
   extends execution.UnaryExecNode with StatefulOperator {
 
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
+    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"))
+
   override protected def doExecute(): RDD[InternalRow] = {
+    metrics // force lazy init at driver
+    assert(returnAllStates.nonEmpty,
+      "Incorrect planning in IncrementalExecution, returnAllStates have not been set")
+    val saveAndReturnFunc = if (returnAllStates.get) saveAndReturnAll _ else saveAndReturnUpdated _
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
       operatorId = getStateId.operatorId,
@@ -93,29 +114,75 @@ case class StateStoreSaveExec(
       keyExpressions.toStructType,
       child.output.toStructType,
       sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
-        new Iterator[InternalRow] {
-          private[this] val baseIterator = iter
-          private[this] val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-
-          override def hasNext: Boolean = {
-            if (!baseIterator.hasNext) {
-              store.commit()
-              false
-            } else {
-              true
-            }
-          }
-
-          override def next(): InternalRow = {
-            val row = baseIterator.next().asInstanceOf[UnsafeRow]
-            val key = getKey(row)
-            store.put(key.copy(), row.copy())
-            row
-          }
-        }
-    }
+      Some(sqlContext.streams.stateStoreCoordinator)
+    )(saveAndReturnFunc)
   }
 
   override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  /**
+   * Save all the rows to the state store, and return all the rows in the state store.
+   * Note that this returns an iterator that pipelines the saving to store with downstream
+   * processing.
+   */
+  private def saveAndReturnUpdated(
+      store: StateStore,
+      iter: Iterator[InternalRow]): Iterator[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    val numTotalStateRows = longMetric("numTotalStateRows")
+    val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+
+    new Iterator[InternalRow] {
+      private[this] val baseIterator = iter
+      private[this] val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+
+      override def hasNext: Boolean = {
+        if (!baseIterator.hasNext) {
+          store.commit()
+          numTotalStateRows += store.numKeys()
+          false
+        } else {
+          true
+        }
+      }
+
+      override def next(): InternalRow = {
+        val row = baseIterator.next().asInstanceOf[UnsafeRow]
+        val key = getKey(row)
+        store.put(key.copy(), row.copy())
+        numOutputRows += 1
+        numUpdatedStateRows += 1
+        row
+      }
+    }
+  }
+
+  /**
+   * Save all the rows to the state store, and return all the rows in the state store.
+   * Note that the saving to store is blocking; only after all the rows have been saved
+   * is the iterator on the update store data is generated.
+   */
+  private def saveAndReturnAll(
+      store: StateStore,
+      iter: Iterator[InternalRow]): Iterator[InternalRow] = {
+    val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+    val numOutputRows = longMetric("numOutputRows")
+    val numTotalStateRows = longMetric("numTotalStateRows")
+    val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+
+    while (iter.hasNext) {
+      val row = iter.next().asInstanceOf[UnsafeRow]
+      val key = getKey(row)
+      store.put(key.copy(), row.copy())
+      numUpdatedStateRows += 1
+    }
+    store.commit()
+    numTotalStateRows += store.numKeys()
+    store.iterator().map { case (k, v) =>
+      numOutputRows += 1
+      v.asInstanceOf[InternalRow]
+    }
+  }
 }

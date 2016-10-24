@@ -88,7 +88,7 @@ class AccumulatorV2Suite extends SparkFunSuite {
   }
 
   test("ListAccumulator") {
-    val acc = new ListAccumulator[Double]
+    val acc = new CollectionAccumulator[Double]
     assert(acc.value.isEmpty)
     assert(acc.isZero)
 
@@ -116,6 +116,15 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc.value.contains(2.0))
     assert(!acc.isZero)
     assert(acc.value.size() === 3)
+
+    val acc3 = acc.copy()
+    assert(acc3.value.contains(2.0))
+    assert(!acc3.isZero)
+    assert(acc3.value.size() === 3)
+
+    acc3.reset()
+    assert(acc3.isZero)
+    assert(acc3.value.isEmpty)
   }
 
   test("LegacyAccumulatorWrapper") {
@@ -144,5 +153,13 @@ class AccumulatorV2Suite extends SparkFunSuite {
     acc.merge(acc2)
     assert(acc.value === "baz")
     assert(!acc.isZero)
+
+    val acc3 = acc.copy()
+    assert(acc3.value === "baz")
+    assert(!acc3.isZero)
+
+    acc3.reset()
+    assert(acc3.isZero)
+    assert(acc3.value === "")
   }
 }

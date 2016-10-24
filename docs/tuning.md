@@ -45,6 +45,7 @@ and calling `conf.set("spark.serializer", "org.apache.spark.serializer.KryoSeria
 This setting configures the serializer used for not only shuffling data between worker
 nodes but also when serializing RDDs to disk.  The only reason Kryo is not the default is because of the custom
 registration requirement, but we recommend trying it in any network-intensive application.
+Since Spark 2.0.0, we internally use Kryo serializer when shuffling RDDs with simple types, arrays of simple types, or string type.
 
 Spark automatically includes Kryo serializers for the many commonly-used core Scala classes covered
 in the AllScalaRegistrar from the [Twitter chill](https://github.com/twitter/chill) library.
@@ -115,12 +116,15 @@ Although there are two relevant configurations, the typical user should not need
 as the default values are applicable to most workloads:
 
 * `spark.memory.fraction` expresses the size of `M` as a fraction of the (JVM heap space - 300MB)
-(default 0.75). The rest of the space (25%) is reserved for user data structures, internal
+(default 0.6). The rest of the space (40%) is reserved for user data structures, internal
 metadata in Spark, and safeguarding against OOM errors in the case of sparse and unusually
 large records.
 * `spark.memory.storageFraction` expresses the size of `R` as a fraction of `M` (default 0.5).
 `R` is the storage space within `M` where cached blocks immune to being evicted by execution.
 
+The value of `spark.memory.fraction` should be set in order to fit this amount of heap space
+comfortably within the JVM's old or "tenured" generation. See the discussion of advanced GC
+tuning below for details.
 
 ## Determining Memory Consumption
 
@@ -201,14 +205,22 @@ temporary objects created during task execution. Some steps which may be useful 
 * Check if there are too many garbage collections by collecting GC stats. If a full GC is invoked multiple times for
   before a task completes, it means that there isn't enough memory available for executing tasks.
 
-* In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of
-  memory used for caching by lowering `spark.memory.storageFraction`; it is better to cache fewer
-  objects than to slow down task execution!
-
 * If there are too many minor collections but not many major GCs, allocating more memory for Eden would help. You
   can set the size of the Eden to be an over-estimate of how much memory each task will need. If the size of Eden
   is determined to be `E`, then you can set the size of the Young generation using the option `-Xmn=4/3*E`. (The scaling
   up by 4/3 is to account for space used by survivor regions as well.)
+  
+* In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of
+  memory used for caching by lowering `spark.memory.fraction`; it is better to cache fewer
+  objects than to slow down task execution. Alternatively, consider decreasing the size of
+  the Young generation. This means lowering `-Xmn` if you've set it as above. If not, try changing the 
+  value of the JVM's `NewRatio` parameter. Many JVMs default this to 2, meaning that the Old generation 
+  occupies 2/3 of the heap. It should be large enough such that this fraction exceeds `spark.memory.fraction`.
+  
+* Try the G1GC garbage collector with `-XX:+UseG1GC`. It can improve performance in some situations where
+  garbage collection is a bottleneck. Note that with large executor heap sizes, it may be important to
+  increase the [G1 region size](https://blogs.oracle.com/g1gc/entry/g1_gc_tuning_a_case) 
+  with `-XX:G1HeapRegionSize`
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
@@ -220,6 +232,9 @@ temporary objects created during task execution. Some steps which may be useful 
 Our experience suggests that the effect of GC tuning depends on your application and the amount of memory available.
 There are [many more tuning options](http://www.oracle.com/technetwork/java/javase/gc-tuning-6-140523.html) described online,
 but at a high level, managing how frequently full GC takes place can help in reducing the overhead.
+
+GC tuning flags for executors can be specified by setting `spark.executor.extraJavaOptions` in
+a job's configuration.
 
 # Other Considerations
 
