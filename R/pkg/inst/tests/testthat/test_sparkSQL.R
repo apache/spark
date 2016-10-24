@@ -2676,6 +2676,11 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
                paste("Error in loadDF : analysis error - Unable to infer schema for JSON at .",
                      "It must be specified manually"))
   expect_error(read.df("arbitrary_path"), "Error in loadDF : analysis error - Path does not exist")
+  expect_error(read.json("arbitrary_path"), "Error in json : analysis error - Path does not exist")
+  expect_error(read.text("arbitrary_path"), "Error in text : analysis error - Path does not exist")
+  expect_error(read.orc("arbitrary_path"), "Error in orc : analysis error - Path does not exist")
+  expect_error(read.parquet("arbitrary_path"),
+              "Error in parquet : analysis error - Path does not exist")
 
   # Arguments checking in R side.
   expect_error(read.df(path = c(3)),
@@ -2683,6 +2688,9 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   expect_error(read.df(jsonPath, source = c(1, 2)),
                paste("source should be character, NULL or omitted. It is the datasource specified",
                      "in 'spark.sql.sources.default' configuration by default."))
+
+  expect_warning(read.json(jsonPath, a = 1, 2, 3, "a"),
+                 "Non-named arguments ignored: 2, 3, a.")
 })
 
 unlink(parquetPath)
