@@ -61,7 +61,17 @@ private[kafka010] object KafkaSourceOffset {
     KafkaSourceOffset(offsetTuples.map { case(t, p, o) => (new TopicPartition(t, p), o) }.toMap)
   }
 
-  def apply(json: String): KafkaSourceOffset = {
-    KafkaSourceOffset(read[List[(TopicPartition, Long)]](json).toMap)
+  def apply(serialized: Offset): KafkaSourceOffset = {
+    /*
+    println(s"JSON KAFKA OFFSET: " + serialized.json)
+    val offsets = read[List[(TopicPartition, Long)]](serialized.json)
+    for (offset <- offsets) {
+      println("Offset: " + offset._1 + ", " + offset._2)
+    }
+    */
+
+    val offset = KafkaSourceOffset(read[List[(TopicPartition, Long)]](serialized.json).toMap)
+    println("OFFSET: " + offset)
+    offset
   }
 }

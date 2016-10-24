@@ -28,4 +28,11 @@ abstract class Offset {
 }
 
 /** Used when loading */
-final class SerializedOffset(override val json: String) extends Offset
+class SerializedOffset(override val json: String) extends Offset
+
+
+object SerializedOffset {
+
+  def apply(json: String): SerializedOffset = new SerializedOffset(json)
+
+}

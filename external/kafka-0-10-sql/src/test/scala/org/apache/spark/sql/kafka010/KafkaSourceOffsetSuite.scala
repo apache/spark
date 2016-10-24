@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import org.apache.spark.sql.execution.streaming.SerializedOffset
 import org.apache.spark.sql.streaming.OffsetSuite
 
 class KafkaSourceOffsetSuite extends OffsetSuite {
@@ -36,4 +37,9 @@ class KafkaSourceOffsetSuite extends OffsetSuite {
   compare(
     one = KafkaSourceOffset(("t", 0, 1L)),
     two = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L)))
+
+  compare(
+    one = KafkaSourceOffset(SerializedOffset(KafkaSourceOffset(("t", 0, 1L)).json)),
+    two = KafkaSourceOffset(SerializedOffset(KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L)).json)))
+
 }
