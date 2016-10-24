@@ -255,6 +255,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override def guarantees(other: Partitioning): Boolean = other match {
     case o: HashPartitioning => this.semanticEquals(o)
+    case o: PartitioningCollection => o.partitionings.exists(this.guarantees)
     case _ => false
   }
 
