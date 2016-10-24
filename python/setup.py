@@ -8,10 +8,11 @@ VERSION = '2.1.0-SNAPSHOT'
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
 JARS_PATH = "%s/assembly/target/scala-2.11/jars/" % SPARK_HOME
+EXAMPLES_PATH = "%s/examples/src/main/python" % SPARK_HOME
 SCRIPTS_PATH = "%s/bin" % SPARK_HOME
 SCRIPTS_TARGET = "%s/bin" % TEMP_PATH
 JARS_TARGET = "%s/jars" % TEMP_PATH
-
+EXAMPLES_TARGET = "%s/examples" % TEMP_PATH
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.scala")
@@ -27,6 +28,7 @@ try:
     if (in_spark):
         os.symlink(JARS_PATH, JARS_TARGET)
         os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
+        os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
     else:
         # We add find-spark-home.py to the bin directory we install so that pip installed PySpark
         # will search for SPARK_HOME with Python.
@@ -55,17 +57,20 @@ try:
                   'pyspark.streaming',
                   'pyspark.bin',
                   'pyspark.jars',
-                  'pyspark.python.lib'],
+                  'pyspark.python.lib',
+                  'pyspark.examples.src.main.python'],
         include_package_data=True,
         package_dir={
             'pyspark.jars': 'deps/jars',
             'pyspark.bin': 'deps/bin',
             'pyspark.python.lib': 'lib',
+            'pyspark.examples.src.main.python': 'deps/examples',
         },
         package_data={
             'pyspark.jars': ['*.jar'],
             'pyspark.bin': ['*'],
-            'pyspark.python.lib': ['*.zip']},
+            'pyspark.python.lib': ['*.zip'],
+            'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
         install_requires=['py4j==0.10.3'],
@@ -81,4 +86,5 @@ finally:
     if (in_spark):
         os.remove("%s/jars" % TEMP_PATH)
         os.remove("%s/bin" % TEMP_PATH)
+        os.remove("%s/examples" % TEMP_PATH)
         os.rmdir(TEMP_PATH)

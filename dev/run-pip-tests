@@ -21,7 +21,8 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-# Run the tests
+# Run the tests, we wrap the underlying test script for cleanup and because early exit
+# doesn't always properly exit a virtualenv.
 ./run-pip-test-2
 export success=$?
 

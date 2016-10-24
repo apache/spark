@@ -21,10 +21,30 @@
 set -e
 set -x
 
+FWDIR="$(cd "`dirname $0`"/..; pwd)"
+cd "$FWDIR"
+# Some systems don't have pip or virtualenv - in those cases our tests won't work.
+if ! hash virtualenv 2>/dev/null; then
+  echo "Missing virtualenv skipping pip installability tests."
+  exit 0
+fi
+if ! hash pip 2>/dev/null; then
+  echo "Missing pip, skipping pip installability tests."
+  exit 0
+fi
+
+if [ -d ~/.cache/pip/wheels/ ]; then
+  echo "Cleaning up pip wheel cache so we install the fresh package"
+  rm -rf ~/.cache/pip/wheels/
+fi
+
 # Create a temp directory for us to work in and save its name to a file for cleanup
 echo "Constucting virtual env for testing"
 mktemp -d > ./virtual_env_temp_dir
-virtualenv `cat ./virtual_env_temp_dir`
+VIRTUALENV_BASE=`cat ./virtual_env_temp_dir`
+echo "Using $VIRTUALENV_BASE for virtualenv"
+virtualenv $VIRTUALENV_BASE
+source $VIRTUALENV_BASE/bin/activate
 
 echo "Creating pip installable source dist"
 cd python
@@ -32,6 +52,11 @@ python setup.py sdist
 
 echo "Installing dist into virtual env"
 cd dist
-pip install *.tar.gz
+pip install --upgrade --force-reinstall *.tar.gz
+
+echo "Run basic sanity check on pip installed version with spark-submit"
+spark-submit $FWDIR/dev/pip-sanity-check.py
+echo "Run basic sanity check with import based"
+python $FWDIR/dev/pip-sanity-check.py
 
 cd "$FWDIR"

@@ -1,4 +1,5 @@
 recursive-include deps/jars *.jar
 recursive-include deps/bin *
+recursive-include deps/examples *.py
 recursive-include lib *.zip
 include find-spark-home.py
