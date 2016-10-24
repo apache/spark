@@ -237,19 +237,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
-          val appListener = new ApplicationEventListener()
-          replayBus.addListener(appListener)
-          val appAttemptInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
+
+          val res = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
             replayBus)
-          appAttemptInfo.map { info =>
+
+          res.map { case (attemptInfo, envInfo) =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
             // make sure to set admin acls before view acls so they are properly picked up
-            ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
+            ui.getSecurityManager.setAdminAcls(envInfo.adminAcls.getOrElse(""))
             ui.getSecurityManager.setViewAcls(attempt.sparkUser,
-              appListener.viewAcls.getOrElse(""))
-            ui.getSecurityManager.setAdminAclsGroups(appListener.adminAclsGroups.getOrElse(""))
-            ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
+              envInfo.viewAcls.getOrElse(""))
+            ui.getSecurityManager.setAdminAclsGroups(envInfo.adminAclsGroups.getOrElse(""))
+            ui.getSecurityManager.setViewAclsGroups(envInfo.viewAclsGroups.getOrElse(""))
             LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize))
           }
         }
@@ -410,12 +410,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
         val res = replay(fileStatus, bus, eventsFilter)
 
-        res match {
-          case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully: $r")
-          case None => logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
-            "The application may have not started.")
+        res.map {
+          case (attempt, _) =>
+            logDebug(s"Application log ${attempt.logPath} loaded successfully: $attempt")
+            attempt
         }
-        res
+
       } catch {
         case e: Exception =>
           logError(
@@ -425,6 +425,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
     if (newAttempts.isEmpty) {
+      logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
+        "The application may have not started.")
       return
     }
 
@@ -557,11 +559,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Replays the events in the specified log file and returns information about the associated
    * application. Return `None` if the application ID cannot be located.
+   *
+   * Depending on the eventsFilter, return values may not be populated or get returned as `None`
+   * because the events carrying the needed data are filtered out and therefore not replayed.
    */
   private def replay(
       eventLog: FileStatus,
       bus: ReplayListenerBus,
-      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Option[FsApplicationAttemptInfo] = {
+      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER)
+  : (Option[(FsApplicationAttemptInfo, FsApplicationEnvACLInfo)]) = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
     // Note that the eventLog may have *increased* in size since when we grabbed the filestatus,
@@ -593,7 +599,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           eventLog.getLen()
         )
         fileToAppInfo(logPath) = attemptInfo
-        Some(attemptInfo)
+
+        val appEnvInfo = new FsApplicationEnvACLInfo(
+          appListener.adminAcls,
+          appListener.adminAcls,
+          appListener.viewAclsGroups,
+          appListener.adminAclsGroups)
+
+        Some(attemptInfo, appEnvInfo)
       } else {
         None
       }
@@ -601,7 +614,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logInput.close()
     }
   }
-
   /**
    * Return true when the application has completed.
    */
@@ -726,6 +738,19 @@ private class FsApplicationAttemptInfo(
       s" ${super.toString}, source=$logPath, size=$fileSize"
   }
 }
+
+/**
+ * Application environment ACL information
+ * @param viewAcls view ACL individuals
+ * @param adminAcls admin ACL individuals
+ * @param viewAclsGroups view ACL groups
+ * @param adminAclsGroups admin ACL groups
+ */
+private[spark] case class FsApplicationEnvACLInfo(
+    viewAcls: Option[String],
+    adminAcls: Option[String],
+    viewAclsGroups: Option[String],
+    adminAclsGroups: Option[String])
 
 /**
  * Application history information
