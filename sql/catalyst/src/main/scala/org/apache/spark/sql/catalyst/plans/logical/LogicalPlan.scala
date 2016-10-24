@@ -293,17 +293,19 @@ abstract class UnaryNode extends LogicalPlan {
    * expressions with the corresponding alias
    */
   protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
-    var aliasedConstraints = child.constraints.toSeq
+    var aliasedConstraints = child.constraints.toSet
     projectList.foreach {
       case a @ Alias(e, _) =>
+        // For every alias in `projectList`, replace the reference in constraints by its attribute.
         aliasedConstraints ++= aliasedConstraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
-        }) :+ EqualNullSafe(e, a.toAttribute)
+        })
+        aliasedConstraints += EqualNullSafe(e, a.toAttribute)
       case _ => // Don't change.
     }
 
-    aliasedConstraints.toSet
+    aliasedConstraints
   }
 
   override protected def validConstraints: Set[Expression] = child.constraints
