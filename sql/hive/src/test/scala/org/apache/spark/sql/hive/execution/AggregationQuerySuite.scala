@@ -851,42 +851,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
   }
 
-  test("percentile") {
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT
-          |  percentile(value1, 0.5)
-          |FROM agg2
-          |LIMIT 1
-        """.stripMargin),
-      Row(Seq(1)) :: Nil)
-
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT
-          |  percentile(value1, array(0d, 0.5d, 1d))
-          |FROM agg2
-          |LIMIT 1
-        """.stripMargin),
-      Row(Seq(-60, 1, 100)) :: Nil)
-
-    checkAnswer(
-      spark.sql(
-        """
-          |SELECT
-          |  key,
-          |  percentile(value1, array(0d, 0.5d, 1d))
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(null, Seq(-60, -10, 100)) ::
-        Row(1, Seq(10, 30, 30)) ::
-        Row(2, Seq(-1, 1, 1)) ::
-        Row(3, Seq.empty) :: Nil)
-  }
-
   test("no aggregation function (SPARK-11486)") {
     val df = spark.range(20).selectExpr("id", "repeat(id, 1) as s")
       .groupBy("s").count()

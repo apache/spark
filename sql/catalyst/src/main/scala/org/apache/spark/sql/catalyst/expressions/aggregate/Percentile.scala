@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
@@ -25,26 +26,37 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
- * The Percentile aggregate function computes the exact percentile(s) of expr at pc with range in
- * [0, 1].
- * The parameter pc can be a DoubleType or DoubleType array.
+ * The Percentile aggregate function returns the exact percentile(s) of numeric column `expr` at
+ * the given percentage(s) with value range in [0.0, 1.0].
  *
  * The operator is bound to the slower sort based aggregation path because the number of elements
  * and their partial order cannot be determined in advance. Therefore we have to store all the
  * elements in memory, and that too many elements can cause GC paused and eventually OutOfMemory
  * Errors.
+ *
+ * @param child child expression that produce numeric column value with `child.eval(inputRow)`
+ * @param percentageExpression Expression that represents a single percentage value or an array of
+ *                             percentage values. Each percentage value must be in the range
+ *                             [0.0, 1.0].
  */
 @ExpressionDescription(
-  usage = """_FUNC_(expr, pc) - Returns the percentile(s) of expr at pc (range: [0,1]). pc can be
-  a double or double array.""")
+  usage =
+    """
+      _FUNC_(col, percentage) - Returns the exact percentile value of numeric column `col` at the
+      given percentage. The value of percentage must be between 0.0 and 1.0.
+
+      _FUNC_(col, array(percentage1 [, percentage2]...)) - Returns the exact percentile value array
+      of numeric column `col` at the given percentage(s). Each value of the percentage array must
+      be between 0.0 and 1.0.
+    """)
 case class Percentile(
   child: Expression,
-  pc: Expression,
+  percentageExpression: Expression,
   mutableAggBufferOffset: Int = 0,
   inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
 
-  def this(child: Expression, pc: Expression) = {
-    this(child = child, pc = pc, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+  def this(child: Expression, percentageExpression: Expression) = {
+    this(child, percentageExpression, 0, 0)
   }
 
   override def prettyName: String = "percentile"
@@ -57,13 +69,19 @@ case class Percentile(
 
   private var counts = new OpenHashMap[Number, Long]
 
-  override def children: Seq[Expression] = child :: pc :: Nil
+  // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
+  private lazy val (returnPercentileArray: Boolean, percentages: Seq[Number]) =
+    evalPercentages(percentageExpression)
+
+  override def children: Seq[Expression] = child :: percentageExpression :: Nil
 
   override def nullable: Boolean = false
 
-  override def dataType: DataType = ArrayType(DoubleType)
+  override def dataType: DataType =
+    if (returnPercentileArray) ArrayType(DoubleType) else DoubleType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(NumericType, TypeCollection(NumericType, ArrayType))
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForOrderingExpr(child.dataType, "function percentile")
@@ -82,32 +100,25 @@ case class Percentile(
     counts = new OpenHashMap[Number, Long]
   }
 
-  private def evalPercentiles(input: InternalRow): Seq[Number] = {
-    val exprs = children
-    val percentiles: Seq[Number] = children(1).eval(input) match {
-      case ar: GenericArrayData =>
-        ar.asInstanceOf[GenericArrayData].array.map{ d => d.asInstanceOf[Number]}
-      case d: Number =>
-        Seq(d.asInstanceOf[Number])
-      case d: Decimal =>
-        Seq(d.toDouble.asInstanceOf[Number])
-      case _ =>
-        sys.error("Percentiles expression cannot be analyzed.")
+  private def evalPercentages(expr: Expression): (Boolean, Seq[Number]) = {
+    val (isArrayType, values) = (expr.dataType, expr.eval()) match {
+      case (_, n: Number) => (false, Seq(n))
+      case (_, d: Decimal) => (false, Seq(d.toDouble.asInstanceOf[Number]))
+      case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
+        (true, arrayData.toArray[Number](baseType).toSeq)
+      case other =>
+        throw new AnalysisException(s"Invalid data type ${other._1} for parameter percentage")
     }
 
-    require(percentiles.size > 0, "Percentiles should not be empty.")
+    require(values.size > 0, s"Percentage values should not be empty.")
 
-    require(percentiles.forall(percentile =>
-      percentile.doubleValue() >= 0.0 && percentile.doubleValue() <= 1.0),
-      "Percentile value must be within the range of 0 to 1.")
+    require(values.forall(value => value.doubleValue() >= 0.0 && value.doubleValue() <= 1.0),
+      s"Percentage values must be between 0.0 and 1.0, current values = ${values.mkString(", ")}")
 
-    percentiles
+    (isArrayType, values)
   }
 
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
-    // Eval percentiles and check whether its value is valid.
-    val percentiles = evalPercentiles(input)
-
     val key = child.eval(input).asInstanceOf[Number]
 
     // Null values are ignored when computing percentiles.
@@ -122,27 +133,31 @@ case class Percentile(
 
   override def eval(buffer: InternalRow): Any = {
     if (counts.isEmpty) {
-      return new GenericArrayData(Seq.empty)
+      return generateOutput(Seq.empty)
     }
 
-    val percentiles = evalPercentiles(buffer)
-
-    // Sort all items and generate a sequence, then accumulate the counts
-    var ascOrder = new Ordering[Int]() {
-      override def compare(a: Int, b: Int): Int = a - b
-    }
     val sortedCounts = counts.toSeq.sortBy(_._1)(new Ordering[Number]() {
       override def compare(a: Number, b: Number): Int =
         scala.math.signum(a.doubleValue() - b.doubleValue()).toInt
     })
     val aggreCounts = sortedCounts.scanLeft(sortedCounts.head._1, 0L) {
       (k1: (Number, Long), k2: (Number, Long)) => (k2._1, k1._2 + k2._2)
-    }.drop(1)
+    }.tail
     val maxPosition = aggreCounts.last._2 - 1
 
-    new GenericArrayData(percentiles.map { percentile =>
+    generateOutput(percentages.map { percentile =>
       getPercentile(aggreCounts, maxPosition * percentile.doubleValue()).doubleValue()
     })
+  }
+
+  private def generateOutput(results: Seq[Double]): Any = {
+    if (results.isEmpty) {
+      null
+    } else if (returnPercentileArray) {
+      new GenericArrayData(results)
+    } else {
+      results.head
+    }
   }
 
   /**

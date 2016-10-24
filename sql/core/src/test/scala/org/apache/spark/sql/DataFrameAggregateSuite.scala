@@ -514,28 +514,4 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
       Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
   }
-
-  test("percentile functions") {
-    val df = Seq(1, 3, 3, 6, 5, 4, 17, 38, 29, 400).toDF("a")
-    checkAnswer(
-      df.select(percentile($"a", 0.5), percentile($"a", Seq(0, 0.75, 1))),
-      Seq(Row(Seq(5.5), Seq(1.0, 26.0, 400.0)))
-    )
-  }
-
-  test("percentile functions with zero input rows.") {
-    val df = Seq(1, 3, 3, 6, 5, 4, 17, 38, 29, 400).toDF("a").where($"a" < 0)
-    checkAnswer(
-      df.select(percentile($"a", 0.5)),
-      Seq(Row(Seq.empty))
-    )
-  }
-
-  test("percentile functions with empty percentile param") {
-    val df = Seq(1, 3, 3, 6, 5, 4, 17, 38, 29, 400).toDF("a")
-    val error = intercept[SparkException] {
-      df.select(percentile($"a", Seq())).collect()
-    }
-    assert(error.getMessage.contains("Percentiles should not be empty."))
-  }
 }
