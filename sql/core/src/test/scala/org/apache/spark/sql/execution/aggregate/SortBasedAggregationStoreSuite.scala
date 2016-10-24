@@ -67,7 +67,7 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
       updateInputRow(hashMap.getAggregationBuffer(group), inputRow)
     }
 
-    val store = new SortBasedAggregationStore(
+    val store = new SortBasedAggregator(
       createSortedAggBufferIterator(hashMap),
       inputSchema,
       groupingSchema,

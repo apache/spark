@@ -140,7 +140,7 @@ class ObjectAggregationIterator(
 
     // If in-memory map is unable to stores all aggregation buffer, fallback to sort-based
     // aggregation backed by sorted physical storage.
-    var sortBasedAggregationStore: SortBasedAggregationStore = null
+    var sortBasedAggregationStore: SortBasedAggregator = null
 
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
@@ -176,7 +176,7 @@ class ObjectAggregationIterator(
         val sortIteratorFromHashMap = hashMap
           .dumpToExternalSorter(groupingAttributes, aggregateFunctions)
           .sortedIterator()
-        sortBasedAggregationStore = new SortBasedAggregationStore(
+        sortBasedAggregationStore = new SortBasedAggregator(
           sortIteratorFromHashMap,
           StructType.fromAttributes(originalInputAttributes),
           StructType.fromAttributes(groupingAttributes),
@@ -202,19 +202,19 @@ class ObjectAggregationIterator(
 }
 
 /**
- * Aggregation store used to do sort-based aggregation.
+ * A class used to handle sort-based aggregation, used together with [[ObjectHashAggregateExec]].
  *
- * @param initialAggBufferIterator iterator that points to sorted input aggregation buffers. The
- *                                 aggregation buffers in this iterator will be merged to
- *                                 SortBasedAggregationStore.
+ * @param initialAggBufferIterator iterator that points to sorted input aggregation buffers
  * @param inputSchema  The schema of input row
  * @param groupingSchema The schema of grouping key
- * @param processRow  Function to update the aggregation buffer with input rows.
- * @param mergeAggregationBuffers Function to merge the aggregation buffer with input aggregation
- *                               buffer.
+ * @param processRow  Function to update the aggregation buffer with input rows
+ * @param mergeAggregationBuffers Function used to merge the input aggregation buffers into existing
+ *                                aggregation buffers
  * @param makeEmptyAggregationBuffer Creates an empty aggregation buffer
+ *
+ * @todo Try to eliminate this class by refactor and reuse code paths in [[SortAggregateExec]].
  */
-class SortBasedAggregationStore(
+class SortBasedAggregator(
     initialAggBufferIterator: KVIterator[UnsafeRow, UnsafeRow],
     inputSchema: StructType,
     groupingSchema: StructType,
