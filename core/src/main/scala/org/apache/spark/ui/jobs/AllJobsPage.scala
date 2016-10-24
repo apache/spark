@@ -606,6 +606,8 @@ private[ui] class JobPagedTable(
        */
       val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
       <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
+    } else {
+      Seq.empty
     }
 
     <tr id={"job-" + job.jobId}>

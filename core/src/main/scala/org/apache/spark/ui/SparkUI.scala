@@ -58,16 +58,13 @@ private[spark] class SparkUI private (
 
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
-
-  val jobsTab = new JobsTab(this)
-
-  val stagesTab = new StagesTab(this)
-
   var appId: String = _
 
   /** Initialize all components of the server. */
   def initialize() {
+    val jobsTab = new JobsTab(this)
     attachTab(jobsTab)
+    val stagesTab = new StagesTab(this)
     attachTab(stagesTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
