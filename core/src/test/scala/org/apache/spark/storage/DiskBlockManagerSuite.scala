@@ -24,27 +24,23 @@ import scala.language.reflectiveCalls
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
   private val testConf = new SparkConf(false)
-  private var rootDir0: File = _
-  private var rootDir1: File = _
-  private var rootDirs: String = _
+  private var rootDirs: Seq[File] = _
 
   var diskBlockManager: DiskBlockManager = _
 
   override def beforeAll() {
     super.beforeAll()
-    rootDir0 = Utils.createTempDir()
-    rootDir1 = Utils.createTempDir()
-    rootDirs = rootDir0.getAbsolutePath + "," + rootDir1.getAbsolutePath
+    rootDirs = (0 until 4).map(_ => Utils.createTempDir())
+    testConf.set("spark.local.dir", rootDirs.map(_.getAbsolutePath).mkString(","))
   }
 
   override def afterAll() {
     try {
-      Utils.deleteRecursively(rootDir0)
-      Utils.deleteRecursively(rootDir1)
+      rootDirs.foreach(Utils.deleteRecursively)
     } finally {
       super.afterAll()
     }
@@ -52,9 +48,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
   override def beforeEach() {
     super.beforeEach()
-    val conf = testConf.clone
-    conf.set("spark.local.dir", rootDirs)
-    diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
   }
 
   override def afterEach() {
@@ -68,6 +62,22 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
   test("basic block creation") {
     val blockId = new TestBlockId("test")
     val newFile = diskBlockManager.getFile(blockId)
+    writeToFile(newFile, 10)
+    assert(diskBlockManager.containsBlock(blockId))
+    newFile.delete()
+    assert(!diskBlockManager.containsBlock(blockId))
+  }
+
+  test("basic block creation using TieredAllocator") {
+    val conf = new SparkConfWithEnv(Map("SPARK_DISKSTORE_TIERS" -> "0000"))
+    conf.setAll(testConf.getAll)
+    conf.set("spark.diskStore.allocation", "TIERED")
+    diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+
+    val blockId = new TestBlockId("test")
+    val newFile = diskBlockManager.getFile(blockId)
+    writeToFile(newFile, 10)
+    diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
     writeToFile(newFile, 10)
     assert(diskBlockManager.containsBlock(blockId))
     newFile.delete()
