@@ -391,7 +391,7 @@ storageLevelToString <- function(levelObj) {
   useOffHeap <- callJMethod(levelObj, "useOffHeap")
   deserialized <- callJMethod(levelObj, "deserialized")
   replication <- callJMethod(levelObj, "replication")
-  if (!useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
+  shortName <- if (!useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
     "NONE"
   } else if (useDisk && !useMemory && !useOffHeap && !deserialized && replication == 1) {
     "DISK_ONLY"
@@ -416,7 +416,13 @@ storageLevelToString <- function(levelObj) {
   } else if (useDisk && useMemory && useOffHeap && !deserialized && replication == 1) {
     "OFF_HEAP"
   } else {
-    callJMethod(levelObj, "toString")
+    NULL
+  }
+  fullInfo <- callJMethod(levelObj, "toString")
+  if (is.null(shortName)) {
+    fullInfo
+  } else {
+    paste(shortName, "-", fullInfo)
   }
 }
 
