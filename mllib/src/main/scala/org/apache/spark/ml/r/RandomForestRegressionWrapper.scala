@@ -54,20 +54,21 @@ private[r] class RandomForestRegressorWrapper private (
 }
 
 private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRegressorWrapper] {
-  def fit(data: DataFrame,
-          formula: String,
-          maxDepth: Int,
-          maxBins: Int,
-          numTrees: Int,
-          impurity: String,
-          minInstancesPerNode: Int,
-          minInfoGain: Double,
-          checkpointInterval: Int,
-          featureSubsetStrategy: String,
-          seed: String,
-          subsamplingRate: Double,
-          maxMemoryInMB: Int,
-          cacheNodeIds: Boolean): RandomForestRegressorWrapper = {
+  def fit(  // scalastyle:ignore
+      data: DataFrame,
+      formula: String,
+      maxDepth: Int,
+      maxBins: Int,
+      numTrees: Int,
+      impurity: String,
+      minInstancesPerNode: Int,
+      minInfoGain: Double,
+      checkpointInterval: Int,
+      featureSubsetStrategy: String,
+      seed: String,
+      subsamplingRate: Double,
+      maxMemoryInMB: Int,
+      cacheNodeIds: Boolean): RandomForestRegressorWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
