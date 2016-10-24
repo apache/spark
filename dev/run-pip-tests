@@ -23,10 +23,13 @@ cd "$FWDIR"
 
 # Run the tests, we wrap the underlying test script for cleanup and because early exit
 # doesn't always properly exit a virtualenv.
-./run-pip-test-2
+$FWDIR/dev/run-pip-tests-2
 export success=$?
 
-# Clean up the virtual env enviroment used
-rm `cat ./virtual_env_temp-dir`
+# Clean up the virtual env enviroment used if we created one.
+if [ -f ./virtual_env_tmp_dir ]; then
+  rm -rf `cat ./virtual_env_temp_dir`
+  rm ./virtaul_env_tmp_dir
+fi
 
 exit $success

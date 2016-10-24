@@ -19,7 +19,6 @@
 
 # Stop on error
 set -e
-set -x
 
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
@@ -59,4 +58,4 @@ spark-submit $FWDIR/dev/pip-sanity-check.py
 echo "Run basic sanity check with import based"
 python $FWDIR/dev/pip-sanity-check.py
 
-cd "$FWDIR"
+exit 0
