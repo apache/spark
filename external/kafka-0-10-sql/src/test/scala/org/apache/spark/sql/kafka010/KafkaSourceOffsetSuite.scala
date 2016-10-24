@@ -40,6 +40,6 @@ class KafkaSourceOffsetSuite extends OffsetSuite {
 
   compare(
     one = KafkaSourceOffset(SerializedOffset(KafkaSourceOffset(("t", 0, 1L)).json)),
-    two = KafkaSourceOffset(SerializedOffset(KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L)).json)))
+    two = KafkaSourceOffset(SerializedOffset(KafkaSourceOffset(("t", 0, 2L), ("t", 1, 2L)).json)))
 
 }
