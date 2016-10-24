@@ -165,7 +165,7 @@ class StreamExecution(
     new Path(new Path(checkpointRoot), name).toUri.toString
 
   /**
-   * Starts the execution. This returns only after the thread has started and [[QueryStarted]] event
+   * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
    * has been posted to all the listeners.
    */
   def start(): Unit = {
@@ -177,9 +177,10 @@ class StreamExecution(
   /**
    * Repeatedly attempts to run batches as data arrives.
    *
-   * Note that this method ensures that [[QueryStarted]] and [[QueryTerminated]] events are posted
-   * such that listeners are guaranteed to get a start event before a termination. Furthermore, this
-   * method also ensures that [[QueryStarted]] event is posted before the `start()` method returns.
+   * Note that this method ensures that [[QueryStartedEvent]] and [[QueryTerminatedEvent]] are
+   * posted such that listeners are guaranteed to get a start event before a termination.
+   * Furthermore, this method also ensures that [[QueryStartedEvent]] event is posted before the
+   * `start()` method returns.
    */
   private def runBatches(): Unit = {
     try {
@@ -190,7 +191,7 @@ class StreamExecution(
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
       updateStatus()
-      postEvent(new QueryStarted(currentStatus)) // Assumption: Does not throw exception.
+      postEvent(new QueryStartedEvent(currentStatus)) // Assumption: Does not throw exception.
 
       // Unblock starting thread
       startLatch.countDown()
@@ -232,7 +233,7 @@ class StreamExecution(
         // Update metrics and notify others
         streamMetrics.reportTriggerFinished()
         updateStatus()
-        postEvent(new QueryProgress(currentStatus))
+        postEvent(new QueryProgressEvent(currentStatus))
         isTerminated
       })
     } catch {
@@ -260,7 +261,7 @@ class StreamExecution(
       // Notify others
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
       postEvent(
-        new QueryTerminated(currentStatus, exception.map(_.cause).map(Utils.exceptionString)))
+        new QueryTerminatedEvent(currentStatus, exception.map(_.cause).map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
   }

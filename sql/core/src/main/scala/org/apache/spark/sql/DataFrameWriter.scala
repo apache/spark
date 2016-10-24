@@ -426,8 +426,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
-    // connectionProperties should override settings in extraOptions
-    this.extraOptions = this.extraOptions ++ (connectionProperties.asScala)
+    // connectionProperties should override settings in extraOptions.
+    this.extraOptions = this.extraOptions ++ connectionProperties.asScala
     // explicit url and dbtable should override all
     this.extraOptions += ("url" -> url, "dbtable" -> table)
     format("jdbc").save()

@@ -31,7 +31,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile, WriterContainer}
+import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
 import org.apache.spark.sql.types._
 
 object CSVRelation extends Logging {
@@ -170,20 +171,25 @@ object CSVRelation extends Logging {
 
 private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
-      path: String,
-      bucketId: Option[Int],
+      stagingDir: String,
+      fileNamePrefix: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    if (bucketId.isDefined) sys.error("csv doesn't support bucketing")
-    new CsvOutputWriter(path, dataSchema, context, params)
+    new CsvOutputWriter(stagingDir, fileNamePrefix, dataSchema, context, params)
   }
 }
 
 private[csv] class CsvOutputWriter(
-    path: String,
+    stagingDir: String,
+    fileNamePrefix: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
+
+  override val path: String = {
+    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
+    new Path(stagingDir, fileNamePrefix + ".csv" + compressionExtension).toString
+  }
 
   // create the Generator without separator inserted between 2 records
   private[this] val text = new Text()
@@ -199,11 +205,7 @@ private[csv] class CsvOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.csv$extension")
+        new Path(path)
       }
     }.getRecordWriter(context)
   }

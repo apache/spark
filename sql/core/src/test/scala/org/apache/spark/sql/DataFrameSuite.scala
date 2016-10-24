@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.util.UUID
 
 import scala.util.Random
@@ -1616,6 +1617,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+<<<<<<< HEAD
   private def verifyNullabilityInFilterExec(
       df: DataFrame,
       expr: String,
@@ -1680,5 +1682,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
     val df3 = Seq((3, 1)).toDF("a", "d")
     checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
+  }
+
+  test("SPARK-17123: Performing set operations that combine non-scala native types") {
+    val dates = Seq(
+      (new Date(0), BigDecimal.valueOf(1), new Timestamp(2)),
+      (new Date(3), BigDecimal.valueOf(4), new Timestamp(5))
+    ).toDF("date", "timestamp", "decimal")
+
+    val widenTypedRows = Seq(
+      (new Timestamp(2), 10.5D, "string")
+    ).toDF("date", "timestamp", "decimal")
+
+    dates.union(widenTypedRows).collect()
+    dates.except(widenTypedRows).collect()
+    dates.intersect(widenTypedRows).collect()
   }
 }
