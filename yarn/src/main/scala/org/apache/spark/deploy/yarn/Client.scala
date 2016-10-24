@@ -1063,7 +1063,7 @@ private[spark] class Client(
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
           case NonFatal(e) =>
             logError(s"Failed to contact YARN for application $appId.", e)
-            cleanupStagingDir(appId)
+            // Don't necessarily clean up staging dir because status is unknown
             return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
         }
       val state = report.getYarnApplicationState
