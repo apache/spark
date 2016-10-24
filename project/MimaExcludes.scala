@@ -864,6 +864,9 @@ object MimaExcludes {
       // [SPARK-12221] Add CPU time to metrics
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetrics.this"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this")
+    ) ++ Seq(
+      // SPARK-6685
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.recommendation.ALS.train")
     )
   }
 
