@@ -51,11 +51,13 @@ class PartitionProviderCompatibilitySuite
       s"DESCRIBE $tableName PARTITION (partcol1=1)",
       s"SHOW PARTITIONS $tableName")
 
-    for (cmd <- unsupportedCommands) {
-      val e = intercept[AnalysisException] {
-        spark.sql(s"show partitions $tableName")
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      for (cmd <- unsupportedCommands) {
+        val e = intercept[AnalysisException] {
+          spark.sql(s"show partitions $tableName")
+        }
+        assert(e.getMessage.contains("partition metadata is not stored in the Hive metastore"), e)
       }
-      assert(e.getMessage.contains("partition metadata is not stored in the Hive metastore"), e)
     }
   }
 
@@ -102,6 +104,33 @@ class PartitionProviderCompatibilitySuite
           setupPartitionedDatasourceTable("test", dir)
           verifyIsLegacyTable("test")
           assert(spark.sql("select * from test").count() == 5)
+        }
+      }
+    }
+  }
+
+  test("when partition management is disabled, we preserve the old behavior even for new tables") {
+    withTable("test") {
+      withTempDir { dir =>
+        withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+          setupPartitionedDatasourceTable("test", dir)
+          spark.sql("show partitions test").count()  // check we are a new table
+          spark.sql("refresh table test")
+          assert(spark.sql("select * from test").count() == 0)
+        }
+        // disabled
+        withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
+          val e = intercept[AnalysisException] {
+            spark.sql(s"show partitions test")
+          }
+          assert(e.getMessage.contains("filesource partition management is disabled"))
+          spark.sql("refresh table test")
+          assert(spark.sql("select * from test").count() == 5)
+        }
+        // then enabled again
+        withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+          spark.sql("refresh table test")
+          assert(spark.sql("select * from test").count() == 0)
         }
       }
     }

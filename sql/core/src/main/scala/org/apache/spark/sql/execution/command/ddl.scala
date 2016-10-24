@@ -346,7 +346,7 @@ case class AlterTableAddPartitionCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
-    DDLUtils.verifyPartitionProviderIsHive(table, "ALTER TABLE ADD PARTITION")
+    DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE ADD PARTITION")
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(spec, table.storage.copy(locationUri = location))
@@ -375,7 +375,7 @@ case class AlterTableRenamePartitionCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
-    DDLUtils.verifyPartitionProviderIsHive(table, "ALTER TABLE RENAME PARTITION")
+    DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE RENAME PARTITION")
     catalog.renamePartitions(
       tableName, Seq(oldPartition), Seq(newPartition))
     Seq.empty[Row]
@@ -408,7 +408,7 @@ case class AlterTableDropPartitionCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
-    DDLUtils.verifyPartitionProviderIsHive(table, "ALTER TABLE DROP PARTITION")
+    DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
     catalog.dropPartitions(table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
@@ -695,12 +695,18 @@ object DDLUtils {
   /**
    * Throws a standard error for actions that require partitionProvider = hive.
    */
-  def verifyPartitionProviderIsHive(table: CatalogTable, action: String): Unit = {
+  def verifyPartitionProviderIsHive(
+      spark: SparkSession, table: CatalogTable, action: String): Unit = {
+    val tableName = table.identifier.table
+    if (!spark.sqlContext.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
+      throw new AnalysisException(
+        s"$action is not allowed on $tableName since filesource partition management is " +
+          "disabled (spark.sql.hive.manageFilesourcePartitions = false).")
+    }
     if (!table.partitionProviderIsHive) {
-      val tableName = table.identifier.table
       throw new AnalysisException(
         s"$action is not allowed on $tableName since its partition metadata is not stored in " +
-          s"the Hive metastore. To import this information into the metastore, run " +
+          "the Hive metastore. To import this information into the metastore, run " +
           s"`msck repair table $tableName`")
     }
   }
