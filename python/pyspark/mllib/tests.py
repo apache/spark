@@ -861,6 +861,19 @@ class SciPyTests(MLlibTestCase):
         dv = DenseVector(array([1., 2., 3., 4.]))
         self.assertEqual(10.0, dv.dot(lil))
 
+    def test_assorted_functs(self):
+        from scipy.sparse import csr_matrix
+        from numpy import array, eye
+        sv  = SparseVector(40, {1: 1, 3: 2, 23: 99})
+        sv2 = SparseVector(5, {1: 2, 3: 2, 4: 2})
+        self.assertEqual(sum(sv.values), sv.sum())
+        self.assertEqual(sum(sv.values)/(sv.size), sv.mean())
+        self.assertEqual(0, sv.min())
+        self.assertEqual(99, sv.max())
+        self.assertEqual(SparseVector(40, {1: 1, 3: 16, 23: 96059601}), sv.power(4))
+        sv2_dot_array = array([ 0.,  2.,  0.,  2.,  2.])
+        self.assertEqual(5, sum(sv2.dot(eye(5)) == sv2_dot_array))
+
     def test_squared_distance(self):
         from scipy.sparse import lil_matrix
         lil = lil_matrix((4, 1))
