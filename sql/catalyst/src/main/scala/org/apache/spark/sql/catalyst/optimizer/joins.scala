@@ -121,10 +121,11 @@ case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with Predic
    * tables and (2) the join predicates are equi joins.
    */
   private def isSelectiveStarJoin(
-      starJoinPlan: Seq[LogicalPlan],
+      factTable: LogicalPlan,
+      dimTables: Seq[LogicalPlan],
       conditions: Seq[Expression]): Boolean = {
 
-    val factTable :: dimTables = starJoinPlan
+    val starJoinPlan = factTable +: dimTables
 
     // Checks if all star plans are base table access.
     val allBaseTables = starJoinPlan.forall {
@@ -260,7 +261,7 @@ case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with Predic
               .exists(_.references.subsetOf(refs))
           }
 
-          val starJoin = factTable +: eligibleDimPlans.map { _._1 }
+          val dimTables = eligibleDimPlans.map { _._1 }
 
           if (eligibleDimPlans.isEmpty) {
             // This is an expanding join since there are no equality joins
@@ -271,7 +272,7 @@ case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with Predic
               eligibleFactTables.filterNot(_._1 eq factTable),
               conditions)
 
-          } else if (isSelectiveStarJoin(starJoin, conditions)) {
+          } else if (isSelectiveStarJoin(factTable, dimTables, conditions)) {
             // This is a selective star join and all dimensions are base table access.
             // Compute the size of the dimensions and return the star join
             // with the most selective dimensions joined lower in the plan.
