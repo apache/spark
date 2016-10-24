@@ -761,7 +761,7 @@ setMethod("write.json",
           function(x, path, mode = "error", ...) {
             write <- callJMethod(x@sdf, "write")
             write <- setWriteOptions(write, mode = mode, ...)
-            invisible(callJMethod(write, "json", path))
+            invisible(handledCallJMethod(write, "json", path))
           })
 
 #' Save the contents of SparkDataFrame as an ORC file, preserving the schema.
@@ -792,7 +792,7 @@ setMethod("write.orc",
           function(x, path, mode = "error", ...) {
             write <- callJMethod(x@sdf, "write")
             write <- setWriteOptions(write, mode = mode, ...)
-            invisible(callJMethod(write, "orc", path))
+            invisible(handledCallJMethod(write, "orc", path))
           })
 
 #' Save the contents of SparkDataFrame as a Parquet file, preserving the schema.
@@ -824,7 +824,7 @@ setMethod("write.parquet",
           function(x, path, mode = "error", ...) {
             write <- callJMethod(x@sdf, "write")
             write <- setWriteOptions(write, mode = mode, ...)
-            invisible(callJMethod(write, "parquet", path))
+            invisible(handledCallJMethod(write, "parquet", path))
           })
 
 #' @rdname write.parquet
@@ -868,7 +868,7 @@ setMethod("write.text",
           function(x, path, mode = "error", ...) {
             write <- callJMethod(x@sdf, "write")
             write <- setWriteOptions(write, mode = mode, ...)
-            invisible(callJMethod(write, "text", path))
+            invisible(handledCallJMethod(write, "text", path))
           })
 
 #' Distinct
@@ -3315,7 +3315,7 @@ setMethod("write.jdbc",
             jprops <- varargsToJProperties(...)
             write <- callJMethod(x@sdf, "write")
             write <- callJMethod(write, "mode", jmode)
-            invisible(callJMethod(write, "jdbc", url, tableName, jprops))
+            invisible(handledCallJMethod(write, "jdbc", url, tableName, jprops))
           })
 
 #' randomSplit
