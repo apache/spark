@@ -41,7 +41,6 @@ try:
     # Scripts directive requires a list of each script path and does not take wild cards.
     script_names = os.listdir(SCRIPTS_TARGET)
     scripts = map(lambda script: SCRIPTS_TARGET + "/" + script, script_names)
-    scripts.append("find_spark_home.py")
 
     setup(
         name='pyspark',
@@ -73,7 +72,7 @@ try:
             'pyspark.examples.src.main.python': ['*.py', '*/*.py']},
         scripts=scripts,
         license='http://www.apache.org/licenses/LICENSE-2.0',
-        install_requires=['py4j==0.10.3'],
+        install_requires=['py4j==0.10.4'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy<=1.7'],
