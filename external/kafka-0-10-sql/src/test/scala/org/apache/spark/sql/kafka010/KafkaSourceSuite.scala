@@ -28,7 +28,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.streaming.{ ProcessingTime, StreamTest }
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.ManualClock
 
 abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
@@ -153,7 +152,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .as[(String, String)]
     val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
 
-    val clock = new ManualClock
+    val clock = new StreamManualClock
     testStream(mapped)(
       StartStream(ProcessingTime(100), clock),
       AdvanceManualClock(100),
