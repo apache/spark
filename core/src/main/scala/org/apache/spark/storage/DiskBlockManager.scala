@@ -89,39 +89,34 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** Looks up a file by tier way in different speed storage devices. */
   private class TieredAllocator extends FileAllocationStrategy {
-    case class Tier(id: Int, dirs: Array[File], threshold: Array[Double])
-    val tiersEnvConf = conf.getenv("SPARK_DISKSTORE_TIERS")
+    val tiersEnvConf = conf.getenv("SPARK_DISKS_TIERS")
     if (tiersEnvConf == null) {
-      logError("SPARK_DISKSTORE_TIERS is not configured.")
+      logError("SPARK_DISKS_TIERS is not configured.")
       System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_BUILD_TIERED_STORAGE)
     }
     val tiersIDs = tiersEnvConf.trim.split("")
     if (localDirs.length != tiersIDs.length) {
-      logError(s"Incorrect SPARK_DISKSTORE_TIERS setting," +
-        s"SPARK_DISKSTORE_TIERS = '$tiersEnvConf'.")
+      logError(s"Incorrect SPARK_DISKS_TIERS setting," +
+        s"SPARK_DISKS_TIERS = '$tiersEnvConf'.")
       System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_BUILD_TIERED_STORAGE)
     }
 
-    val tieredDirs: Seq[(String, Array[File])] = (localDirs zip tiersIDs).
-      groupBy(_._2).mapValues(_.map(_._1)).toSeq.sortBy(_._1)
-    val tiers = tieredDirs.map {
-      s => Tier(s._1.toInt, s._2, s._2.map(_.getTotalSpace * 0.1))
-    }
-    logInfo("Tires info:")
-    for (tier <- tiers) {
-      (tier.dirs zip tier.threshold).foreach
-      { dir => logInfo("\tDir: %s, Threshold: %s".format(dir._1.getCanonicalPath,
-        Utils.bytesToString(dir._2.toLong))) }
+    val tieredDirs: Seq[Array[File]] = (localDirs zip tiersIDs).
+      groupBy(_._2).mapValues(_.map(_._1)).toSeq.sortBy(_._1).map(_._2)
+    tieredDirs.zipWithIndex.foreach {
+      case (dirs, index) =>
+        logInfo(s"Tier $index:")
+        dirs.foreach(logInfo("\t" + _))
     }
 
     def apply(filename: String): File = {
       var availableFile: File = null
-      for (tier <- tiers) {
-        val file = getFile(filename, tier.dirs)
+      for (tier <- tieredDirs) {
+        val file = getFile(filename, tier)
         if (file.exists()) return file
 
         if (availableFile == null &&
-          file.getParentFile.getUsableSpace >= tier.threshold(tier.dirs.indexOf(file))) {
+          file.getParentFile.getFreeSpace / file.getParent.getTotalSpace < 0.1) {
           availableFile = file
         }
       }
