@@ -179,10 +179,12 @@ class GroupedData(object):
         :param values: List of values that will be translated to columns in the output DataFrame.
 
         # Compute the sum of earnings for each year by course with each course as a separate column
+
         >>> df4.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").collect()
         [Row(year=2012, dotNET=15000, Java=20000), Row(year=2013, dotNET=48000, Java=30000)]
 
         # Or without specifying column values (less efficient)
+
         >>> df4.groupBy("year").pivot("course").sum("earnings").collect()
         [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
         """

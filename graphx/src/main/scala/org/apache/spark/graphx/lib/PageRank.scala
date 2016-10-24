@@ -17,11 +17,13 @@
 
 package org.apache.spark.graphx.lib
 
-import scala.language.postfixOps
 import scala.reflect.ClassTag
+
+import breeze.linalg.{Vector => BV}
 
 import org.apache.spark.graphx._
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
@@ -109,7 +111,7 @@ object PageRank extends Logging {
     require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
       s" to [0, 1], but got ${resetProb}")
 
-    val personalized = srcId isDefined
+    val personalized = srcId.isDefined
     val src: VertexId = srcId.getOrElse(-1L)
 
     // Initialize the PageRank graph with each edge attribute having
@@ -161,6 +163,84 @@ object PageRank extends Logging {
     }
 
     rankGraph
+  }
+
+  /**
+   * Run Personalized PageRank for a fixed number of iterations, for a
+   * set of starting nodes in parallel. Returns a graph with vertex attributes
+   * containing the pagerank relative to all starting nodes (as a sparse vector) and
+   * edge attributes the normalized edge weight
+   *
+   * @tparam VD The original vertex attribute (not used)
+   * @tparam ED The original edge attribute (not used)
+   *
+   * @param graph The graph on which to compute personalized pagerank
+   * @param numIter The number of iterations to run
+   * @param resetProb The random reset probability
+   * @param sources The list of sources to compute personalized pagerank from
+   * @return the graph with vertex attributes
+   *         containing the pagerank relative to all starting nodes (as a sparse vector) and
+   *         edge attributes the normalized edge weight
+   */
+  def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
+    numIter: Int, resetProb: Double = 0.15,
+    sources: Array[VertexId]): Graph[Vector, Double] = {
+    // TODO if one sources vertex id is outside of the int range
+    // we won't be able to store its activations in a sparse vector
+    val zero = Vectors.sparse(sources.size, List()).asBreeze
+    val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
+      val v = Vectors.sparse(sources.size, Array(i), Array(resetProb)).asBreeze
+      (vid, v)
+    }.toMap
+    val sc = graph.vertices.sparkContext
+    val sourcesInitMapBC = sc.broadcast(sourcesInitMap)
+    // Initialize the PageRank graph with each edge attribute having
+    // weight 1/outDegree and each source vertex with attribute 1.0.
+    var rankGraph = graph
+      // Associate the degree with each vertex
+      .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
+      // Set the weight on the edges based on the degree
+      .mapTriplets(e => 1.0 / e.srcAttr, TripletFields.Src)
+      .mapVertices { (vid, attr) =>
+        if (sourcesInitMapBC.value contains vid) {
+          sourcesInitMapBC.value(vid)
+        } else {
+          zero
+        }
+      }
+
+    var i = 0
+    while (i < numIter) {
+      val prevRankGraph = rankGraph
+      // Propagates the message along outbound edges
+      // and adding start nodes back in with activation resetProb
+      val rankUpdates = rankGraph.aggregateMessages[BV[Double]](
+        ctx => ctx.sendToDst(ctx.srcAttr :* ctx.attr),
+        (a : BV[Double], b : BV[Double]) => a :+ b, TripletFields.Src)
+
+      rankGraph = rankGraph.joinVertices(rankUpdates) {
+        (vid, oldRank, msgSum) =>
+          val popActivations: BV[Double] = msgSum :* (1.0 - resetProb)
+          val resetActivations = if (sourcesInitMapBC.value contains vid) {
+            sourcesInitMapBC.value(vid)
+          } else {
+            zero
+          }
+          popActivations :+ resetActivations
+        }.cache()
+
+      rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
+      prevRankGraph.vertices.unpersist(false)
+      prevRankGraph.edges.unpersist(false)
+
+      logInfo(s"Parallel Personalized PageRank finished iteration $i.")
+
+      i += 1
+    }
+
+    rankGraph.mapVertices { (vid, attr) =>
+      Vectors.fromBreeze(attr)
+    }
   }
 
   /**

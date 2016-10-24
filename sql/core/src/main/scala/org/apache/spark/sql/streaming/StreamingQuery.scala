@@ -31,8 +31,8 @@ trait StreamingQuery {
 
   /**
    * Returns the name of the query. This name is unique across all active queries. This can be
-   * set in the[[org.apache.spark.sql.DataFrameWriter DataFrameWriter]] as
-   * `dataframe.write().queryName("query").startStream()`.
+   * set in the [[org.apache.spark.sql.DataStreamWriter DataStreamWriter]] as
+   * `dataframe.writeStream.queryName("query").start()`.
    * @since 2.0.0
    */
   def name: String
@@ -63,12 +63,23 @@ trait StreamingQuery {
   def exception: Option[StreamingQueryException]
 
   /**
+   * Returns the current status of the query.
+   * @since 2.0.2
+   */
+  def status: StreamingQueryStatus
+
+  /**
    * Returns current status of all the sources.
    * @since 2.0.0
    */
+  @deprecated("use status.sourceStatuses", "2.0.2")
   def sourceStatuses: Array[SourceStatus]
 
-  /** Returns current status of the sink. */
+  /**
+   * Returns current status of the sink.
+   * @since 2.0.0
+   */
+  @deprecated("use status.sinkStatus", "2.0.2")
   def sinkStatus: SinkStatus
 
   /**

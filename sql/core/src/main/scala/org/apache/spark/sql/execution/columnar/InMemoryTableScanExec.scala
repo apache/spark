@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
 
 
-private[sql] case class InMemoryTableScanExec(
+case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
@@ -36,7 +36,7 @@ private[sql] case class InMemoryTableScanExec(
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
@@ -65,6 +65,11 @@ private[sql] case class InMemoryTableScanExec(
     case EqualTo(l: Literal, a: AttributeReference) =>
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
 
+    case EqualNullSafe(a: AttributeReference, l: Literal) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+    case EqualNullSafe(l: Literal, a: AttributeReference) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+
     case LessThan(a: AttributeReference, l: Literal) => statsFor(a).lowerBound < l
     case LessThan(l: Literal, a: AttributeReference) => l < statsFor(a).upperBound
 
@@ -79,6 +84,10 @@ private[sql] case class InMemoryTableScanExec(
 
     case IsNull(a: Attribute) => statsFor(a).nullCount > 0
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
+
+    case In(a: AttributeReference, list: Seq[Expression]) if list.forall(_.isInstanceOf[Literal]) =>
+      list.map(l => statsFor(a).lowerBound <= l.asInstanceOf[Literal] &&
+        l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
   }
 
   val partitionFilters: Seq[Expression] = {

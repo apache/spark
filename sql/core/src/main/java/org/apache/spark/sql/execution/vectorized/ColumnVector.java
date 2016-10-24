@@ -20,7 +20,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.io.api.Binary;
 
@@ -100,7 +99,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public ArrayData copy() {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     // TODO: this is extremely expensive.
@@ -171,7 +170,7 @@ public abstract class ColumnVector implements AutoCloseable {
           }
         }
       } else {
-        throw new NotImplementedException("Type " + dt);
+        throw new UnsupportedOperationException("Type " + dt);
       }
       return list;
     }
@@ -181,7 +180,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public boolean getBoolean(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -189,7 +188,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public short getShort(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -200,7 +199,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public float getFloat(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -240,12 +239,12 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public MapData getMap(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
     public Object get(int ordinal, DataType dataType) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
   }
 
@@ -283,13 +282,27 @@ public abstract class ColumnVector implements AutoCloseable {
     if (requiredCapacity > capacity) {
       int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
       if (requiredCapacity <= newCapacity) {
-        reserveInternal(newCapacity);
+        try {
+          reserveInternal(newCapacity);
+        } catch (OutOfMemoryError outOfMemoryError) {
+          throwUnsupportedException(requiredCapacity, outOfMemoryError);
+        }
       } else {
-        throw new RuntimeException("Cannot reserve more than " + newCapacity +
-            " bytes in the vectorized reader (requested = " + requiredCapacity + " bytes). As a " +
-            "workaround, you can disable the vectorized reader by setting "
-            + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + " to false.");
+        throwUnsupportedException(requiredCapacity, null);
       }
+    }
+  }
+
+  private void throwUnsupportedException(int requiredCapacity, Throwable cause) {
+    String message = "Cannot reserve additional contiguous bytes in the vectorized reader " +
+        "(requested = " + requiredCapacity + " bytes). As a workaround, you can disable the " +
+        "vectorized reader by setting " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() +
+        " to false.";
+
+    if (cause != null) {
+      throw new RuntimeException(message, cause);
+    } else {
+      throw new RuntimeException(message);
     }
   }
 
@@ -414,6 +427,13 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract int getInt(int rowId);
+
+  /**
+   * Returns the dictionary Id for rowId.
+   * This should only be called when the ColumnVector is dictionaryIds.
+   * We have this separate method for dictionaryIds as per SPARK-16928.
+   */
+  public abstract int getDictId(int rowId);
 
   /**
    * Sets the value at rowId to `value`.
@@ -562,7 +582,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public MapData getMap(int ordinal) {
-    throw new NotImplementedException();
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -602,7 +622,7 @@ public abstract class ColumnVector implements AutoCloseable {
       ColumnVector.Array a = getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return UTF8String.fromBytes(v.getBytes());
     }
   }
@@ -617,7 +637,7 @@ public abstract class ColumnVector implements AutoCloseable {
       System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
       return bytes;
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return v.getBytes();
     }
   }

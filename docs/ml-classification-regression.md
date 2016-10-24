@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Classification and regression - spark.ml
-displayTitle: Classification and regression - spark.ml
+title: Classification and regression
+displayTitle: Classification and regression
 ---
 
 
@@ -22,52 +22,34 @@ displayTitle: Classification and regression - spark.ml
 \newcommand{\zero}{\mathbf{0}}
 \]`
 
+This page covers algorithms for Classification and Regression.  It also includes sections
+discussing specific classes of algorithms, such as linear methods, trees, and ensembles.
+
 **Table of Contents**
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-In `spark.ml`, we implement popular linear methods such as logistic
-regression and linear least squares with $L_1$ or $L_2$ regularization.
-Refer to [the linear methods in mllib](mllib-linear-methods.html) for
-details about implementation and tuning.  We also include a DataFrame API for [Elastic
-net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid
-of $L_1$ and $L_2$ regularization proposed in [Zou et al, Regularization
-and variable selection via the elastic
-net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf).
-Mathematically, it is defined as a convex combination of the $L_1$ and
-the $L_2$ regularization terms:
-`\[
-\alpha \left( \lambda \|\wv\|_1 \right) + (1-\alpha) \left( \frac{\lambda}{2}\|\wv\|_2^2 \right) , \alpha \in [0, 1], \lambda \geq 0
-\]`
-By setting $\alpha$ properly, elastic net contains both $L_1$ and $L_2$
-regularization as special cases. For example, if a [linear
-regression](https://en.wikipedia.org/wiki/Linear_regression) model is
-trained with the elastic net parameter $\alpha$ set to $1$, it is
-equivalent to a
-[Lasso](http://en.wikipedia.org/wiki/Least_squares#Lasso_method) model.
-On the other hand, if $\alpha$ is set to $0$, the trained model reduces
-to a [ridge
-regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model.
-We implement Pipelines API for both linear regression and logistic
-regression with elastic net regularization.
-
-
 # Classification
 
 ## Logistic regression
 
-Logistic regression is a popular method to predict a binary response. It is a special case of [Generalized Linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) that predicts the probability of the outcome.
-For more background and more details about the implementation, refer to the documentation of the [logistic regression in `spark.mllib`](mllib-linear-methods.html#logistic-regression). 
+Logistic regression is a popular method to predict a categorical response. It is a special case of [Generalized Linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) that predicts the probability of the outcomes.
+In `spark.ml` logistic regression can be used to predict a binary outcome by using binomial logistic regression, or it can be used to predict a multiclass outcome by using multinomial logistic regression. Use the `family`
+parameter to select between these two algorithms, or leave it unset and Spark will infer the correct variant.
 
-  > The current implementation of logistic regression in `spark.ml` only supports binary classes. Support for multiclass regression will be added in the future.
+  > Multinomial logistic regression can be used for binary classification by setting the `family` param to "multinomial". It will produce two sets of coefficients and two intercepts.
 
   > When fitting LogisticRegressionModel without intercept on dataset with constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.
 
+### Binomial logistic regression
+
+For more background and more details about the implementation of binomial logistic regression, refer to the documentation of [logistic regression in `spark.mllib`](mllib-linear-methods.html#logistic-regression). 
+
 **Example**
 
-The following example shows how to train a logistic regression model
-with elastic net regularization. `elasticNetParam` corresponds to
+The following example shows how to train binomial and multinomial logistic regression 
+models for binary classification with elastic net regularization. `elasticNetParam` corresponds to
 $\alpha$ and `regParam` corresponds to $\lambda$.
 
 <div class="codetabs">
@@ -115,8 +97,8 @@ provides a summary for a
 [`LogisticRegressionModel`](api/java/org/apache/spark/ml/classification/LogisticRegressionModel.html).
 Currently, only binary classification is supported and the
 summary must be explicitly cast to
-[`BinaryLogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/BinaryLogisticRegressionTrainingSummary.html).
-This will likely change when multiclass classification is supported.
+[`BinaryLogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/BinaryLogisticRegressionTrainingSummary.html). 
+Support for multiclass model summaries will be added in the future.
 
 Continuing the earlier example:
 
@@ -126,6 +108,52 @@ Continuing the earlier example:
 <!--- TODO: Add python model summaries once implemented -->
 <div data-lang="python" markdown="1">
 Logistic regression model summary is not yet supported in Python.
+</div>
+
+</div>
+
+### Multinomial logistic regression
+
+Multiclass classification is supported via multinomial logistic (softmax) regression. In multinomial logistic regression,
+the algorithm produces $K$ sets of coefficients, or a matrix of dimension $K \times J$ where $K$ is the number of outcome
+classes and $J$ is the number of features. If the algorithm is fit with an intercept term then a length $K$ vector of
+intercepts is available.
+
+  > Multinomial coefficients are available as `coefficientMatrix` and intercepts are available as `interceptVector`.
+ 
+  > `coefficients` and `intercept` methods on a logistic regression model trained with multinomial family are not supported. Use `coefficientMatrix` and `interceptVector` instead.
+
+The conditional probabilities of the outcome classes $k \in \{1, 2, ..., K\}$ are modeled using the softmax function.
+
+`\[
+   P(Y=k|\mathbf{X}, \boldsymbol{\beta}_k, \beta_{0k}) =  \frac{e^{\boldsymbol{\beta}_k \cdot \mathbf{X}  + \beta_{0k}}}{\sum_{k'=0}^{K-1} e^{\boldsymbol{\beta}_{k'} \cdot \mathbf{X}  + \beta_{0k'}}}
+\]`
+
+We minimize the weighted negative log-likelihood, using a multinomial response model, with elastic-net penalty to control for overfitting.
+
+`\[
+\min_{\beta, \beta_0} -\left[\sum_{i=1}^L w_i \cdot \log P(Y = y_i|\mathbf{x}_i)\right] + \lambda \left[\frac{1}{2}\left(1 - \alpha\right)||\boldsymbol{\beta}||_2^2 + \alpha ||\boldsymbol{\beta}||_1\right]
+\]`
+
+For a detailed derivation please see [here](https://en.wikipedia.org/wiki/Multinomial_logistic_regression#As_a_log-linear_model).
+
+**Example**
+
+The following example shows how to train a multiclass logistic regression 
+model with elastic net regularization.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+{% include_example scala/org/apache/spark/examples/ml/MulticlassLogisticRegressionWithElasticNetExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% include_example java/org/apache/spark/examples/ml/JavaMulticlassLogisticRegressionWithElasticNetExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% include_example python/ml/multiclass_logistic_regression_with_elastic_net.py %}
 </div>
 
 </div>
@@ -760,7 +788,34 @@ Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.ml.html#pyspa
 </div>
 </div>
 
+# Linear methods
 
+We implement popular linear methods such as logistic
+regression and linear least squares with $L_1$ or $L_2$ regularization.
+Refer to [the linear methods guide for the RDD-based API](mllib-linear-methods.html) for
+details about implementation and tuning; this information is still relevant.
+
+We also include a DataFrame API for [Elastic
+net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid
+of $L_1$ and $L_2$ regularization proposed in [Zou et al, Regularization
+and variable selection via the elastic
+net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf).
+Mathematically, it is defined as a convex combination of the $L_1$ and
+the $L_2$ regularization terms:
+`\[
+\alpha \left( \lambda \|\wv\|_1 \right) + (1-\alpha) \left( \frac{\lambda}{2}\|\wv\|_2^2 \right) , \alpha \in [0, 1], \lambda \geq 0
+\]`
+By setting $\alpha$ properly, elastic net contains both $L_1$ and $L_2$
+regularization as special cases. For example, if a [linear
+regression](https://en.wikipedia.org/wiki/Linear_regression) model is
+trained with the elastic net parameter $\alpha$ set to $1$, it is
+equivalent to a
+[Lasso](http://en.wikipedia.org/wiki/Least_squares#Lasso_method) model.
+On the other hand, if $\alpha$ is set to $0$, the trained model reduces
+to a [ridge
+regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model.
+We implement Pipelines API for both linear regression and logistic
+regression with elastic net regularization.
 
 # Decision trees
 

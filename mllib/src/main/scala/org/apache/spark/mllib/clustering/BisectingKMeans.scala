@@ -22,7 +22,7 @@ import java.util.Random
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
@@ -31,8 +31,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
- * :: Experimental ::
- *
  * A bisecting k-means algorithm based on the paper "A comparison of document clustering techniques"
  * by Steinbach, Karypis, and Kumar, with modification to fit Spark.
  * The algorithm starts from a single cluster that contains all points.
@@ -54,7 +52,6 @@ import org.apache.spark.storage.StorageLevel
  *     KDD Workshop on Text Mining, 2000.]]
  */
 @Since("1.6.0")
-@Experimental
 class BisectingKMeans private (
     private var k: Int,
     private var maxIterations: Int,
@@ -168,6 +165,8 @@ class BisectingKMeans private (
     val random = new Random(seed)
     var numLeafClustersNeeded = k - 1
     var level = 1
+    var preIndices: RDD[Long] = null
+    var indices: RDD[Long] = null
     while (activeClusters.nonEmpty && numLeafClustersNeeded > 0 && level < LEVEL_LIMIT) {
       // Divisible clusters are sufficiently large and have non-trivial cost.
       var divisibleClusters = activeClusters.filter { case (_, summary) =>
@@ -197,8 +196,9 @@ class BisectingKMeans private (
           newClusters = summarize(d, newAssignments)
           newClusterCenters = newClusters.mapValues(_.center).map(identity)
         }
-        // TODO: Unpersist old indices.
-        val indices = updateAssignments(assignments, divisibleIndices, newClusterCenters).keys
+        if (preIndices != null) preIndices.unpersist()
+        preIndices = indices
+        indices = updateAssignments(assignments, divisibleIndices, newClusterCenters).keys
           .persist(StorageLevel.MEMORY_AND_DISK)
         assignments = indices.zip(vectors)
         inactiveClusters ++= activeClusters
@@ -211,6 +211,7 @@ class BisectingKMeans private (
       }
       level += 1
     }
+    if(indices != null) indices.unpersist()
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters)
     new BisectingKMeansModel(root)
@@ -398,8 +399,6 @@ private object BisectingKMeans extends Serializable {
 }
 
 /**
- * :: Experimental ::
- *
  * Represents a node in a clustering tree.
  *
  * @param index node index, negative for internal nodes and non-negative for leaf nodes
@@ -411,7 +410,6 @@ private object BisectingKMeans extends Serializable {
  * @param children children nodes
  */
 @Since("1.6.0")
-@Experimental
 private[clustering] class ClusteringTreeNode private[clustering] (
     val index: Int,
     val size: Long,

@@ -1,5 +1,9 @@
 # Imports from base R
-importFrom(methods, setGeneric, setMethod, setOldClass)
+# Do not include stats:: "rpois", "runif" - causes error at runtime
+importFrom("methods", "setGeneric", "setMethod", "setOldClass")
+importFrom("methods", "is", "new", "signature", "show")
+importFrom("stats", "gaussian", "setNames")
+importFrom("utils", "download.file", "object.size", "packageVersion", "untar")
 
 # Disable native libraries till we figure out how to package it
 # See SPARKR-7839
@@ -10,7 +14,15 @@ export("sparkR.session")
 export("sparkR.init")
 export("sparkR.stop")
 export("sparkR.session.stop")
+export("sparkR.conf")
+export("sparkR.version")
 export("print.jobj")
+
+export("sparkR.newJObject")
+export("sparkR.callJMethod")
+export("sparkR.callJStatic")
+
+export("install.spark")
 
 export("sparkRSQL.init",
        "sparkRHive.init")
@@ -22,8 +34,16 @@ exportMethods("glm",
               "summary",
               "spark.kmeans",
               "fitted",
+              "spark.mlp",
               "spark.naiveBayes",
-              "spark.survreg")
+              "spark.survreg",
+              "spark.lda",
+              "spark.posterior",
+              "spark.perplexity",
+              "spark.isoreg",
+              "spark.gaussianMixture",
+              "spark.als",
+              "spark.kstest")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -51,6 +71,7 @@ exportMethods("arrange",
               "covar_samp",
               "covar_pop",
               "createOrReplaceTempView",
+              "crossJoin",
               "crosstab",
               "dapply",
               "dapplyCollect",
@@ -68,6 +89,7 @@ exportMethods("arrange",
               "first",
               "freqItems",
               "gapply",
+              "gapplyCollect",
               "group_by",
               "groupBy",
               "head",
@@ -233,6 +255,7 @@ exportMethods("%in%",
               "over",
               "percent_rank",
               "pmod",
+              "posexplode",
               "quarter",
               "rand",
               "randn",
@@ -314,6 +337,9 @@ export("as.DataFrame",
        "read.parquet",
        "read.text",
        "spark.lapply",
+       "spark.addFile",
+       "spark.getSparkFilesRootDirectory",
+       "spark.getSparkFiles",
        "sql",
        "str",
        "tableToDF",
@@ -321,7 +347,8 @@ export("as.DataFrame",
        "tables",
        "uncacheTable",
        "print.summary.GeneralizedLinearRegressionModel",
-       "read.ml")
+       "read.ml",
+       "print.summary.KSTest")
 
 export("structField",
        "structField.jobj",
@@ -338,5 +365,15 @@ export("partitionBy",
        "rowsBetween",
        "rangeBetween")
 
-export("window.partitionBy",
-       "window.orderBy")
+export("windowPartitionBy",
+       "windowOrderBy")
+
+S3method(print, jobj)
+S3method(print, structField)
+S3method(print, structType)
+S3method(print, summary.GeneralizedLinearRegressionModel)
+S3method(print, summary.KSTest)
+S3method(structField, character)
+S3method(structField, jobj)
+S3method(structType, jobj)
+S3method(structType, structField)

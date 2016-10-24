@@ -21,7 +21,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.feature.LabeledPoint
@@ -38,7 +38,6 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
@@ -56,7 +55,6 @@ import org.apache.spark.sql.functions._
  *    [https://issues.apache.org/jira/browse/SPARK-4240]
  */
 @Since("1.4.0")
-@Experimental
 class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
   with GBTRegressorParams with DefaultParamsWritable with Logging {
@@ -135,7 +133,6 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 }
 
 @Since("1.4.0")
-@Experimental
 object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 
   /** Accessor for supported loss settings: squared (L2), absolute (L1) */
@@ -147,8 +144,6 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 }
 
 /**
- * :: Experimental ::
- *
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * model for regression.
  * It supports both continuous and categorical features.
@@ -156,7 +151,6 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
 @Since("1.4.0")
-@Experimental
 class GBTRegressionModel private[ml](
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],

@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -32,7 +32,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
  * Implements the feature interaction transform. This transformer takes in Double and Vector type
  * columns and outputs a flattened vector of their feature interactions. To handle interaction,
  * we first one-hot encode any nominal features. Then, a vector of the feature cross-products is
@@ -42,7 +41,6 @@ import org.apache.spark.sql.types._
  * `Vector(6, 8)` if all input features were numeric. If the first feature was instead nominal
  * with four categories, the output would then be `Vector(0, 0, 0, 0, 3, 4, 0, 0)`.
  */
-@Experimental
 @Since("1.6.0")
 class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) extends Transformer
   with HasInputCols with HasOutputCol with DefaultParamsWritable {
@@ -70,6 +68,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val inputFeatures = $(inputCols).map(c => dataset.schema(c))
     val featureEncoders = getFeatureEncoders(inputFeatures)
     val featureAttrs = getFeatureAttrs(inputFeatures)
@@ -137,7 +136,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
         case _: VectorUDT =>
           val attrs = AttributeGroup.fromStructField(f).attributes.getOrElse(
             throw new SparkException("Vector attributes must be defined for interaction."))
-          attrs.map(getNumFeatures).toArray
+          attrs.map(getNumFeatures)
       }
       new FeatureEncoder(numFeatures)
     }.toArray

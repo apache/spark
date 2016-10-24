@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
@@ -74,18 +74,20 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
 }
 
 /**
- * :: Experimental ::
  * Rescale each feature individually to a common range [min, max] linearly using column summary
  * statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
- * feature E is calculated as,
+ * feature E is calculated as:
  *
- * Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+ * <p><blockquote>
+ *    $$
+ *    Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+ *    $$
+ * </blockquote></p>
  *
- * For the case E_{max} == E_{min}, Rescaled(e_i) = 0.5 * (max + min)
+ * For the case $E_{max} == E_{min}$, $Rescaled(e_i) = 0.5 * (max + min)$.
  * Note that since zero values will probably be transformed to non-zero values, output of the
  * transformer will be DenseVector even for sparse input.
  */
-@Experimental
 @Since("1.5.0")
 class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[MinMaxScalerModel] with MinMaxScalerParams with DefaultParamsWritable {
@@ -138,7 +140,6 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[MinMaxScaler]].
  *
  * @param originalMin min value for each original column during fitting
@@ -146,7 +147,6 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
  *
  * TODO: The transformer does not yet set the metadata in the output column (SPARK-8529).
  */
-@Experimental
 @Since("1.5.0")
 class MinMaxScalerModel private[ml] (
     @Since("1.5.0") override val uid: String,
@@ -174,6 +174,7 @@ class MinMaxScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
     val minArray = originalMin.toArray
 
@@ -185,8 +186,10 @@ class MinMaxScalerModel private[ml] (
       val size = values.length
       var i = 0
       while (i < size) {
-        val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
-        values(i) = raw * scale + $(min)
+        if (!values(i).isNaN) {
+          val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
+          values(i) = raw * scale + $(min)
+        }
         i += 1
       }
       Vectors.dense(values)

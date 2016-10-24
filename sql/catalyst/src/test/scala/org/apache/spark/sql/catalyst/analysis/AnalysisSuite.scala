@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -339,9 +339,9 @@ class AnalysisSuite extends AnalysisTest {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input)),
-          Project(Seq($"y.key"), SubqueryAlias("y", input)),
-          Inner, None))
+          Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
+          Cross, None))
 
     assertAnalysisSuccess(query)
   }
@@ -376,5 +376,24 @@ class AnalysisSuite extends AnalysisTest {
     assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(31, 11))
     assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
+  }
+
+  test("SPARK-18058: union and set operations shall not care about the nullability" +
+    " when comparing column types") {
+    val firstTable = LocalRelation(
+      AttributeReference("a",
+        StructType(Seq(StructField("a", IntegerType, nullable = true))), nullable = false)())
+    val secondTable = LocalRelation(
+      AttributeReference("a",
+        StructType(Seq(StructField("a", IntegerType, nullable = false))), nullable = false)())
+
+    val unionPlan = Union(firstTable, secondTable)
+    assertAnalysisSuccess(unionPlan)
+
+    val r1 = Except(firstTable, secondTable)
+    val r2 = Intersect(firstTable, secondTable)
+
+    assertAnalysisSuccess(r1)
+    assertAnalysisSuccess(r2)
   }
 }

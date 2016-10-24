@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
@@ -41,8 +41,7 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 
   /**
    * Whether to center the data with mean before scaling.
-   * It will build a dense output, so this does not work on sparse input
-   * and will raise an exception.
+   * It will build a dense output, so take care when applying to sparse input.
    * Default: false
    * @group param
    */
@@ -76,7 +75,6 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 }
 
 /**
- * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
  *
@@ -85,7 +83,6 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  *   corrected sample standard deviation]],
  * which is computed as the square root of the unbiased sample variance.
  */
-@Experimental
 @Since("1.2.0")
 class StandardScaler @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
@@ -138,13 +135,11 @@ object StandardScaler extends DefaultParamsReadable[StandardScaler] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[StandardScaler]].
  *
  * @param std Standard deviation of the StandardScalerModel
  * @param mean Mean of the StandardScalerModel
  */
-@Experimental
 @Since("1.2.0")
 class StandardScalerModel private[ml] (
     @Since("1.4.0") override val uid: String,

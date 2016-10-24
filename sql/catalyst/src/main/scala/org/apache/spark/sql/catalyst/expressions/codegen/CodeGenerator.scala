@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.io.ByteArrayInputStream
+import java.util.{Map => JavaMap}
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
-import org.codehaus.janino.ClassBodyEvaluator
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
+import org.codehaus.janino.util.ClassFile
 import scala.language.existentials
 
 import org.apache.spark.SparkEnv
@@ -77,6 +83,21 @@ class CodegenContext {
    * Holding a list of objects that could be used passed into generated class.
    */
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
+
+  /**
+   * Add an object to `references`.
+   *
+   * Returns the code to access it.
+   *
+   * This is for minor objects not to store the object into field but refer it from the references
+   * field at the time of use because number of fields in class is limited so we should reduce it.
+   */
+  def addReferenceObj(obj: Any): String = {
+    val idx = references.length
+    references += obj
+    val clsName = obj.getClass.getName
+    s"(($clsName) references[$idx])"
+  }
 
   /**
    * Add an object to `references`, create a class member to access it.
@@ -157,7 +178,10 @@ class CodegenContext {
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map(_._3).mkString("\n")
+    val initCodes = mutableStates.distinct.map(_._3 + "\n")
+    // The generated initialization code may exceed 64kb function size limit in JVM if there are too
+    // many mutable states, so split it into multiple functions.
+    splitExpressions(initCodes, "init", Nil)
   }
 
   /**
@@ -579,31 +603,39 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
-    if (row == null) {
+    if (row == null || currentVars != null) {
       // Cannot split these expressions because they are not created from a row object.
       return expressions.mkString("\n")
     }
+    splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
+  }
+
+  private def splitExpressions(
+      expressions: Seq[String], funcName: String, arguments: Seq[(String, String)]): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
-      // We can't know how many byte code will be generated, so use the number of bytes as limit
-      if (blockBuilder.length > 64 * 1000) {
-        blocks.append(blockBuilder.toString())
+      // We can't know how many bytecode will be generated, so use the length of source code
+      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
+      // also not be too small, or it will have many function calls (for wide table), see the
+      // results in BenchmarkWideTable.
+      if (blockBuilder.length > 1024) {
+        blocks += blockBuilder.toString()
         blockBuilder.clear()
       }
       blockBuilder.append(code)
     }
-    blocks.append(blockBuilder.toString())
+    blocks += blockBuilder.toString()
 
     if (blocks.length == 1) {
       // inline execution if only one block
       blocks.head
     } else {
-      val apply = freshName("apply")
+      val func = freshName(funcName)
       val functions = blocks.zipWithIndex.map { case (body, i) =>
-        val name = s"${apply}_$i"
+        val name = s"${func}_$i"
         val code = s"""
-           |private void $name(InternalRow $row) {
+           |private void $name(${arguments.map { case (t, name) => s"$t $name" }.mkString(", ")}) {
            |  $body
            |}
          """.stripMargin
@@ -611,7 +643,7 @@ class CodegenContext {
         name
       }
 
-      functions.map(name => s"$name($row);").mkString("\n")
+      functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")});").mkString("\n")
     }
   }
 
@@ -654,10 +686,6 @@ class CodegenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     val codes = commonExprs.map { e =>
       val expr = e.head
-      val fnName = freshName("evalExpr")
-      val isNull = s"${fnName}IsNull"
-      val value = s"${fnName}Value"
-
       // Generate the code for this expression tree.
       val code = expr.genCode(this)
       val state = SubExprEliminationState(code.isNull, code.value)
@@ -791,7 +819,7 @@ class CodeAndComment(val body: String, val comment: collection.Map[String, Strin
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
-  protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+  protected val genericMutableRowType: String = classOf[GenericInternalRow].getName
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
@@ -861,7 +889,6 @@ object CodeGenerator extends Logging {
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
       classOf[UnsafeMapData].getName,
-      classOf[MutableRow].getName,
       classOf[Expression].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
@@ -876,6 +903,7 @@ object CodeGenerator extends Logging {
 
     try {
       evaluator.cook("generated.java", code.body)
+      recordCompilationStats(evaluator)
     } catch {
       case e: Exception =>
         val msg = s"failed to compile: $e\n$formatted"
@@ -883,6 +911,43 @@ object CodeGenerator extends Logging {
         throw new Exception(msg, e)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
+  }
+
+  /**
+   * Records the generated class and method bytecode sizes by inspecting janino private fields.
+   */
+  private def recordCompilationStats(evaluator: ClassBodyEvaluator): Unit = {
+    // First retrieve the generated classes.
+    val classes = {
+      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
+      resultField.setAccessible(true)
+      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
+      val classesField = loader.getClass.getDeclaredField("classes")
+      classesField.setAccessible(true)
+      classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
+    }
+
+    // Then walk the classes to get at the method bytecode.
+    val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
+    val codeAttrField = codeAttr.getDeclaredField("code")
+    codeAttrField.setAccessible(true)
+    classes.foreach { case (_, classBytes) =>
+      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
+      try {
+        val cf = new ClassFile(new ByteArrayInputStream(classBytes))
+        cf.methodInfos.asScala.foreach { method =>
+          method.getAttributes().foreach { a =>
+            if (a.getClass.getName == codeAttr.getName) {
+              CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
+                codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+            }
+          }
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Error calculating stats of compiled class.", e)
+      }
+    }
   }
 
   /**
