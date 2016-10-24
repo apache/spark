@@ -87,13 +87,6 @@ class TableFileCatalog(
     }
   }
 
-  override def equals(o: Any): Boolean = o match {
-    case other: TableFileCatalog => this.db == other.db && this.table == other.table
-    case _ => false
-  }
-
-  override def hashCode(): Int = 31 * db.hashCode + table.hashCode
-
   override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
 }
 

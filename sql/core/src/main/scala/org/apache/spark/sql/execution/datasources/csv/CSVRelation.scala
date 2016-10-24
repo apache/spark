@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
 import org.apache.spark.sql.types._
 
 object CSVRelation extends Logging {
@@ -185,6 +186,11 @@ private[csv] class CsvOutputWriter(
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
 
+  override val path: String = {
+    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
+    new Path(stagingDir, fileNamePrefix + ".csv" + compressionExtension).toString
+  }
+
   // create the Generator without separator inserted between 2 records
   private[this] val text = new Text()
 
@@ -199,7 +205,7 @@ private[csv] class CsvOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        new Path(stagingDir, s"$fileNamePrefix.csv$extension")
+        new Path(path)
       }
     }.getRecordWriter(context)
   }
