@@ -22,7 +22,7 @@ import org.apache.spark.TaskContext
 class FakeTask(
     stageId: Int,
     partitionId: Int,
-    prefLocs: Seq[TaskLocation] = Nil) extends Task[Int](stageId, 0, partitionId) {
+    prefLocs: Seq[TaskLocation] = Nil) extends Task[Int](stageId, stageAttemptId = 0, partitionId) {
   override def runTask(context: TaskContext): Int = 0
   override def preferredLocations: Seq[TaskLocation] = prefLocs
 }
@@ -33,16 +33,21 @@ object FakeTask {
    * locations for each task (given as varargs) if this sequence is not empty.
    */
   def createTaskSet(numTasks: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
-    createTaskSet(numTasks, 0, prefLocs: _*)
+    createTaskSet(numTasks, stageAttemptId = 0, prefLocs: _*)
   }
 
   def createTaskSet(numTasks: Int, stageAttemptId: Int, prefLocs: Seq[TaskLocation]*): TaskSet = {
+    createTaskSet(numTasks, stageId = 0, stageAttemptId, prefLocs: _*)
+  }
+
+  def createTaskSet(numTasks: Int, stageId: Int, stageAttemptId: Int, prefLocs: Seq[TaskLocation]*):
+  TaskSet = {
     if (prefLocs.size != 0 && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
     }
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
-      new FakeTask(0, i, if (prefLocs.size != 0) prefLocs(i) else Nil)
+      new FakeTask(stageId, i, if (prefLocs.size != 0) prefLocs(i) else Nil)
     }
-    new TaskSet(tasks, 0, stageAttemptId, 0, null)
+    new TaskSet(tasks, stageId, stageAttemptId, priority = 0, null)
   }
 }
