@@ -1662,9 +1662,7 @@ print.summary.KSTest <- function(x, ...) {
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #' @param featureSubsetStrategy The number of features to consider for splits at each tree node.
-#'        See
-#' \href{http://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.ml.classification.RandomForestClassifier@featureSubsetStrategy:org.apache.spark.ml.param.Param[String]}{
-#'        Supported options} for details.
+#'        See [removed for now]
 #' @param seed integer seed for random number generation.
 #' @param subsamplingRate Fraction of the training data used for learning each decision tree, in
 #'                        range (0, 1]. (default = 1.0)
