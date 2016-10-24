@@ -27,6 +27,36 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.Utils
 
+/**
+ * A hash-based aggregate operator that supports [[TypedImperativeAggregate]] functions that may
+ * use arbitrary JVM objects as aggregation states.
+ *
+ * Similar to [[HashAggregateExec]], this operator also falls back to sort-based aggregation when
+ * the size of the internal hash map exceeds the threshold. The differences are:
+ *
+ *  - It uses safe rows as aggregation buffer since it must support JVM objects as aggregation
+ *    states.
+ *
+ *  - It tracks entry count of the hash map instead of byte size to decide when we should fall back.
+ *    This is because it's hard to estimate the accurate size of arbitrary JVM objects in a
+ *    lightweight way.
+ *
+ *  - Whenever fallen back to sort-based aggregation, this operator feeds all of the rest input rows
+ *    into external sorters instead of building more hash map(s) as what [[HashAggregateExec]] does.
+ *    This is because having too many JVM object aggregation states floating there can be dangerous
+ *    for GC.
+ *
+ *  - CodeGen is not supported yet.
+ *
+ * This operator may be turned off by setting the following SQL configuration to `false`:
+ * {{{
+ *   spark.sql.execution.useObjectHashAggregateExec
+ * }}}
+ * The fallback threshold can be configured by tuning:
+ * {{{
+ *   spark.sql.objectHashAggregate.sortBased.fallbackThreshold
+ * }}}
+ */
 case class ObjectHashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
