@@ -201,11 +201,11 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getFinalStorageLevel: String = $(finalStorageLevel)
 
   /**
-    * Param for threshold in computation of dst factors to decide
-    * if stacking factors to speed up the computation.(>= 1).
-    * Default: 1024
-    * @group expertParam
-    */
+   * Param for threshold in computation of dst factors to decide
+   * if stacking factors to speed up the computation.(>= 1).
+   * Default: 1024
+   * @group expertParam
+   */
   val threshold = new IntParam(this, "threshold", "threshold in computation of dst factors " +
     "to decide if stacking factors to speed up the computation.",
     ParamValidators.gtEq(1))
