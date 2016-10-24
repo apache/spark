@@ -389,7 +389,7 @@ class ALSSuite
     testALS(training, test, maxIter = 1, rank = 129, regParam = 0.01, targetRMSE = 0.02,
       threshold = 128)
   }
-  
+
   test("implicit feedback") {
     val (training, test) =
       genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
