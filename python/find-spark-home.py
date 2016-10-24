@@ -23,34 +23,40 @@
 from __future__ import print_function
 import os, sys
 
-def is_spark_home(path):
-    """Takes a path and returns true if the provided path could be a reasonable SPARK_HOME"""
-    return (os.path.isfile(path + "/bin/spark-submit") and os.path.isdir(path + "/jars"))
+def _find_spark_home():
+    """Find the SPARK_HOME."""
+    if "SPARK_HOME" in os.environ:
+        return os.environ["SPARK_HOME"]
 
-paths = ["../", os.path.dirname(sys.argv[0]) + "/../"]
+    def is_spark_home(path):
+        """Takes a path and returns true if the provided path could be a reasonable SPARK_HOME"""
+        return (os.path.isfile(path + "/bin/spark-submit") and os.path.isdir(path + "/jars"))
 
-# Add the path of the PySpark module if it exists
-import sys
-if sys.version < "3":
-    import imp
+    paths = ["../", os.path.dirname(sys.argv[0]) + "/../"]
+
+    # Add the path of the PySpark module if it exists
+    if sys.version < "3":
+        import imp
+        try:
+            paths.append(imp.find_module("pyspark")[1])
+        except ImportError:
+            # Not pip installed no worries
+            True
+    else:
+        import importlib
+        try:
+            paths.append(importlib.util.find_spec("pyspark").origin)
+        except ImportError:
+            # Not pip installed no worries
+            True
+
+    # Normalize the paths
+    paths = map(lambda path:os.path.abspath(path), paths)
+
     try:
-        paths.append(imp.find_module("pyspark")[1])
-    except ImportError:
-        # Not pip installed no worries
-        True
-else:
-    import importlib
-    try:
-        paths.append(importlib.util.find_spec("pyspark").origin)
-    except ImportError:
-        # Not pip installed no worries
-        True
+        return next(path for path in paths if is_spark_home(path))
+    except StopIteration:
+        print("Could not find valid SPARK_HOME while searching %s" % paths, file=sys.stderr)
 
-# Normalize the paths
-paths = map(lambda path:os.path.abspath(path), paths)
-
-try:
-    print(next(path for path in paths if is_spark_home(path)))
-except StopIteration:
-    print("Could not find valid SPARK_HOME while searching %s" % paths, file=sys.stderr)
-    exit(-1)
+if __name__ == "__main__":
+    print(_find_spark_home())
