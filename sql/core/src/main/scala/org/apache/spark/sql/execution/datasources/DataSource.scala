@@ -422,7 +422,7 @@ case class DataSource(
             catalogTable.get.identifier.database.get,
             catalogTable.get.identifier.table,
             partitionSchema.getOrElse(StructType(Nil)),
-            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L) /* TODO(ekl) */)
+            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L))
         } else {
           new ListingFileCatalog(
             sparkSession, globbedPaths, options, partitionSchema)
