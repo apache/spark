@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.serializer
 
-import org.apache.spark.SparkFunSuite
+class UnsafeKryoSerializerSuite extends KryoSerializerSuite {
 
-class SessionFileCatalogSuite extends SparkFunSuite {
+  // This test suite should run all tests in KryoSerializerSuite with kryo unsafe.
 
-  test("file filtering") {
-    assert(!SessionFileCatalog.shouldFilterOut("abcd"))
-    assert(SessionFileCatalog.shouldFilterOut(".ab"))
-    assert(SessionFileCatalog.shouldFilterOut("_cd"))
+  override def beforeAll() {
+    conf.set("spark.kryo.unsafe", "true")
+    super.beforeAll()
+  }
 
-    assert(!SessionFileCatalog.shouldFilterOut("_metadata"))
-    assert(!SessionFileCatalog.shouldFilterOut("_common_metadata"))
-    assert(SessionFileCatalog.shouldFilterOut("_ab_metadata"))
-    assert(SessionFileCatalog.shouldFilterOut("_cd_common_metadata"))
+  override def afterAll() {
+    conf.set("spark.kryo.unsafe", "false")
+    super.afterAll()
   }
 }

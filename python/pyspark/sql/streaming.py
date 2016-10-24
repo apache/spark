@@ -205,8 +205,7 @@ class StreamingQueryStatus(object):
         Pretty string of this query status.
 
         >>> print(sqs)
-        StreamingQueryStatus:
-            Query name: query
+        Status of query 'query'
             Query id: 1
             Status timestamp: 123
             Input rate: 15.5 rows/sec
@@ -220,7 +219,7 @@ class StreamingQueryStatus(object):
                 numRows.input.total: 100
                 triggerId: 5
             Source statuses [1 source]:
-                Source 1:    MySource1
+                Source 1 - MySource1
                     Available offset: #0
                     Input rate: 15.5 rows/sec
                     Processing rate: 23.5 rows/sec
@@ -228,7 +227,7 @@ class StreamingQueryStatus(object):
                         numRows.input.source: 100
                         latency.getOffset.source: 10
                         latency.getBatch.source: 20
-            Sink status:     MySink
+            Sink status - MySink
                 Committed offsets: [#1, -]
         """
         return self._jsqs.toString()
@@ -366,7 +365,7 @@ class SourceStatus(object):
         Pretty string of this source status.
 
         >>> print(sqs.sourceStatuses[0])
-        SourceStatus:    MySource1
+        Status of source MySource1
             Available offset: #0
             Input rate: 15.5 rows/sec
             Processing rate: 23.5 rows/sec
@@ -457,7 +456,7 @@ class SinkStatus(object):
         Pretty string of this source status.
 
         >>> print(sqs.sinkStatus)
-        SinkStatus:    MySink
+        Status of sink MySink
             Committed offsets: [#1, -]
         """
         return self._jss.toString()

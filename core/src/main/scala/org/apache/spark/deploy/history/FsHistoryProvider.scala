@@ -23,6 +23,7 @@ import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
+import scala.xml.Node
 
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
@@ -260,6 +261,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } catch {
       case e: FileNotFoundException => None
     }
+  }
+
+  override def getEmptyListingHtml(): Seq[Node] = {
+    <p>
+      Did you specify the correct logging directory? Please verify your setting of
+      <span style="font-style:italic">spark.history.fs.logDirectory</span>
+      listed above and whether you have the permissions to access it.
+      <br/>
+      It is also possible that your application did not run to
+      completion or did not stop the SparkContext.
+    </p>
   }
 
   override def getConfig(): Map[String, String] = {
