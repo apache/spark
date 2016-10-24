@@ -208,6 +208,17 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
+test_that("createDataFrame uses files for large objects", {
+  # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
+  conf <- callJMethod(sparkSession, "conf")
+  callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
+  df <- suppressWarnings(createDataFrame(iris))
+
+  # Resetting the conf back to default value
+  callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
+  expect_equal(dim(df), dim(iris))
+})
+
 test_that("read/write csv as DataFrame", {
   csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
   mockLinesCsv <- c("year,make,model,comment,blank",
@@ -254,6 +265,23 @@ test_that("read/write csv as DataFrame", {
 
   unlink(csvPath)
   unlink(csvPath2)
+})
+
+test_that("Support other types for options", {
+  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+  mockLinesCsv <- c("year,make,model,comment,blank",
+  "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+  "1997,Ford,E350,\"Go get one now they are going fast\",",
+  "2015,Chevy,Volt",
+  "NA,Dummy,Placeholder")
+  writeLines(mockLinesCsv, csvPath)
+
+  csvDf <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
+  expected <- read.df(csvPath, "csv", header = TRUE, inferSchema = TRUE)
+  expect_equal(collect(csvDf), collect(expected))
+
+  expect_error(read.df(csvPath, "csv", header = TRUE, maxColumns = 3))
+  unlink(csvPath)
 })
 
 test_that("convert NAs to null type in DataFrames", {
@@ -360,6 +388,19 @@ test_that("create DataFrame with different data types", {
                                 c("d", "string"), c("e", "date"), c("f", "timestamp")))
   expect_equal(count(df), 1)
   expect_equal(collect(df), data.frame(l, stringsAsFactors = FALSE))
+})
+
+test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
+  df <- data.frame(
+    id = 1:2,
+    time = c(as.POSIXlt("2016-01-10"), NA),
+    date = c(as.Date("2016-10-01"), NA))
+
+  DF <- collect(createDataFrame(df))
+  expect_true(is.na(DF$date[2]))
+  expect_equal(DF$date[1], as.Date("2016-10-01"))
+  expect_true(is.na(DF$time[2]))
+  expect_equal(DF$time[1], as.POSIXlt("2016-01-10"))
 })
 
 test_that("create DataFrame with complex types", {
@@ -495,6 +536,19 @@ test_that("read/write json files", {
 
   unlink(jsonPath2)
   unlink(jsonPath3)
+})
+
+test_that("read/write json files - compression option", {
+  df <- read.df(jsonPath, "json")
+
+  jsonPath <- tempfile(pattern = "jsonPath", fileext = ".json")
+  write.json(df, jsonPath, compression = "gzip")
+  jsonDF <- read.json(jsonPath)
+  expect_is(jsonDF, "SparkDataFrame")
+  expect_equal(count(jsonDF), count(df))
+  expect_true(length(list.files(jsonPath, pattern = ".gz")) > 0)
+
+  unlink(jsonPath)
 })
 
 test_that("jsonRDD() on a RDD with json string", {
@@ -791,7 +845,7 @@ test_that("names() colnames() set the column names", {
   expect_equal(names(df)[1], "col3")
 
   expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
-               "Colum names cannot contain the '.' symbol.")
+               "Column names cannot contain the '.' symbol.")
   expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
   expect_error(colnames(df) <- c("a"),
                "Column names must have the same length as the number of columns in the dataset.")
@@ -1531,7 +1585,7 @@ test_that("filter() on a DataFrame", {
   #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint
 })
 
-test_that("join() and merge() on a DataFrame", {
+test_that("join(), crossJoin() and merge() on a DataFrame", {
   df <- read.json(jsonPath)
 
   mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
@@ -1542,7 +1596,14 @@ test_that("join() and merge() on a DataFrame", {
   writeLines(mockLines2, jsonPath2)
   df2 <- read.json(jsonPath2)
 
-  joined <- join(df, df2)
+  # inner join, not cartesian join
+  expect_equal(count(where(join(df, df2), df$name == df2$name)), 3)
+  # cartesian join
+  expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
+               paste0(".*(org.apache.spark.sql.AnalysisException: Detected cartesian product for",
+                      " INNER join between logical plans).*"))
+
+  joined <- crossJoin(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
   expect_equal(count(joined), 12)
   expect_equal(names(collect(joined)), c("age", "name", "name", "test"))
@@ -1786,6 +1847,21 @@ test_that("read/write ORC files", {
   unsetHiveContext()
 })
 
+test_that("read/write ORC files - compression option", {
+  setHiveContext(sc)
+  df <- read.df(jsonPath, "json")
+
+  orcPath2 <- tempfile(pattern = "orcPath2", fileext = ".orc")
+  write.orc(df, orcPath2, compression = "ZLIB")
+  orcDF <- read.orc(orcPath2)
+  expect_is(orcDF, "SparkDataFrame")
+  expect_equal(count(orcDF), count(df))
+  expect_true(length(list.files(orcPath2, pattern = ".zlib.orc")) > 0)
+
+  unlink(orcPath2)
+  unsetHiveContext()
+})
+
 test_that("read/write Parquet files", {
   df <- read.df(jsonPath, "json")
   # Test write.df and read.df
@@ -1817,6 +1893,23 @@ test_that("read/write Parquet files", {
   unlink(parquetPath4)
 })
 
+test_that("read/write Parquet files - compression option/mode", {
+  df <- read.df(jsonPath, "json")
+  tempPath <- tempfile(pattern = "tempPath", fileext = ".parquet")
+
+  # Test write.df and read.df
+  write.parquet(df, tempPath, compression = "GZIP")
+  df2 <- read.parquet(tempPath)
+  expect_is(df2, "SparkDataFrame")
+  expect_equal(count(df2), 3)
+  expect_true(length(list.files(tempPath, pattern = ".gz.parquet")) > 0)
+
+  write.parquet(df, tempPath, mode = "overwrite")
+  df3 <- read.parquet(tempPath)
+  expect_is(df3, "SparkDataFrame")
+  expect_equal(count(df3), 3)
+})
+
 test_that("read/write text files", {
   # Test write.df and read.df
   df <- read.df(jsonPath, "text")
@@ -1836,6 +1929,19 @@ test_that("read/write text files", {
 
   unlink(textPath)
   unlink(textPath2)
+})
+
+test_that("read/write text files - compression option", {
+  df <- read.df(jsonPath, "text")
+
+  textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+  write.text(df, textPath, compression = "GZIP")
+  textDF <- read.text(textPath)
+  expect_is(textDF, "SparkDataFrame")
+  expect_equal(count(textDF), count(df))
+  expect_true(length(list.files(textPath, pattern = ".gz")) > 0)
+
+  unlink(textPath)
 })
 
 test_that("describe() and summarize() on a DataFrame", {
@@ -2534,7 +2640,7 @@ test_that("enableHiveSupport on SparkSession", {
   unsetHiveContext()
   # if we are still here, it must be built with hive
   conf <- callJMethod(sparkSession, "conf")
-  value <- callJMethod(conf, "get", "spark.sql.catalogImplementation", "")
+  value <- callJMethod(conf, "get", "spark.sql.catalogImplementation")
   expect_equal(value, "hive")
 })
 

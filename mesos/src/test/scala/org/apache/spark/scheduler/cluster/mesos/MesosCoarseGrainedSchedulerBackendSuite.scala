@@ -67,7 +67,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     val minMem = backend.executorMemory(sc)
     val minCpu = 4
-    val offers = List((minMem, minCpu))
+    val offers = List(Resources(minMem, minCpu))
 
     // launches a task on a valid offer
     offerResources(offers)
@@ -95,8 +95,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     // launches a task on a valid offer
     val minMem = backend.executorMemory(sc) + 1024
     val minCpu = 4
-    val offer1 = (minMem, minCpu)
-    val offer2 = (minMem, 1)
+    val offer1 = Resources(minMem, minCpu)
+    val offer2 = Resources(minMem, 1)
     offerResources(List(offer1, offer2))
     verifyTaskLaunched(driver, "o1")
 
@@ -115,7 +115,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     setBackend(Map("spark.executor.cores" -> executorCores.toString))
 
     val executorMemory = backend.executorMemory(sc)
-    val offers = List((executorMemory * 2, executorCores + 1))
+    val offers = List(Resources(executorMemory * 2, executorCores + 1))
     offerResources(offers)
 
     val taskInfos = verifyTaskLaunched(driver, "o1")
@@ -130,7 +130,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     val executorMemory = backend.executorMemory(sc)
     val offerCores = 10
-    offerResources(List((executorMemory * 2, offerCores)))
+    offerResources(List(Resources(executorMemory * 2, offerCores)))
 
     val taskInfos = verifyTaskLaunched(driver, "o1")
     assert(taskInfos.length == 1)
@@ -144,7 +144,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     setBackend(Map("spark.cores.max" -> maxCores.toString))
 
     val executorMemory = backend.executorMemory(sc)
-    offerResources(List((executorMemory, maxCores + 1)))
+    offerResources(List(Resources(executorMemory, maxCores + 1)))
 
     val taskInfos = verifyTaskLaunched(driver, "o1")
     assert(taskInfos.length == 1)
@@ -153,9 +153,38 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(cpus == maxCores)
   }
 
+  test("mesos does not acquire gpus if not specified") {
+    setBackend()
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(Resources(executorMemory, 1, 1)))
+
+    val taskInfos = verifyTaskLaunched(driver, "o1")
+    assert(taskInfos.length == 1)
+
+    val gpus = backend.getResource(taskInfos.head.getResourcesList, "gpus")
+    assert(gpus == 0.0)
+  }
+
+
+  test("mesos does not acquire more than spark.mesos.gpus.max") {
+    val maxGpus = 5
+    setBackend(Map("spark.mesos.gpus.max" -> maxGpus.toString))
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(Resources(executorMemory, 1, maxGpus + 1)))
+
+    val taskInfos = verifyTaskLaunched(driver, "o1")
+    assert(taskInfos.length == 1)
+
+    val gpus = backend.getResource(taskInfos.head.getResourcesList, "gpus")
+    assert(gpus == maxGpus)
+  }
+
+
   test("mesos declines offers that violate attribute constraints") {
     setBackend(Map("spark.mesos.constraints" -> "x:true"))
-    offerResources(List((backend.executorMemory(sc), 4)))
+    offerResources(List(Resources(backend.executorMemory(sc), 4)))
     verifyDeclinedOffer(driver, createOfferId("o1"), true)
   }
 
@@ -165,8 +194,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(
-      (executorMemory, maxCores + 1),
-      (executorMemory, maxCores + 1)))
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1)))
 
     verifyTaskLaunched(driver, "o1")
     verifyDeclinedOffer(driver, createOfferId("o2"), true)
@@ -180,8 +209,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     val executorMemory = backend.executorMemory(sc)
     offerResources(List(
-      (executorMemory * 2, executorCores * 2),
-      (executorMemory * 2, executorCores * 2)))
+      Resources(executorMemory * 2, executorCores * 2),
+      Resources(executorMemory * 2, executorCores * 2)))
 
     verifyTaskLaunched(driver, "o1")
     verifyTaskLaunched(driver, "o2")
@@ -193,7 +222,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     // offer with room for two executors
     val executorMemory = backend.executorMemory(sc)
-    offerResources(List((executorMemory * 2, executorCores * 2)))
+    offerResources(List(Resources(executorMemory * 2, executorCores * 2)))
 
     // verify two executors were started on a single offer
     val taskInfos = verifyTaskLaunched(driver, "o1")
@@ -397,7 +426,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     setBackend()
 
     // launches a task on a valid offer
-    val offers = List((backend.executorMemory(sc), 1))
+    val offers = List(Resources(backend.executorMemory(sc), 1))
     offerResources(offers)
     verifyTaskLaunched(driver, "o1")
 
@@ -434,6 +463,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(launchedTasks.head.getCommand.getUrisList.asScala(0).getValue == url)
   }
 
+  private case class Resources(mem: Int, cpus: Int, gpus: Int = 0)
+
   private def verifyDeclinedOffer(driver: SchedulerDriver,
       offerId: OfferID,
       filter: Boolean = false): Unit = {
@@ -444,9 +475,9 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     }
   }
 
-  private def offerResources(offers: List[(Int, Int)], startId: Int = 1): Unit = {
+  private def offerResources(offers: List[Resources], startId: Int = 1): Unit = {
     val mesosOffers = offers.zipWithIndex.map {case (offer, i) =>
-      createOffer(s"o${i + startId}", s"s${i + startId}", offer._1, offer._2)}
+      createOffer(s"o${i + startId}", s"s${i + startId}", offer.mem, offer.cpus, None, offer.gpus)}
 
     backend.resourceOffers(driver, mesosOffers.asJava)
   }

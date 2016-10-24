@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -59,6 +59,7 @@ private[sql] object Column {
  *
  * @since 1.6.0
  */
+@InterfaceStability.Stable
 class TypedColumn[-T, U](
     expr: Expression,
     private[sql] val encoder: ExpressionEncoder[U])
@@ -124,6 +125,7 @@ class TypedColumn[-T, U](
  *
  * @since 1.3.0
  */
+@InterfaceStability.Stable
 class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
@@ -1179,12 +1181,11 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
 
 /**
- * :: Experimental ::
  * A convenient class used for constructing schema.
  *
  * @since 1.3.0
  */
-@Experimental
+@InterfaceStability.Stable
 class ColumnName(name: String) extends Column(name) {
 
   /**

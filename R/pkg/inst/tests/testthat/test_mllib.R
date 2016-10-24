@@ -481,6 +481,16 @@ test_that("spark.naiveBayes", {
     expect_error(m <- e1071::naiveBayes(Survived ~ ., data = t1), NA)
     expect_equal(as.character(predict(m, t1[1, ])), "Yes")
   }
+
+  # Test numeric response variable
+  t1$NumericSurvived <- ifelse(t1$Survived == "No", 0, 1)
+  t2 <- t1[-4]
+  df <- suppressWarnings(createDataFrame(t2))
+  m <- spark.naiveBayes(df, NumericSurvived ~ ., smoothing = 0.0)
+  s <- summary(m)
+  expect_equal(as.double(s$apriori[1, 1]), 0.5833333, tolerance = 1e-6)
+  expect_equal(sum(s$apriori), 1)
+  expect_equal(as.double(s$tables[1, "Age_Adult"]), 0.5714286, tolerance = 1e-6)
 })
 
 test_that("spark.survreg", {

@@ -22,7 +22,6 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
@@ -32,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveDDLSuite
@@ -313,6 +313,38 @@ class HiveDDLSuite
   private def assertErrorForAlterViewOnTable(sqlText: String): Unit = {
     val message = intercept[AnalysisException](sql(sqlText)).getMessage
     assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+  }
+
+  test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      val message = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $tabName (height INT, length INT) TBLPROPERTIES('EXTERNAL'='TRUE')")
+      }.getMessage
+      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
+    }
+  }
+
+  test("alter table - SET TBLPROPERTIES EXTERNAL to TRUE") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      val catalog = spark.sessionState.catalog
+      sql(s"CREATE TABLE $tabName (height INT, length INT)")
+      assert(
+        catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
+      val message = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')")
+      }.getMessage
+      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
+      // The table type is not changed to external
+      assert(
+        catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
+      // The table property is case sensitive. Thus, external is allowed
+      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('external' = 'TRUE')")
+      // The table type is not changed to external
+      assert(
+        catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
+    }
   }
 
   test("alter views and alter table - misuse") {

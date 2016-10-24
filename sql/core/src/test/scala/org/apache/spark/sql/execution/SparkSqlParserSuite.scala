@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.{DescribeFunctionCommand, DescribeTableCommand,
   ShowFunctionsCommand}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing}
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
 /**
  * Parser test cases for rules defined in [[SparkSqlParser]].
@@ -35,8 +39,23 @@ class SparkSqlParserSuite extends PlanTest {
 
   private lazy val parser = new SparkSqlParser(new SQLConf)
 
+  /**
+   * Normalizes plans:
+   * - CreateTable the createTime in tableDesc will replaced by -1L.
+   */
+  private def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case CreateTable(tableDesc, mode, query) =>
+        val newTableDesc = tableDesc.copy(createTime = -1L)
+        CreateTable(newTableDesc, mode, query)
+      case _ => plan // Don't transform
+    }
+  }
+
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
-    comparePlans(parser.parsePlan(sqlCommand), plan)
+    val normalized1 = normalizePlan(parser.parsePlan(sqlCommand))
+    val normalized2 = normalizePlan(plan)
+    comparePlans(normalized1, normalized2)
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit = {
@@ -68,9 +87,124 @@ class SparkSqlParserSuite extends PlanTest {
       DescribeFunctionCommand(FunctionIdentifier("bar", database = None), isExtended = true))
     assertEqual("describe function foo.bar",
       DescribeFunctionCommand(
-        FunctionIdentifier("bar", database = Option("foo")), isExtended = false))
+        FunctionIdentifier("bar", database = Some("foo")), isExtended = false))
     assertEqual("describe function extended f.bar",
-      DescribeFunctionCommand(FunctionIdentifier("bar", database = Option("f")), isExtended = true))
+      DescribeFunctionCommand(FunctionIdentifier("bar", database = Some("f")), isExtended = true))
+  }
+
+  private def createTableUsing(
+      table: String,
+      database: Option[String] = None,
+      tableType: CatalogTableType = CatalogTableType.MANAGED,
+      storage: CatalogStorageFormat = CatalogStorageFormat.empty,
+      schema: StructType = new StructType,
+      provider: Option[String] = Some("parquet"),
+      partitionColumnNames: Seq[String] = Seq.empty,
+      bucketSpec: Option[BucketSpec] = None,
+      mode: SaveMode = SaveMode.ErrorIfExists,
+      query: Option[LogicalPlan] = None): CreateTable = {
+    CreateTable(
+      CatalogTable(
+        identifier = TableIdentifier(table, database),
+        tableType = tableType,
+        storage = storage,
+        schema = schema,
+        provider = provider,
+        partitionColumnNames = partitionColumnNames,
+        bucketSpec = bucketSpec
+      ), mode, query
+    )
+  }
+
+  private def createTable(
+      table: String,
+      database: Option[String] = None,
+      tableType: CatalogTableType = CatalogTableType.MANAGED,
+      storage: CatalogStorageFormat = CatalogStorageFormat.empty.copy(
+        inputFormat = HiveSerDe.sourceToSerDe("textfile").get.inputFormat,
+        outputFormat = HiveSerDe.sourceToSerDe("textfile").get.outputFormat),
+      schema: StructType = new StructType,
+      provider: Option[String] = Some("hive"),
+      partitionColumnNames: Seq[String] = Seq.empty,
+      comment: Option[String] = None,
+      mode: SaveMode = SaveMode.ErrorIfExists,
+      query: Option[LogicalPlan] = None): CreateTable = {
+    CreateTable(
+      CatalogTable(
+        identifier = TableIdentifier(table, database),
+        tableType = tableType,
+        storage = storage,
+        schema = schema,
+        provider = provider,
+        partitionColumnNames = partitionColumnNames,
+        comment = comment
+      ), mode, query
+    )
+  }
+
+  test("create table - schema") {
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING)",
+      createTable(
+        table = "my_tab",
+        schema = (new StructType)
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType)
+      )
+    )
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+      "PARTITIONED BY (c INT, d STRING COMMENT 'test2')",
+      createTable(
+        table = "my_tab",
+        schema = (new StructType)
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType)
+          .add("c", IntegerType)
+          .add("d", StringType, nullable = true, "test2"),
+        partitionColumnNames = Seq("c", "d")
+      )
+    )
+    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>)",
+      createTable(
+        table = "my_tab",
+        schema = (new StructType)
+          .add("id", LongType)
+          .add("nested", (new StructType)
+            .add("col1", StringType)
+            .add("col2", IntegerType)
+          )
+      )
+    )
+    // Partitioned by a StructType should be accepted by `SparkSqlParser` but will fail an analyze
+    // rule in `AnalyzeCreateTable`.
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+      "PARTITIONED BY (nested STRUCT<col1: STRING,col2: INT>)",
+      createTable(
+        table = "my_tab",
+        schema = (new StructType)
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType)
+          .add("nested", (new StructType)
+            .add("col1", StringType)
+            .add("col2", IntegerType)
+          ),
+        partitionColumnNames = Seq("nested")
+      )
+    )
+    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
+      "no viable alternative at input")
+  }
+
+  test("create table using - schema") {
+    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet",
+      createTableUsing(
+        table = "my_tab",
+        schema = (new StructType)
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType)
+      )
+    )
+    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
+      "no viable alternative at input")
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {

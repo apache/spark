@@ -289,8 +289,8 @@ class DataFrameReader(OptionUtils):
         [Row(value=u'hello'), Row(value=u'this')]
         """
         if isinstance(paths, basestring):
-            path = [paths]
-        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+            paths = [paths]
+        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,

@@ -188,17 +188,18 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
+    val instances: RDD[Instance] = dataset.select(
+      col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+      case Row(label: Double, weight: Double, features: Vector) =>
+        Instance(label, weight, features)
+    }
+
     if (($(solver) == "auto" && $(elasticNetParam) == 0.0 &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
       require($(elasticNetParam) == 0.0, "Only L2 regularization can be used when normal " +
         "solver is used.'")
       // For low dimensional data, WeightedLeastSquares is more efficiently since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
-      val instances: RDD[Instance] = dataset.select(
-        col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
-          case Row(label: Double, weight: Double, features: Vector) =>
-            Instance(label, weight, features)
-      }
 
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         $(standardization), true)
@@ -220,12 +221,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
       return lrModel.setSummary(trainingSummary)
     }
-
-    val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)

@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.File
+import java.io._
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.GZIPOutputStream
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
@@ -394,7 +395,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
         val fileCatalog = new ListingFileCatalog(
           sparkSession = spark,
-          paths = Seq(new Path(tempDir)),
+          rootPaths = Seq(new Path(tempDir)),
           parameters = Map.empty[String, String],
           partitionSchema = None)
         // This should not fail.
@@ -438,6 +439,40 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       val df1 = df.where("a = 0").groupBy("b").agg("c" -> "sum")
       val df2 = df.where("a = 1").groupBy("b").agg("c" -> "sum")
       checkAnswer(df1.join(df2, "b"), Row(0, 6, 12) :: Row(1, 4, 8) :: Row(2, 10, 5) :: Nil)
+    }
+  }
+
+  test("spark.files.ignoreCorruptFiles should work in SQL") {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.text(inputFile.toURI.toString).collect()
+        }
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)
+      }
+    } finally {
+      inputFile.delete()
     }
   }
 

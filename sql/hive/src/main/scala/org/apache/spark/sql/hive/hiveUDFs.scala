@@ -329,17 +329,17 @@ private[hive] case class HiveUDAFFunction(
   // buffer for it.
   override def aggBufferSchema: StructType = StructType(Nil)
 
-  override def update(_buffer: MutableRow, input: InternalRow): Unit = {
+  override def update(_buffer: InternalRow, input: InternalRow): Unit = {
     val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, wrappers, cached, inputDataTypes))
   }
 
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
     throw new UnsupportedOperationException(
       "Hive UDAF doesn't support partial aggregate")
   }
 
-  override def initialize(_buffer: MutableRow): Unit = {
+  override def initialize(_buffer: InternalRow): Unit = {
     buffer = function.getNewAggregationBuffer
   }
 

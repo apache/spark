@@ -328,6 +328,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.json
 #' @export
@@ -341,11 +342,13 @@ setMethod("toDF", signature(x = "RDD"),
 #' @name read.json
 #' @method read.json default
 #' @note read.json since 1.6.0
-read.json.default <- function(path) {
+read.json.default <- function(path, ...) {
   sparkSession <- getSparkSession()
+  options <- varargsToStrEnv(...)
   # Allow the user to have a more flexible definiton of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
+  read <- callJMethod(read, "options", options)
   sdf <- callJMethod(read, "json", paths)
   dataFrame(sdf)
 }
@@ -405,16 +408,19 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 #' Loads an ORC file, returning the result as a SparkDataFrame.
 #'
 #' @param path Path of file to read.
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.orc
 #' @export
 #' @name read.orc
 #' @note read.orc since 2.0.0
-read.orc <- function(path) {
+read.orc <- function(path, ...) {
   sparkSession <- getSparkSession()
+  options <- varargsToStrEnv(...)
   # Allow the user to have a more flexible definiton of the ORC file path
   path <- suppressWarnings(normalizePath(path))
   read <- callJMethod(sparkSession, "read")
+  read <- callJMethod(read, "options", options)
   sdf <- callJMethod(read, "orc", path)
   dataFrame(sdf)
 }
@@ -430,11 +436,13 @@ read.orc <- function(path) {
 #' @name read.parquet
 #' @method read.parquet default
 #' @note read.parquet since 1.6.0
-read.parquet.default <- function(path) {
+read.parquet.default <- function(path, ...) {
   sparkSession <- getSparkSession()
+  options <- varargsToStrEnv(...)
   # Allow the user to have a more flexible definiton of the Parquet file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
+  read <- callJMethod(read, "options", options)
   sdf <- callJMethod(read, "parquet", paths)
   dataFrame(sdf)
 }
@@ -467,6 +475,7 @@ parquetFile <- function(x, ...) {
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param ... additional external data source specific named properties.
 #' @return SparkDataFrame
 #' @rdname read.text
 #' @export
@@ -479,11 +488,13 @@ parquetFile <- function(x, ...) {
 #' @name read.text
 #' @method read.text default
 #' @note read.text since 1.6.1
-read.text.default <- function(path) {
+read.text.default <- function(path, ...) {
   sparkSession <- getSparkSession()
+  options <- varargsToStrEnv(...)
   # Allow the user to have a more flexible definiton of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
+  read <- callJMethod(read, "options", options)
   sdf <- callJMethod(read, "text", paths)
   dataFrame(sdf)
 }
@@ -779,7 +790,7 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.string
          "in 'spark.sql.sources.default' configuration by default.")
   }
   sparkSession <- getSparkSession()
-  options <- varargsToEnv(...)
+  options <- varargsToStrEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
   }
@@ -842,7 +853,7 @@ loadDF <- function(x = NULL, ...) {
 #' @note createExternalTable since 1.4.0
 createExternalTable.default <- function(tableName, path = NULL, source = NULL, ...) {
   sparkSession <- getSparkSession()
-  options <- varargsToEnv(...)
+  options <- varargsToStrEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
   }
