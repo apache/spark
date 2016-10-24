@@ -1380,7 +1380,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The strategy of how to allocate tasks among workers with free cores. Three task
     assigners (roundrobin, packed, and balanced) are supported currently. By default, roundrobin
-    with randomness is used to allocate task to workers with available cores in a
+    with randomness is used to allocate tasks to workers with available cores in a
     roundrobin manner. The packed task assigner is used to allocate tasks to workers with the least
     free cores, resulting in tasks assigned to fewer workers, which may help driver to release the
     reserved idle workers when dynamic allocation(spark.dynamicAllocation.enabled) is enabled.

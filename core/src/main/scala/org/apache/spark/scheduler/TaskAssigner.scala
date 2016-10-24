@@ -21,8 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.PriorityQueue
 import scala.util.Random
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
 /** Tracks the current state of the workers with available cores and assigned task list. */
@@ -33,9 +33,12 @@ private[scheduler] class OfferState(val workOffer: WorkerOffer) {
   val tasks = new ArrayBuffer[TaskDescription](coresAvailable)
 
   def assignTask(task: TaskDescription, cpu: Int): Unit = {
+    if (coresAvailable < cpu) {
+      throw new SparkException(s"Available cores are less than cpu per task" +
+        s" ($coresAvailable < $cpu)")
+    }
     tasks += task
     coresAvailable -= cpu
-    assert(coresAvailable >= 0)
   }
 }
 
@@ -142,7 +145,7 @@ object TaskAssigner extends Logging {
 }
 
 /**
- * Assigns the task to workers with available cores in roundrobin manner.
+ * Assigns the task to workers with available cores in a roundrobin manner.
  */
 class RoundRobinAssigner extends TaskAssigner {
   private var currentOfferIndex = 0
@@ -197,7 +200,7 @@ class BalancedAssigner extends TaskAssigner {
 }
 
 /**
- * Assign the task to workers with the least available cores. In other words, PackedAssigner tries
+ * Assigns the task to workers with the least available cores. In other words, PackedAssigner tries
  * to schedule tasks to fewer workers.  As a result, there will be idle workers without any tasks
  * assigned if more than required workers are reserved. If the dynamic allocator is enabled,
  * these idle workers will be released by driver. The released resources can then be allocated to
