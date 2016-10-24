@@ -75,7 +75,8 @@ case class Percentile(
 
   override def children: Seq[Expression] = child :: percentageExpression :: Nil
 
-  override def nullable: Boolean = false
+  // Returns null for empty inputs
+  override def nullable: Boolean = true
 
   override def dataType: DataType =
     if (returnPercentileArray) ArrayType(DoubleType) else DoubleType
@@ -84,7 +85,7 @@ case class Percentile(
     Seq(NumericType, TypeCollection(NumericType, ArrayType))
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForOrderingExpr(child.dataType, "function percentile")
+    TypeUtils.checkForNumericExpr(child.dataType, "function percentile")
 
   override def supportsPartial: Boolean = false
 
@@ -102,15 +103,16 @@ case class Percentile(
 
   private def evalPercentages(expr: Expression): (Boolean, Seq[Number]) = {
     val (isArrayType, values) = (expr.dataType, expr.eval()) match {
-      case (_, n: Number) => (false, Seq(n))
-      case (_, d: Decimal) => (false, Seq(d.toDouble.asInstanceOf[Number]))
+      case (_, n: Number) => (false, Array(n))
+      case (_, d: Decimal) => (false, Array(d.toDouble.asInstanceOf[Number]))
       case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
-        (true, arrayData.toArray[Number](baseType).toSeq)
+        val numericArray = arrayData.toObjectArray(baseType)
+        (true, numericArray.map { x =>
+          baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType]).asInstanceOf[Number]
+        })
       case other =>
         throw new AnalysisException(s"Invalid data type ${other._1} for parameter percentage")
     }
-
-    require(values.size > 0, s"Percentage values should not be empty.")
 
     require(values.forall(value => value.doubleValue() >= 0.0 && value.doubleValue() <= 1.0),
       s"Percentage values must be between 0.0 and 1.0, current values = ${values.mkString(", ")}")
