@@ -70,7 +70,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       } else {
         ${falseEval.code}
         ${ev.isNull} = ${falseEval.isNull};
-        ${ev.value} = ${falseEval.value};
+        ${ev.value} = (${ctx.javaType(dataType)}) ${falseEval.value};
       }""")
   }
 
