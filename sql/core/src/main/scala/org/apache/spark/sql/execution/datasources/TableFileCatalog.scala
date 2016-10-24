@@ -77,6 +77,9 @@ class TableFileCatalog(
 
   override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
 
+  // `TableFileCatalog` may be a member of `HadoopFsRelation`, `HadoopFsRelation` may be a member
+  // of `LogicalRelation`, and `LogicalRelation` may be used as the cache key. So we need to
+  // implement `equals` and `hashCode` here, to make it work with cache lookup.
   override def equals(o: Any): Boolean = o match {
     case other: TableFileCatalog => this.table.identifier == other.table.identifier
     case _ => false
