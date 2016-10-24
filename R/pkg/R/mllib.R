@@ -1662,7 +1662,7 @@ print.summary.KSTest <- function(x, ...) {
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #' @param featureSubsetStrategy The number of features to consider for splits at each tree node.
-#'        See [removed for now]
+#'        Supported options: "auto", "all", "onethird", "sqrt", "log2", (0.0-1.0], [1-n].
 #' @param seed integer seed for random number generation.
 #' @param subsamplingRate Fraction of the training data used for learning each decision tree, in
 #'                        range (0, 1]. (default = 1.0)
@@ -1712,7 +1712,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
               seed <- as.character(as.integer(seed))
             }
             switch(type,
-                   regression =  {
+                   regression = {
                      if (is.null(impurity)) impurity <- "variance"
                      impurity <- match.arg(impurity, "variance")
                      jobj <- callJStatic("org.apache.spark.ml.r.RandomForestRegressorWrapper",
@@ -1720,7 +1720,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                                          as.integer(maxBins), as.integer(numTrees),
                                          impurity, as.integer(minInstancesPerNode),
                                          as.numeric(minInfoGain), as.integer(checkpointInterval),
-                                         featureSubsetStrategy = "auto", seed,
+                                         as.character(featureSubsetStrategy), seed,
                                          as.numeric(subsamplingRate),
                                          as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
                      new("RandomForestRegressionModel", jobj = jobj)
@@ -1733,7 +1733,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                                          as.integer(maxBins), as.integer(numTrees),
                                          impurity, as.integer(minInstancesPerNode),
                                          as.numeric(minInfoGain), as.integer(checkpointInterval),
-                                         featureSubsetStrategy = "auto", seed,
+                                         as.character(featureSubsetStrategy), seed,
                                          as.numeric(subsamplingRate), as.character(probabilityCol),
                                          as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
                      new("RandomForestClassificationModel", jobj = jobj)
