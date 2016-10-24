@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, Outp
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.{Row, SparkSession}
@@ -47,7 +48,7 @@ import org.apache.spark.util.SerializableConfiguration
  * [[FileFormat]] for reading ORC files. If this is moved or renamed, please update
  * [[DataSource]]'s backwardCompatibilityMap.
  */
-private[sql] class OrcFileFormat
+class OrcFileFormat
   extends FileFormat with DataSourceRegister with Serializable {
 
   override def shortName(): String = "orc"
@@ -150,12 +151,15 @@ private[sql] class OrcFileFormat
           new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
         }
 
+        val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
+        Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => recordsIterator.close()))
+
         // Unwraps `OrcStruct`s to `UnsafeRow`s
         OrcRelation.unwrapOrcStructs(
           conf,
           requiredSchema,
           Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
-          new RecordReaderIterator[OrcStruct](orcRecordReader))
+          recordsIterator)
       }
     }
   }
@@ -194,7 +198,8 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
       row: InternalRow): Unit = {
     val fieldRefs = oi.getAllStructFieldRefs
     var i = 0
-    while (i < fieldRefs.size) {
+    val size = fieldRefs.size
+    while (i < size) {
 
       oi.setStructFieldData(
         struct,
@@ -358,7 +363,8 @@ private[orc] object OrcRelation extends HiveInspectors {
       iterator.map { value =>
         val raw = deserializer.deserialize(value)
         var i = 0
-        while (i < fieldRefs.length) {
+        val length = fieldRefs.length
+        while (i < length) {
           val fieldValue = oi.getStructFieldData(raw, fieldRefs(i))
           if (fieldValue == null) {
             mutableRow.setNullAt(fieldOrdinals(i))

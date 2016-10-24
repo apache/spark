@@ -242,10 +242,30 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (scale < _scale) {
         // Easier case: we just need to divide our scale down
         val diff = _scale - scale
-        val droppedDigits = longVal % POW_10(diff)
-        longVal /= POW_10(diff)
-        if (math.abs(droppedDigits) * 2 >= POW_10(diff)) {
-          longVal += (if (longVal < 0) -1L else 1L)
+        val pow10diff = POW_10(diff)
+        // % and / always round to 0
+        val droppedDigits = longVal % pow10diff
+        longVal /= pow10diff
+        roundMode match {
+          case ROUND_FLOOR =>
+            if (droppedDigits < 0) {
+              longVal += -1L
+            }
+          case ROUND_CEILING =>
+            if (droppedDigits > 0) {
+              longVal += 1L
+            }
+          case ROUND_HALF_UP =>
+            if (math.abs(droppedDigits) * 2 >= pow10diff) {
+              longVal += (if (droppedDigits < 0) -1L else 1L)
+            }
+          case ROUND_HALF_EVEN =>
+            val doubled = math.abs(droppedDigits) * 2
+            if (doubled > pow10diff || doubled == pow10diff && longVal % 2 != 0) {
+              longVal += (if (droppedDigits < 0) -1L else 1L)
+            }
+          case _ =>
+            sys.error(s"Not supported rounding mode: $roundMode")
         }
       } else if (scale > _scale) {
         // We might be able to multiply longVal by a power of 10 and not overflow, but if not,

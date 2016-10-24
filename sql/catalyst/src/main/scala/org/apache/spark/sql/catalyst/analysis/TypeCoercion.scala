@@ -150,7 +150,7 @@ object TypeCoercion {
    * [[findTightestCommonType]], but can handle decimal types. If the wider decimal type exceeds
    * system limitation, this rule will truncate the decimal type before return it.
    */
-  private def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
+  def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
       case Some(d) => findTightestCommonTypeOfTwo(d, c).orElse((d, c) match {
         case (t1: DecimalType, t2: DecimalType) =>
@@ -542,11 +542,14 @@ object TypeCoercion {
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
-      case Divide(left, right) if isNumeric(left) && isNumeric(right) =>
+      case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
         Divide(Cast(left, DoubleType), Cast(right, DoubleType))
     }
 
-    private def isNumeric(ex: Expression): Boolean = ex.dataType.isInstanceOf[NumericType]
+    private def isNumericOrNull(ex: Expression): Boolean = {
+      // We need to handle null types in case a query contains null literals.
+      ex.dataType.isInstanceOf[NumericType] || ex.dataType == NullType
+    }
   }
 
   /**

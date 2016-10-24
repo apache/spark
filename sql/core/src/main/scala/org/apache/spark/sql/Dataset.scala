@@ -30,7 +30,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
-import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
@@ -2519,8 +2519,12 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def collectToPython(): Int = {
+    EvaluatePython.registerPicklers()
     withNewExecutionId {
-      PythonRDD.collectAndServe(javaToPython.rdd)
+      val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
+      val iter = new SerDeUtil.AutoBatchedPickler(
+        queryExecution.executedPlan.executeCollect().iterator.map(toJava))
+      PythonRDD.serveIterator(iter, "serve-DataFrame")
     }
   }
 

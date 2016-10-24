@@ -510,18 +510,18 @@ class ALSSuite
       (1, 1L, 1d, 0, 0L, 0d, 5.0)
     ).toDF("user", "user_big", "user_small", "item", "item_big", "item_small", "rating")
     withClue("fit should fail when ids exceed integer range. ") {
-      assert(intercept[IllegalArgumentException] {
+      assert(intercept[SparkException] {
         als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
-      }.getMessage.contains("was out of Integer range"))
-      assert(intercept[IllegalArgumentException] {
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
         als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
-      }.getMessage.contains("was out of Integer range"))
-      assert(intercept[IllegalArgumentException] {
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
         als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
-      }.getMessage.contains("was out of Integer range"))
-      assert(intercept[IllegalArgumentException] {
+      }.getCause.getMessage.contains("was out of Integer range"))
+      assert(intercept[SparkException] {
         als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
-      }.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains("was out of Integer range"))
     }
     withClue("transform should fail when ids exceed integer range. ") {
       val model = als.fit(df)

@@ -422,6 +422,31 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       3, 17, 27, 58, 62)
   }
 
+  test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
+    val simpleUdf = udf((n: Int) => {
+      require(n != 1, "simpleUdf shouldn't see id=1!")
+      1
+    })
+
+    val df = Seq(
+      (0, "string0"),
+      (1, "string1"),
+      (2, "string2"),
+      (3, "string3"),
+      (4, "string4"),
+      (5, "string5"),
+      (6, "string6"),
+      (7, "string7"),
+      (8, "string8"),
+      (9, "string9")
+    ).toDF("id", "stringData")
+    val sampleDF = df.sample(false, 0.7, 50)
+    // After sampling, sampleDF doesn't contain id=1.
+    assert(!sampleDF.select("id").collect.contains(1))
+    // simpleUdf should not encounter id=1.
+    checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(1)))
+  }
+
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
@@ -843,6 +868,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val data = Seq((("a", "b"), "c"), (null, "d"))
     val ds = spark.createDataset(data)(enc)
     checkDataset(ds, (("a", "b"), "c"), (null, "d"))
+  }
+
+  test("SPARK-16995: flat mapping on Dataset containing a column created with lit/expr") {
+    val df = Seq("1").toDF("a")
+
+    import df.sparkSession.implicits._
+
+    checkDataset(
+      df.withColumn("b", lit(0)).as[ClassData]
+        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+    checkDataset(
+      df.withColumn("b", expr("0")).as[ClassData]
+        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
   }
 }
 

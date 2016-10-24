@@ -66,6 +66,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           // No progress events or termination events
           assert(listener.progressStatuses.isEmpty)
           assert(listener.terminationStatus === null)
+          true
         },
         AddDataMemory(input, Seq(1, 2, 3)),
         CheckAnswer(1, 2, 3),
@@ -84,6 +85,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             // No termination events
             assert(listener.terminationStatus === null)
           }
+          true
         },
         StopStream,
         AssertOnQuery("Incorrect query status in onQueryTerminated") { query =>
@@ -94,10 +96,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             assert(status.id === query.id)
             assert(status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString))
             assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
-            assert(listener.terminationStackTrace.isEmpty)
             assert(listener.terminationException === None)
           }
           listener.checkAsyncErrors()
+          true
         }
       )
     }
@@ -147,7 +149,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("exception should be reported in QueryTerminated") {
+  testQuietly("exception should be reported in QueryTerminated") {
     val listener = new QueryStatusCollector
     withListenerAdded(listener) {
       val input = MemoryStream[Int]
@@ -159,8 +161,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           spark.sparkContext.listenerBus.waitUntilEmpty(10000)
           assert(listener.terminationStatus !== null)
           assert(listener.terminationException.isDefined)
+          // Make sure that the exception message reported through listener
+          // contains the actual exception and relevant stack trace
+          assert(!listener.terminationException.get.contains("StreamingQueryException"))
           assert(listener.terminationException.get.contains("java.lang.ArithmeticException"))
-          assert(listener.terminationStackTrace.nonEmpty)
+          assert(listener.terminationException.get.contains("StreamingQueryListenerSuite"))
         }
       )
     }
@@ -205,8 +210,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val exception = new RuntimeException("exception")
     val queryQueryTerminated = new StreamingQueryListener.QueryTerminated(
       queryTerminatedInfo,
-      Some(exception.getMessage),
-      exception.getStackTrace)
+      Some(exception.getMessage))
     val json =
       JsonProtocol.sparkEventToJson(queryQueryTerminated)
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
@@ -262,7 +266,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     @volatile var startStatus: StreamingQueryInfo = null
     @volatile var terminationStatus: StreamingQueryInfo = null
     @volatile var terminationException: Option[String] = null
-    @volatile var terminationStackTrace: Seq[StackTraceElement] = null
 
     val progressStatuses = new ConcurrentLinkedQueue[StreamingQueryInfo]
 
@@ -296,7 +299,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         assert(startStatus != null, "onQueryTerminated called before onQueryStarted")
         terminationStatus = queryTerminated.queryInfo
         terminationException = queryTerminated.exception
-        terminationStackTrace = queryTerminated.stackTrace
       }
       asyncTestWaiter.dismiss()
     }

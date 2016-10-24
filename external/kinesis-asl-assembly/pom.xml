@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.0.1-SNAPSHOT</version>
+    <version>2.0.1</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -142,6 +142,21 @@
   <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
   <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
   <plugins>
+    <!-- SPARK-17418: prevent the kinesis-asl-assembly from being published to Maven -->
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-deploy-plugin</artifactId>
+      <configuration>
+        <skip>true</skip>
+      </configuration>
+    </plugin>
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-install-plugin</artifactId>
+      <configuration>
+        <skip>true</skip>
+      </configuration>
+    </plugin>
     <plugin>
       <groupId>org.apache.maven.plugins</groupId>
       <artifactId>maven-shade-plugin</artifactId>
