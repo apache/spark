@@ -353,11 +353,16 @@ class GaussianMixture @Since("2.0.0") (
     // derived from the samples.
     // TODO: Support users supplied initial GMM.
     val samples = instances.takeSample(withReplacement = true, _k * nSamples, $(seed))
-    val weights = Array.fill(_k)(1.0 / _k)
-    val gaussians = Array.tabulate(_k) { i =>
+    val weights: Array[Double] = Array.fill(_k)(1.0 / _k)
+    /**
+     * Since the covariance matrix of multivariate gaussian distribution is symmetric,
+     * only the upper triangular part of the matrix will be stored as a dense vector
+     * in order to reduce the shuffled data size.
+     */
+    val gaussians: Array[(DenseVector, DenseVector)] = Array.tabulate(_k) { i =>
       val slice = samples.view(i * nSamples, (i + 1) * nSamples)
       val mean = {
-        val v = Vectors.zeros(numFeatures)
+        val v = new DenseVector(Array.fill[Double](numFeatures)(0.0))
         var i = 0
         while (i < nSamples) {
           BLAS.axpy(1.0, slice(i), v)
@@ -368,16 +373,21 @@ class GaussianMixture @Since("2.0.0") (
       }
       /**
        * Construct matrix where diagonal entries are element-wise
-       * variance of input vectors (computes biased variance)
+       * variance of input vectors (computes biased variance).
        */
       val cov = {
-        val ss = Vectors.zeros(numFeatures).asBreeze
+        val ss = new DenseVector(Array.fill[Double](numFeatures)(0)).asBreeze
         slice.foreach(xi => ss += (xi.asBreeze - mean.asBreeze) :^ 2.0)
         val diagVec = Vectors.fromBreeze(ss)
         BLAS.scal(1.0 / nSamples, diagVec)
-        Matrices.diag(diagVec)
+        val covVec = new DenseVector(Array.fill[Double](
+          numFeatures * (numFeatures + 1) / 2)(0.0))
+        diagVec.toArray.zipWithIndex.foreach { case (v: Double, i: Int) =>
+          covVec.values(i + i * (i + 1) / 2) = v
+        }
+        covVec
       }
-      new MultivariateGaussian(mean, cov)
+      (mean, cov)
     }
 
     var llh = Double.MinValue // current log-likelihood
@@ -434,7 +444,13 @@ class GaussianMixture @Since("2.0.0") (
       iter += 1
     }
 
-    val model = copyValues(new GaussianMixtureModel(uid, weights, gaussians)).setParent(this)
+    val gaussianDists = gaussians.map { case (mean, covVec) =>
+      val cov = new DenseMatrix(numFeatures, numFeatures,
+        GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values))
+      new MultivariateGaussian(mean, cov)
+    }
+
+    val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
@@ -466,17 +482,37 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
     ((k - 1.0) / k) * d > 25
   }
 
+  /**
+   * Unpack upper triangular part of a symmetric matrix.
+   * @param n The order of the n by n matrix.
+   * @param triangular The upper triangular part of the matrix packed in an array (column major).
+   * @return An array which represents the symmetric matrix in column major.
+   */
+  private[clustering] def unpackUpperTriangularMatrix(
+      n: Int,
+      triangular: Array[Double]): Array[Double] = {
+    val symmetric = Array.fill(n * n)(0.0)
+    var r = 0
+    for (i <- 0 until n) {
+      for (j <- 0 to i) {
+        symmetric(i * n + j) = triangular(r)
+        symmetric(j * n + i) = triangular(r)
+        r += 1
+      }
+    }
+    symmetric
+  }
+
   private[clustering] def updateWeightsAndGaussians(
-      mean: Vector,
-      cov: Matrix,
+      mean: DenseVector,
+      cov: DenseVector,
       weight: Double,
-      sumWeights: Double): (Double, MultivariateGaussian) = {
+      sumWeights: Double): (Double, (DenseVector, DenseVector)) = {
     BLAS.scal(1.0 / weight, mean)
-    // TODO: Handle sparse matrix more efficiently
-    BLAS.syr(-weight, mean, cov.asInstanceOf[DenseMatrix])
+    BLAS.spr(-weight, mean, cov)
+    BLAS.scal(1.0 / weight, cov)
     val newWeight = weight / sumWeights
-    cov.update(_ / weight)
-    val newGaussian = new MultivariateGaussian(mean, cov)
+    val newGaussian = (mean, cov)
     (newWeight, newGaussian)
   }
 }
@@ -487,19 +523,31 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  * @param numFeatures The number of features.
  * @param bcWeights The broadcast weights for each Gaussian distribution in the mixture.
  * @param bcGaussians The broadcast array of Multivariate Gaussian (Normal) Distribution
- *                    in the mixture.
+ *                    in the mixture. Note only upper triangular part of the covariance
+ *                    matrix of each distribution is stored as dense vector in order to
+ *                    reduce shuffled data size.
  */
 private class ExpectationAggregator(
     numFeatures: Int,
     bcWeights: Broadcast[Array[Double]],
-    bcGaussians: Broadcast[Array[MultivariateGaussian]]) extends Serializable {
+    bcGaussians: Broadcast[Array[(DenseVector, DenseVector)]]) extends Serializable {
 
   private val k: Int = bcWeights.value.length
   private var totalCnt: Long = 0L
   private var newLogLikelihood: Double = 0.0
   private val newWeights: Array[Double] = Array.fill(k)(0.0)
-  private val newMeans: Array[Vector] = Array.fill(k)(Vectors.zeros(numFeatures))
-  private val newCovs: Array[Matrix] = Array.fill(k)(Matrices.zeros(numFeatures, numFeatures))
+  private val newMeans: Array[DenseVector] = Array.fill(k)(
+    new DenseVector(Array.fill[Double](numFeatures)(0.0)))
+  private val newCovs: Array[DenseVector] = Array.fill(k)(
+    new DenseVector(Array.fill[Double](numFeatures * (numFeatures + 1) / 2)(0.0)))
+
+  @transient private lazy val oldGaussians = {
+    bcGaussians.value.map { case (mean, covVec) =>
+      val cov = new DenseMatrix(numFeatures, numFeatures,
+        GaussianMixture.unpackUpperTriangularMatrix(numFeatures, covVec.values))
+      new MultivariateGaussian(mean, cov)
+    }
+  }
 
   def count: Long = totalCnt
 
@@ -507,9 +555,9 @@ private class ExpectationAggregator(
 
   def weights: Array[Double] = newWeights
 
-  def means: Array[Vector] = newMeans
+  def means: Array[DenseVector] = newMeans
 
-  def covs: Array[Matrix] = newCovs
+  def covs: Array[DenseVector] = newCovs
 
   /**
    * Add a new training data to this ExpectationAggregator, and update the log likelihood,
@@ -520,9 +568,8 @@ private class ExpectationAggregator(
    */
   def add(data: Vector): this.type = {
     val localWeights = bcWeights.value
-    val localGaussians = bcGaussians.value
 
-    val p = localWeights.zip(localGaussians).map { case (weight, gaussian) =>
+    val p = localWeights.zip(oldGaussians).map { case (weight, gaussian) =>
       EPSILON + weight * gaussian.pdf(data)
     }
     val pSum = p.sum
@@ -532,8 +579,7 @@ private class ExpectationAggregator(
       p(i) /= pSum
       newWeights(i) += p(i)
       BLAS.axpy(p(i), data, newMeans(i))
-      // TODO: Handle sparse matrix more efficiently
-      BLAS.syr(p(i), data, newCovs(i).asInstanceOf[DenseMatrix])
+      BLAS.spr(p(i), data, newCovs(i))
       i += 1
     }
 
@@ -556,7 +602,7 @@ private class ExpectationAggregator(
       while(i < k) {
         newWeights(i) += other.newWeights(i)
         BLAS.axpy(1.0, other.newMeans(i), newMeans(i))
-        newCovs(i).asBreeze += other.newCovs(i).asBreeze
+        BLAS.axpy(1.0, other.newCovs(i), newCovs(i))
         i += 1
       }
       newLogLikelihood += other.newLogLikelihood
