@@ -137,8 +137,10 @@ private[spark] class IndexShuffleBlockResolver(
       shuffleId: Int,
       mapId: Int,
       lengths: Array[Long],
+      // SPARK-12196, when using tiered store,
+      // multiple call of getDataFile could return different value,
+      // so we pass both dataFileTmp and dataFile for renaming.
       dataFileTmp: File,
-      // SPARK-12196, in hierarchy store, the getDataFile could return different value
       dataFile: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
@@ -159,7 +161,8 @@ private[spark] class IndexShuffleBlockResolver(
       // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
       // the following check and rename are atomic.
       synchronized {
-        val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
+        val existingLengths = checkIndexAndDataFile(getIndexFile(shuffleId, mapId),
+          getDataFile(shuffleId, mapId), lengths.length)
         if (existingLengths != null) {
           // Another attempt for the same task has already written our map outputs successfully,
           // so just use the existing partition lengths and delete our temporary map outputs.

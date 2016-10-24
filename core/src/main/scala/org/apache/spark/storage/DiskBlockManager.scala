@@ -44,103 +44,34 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     logError("Failed to create any local dir.")
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
-  // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
-  // of subDirs(i) is protected by the lock of subDirs(i)
-  private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
   private val shutdownHook = addShutdownHook()
 
-  private abstract class FileAllocationStrategy {
-    def apply(filename: String): File
-
-    protected def getFile(filename: String, storageDirs: Array[File]): File = {
-      require(storageDirs.nonEmpty, "could not find file when the directories are empty")
-
-      // Figure out which local directory it hashes to, and which subdirectory in that
-      val hash = Utils.nonNegativeHash(filename)
-      val dirId = localDirs.indexOf(storageDirs(hash % storageDirs.length))
-      val subDirId = (hash / storageDirs.length) % subDirsPerLocalDir
-
-      // Create the subdirectory if it doesn't already exist
-      val subDir = subDirs(dirId).synchronized {
-        val old = subDirs(dirId)(subDirId)
-        if (old != null) {
-          old
-        } else {
-          val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-          if (!newDir.exists() && !newDir.mkdir()) {
-            throw new IOException(s"Failed to create local dir in $newDir.")
-          }
-          subDirs(dirId)(subDirId) = newDir
-          newDir
-        }
-      }
-
-      new File(subDir, filename)
+  private val shortFileAllocatorNames = Map(
+    "hash" -> classOf[HashAllocator].getName,
+    "tiered" -> classOf[TieredAllocator].getName)
+  private def createFileAllcator(allocatorName: String): FileAllocator = {
+    val allocatorClass = shortFileAllocatorNames
+      .getOrElse(allocatorName.toLowerCase, allocatorName)
+    val allocator = try {
+      val ctor = Utils.classForName(allocatorClass)
+        .getConstructor(classOf[SparkConf], classOf[Array[File]], java.lang.Integer.TYPE)
+      Some(ctor.newInstance(conf, localDirs, new Integer(subDirsPerLocalDir))
+        .asInstanceOf[FileAllocator])
+    } catch {
+      case e: ClassNotFoundException => None
+      case e: NoSuchMethodException => None
+    }
+    if (allocator.isDefined && allocator.get.support) {
+      logInfo(s"fileAllocator($allocatorClass) is enabled.")
+      allocator.get
+    } else {
+      logInfo("default fileAllocator(HashAllocator) is enabled.")
+      new HashAllocator(conf, localDirs, subDirsPerLocalDir)
     }
   }
-
-  /** Looks up a file by hashing it into one of our local subdirectories. */
-  // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
-  private object hashAllocator extends FileAllocationStrategy {
-    def apply(filename: String): File = getFile(filename, localDirs)
-  }
-
-  /** Looks up a file by tier way in different speed storage devices. */
-  private class TieredAllocator extends FileAllocationStrategy {
-    val tiersEnvConf = conf.getenv("SPARK_DISKS_TIERS")
-    if (tiersEnvConf == null) {
-      logError("SPARK_DISKS_TIERS is not configured.")
-      System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_BUILD_TIERED_STORAGE)
-    }
-    val tiersIDs = tiersEnvConf.trim.split("")
-    if (localDirs.length != tiersIDs.length) {
-      logError(s"Incorrect SPARK_DISKS_TIERS setting," +
-        s"SPARK_DISKS_TIERS = '$tiersEnvConf'.")
-      System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_BUILD_TIERED_STORAGE)
-    }
-
-    val tieredDirs: Seq[Array[File]] = (localDirs zip tiersIDs).
-      groupBy(_._2).mapValues(_.map(_._1)).toSeq.sortBy(_._1).map(_._2)
-    tieredDirs.zipWithIndex.foreach {
-      case (dirs, index) =>
-        logInfo(s"Tier $index:")
-        dirs.foreach(logInfo("\t" + _))
-    }
-
-    def apply(filename: String): File = {
-      var availableFile: File = null
-      for (tier <- tieredDirs) {
-        val file = getFile(filename, tier)
-        if (file.exists()) return file
-
-        if (availableFile == null &&
-          file.getParentFile.getFreeSpace / file.getParent.getTotalSpace < 0.1) {
-          availableFile = file
-        }
-      }
-
-      if (availableFile == null) {
-        throw new IOException(s"No enough disk space.")
-      }
-      availableFile
-    }
-  }
-
-  private val allocationStrategy = conf.get("spark.diskStore.allocation", "HASH")
-  private var fileAllocator: FileAllocationStrategy = _
-  allocationStrategy.toUpperCase match {
-    case "HASH" =>
-      logInfo(s"Hash allocator for blocks is enabled.")
-      fileAllocator = hashAllocator
-    case "TIERED" if !conf.getBoolean("spark.shuffle.service.enabled", false) =>
-      logInfo(s"Tiered allocator for blocks is enabled.")
-      fileAllocator = new TieredAllocator
-    case _ =>
-      logError("Unknown allocation strategy in DiskStore.")
-      System.exit(ExecutorExitCode.DISK_STORE_UNKNOWN_ALLOCATION_STRATEGY)
-  }
+  private val allocatorName = conf.get("spark.diskStore.allocator", "hash")
+  private val fileAllocator: FileAllocator = createFileAllcator(allocatorName)
 
   def getFile(filename: String): File = fileAllocator(filename)
 
@@ -154,7 +85,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   /** List all the files currently stored on disk by the disk manager. */
   def getAllFiles(): Seq[File] = {
     // Get all the files inside the array of array of directories
-    subDirs.flatMap { dir =>
+    fileAllocator.subDirs.flatMap { dir =>
       dir.synchronized {
         // Copy the content of dir because it may be modified in other threads
         dir.clone()

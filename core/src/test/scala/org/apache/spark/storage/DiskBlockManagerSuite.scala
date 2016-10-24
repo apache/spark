@@ -26,6 +26,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
+
 class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
   private val testConf = new SparkConf(false)
   private var rootDirs: Seq[File] = _
@@ -69,15 +70,42 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
   }
 
   test("basic block creation using TieredAllocator") {
-    val conf = new SparkConfWithEnv(Map("SPARK_DISKSTORE_TIERS" -> "0000"))
+    val conf = new SparkConfWithEnv(Map("SPARK_DIRS_TIERS" -> "0000"))
     conf.setAll(testConf.getAll)
-    conf.set("spark.diskStore.allocation", "TIERED")
+    conf.set("spark.diskStore.allocator", "TieredAllocator")
     diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
 
     val blockId = new TestBlockId("test")
     val newFile = diskBlockManager.getFile(blockId)
     writeToFile(newFile, 10)
+    assert(diskBlockManager.containsBlock(blockId))
+    newFile.delete()
+    assert(!diskBlockManager.containsBlock(blockId))
+  }
+
+  test("dev_testing") {
+    class TieredTestAllocator(
+        conf: SparkConf,
+        localDirs: Array[File],
+        subDirsPerLocalDir: Int)
+      extends TieredAllocator(
+        conf,
+        localDirs,
+        subDirsPerLocalDir) {
+      override def hasEnoughSpace(file: File): Boolean = {
+        // scalastyle:off
+        println("in testing")
+        // scalastyle:on
+        false
+      }
+    }
+    val conf = new SparkConfWithEnv(Map("SPARK_DIRS_TIERS" -> "0000"))
+    conf.setAll(testConf.getAll)
+    conf.set("spark.diskStore.allocator", "org.apache.spark.storage.TieredAllocator")
     diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+
+    val blockId = new TestBlockId("test")
+    val newFile = diskBlockManager.getFile(blockId)
     writeToFile(newFile, 10)
     assert(diskBlockManager.containsBlock(blockId))
     newFile.delete()

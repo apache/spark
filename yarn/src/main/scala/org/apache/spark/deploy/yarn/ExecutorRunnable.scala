@@ -241,6 +241,10 @@ private[yarn] class ExecutorRunnable(
       YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
     }
 
+    // Tiered storage config
+    val tiersConf = conf.get("yarn.nodemanager.spark-dirs-tiers").trim
+    env("SPARK_DIRS_TIERS") = tiersConf
+
     // lookup appropriate http scheme for container log urls
     val yarnHttpPolicy = conf.get(
       YarnConfiguration.YARN_HTTP_POLICY_KEY,
