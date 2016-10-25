@@ -191,14 +191,14 @@ sealed trait Matrix extends Serializable {
    */
   @Since("2.1.0")
   def compressed: Matrix = {
-    val cscSize = getSparseSizeInBytes(true)
-    val csrSize = getSparseSizeInBytes(false)
+    val cscSize = getSparseSizeInBytes(columnMajor = true)
+    val csrSize = getSparseSizeInBytes(columnMajor = false)
     val minSparseSize = cscSize.min(csrSize)
     if (getDenseSizeInBytes < minSparseSize) {
       // size is the same either way, so maintain current layout
-      if (isTransposed) toDense(false) else toDense(true)
+      toDense(!isTransposed)
     } else {
-      if (cscSize == minSparseSize) toSparse(true) else toSparse(false)
+      if (cscSize == minSparseSize) toSparse(columnMajor = true) else toSparse(columnMajor = false)
     }
   }
 
