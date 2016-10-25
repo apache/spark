@@ -17,7 +17,9 @@
 # limitations under the License.
 
 from __future__ import print_function
-import os, sys
+import glob
+import os
+import sys
 from setuptools import setup, find_packages
 from shutil import copyfile
 
@@ -41,7 +43,9 @@ if sys.version_info < (2, 7):
 # This is important because we only want to build the symlink farm while under Spark otherwise we
 # want to use the symlink farm. And if the symlink farm exists under while under Spark (e.g. a
 # partially built sdist) we should error and have the user sort it out.
-in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.scala")
+in_spark = (os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.scala") or
+            (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1))
+
 if (in_spark):
     # Construct links for setup
     try:
