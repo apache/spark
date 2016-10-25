@@ -887,8 +887,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showHiveTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
       val filteredProps = metadata.properties.filterNot {
-        // Skips "EXTERNAL" property for external tables
-        case (key, _) => key == "EXTERNAL" && metadata.tableType == EXTERNAL
+        case (key, _) =>
+          (key == "EXTERNAL" && metadata.tableType == EXTERNAL) ||
+            CatalogTable.isSparkManagedTableProp(key)
       }
 
       val props = filteredProps.map { case (key, value) =>

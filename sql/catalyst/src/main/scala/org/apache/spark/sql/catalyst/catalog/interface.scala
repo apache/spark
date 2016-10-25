@@ -229,8 +229,12 @@ case class CatalogTable(
 }
 
 object CatalogTable {
-  val PARTITION_PROVIDER_KEY = "partitionProvider"
+  val PARTITION_PROVIDER_KEY = "org.apache.spark/partitionProvider"
   val PARTITION_PROVIDER_HIVE = "hive"
+
+  def isSparkManagedTableProp(prop: String): Boolean = {
+    prop == PARTITION_PROVIDER_KEY  // only one for now
+  }
 }
 
 case class CatalogTableType private(name: String)

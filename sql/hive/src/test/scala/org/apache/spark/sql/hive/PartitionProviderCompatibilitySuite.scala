@@ -29,32 +29,31 @@ class PartitionProviderCompatibilitySuite
   extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   private def setupPartitionedDatasourceTable(tableName: String, dir: File): Unit = {
-    // TODO(ekl) make these mixed-case fields once support for that is fixed
-    spark.range(5).selectExpr("id as fieldone", "id as partcol1", "id as partcol2").write
-      .partitionBy("partcol1", "partcol2")
+    spark.range(5).selectExpr("id as fieldOne", "id as partCol").write
+      .partitionBy("partCol")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
 
     spark.sql(s"""
-      |create table $tableName (fieldone long, partcol1 int, partcol2 int)
+      |create table $tableName (fieldOne long, partCol int)
       |using parquet
       |options (path "${dir.getAbsolutePath}")
-      |partitioned by (partcol1, partcol2)""".stripMargin)
+      |partitioned by (partCol)""".stripMargin)
   }
 
   private def verifyIsLegacyTable(tableName: String): Unit = {
     val unsupportedCommands = Seq(
-      s"ALTER TABLE $tableName ADD PARTITION (partcol=1)",
-      s"ALTER TABLE $tableName RENAME PARTITION (partcol=1)",
-      s"ALTER TABLE $tableName DROP PARTITION (partcol=1)",
-      s"TRUNCATE TABLE $tableName PARTITION (partcol=1)",
-      s"DESCRIBE $tableName PARTITION (partcol1=1)",
+      s"ALTER TABLE $tableName ADD PARTITION (partCol=1) LOCATION '/foo'",
+      s"ALTER TABLE $tableName PARTITION (partCol=1) RENAME TO PARTITION (partCol=2)",
+      s"ALTER TABLE $tableName PARTITION (partCol=1) SET LOCATION '/foo'",
+      s"ALTER TABLE $tableName DROP PARTITION (partCol=1)",
+      s"DESCRIBE $tableName PARTITION (partCol=1)",
       s"SHOW PARTITIONS $tableName")
 
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
       for (cmd <- unsupportedCommands) {
         val e = intercept[AnalysisException] {
-          spark.sql(s"show partitions $tableName")
+          spark.sql(cmd)
         }
         assert(e.getMessage.contains("partition metadata is not stored in the Hive metastore"), e)
       }
@@ -75,7 +74,7 @@ class PartitionProviderCompatibilitySuite
 
           // sanity check table performance
           HiveCatalogMetrics.reset()
-          assert(spark.sql("select * from test where partcol1 < 2").count() == 2)
+          assert(spark.sql("select * from test where partCol < 2").count() == 2)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 2)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 2)
         }
