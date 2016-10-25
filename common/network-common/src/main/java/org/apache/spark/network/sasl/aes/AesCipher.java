@@ -66,10 +66,7 @@ public class AesCipher {
       byte[] outKey,
       byte[] inIv,
       byte[] outIv) throws IOException {
-    properties.setProperty(CryptoInputStream.STREAM_BUFFER_SIZE_KEY,
-      String.valueOf(STREAM_BUFFER_SIZE));
     this.properties = properties;
-
     inKeySpec = new SecretKeySpec(inKey, "AES");
     inIvSpec = new IvParameterSpec(inIv);
     outKeySpec = new SecretKeySpec(outKey, "AES");
@@ -159,8 +156,11 @@ public class AesCipher {
 
     @Override
     public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-      cos.close();
-      super.close(ctx, promise);
+      try {
+        cos.close();
+      } finally {
+        super.close(ctx, promise);
+      }
     }
   }
 
@@ -202,9 +202,12 @@ public class AesCipher {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-      cis.close();
-      logger.debug("{} channel decrypted {} bytes.", ctx.channel(), totalDecrypted);
-      super.channelInactive(ctx);
+      try {
+        cis.close();
+        logger.debug("{} channel decrypted {} bytes.", ctx.channel(), totalDecrypted);
+      } finally {
+        super.channelInactive(ctx);
+      }
     }
   }
 
