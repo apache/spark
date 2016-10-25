@@ -783,7 +783,7 @@ setMethod("predict", signature(object = "LogisticRegressionModel"),
 #' @return \code{summary} returns the Binary Logistic regression results of a given model as lists. Note that
 #'                        Multinomial logistic regression summary is not available now.
 #' @rdname spark.logit
-#' @aliases spark.logit,SparkDataFrame,formula-method
+#' @aliases summary,LogisticRegressionModel-method
 #' @export
 #' @note summary(LogisticRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "LogisticRegressionModel"),
