@@ -831,6 +831,9 @@ private[hive] class HiveClientImpl(
     new HivePartition(ht, tpart)
   }
 
+  // TODO (cloud-fan): the column names in partition specification are always lower cased because
+  // Hive metastore is not case preserving. We should normalize them to the actual column names of
+  // the table, once we store partition spec of data source tables.
   private def fromHivePartition(hp: HivePartition): CatalogTablePartition = {
     val apiPartition = hp.getTPartition
     CatalogTablePartition(
