@@ -299,8 +299,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
   override def executeCollect(): Array[InternalRow] = child match {
-    // This happens when the user is collecting results back to the driver, we could skip
-    // the shuffling and scan increasingly the RDD to get the limited items.
+    // A physical Limit operator has optimized executeCollect which scans increasingly
+    // the RDD to get the limited items, without fully materializing the RDD.
     case g: GlobalLimitExec => g.executeCollect()
     case _ => super.executeCollect()
   }
