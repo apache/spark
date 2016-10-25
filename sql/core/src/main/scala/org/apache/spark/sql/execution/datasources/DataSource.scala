@@ -419,9 +419,7 @@ case class DataSource(
             catalogTable.isDefined && catalogTable.get.partitionProviderIsHive) {
           new TableFileCatalog(
             sparkSession,
-            catalogTable.get.identifier.database.get,
-            catalogTable.get.identifier.table,
-            partitionSchema.getOrElse(StructType(Nil)),
+            catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L))
         } else {
           new ListingFileCatalog(
