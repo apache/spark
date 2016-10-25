@@ -41,7 +41,7 @@ class PartitionedTablePerfStatsSuite
     FileStatusCache.resetForTesting()
   }
 
-  private case class TestSpec(setupTable: (String, File) => Unit)
+  private case class TestSpec(setupTable: (String, File) => Unit, isDatasourceTable: Boolean)
 
   /**
    * Runs a test against both converted hive and native datasource tables. The test can use the
@@ -49,10 +49,10 @@ class PartitionedTablePerfStatsSuite
    */
   private def genericTest(testName: String)(fn: TestSpec => Unit): Unit = {
     test("hive table: " + testName) {
-      fn(TestSpec(setupPartitionedHiveTable))
+      fn(TestSpec(setupPartitionedHiveTable, false))
     }
     test("datasource table: " + testName) {
-      fn(TestSpec(setupPartitionedDatasourceTable))
+      fn(TestSpec(setupPartitionedDatasourceTable, true))
     }
   }
 
@@ -104,6 +104,13 @@ class PartitionedTablePerfStatsSuite
         val df4 = spark.sql("select * from test where partCol1 = 999")
         assert(df4.count() == 0)
         assert(df4.inputFiles.length == 0)
+
+        // TODO(ekl) enable for hive tables as well once SPARK-17983 is fixed
+        if (spec.isDatasourceTable) {
+          val df5 = spark.sql("select * from test where fieldOne = 4")
+          assert(df5.count() == 1)
+          assert(df5.inputFiles.length == 5)
+        }
       }
     }
   }
