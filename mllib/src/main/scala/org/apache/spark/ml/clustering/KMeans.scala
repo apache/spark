@@ -324,9 +324,9 @@ class KMeans @Since("1.5.0") (
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    val m = model.setSummary(summary)
-    instr.logSuccess(m)
-    m
+    model.setSummary(summary)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("1.5.0")
