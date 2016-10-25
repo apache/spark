@@ -19,6 +19,8 @@
 
 # Stop on error
 set -e
+# Set nullglob for when we are checking existence based on globs
+shopt -s nullglob
 
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
@@ -44,18 +46,30 @@ VIRTUALENV_BASE=`cat ./virtual_env_temp_dir`
 echo "Using $VIRTUALENV_BASE for virtualenv"
 virtualenv $VIRTUALENV_BASE
 source $VIRTUALENV_BASE/bin/activate
+# Upgrade pip
+pip install --upgrade pip
 
 echo "Creating pip installable source dist"
 cd python
 python setup.py sdist
 
+
 echo "Installing dist into virtual env"
 cd dist
+# Verify that the dist directory only contains one thing to install
+sdists=(*.targ.gz)
+if [ ! $sdists == 1 ]; then
+  echo "Unexpected number of targets found in dist directory - please cleanup existing sdists first."
+  exit -1
+fi
+# Do the actual installation
 pip install --upgrade --force-reinstall *.tar.gz
 
 echo "Run basic sanity check on pip installed version with spark-submit"
 spark-submit $FWDIR/dev/pip-sanity-check.py
 echo "Run basic sanity check with import based"
 python $FWDIR/dev/pip-sanity-check.py
+echo "Run the tests for context.py"
+python $FWDIR/python/pyspark/context.py
 
 exit 0

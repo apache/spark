@@ -33,13 +33,6 @@ try:
         os.symlink(JARS_PATH, JARS_TARGET)
         os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
         os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
-        # Parse the README markdown file into rst for PyPi
-        try:
-            import pypandoc
-            long_description = pypandoc.convert('README.md', 'rst')
-        except ImportError:
-            print("Could not import pypandoc - required to package PySpark", file=sys.stderr)
-            long_description = "!!!!! missing pandoc do not upload to PyPi !!!!"
     else:
         # We add find_spark_home.py to the bin directory we install so that pip installed PySpark
         # will search for SPARK_HOME with Python.
@@ -50,7 +43,11 @@ try:
         # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
         # find it where expected. The rest of the files aren't copied because they are accessed
         # using Python imports instead which will be resolved correctly.
-        os.makedirs("pyspark/python/pyspark")
+        try:
+            os.makedirs("pyspark/python/pyspark")
+        except OSError:
+            # Don't worry if the directory already exists.
+            True
         copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if not os.path.isdir(SCRIPTS_TARGET):
@@ -60,6 +57,14 @@ try:
     # Scripts directive requires a list of each script path and does not take wild cards.
     script_names = os.listdir(SCRIPTS_TARGET)
     scripts = map(lambda script: SCRIPTS_TARGET + "/" + script, script_names)
+
+    # Parse the README markdown file into rst for PyPi
+    long_description = "!!!!! missing pandoc do not upload to PyPi !!!!"
+    try:
+        import pypandoc
+        long_description = pypandoc.convert('README.md', 'rst')
+    except ImportError:
+        print("Could not import pypandoc - required to package PySpark", file=sys.stderr)
 
     setup(
         name='pyspark',
