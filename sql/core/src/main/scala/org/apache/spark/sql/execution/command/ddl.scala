@@ -28,6 +28,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -515,8 +516,8 @@ case class AlterTableRecoverPartitionsCommand(
     val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
     val hadoopConf = spark.sparkContext.hadoopConfiguration
     val pathFilter = getPathFilter(hadoopConf)
-    val partitionSpecsAndLocs = scanPartitions(
-      spark, fs, pathFilter, root, Map(), table.partitionColumnNames.map(_.toLowerCase), threshold)
+    val partitionSpecsAndLocs = scanPartitions(spark, fs, pathFilter, root, Map(),
+      table.partitionColumnNames, threshold, spark.sessionState.conf.resolver)
     val total = partitionSpecsAndLocs.length
     logInfo(s"Found $total partitions in $root")
 
@@ -543,7 +544,8 @@ case class AlterTableRecoverPartitionsCommand(
       path: Path,
       spec: TablePartitionSpec,
       partitionNames: Seq[String],
-      threshold: Int): GenSeq[(TablePartitionSpec, Path)] = {
+      threshold: Int,
+      resolver: Resolver): GenSeq[(TablePartitionSpec, Path)] = {
     if (partitionNames.isEmpty) {
       return Seq(spec -> path)
     }
@@ -562,13 +564,12 @@ case class AlterTableRecoverPartitionsCommand(
       val name = st.getPath.getName
       if (st.isDirectory && name.contains("=")) {
         val ps = name.split("=", 2)
-        val columnName = PartitioningUtils.unescapePathName(ps(0)).toLowerCase
+        val columnName = PartitioningUtils.unescapePathName(ps(0))
         // TODO: Validate the value
         val value = PartitioningUtils.unescapePathName(ps(1))
-        // comparing with case-insensitive, but preserve the case
-        if (columnName == partitionNames.head) {
-          scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(columnName -> value),
-            partitionNames.drop(1), threshold)
+        if (resolver(columnName, partitionNames.head)) {
+          scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
+            partitionNames.drop(1), threshold, resolver)
         } else {
           logWarning(
             s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
