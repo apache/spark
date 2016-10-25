@@ -21,10 +21,6 @@ import java.io.File
 import java.math.MathContext
 import java.sql.Timestamp
 
-import scala.concurrent.duration._
-
-import org.scalatest.concurrent.Eventually._
-
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
