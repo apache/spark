@@ -665,7 +665,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param tol convergence tolerance of iterations.
 #' @param stepSize stepSize parameter.
 #' @param seed seed parameter for weights initialization.
-#' @param initialWeights initialWeights parameter for weights initialization.
+#' @param initialWeights initialWeights parameter for weights initialization, it should be a
+#' numeric vector.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
@@ -678,8 +679,9 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 #'
 #' # fit a Multilayer Perceptron Classification Model
-#' model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs",
-#'                    maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
+#' model <- spark.mlp(df, blockSize = 128, layers = c(4, 3), solver = "l-bfgs",
+#'                    maxIter = 100, tol = 0.5, stepSize = 1, seed = 1,
+#'                    initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
 #'
 #' # get the summary of the model
 #' summary(model)

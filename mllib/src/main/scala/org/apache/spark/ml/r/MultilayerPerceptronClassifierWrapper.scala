@@ -75,7 +75,10 @@ private[r] object MultilayerPerceptronClassifierWrapper
       .setStepSize(stepSize)
       .setPredictionCol(PREDICTED_LABEL_COL)
     if (seed != null && seed.length > 0) mlp.setSeed(seed.toInt)
-    if (initialWeights != null) mlp.setInitialWeights(Vectors.dense(initialWeights))
+    if (initialWeights != null) {
+      require(initialWeights.length > 0)
+      mlp.setInitialWeights(Vectors.dense(initialWeights))
+    }
 
     val pipeline = new Pipeline()
       .setStages(Array(mlp))
