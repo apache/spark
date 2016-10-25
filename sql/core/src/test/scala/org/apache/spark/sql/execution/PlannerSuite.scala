@@ -178,10 +178,10 @@ class PlannerSuite extends SharedSQLContext {
     assert(planned.output === testData.select('value, 'key).logicalPlan.output)
   }
 
-  test("terminal limits that are not handled by TakeOrderedAndProject should use CollectLimit") {
+  test("terminal limits that are not handled by TakeOrderedAndProject should use GlobalLimit") {
     val query = testData.select('value).limit(2)
     val planned = query.queryExecution.sparkPlan
-    assert(planned.isInstanceOf[CollectLimitExec])
+    assert(planned.isInstanceOf[GlobalLimitExec])
     assert(planned.output === testData.select('value).logicalPlan.output)
   }
 
@@ -191,10 +191,10 @@ class PlannerSuite extends SharedSQLContext {
     assert(planned.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
   }
 
-  test("CollectLimit can appear in the middle of a plan when caching is used") {
+  test("GlobalLimit can appear in the middle of a plan when caching is used") {
     val query = testData.select('key, 'value).limit(2).cache()
     val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
-    assert(planned.child.isInstanceOf[CollectLimitExec])
+    assert(planned.child.isInstanceOf[GlobalLimitExec])
   }
 
   test("PartitioningCollection") {

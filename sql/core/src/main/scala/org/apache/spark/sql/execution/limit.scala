@@ -28,27 +28,6 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Take the first `limit` elements and collect them to a single partition.
- *
- * This operator will be used when a logical `Limit` operation is the final operator in an
- * logical plan, which happens when the user is collecting results back to the driver.
- */
-case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
-  override def output: Seq[Attribute] = child.output
-  override def outputPartitioning: Partitioning = SinglePartition
-  override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
-  override def executeCollect(): Array[InternalRow] = {
-    child.collect {
-      case l: LocalLimitExec => l
-    }.head.child.executeTake(limit)
-  }
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsInternal(_.take(limit))
-  }
-}
-
-/**
  * Helper trait which defines methods that are shared by both
  * [[LocalLimitExec]] and [[GlobalLimitExec]].
  */
@@ -57,6 +36,18 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
   override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def executeCollect(): Array[InternalRow] = {
+    child match {
+      // Shuffling is inserted under whole stage codegen.
+      case InputAdapter(ShuffleExchange(_, WholeStageCodegenExec(l: LocalLimitExec), _)) =>
+        l.executeCollect()
+      // Shuffling is inserted without whole stage codegen.
+      case ShuffleExchange(_, l: LocalLimitExec, _) => l.executeCollect()
+      // No shuffling happened.
+      case _ => child.executeTake(limit)
+    }
+  }
+
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
   }
@@ -100,6 +91,9 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 
 /**
  * Take the first `limit` elements of the child's single output partition.
+ * If this is the final operator in physical plan, which happens when the user is collecting
+ * results back to the driver, we could skip the shuffling and scan increasingly the RDD to
+ * get the limited items.
  */
 case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil

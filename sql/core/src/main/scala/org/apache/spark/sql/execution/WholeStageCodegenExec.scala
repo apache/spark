@@ -294,6 +294,12 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def executeCollect(): Array[InternalRow] = child match {
+    // This happens when the user is collecting results back to the driver, we could skip
+    // the shuffling and scan increasingly the RDD to get the limited items.
+    case g: GlobalLimitExec => g.executeCollect()
+    case _ => super.executeCollect()
+  }
 
   override lazy val metrics = Map(
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
