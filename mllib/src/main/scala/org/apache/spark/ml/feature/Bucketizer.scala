@@ -77,8 +77,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   /**
    * Param for how to handle invalid entries. Options are skip (which will filter out rows with
    * invalid values), or error (which will throw an error), or keep (which will keep the invalid
-   * values in certain way). Default behaviour is to report an error for invalid entries.
-   *
+   * values in certain way).
+   * Default: "error"
    * @group param
    */
   @Since("2.1.0")
@@ -90,11 +90,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   /** @group getParam */
   @Since("2.1.0")
-  def gethandleInvalid: Option[Boolean] = $(handleInvalid) match {
-    case "keep" => Some(true)
-    case "skip" => Some(false)
-    case _ => None
-  }
+  def gethandleInvalid: String = $(handleInvalid)
 
   /** @group setParam */
   @Since("2.1.0")
@@ -104,19 +100,19 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
-    val keepInvalid = gethandleInvalid.isDefined && gethandleInvalid.get
+    val (filteredDataset, keepInvalid) = {
+      if ("skip" == gethandleInvalid) {
+        // "skip" NaN option is set, will filter out NaN values in the dataset
+        (dataset.na.drop.toDF(), false)
+      } else {
+        (dataset.toDF(), "keep" == gethandleInvalid)
+      }
+    }
 
     val bucketizer: UserDefinedFunction = udf { (feature: Double) =>
       Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
     }
-    val filteredDataset = {
-      if (!keepInvalid) {
-        // "skip" NaN option is set, will filter out NaN values in the dataset
-        dataset.na.drop.toDF()
-      } else {
-        dataset.toDF()
-      }
-    }
+
     val newCol = bucketizer(filteredDataset($(inputCol)))
     val newField = prepOutputField(filteredDataset.schema)
     filteredDataset.withColumn($(outputCol), newCol, newField.metadata)

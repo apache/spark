@@ -106,7 +106,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
    * Param for how to handle invalid entries. Options are skip (which will filter out rows with
    * invalid values), or error (which will throw an error), or keep (which will keep the invalid
    * values in certain way). Default behaviour is to report an error for invalid entries.
-   *
+   * Default: "error"
    * @group param
    */
   @Since("2.1.0")
@@ -118,11 +118,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
 
   /** @group getParam */
   @Since("2.1.0")
-  def gethandleInvalid: Option[Boolean] = $(handleInvalid) match {
-    case "keep" => Some(true)
-    case "skip" => Some(false)
-    case _ => None
-  }
+  def gethandleInvalid: String = $(handleInvalid)
 
   /** @group setParam */
   @Since("2.1.0")
