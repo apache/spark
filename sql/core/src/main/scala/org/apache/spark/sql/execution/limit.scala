@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchange}
 import org.apache.spark.util.Utils
 
-
 /**
  * Helper trait which defines methods that are shared by both
  * [[LocalLimitExec]] and [[GlobalLimitExec]].
@@ -34,8 +33,6 @@ import org.apache.spark.util.Utils
 trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   val limit: Int
   override def output: Seq[Attribute] = child.output
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-  override def outputPartitioning: Partitioning = child.outputPartitioning
   override def executeCollect(): Array[InternalRow] = {
     child match {
       // Shuffling is inserted under whole stage codegen.
@@ -86,7 +83,10 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
  * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
  */
 case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
+
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 /**
@@ -96,7 +96,12 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
  * get the limited items.
  */
 case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
+
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
@@ -115,8 +120,6 @@ case class TakeOrderedAndProjectExec(
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
   }
-
-  override def outputPartitioning: Partitioning = SinglePartition
 
   override def executeCollect(): Array[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
@@ -153,6 +156,8 @@ case class TakeOrderedAndProjectExec(
   }
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
+
+  override def outputPartitioning: Partitioning = SinglePartition
 
   override def simpleString: String = {
     val orderByString = Utils.truncatedString(sortOrder, "[", ",", "]")

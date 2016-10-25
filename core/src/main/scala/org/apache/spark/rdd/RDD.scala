@@ -432,7 +432,8 @@ abstract class RDD[T: ClassTag](
    * of partitions. This is useful if you have a small number of partitions,
    * say 100, potentially with a few partitions being abnormally large. Calling
    * coalesce(1000, shuffle = true) will result in 1000 partitions with the
-   * data distributed using a hash partitioner.
+   * data distributed using a hash partitioner. The optional partition coalescer
+   * passed in must be serializable.
    */
   def coalesce(numPartitions: Int, shuffle: Boolean = false,
                partitionCoalescer: Option[PartitionCoalescer] = Option.empty)
@@ -1278,7 +1279,7 @@ abstract class RDD[T: ClassTag](
   def zipWithUniqueId(): RDD[(T, Long)] = withScope {
     val n = this.partitions.length.toLong
     this.mapPartitionsWithIndex { case (k, iter) =>
-      iter.zipWithIndex.map { case (item, i) =>
+      Utils.getIteratorZipWithIndex(iter, 0L).map { case (item, i) =>
         (item, i * n + k)
       }
     }
