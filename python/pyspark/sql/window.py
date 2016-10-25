@@ -66,6 +66,54 @@ class Window(object):
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
+    @staticmethod
+    @since(2.1)
+    def rowsBetween(start, end):
+        """
+        Creates a :class:`WindowSpec` with the frame boundaries defined,
+        from `start` (inclusive) to `end` (inclusive).
+
+        Both `start` and `end` are relative positions from the current row.
+        For example, "0" means "current row", while "-1" means the row before
+        the current row, and "5" means the fifth row after the current row.
+
+        :param start: boundary start, inclusive.
+                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
+        :param end: boundary end, inclusive.
+                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
+        """
+        if start <= -sys.maxsize:
+            start = WindowSpec._JAVA_MIN_LONG
+        if end >= sys.maxsize:
+            end = WindowSpec._JAVA_MAX_LONG
+        sc = SparkContext._active_spark_context
+        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
+        return WindowSpec(jspec)
+
+    @staticmethod
+    @since(2.1)
+    def rangeBetween(start, end):
+        """
+        Creates a :class:`WindowSpec` with the frame boundaries defined,
+        from `start` (inclusive) to `end` (inclusive).
+
+        Both `start` and `end` are relative from the current row. For example,
+        "0" means "current row", while "-1" means one off before the current row,
+        and "5" means the five off after the current row.
+
+        :param start: boundary start, inclusive.
+                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
+        :param end: boundary end, inclusive.
+                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
+        """
+        if start <= -sys.maxsize:
+            start = WindowSpec._JAVA_MIN_LONG
+        if end >= sys.maxsize:
+            end = WindowSpec._JAVA_MAX_LONG
+        sc = SparkContext._active_spark_context
+        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
+        return WindowSpec(jspec)
+
 
 class WindowSpec(object):
     """

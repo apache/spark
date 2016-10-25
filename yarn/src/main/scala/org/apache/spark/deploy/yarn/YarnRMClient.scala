@@ -20,7 +20,6 @@ package org.apache.spark.deploy.yarn
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
-import scala.collection.Map
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -52,6 +51,8 @@ private[spark] class YarnRMClient extends Logging {
    * @param sparkConf The Spark configuration.
    * @param uiAddress Address of the SparkUI.
    * @param uiHistoryAddress Address of the application on the History Server.
+   * @param securityMgr The security manager.
+   * @param localResources Map with information about files distributed via YARN's cache.
    */
   def register(
       driverUrl: String,
@@ -60,7 +61,8 @@ private[spark] class YarnRMClient extends Logging {
       sparkConf: SparkConf,
       uiAddress: String,
       uiHistoryAddress: String,
-      securityMgr: SecurityManager
+      securityMgr: SecurityManager,
+      localResources: Map[String, LocalResource]
     ): YarnAllocator = {
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
@@ -72,7 +74,8 @@ private[spark] class YarnRMClient extends Logging {
       amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
       registered = true
     }
-    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr)
+    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr,
+      localResources)
   }
 
   /**

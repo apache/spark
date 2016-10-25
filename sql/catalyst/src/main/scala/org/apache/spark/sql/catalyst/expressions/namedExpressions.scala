@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.UUID
+import java.util.{Objects, UUID}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -142,8 +142,8 @@ case class Alias(child: Expression, name: String)(
   override def eval(input: InternalRow): Any = child.eval(input)
 
   /** Just a simple passthrough for code generation. */
-  override def gen(ctx: CodegenContext): ExprCode = child.gen(ctx)
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = ""
+  override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -173,6 +173,11 @@ case class Alias(child: Expression, name: String)(
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: explicitMetadata :: isGenerated :: Nil
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(name, exprId, child, qualifier, explicitMetadata)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -330,6 +335,16 @@ case class PrettyAttribute(
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = true
+}
+
+/**
+ * A place holder used to hold a reference that has been resolved to a field outside of the current
+ * plan. This is used for correlated subqueries.
+ */
+case class OuterReference(e: NamedExpression) extends LeafExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "outer"
 }
 
 object VirtualColumn {

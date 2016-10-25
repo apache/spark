@@ -1,5 +1,3 @@
-package org.apache.spark.io;
-
 /*
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +11,7 @@ package org.apache.spark.io;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.io;
 
 import java.io.EOFException;
 import java.io.FilterInputStream;

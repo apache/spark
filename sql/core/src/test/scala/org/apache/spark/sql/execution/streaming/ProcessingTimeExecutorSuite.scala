@@ -20,18 +20,33 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.ProcessingTime
-import org.apache.spark.util.ManualClock
+import org.apache.spark.sql.streaming.ProcessingTime
+import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 class ProcessingTimeExecutorSuite extends SparkFunSuite {
 
   test("nextBatchTime") {
     val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(100))
+    assert(processingTimeExecutor.nextBatchTime(0) === 100)
     assert(processingTimeExecutor.nextBatchTime(1) === 100)
     assert(processingTimeExecutor.nextBatchTime(99) === 100)
-    assert(processingTimeExecutor.nextBatchTime(100) === 100)
+    assert(processingTimeExecutor.nextBatchTime(100) === 200)
     assert(processingTimeExecutor.nextBatchTime(101) === 200)
     assert(processingTimeExecutor.nextBatchTime(150) === 200)
+  }
+
+  test("calling nextBatchTime with the result of a previous call should return the next interval") {
+    val intervalMS = 100
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(intervalMS))
+
+    val ITERATION = 10
+    var nextBatchTime: Long = 0
+    for (it <- 1 to ITERATION) {
+      nextBatchTime = processingTimeExecutor.nextBatchTime(nextBatchTime)
+    }
+
+    // nextBatchTime should be 1000
+    assert(nextBatchTime === intervalMS * ITERATION)
   }
 
   private def testBatchTermination(intervalMs: Long): Unit = {

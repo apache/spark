@@ -18,20 +18,23 @@
 """
 Estimator Transformer Param Example.
 """
-from pyspark import SparkContext, SQLContext
+from __future__ import print_function
+
 # $example on$
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-
-    sc = SparkContext(appName="EstimatorTransformerParamExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("EstimatorTransformerParamExample")\
+        .getOrCreate()
 
     # $example on$
     # Prepare training data from a list of (label, features) tuples.
-    training = sqlContext.createDataFrame([
+    training = spark.createDataFrame([
         (1.0, Vectors.dense([0.0, 1.1, 0.1])),
         (0.0, Vectors.dense([2.0, 1.0, -1.0])),
         (0.0, Vectors.dense([2.0, 1.3, 1.0])),
@@ -40,7 +43,7 @@ if __name__ == "__main__":
     # Create a LogisticRegression instance. This instance is an Estimator.
     lr = LogisticRegression(maxIter=10, regParam=0.01)
     # Print out the parameters, documentation, and any default values.
-    print "LogisticRegression parameters:\n" + lr.explainParams() + "\n"
+    print("LogisticRegression parameters:\n" + lr.explainParams() + "\n")
 
     # Learn a LogisticRegression model. This uses the parameters stored in lr.
     model1 = lr.fit(training)
@@ -49,8 +52,8 @@ if __name__ == "__main__":
     # we can view the parameters it used during fit().
     # This prints the parameter (name: value) pairs, where names are unique IDs for this
     # LogisticRegression instance.
-    print "Model 1 was fit using parameters: "
-    print model1.extractParamMap()
+    print("Model 1 was fit using parameters: ")
+    print(model1.extractParamMap())
 
     # We may alternatively specify parameters using a Python dictionary as a paramMap
     paramMap = {lr.maxIter: 20}
@@ -65,11 +68,11 @@ if __name__ == "__main__":
     # Now learn a new model using the paramMapCombined parameters.
     # paramMapCombined overrides all parameters set earlier via lr.set* methods.
     model2 = lr.fit(training, paramMapCombined)
-    print "Model 2 was fit using parameters: "
-    print model2.extractParamMap()
+    print("Model 2 was fit using parameters: ")
+    print(model2.extractParamMap())
 
     # Prepare test data
-    test = sqlContext.createDataFrame([
+    test = spark.createDataFrame([
         (1.0, Vectors.dense([-1.0, 1.5, 1.3])),
         (0.0, Vectors.dense([3.0, 2.0, -0.1])),
         (1.0, Vectors.dense([0.0, 2.2, -1.5]))], ["label", "features"])
@@ -79,9 +82,12 @@ if __name__ == "__main__":
     # Note that model2.transform() outputs a "myProbability" column instead of the usual
     # 'probability' column since we renamed the lr.probabilityCol parameter previously.
     prediction = model2.transform(test)
-    selected = prediction.select("features", "label", "myProbability", "prediction")
-    for row in selected.collect():
-        print row
+    result = prediction.select("features", "label", "myProbability", "prediction") \
+        .collect()
+
+    for row in result:
+        print("features=%s, label=%s -> prob=%s, prediction=%s"
+              % (row.features, row.label, row.myProbability, row.prediction))
     # $example off$
 
-    sc.stop()
+    spark.stop()

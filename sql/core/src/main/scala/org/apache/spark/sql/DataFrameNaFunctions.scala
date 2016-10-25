@@ -21,7 +21,7 @@ import java.{lang => jl}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -34,6 +34,7 @@ import org.apache.spark.sql.types._
  * @since 1.3.1
  */
 @Experimental
+@InterfaceStability.Evolving
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
@@ -155,7 +156,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def fill(value: Double, cols: Seq[String]): DataFrame = {
-    val columnEquals = df.sqlContext.sessionState.analyzer.resolver
+    val columnEquals = df.sparkSession.sessionState.analyzer.resolver
     val projections = df.schema.fields.map { f =>
       // Only fill if the column is part of the cols list.
       if (f.dataType.isInstanceOf[NumericType] && cols.exists(col => columnEquals(f.name, col))) {
@@ -182,7 +183,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def fill(value: String, cols: Seq[String]): DataFrame = {
-    val columnEquals = df.sqlContext.sessionState.analyzer.resolver
+    val columnEquals = df.sparkSession.sessionState.analyzer.resolver
     val projections = df.schema.fields.map { f =>
       // Only fill if the column is part of the cols list.
       if (f.dataType.isInstanceOf[StringType] && cols.exists(col => columnEquals(f.name, col))) {
@@ -355,7 +356,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       case _: String => StringType
     }
 
-    val columnEquals = df.sqlContext.sessionState.analyzer.resolver
+    val columnEquals = df.sparkSession.sessionState.analyzer.resolver
     val projections = df.schema.fields.map { f =>
       val shouldReplace = cols.exists(colName => columnEquals(colName, f.name))
       if (f.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType && shouldReplace) {
@@ -384,7 +385,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       }
     }
 
-    val columnEquals = df.sqlContext.sessionState.analyzer.resolver
+    val columnEquals = df.sparkSession.sessionState.analyzer.resolver
     val projections = df.schema.fields.map { f =>
       values.find { case (k, _) => columnEquals(k, f.name) }.map { case (_, v) =>
         v match {

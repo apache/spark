@@ -70,7 +70,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   // name of function in java.lang.Math
   def funcName: String = name.toLowerCase
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
   }
 }
@@ -88,7 +88,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
     if (d <= yAsymptote) null else f(d)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
         if ($c <= $yAsymptote) {
@@ -123,7 +123,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
     f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${name.toLowerCase}($c1, $c2)")
   }
 }
@@ -197,7 +197,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
       case DecimalType.Fixed(precision, scale) =>
@@ -242,7 +242,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
       toBase.asInstanceOf[Int])
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
@@ -284,7 +284,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
       case DecimalType.Fixed(precision, scale) =>
@@ -346,7 +346,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
         if ($eval > 20 || $eval < 0) {
@@ -370,7 +370,7 @@ case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
   extended = "> SELECT _FUNC_(2);\n 1.0")
 case class Log2(child: Expression)
   extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
         if ($c <= $yAsymptote) {
@@ -458,7 +458,7 @@ case class Bin(child: Expression)
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c) =>
       s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
   }
@@ -556,7 +556,7 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
     case StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (c) => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       s"${ev.value} = " + (child.dataType match {
@@ -584,7 +584,7 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
   protected override def nullSafeEval(num: Any): Any =
     Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (c) => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       s"""
@@ -613,7 +613,7 @@ case class Atan2(left: Expression, right: Expression)
     math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
 }
@@ -623,7 +623,7 @@ case class Atan2(left: Expression, right: Expression)
   extended = "> SELECT _FUNC_(2, 3);\n 8.0")
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
   }
 }
@@ -653,7 +653,7 @@ case class ShiftLeft(left: Expression, right: Expression)
     }
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left << $right")
   }
 }
@@ -683,7 +683,7 @@ case class ShiftRight(left: Expression, right: Expression)
     }
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >> $right")
   }
 }
@@ -713,7 +713,7 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
     }
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >>> $right")
   }
 }
@@ -753,7 +753,7 @@ case class Logarithm(left: Expression, right: Expression)
     if (dLeft <= 0.0 || dRight <= 0.0) null else math.log(dRight) / math.log(dLeft)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (left.isInstanceOf[EulerNumber]) {
       nullSafeCodeGen(ctx, ev, (c1, c2) =>
         s"""
@@ -779,7 +779,6 @@ case class Logarithm(left: Expression, right: Expression)
 /**
  * Round the `child`'s result to `scale` decimal place when `scale` >= 0
  * or round at integral part when `scale` < 0.
- * For example, round(31.415, 2) = 31.42 and round(31.415, -1) = 30.
  *
  * Child of IntegralType would round to itself when `scale` >= 0.
  * Child of FractionalType whose value is NaN or Infinite would always round to itself.
@@ -789,16 +788,12 @@ case class Logarithm(left: Expression, right: Expression)
  *
  * @param child expr to be round, all [[NumericType]] is allowed as Input
  * @param scale new scale to be round to, this should be a constant int at runtime
+ * @param mode rounding mode (e.g. HALF_UP, HALF_UP)
+ * @param modeStr rounding mode string name (e.g. "ROUND_HALF_UP", "ROUND_HALF_EVEN")
  */
-@ExpressionDescription(
-  usage = "_FUNC_(x, d) - Round x to d decimal places.",
-  extended = "> SELECT _FUNC_(12.3456, 1);\n 12.3")
-case class Round(child: Expression, scale: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-
-  import BigDecimal.RoundingMode.HALF_UP
-
-  def this(child: Expression) = this(child, Literal(0))
+abstract class RoundBase(child: Expression, scale: Expression,
+    mode: BigDecimal.RoundingMode.Value, modeStr: String)
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def left: Expression = child
   override def right: Expression = scale
@@ -853,39 +848,40 @@ case class Round(child: Expression, scale: Expression)
     child.dataType match {
       case _: DecimalType =>
         val decimal = input1.asInstanceOf[Decimal]
-        if (decimal.changePrecision(decimal.precision, _scale)) decimal else null
+        if (decimal.changePrecision(decimal.precision, _scale, mode)) decimal else null
       case ByteType =>
-        BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, HALF_UP).toByte
+        BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType =>
-        BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, HALF_UP).toShort
+        BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
       case IntegerType =>
-        BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, HALF_UP).toInt
+        BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
       case LongType =>
-        BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, HALF_UP).toLong
+        BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
       case FloatType =>
         val f = input1.asInstanceOf[Float]
         if (f.isNaN || f.isInfinite) {
           f
         } else {
-          BigDecimal(f.toDouble).setScale(_scale, HALF_UP).toFloat
+          BigDecimal(f.toDouble).setScale(_scale, mode).toFloat
         }
       case DoubleType =>
         val d = input1.asInstanceOf[Double]
         if (d.isNaN || d.isInfinite) {
           d
         } else {
-          BigDecimal(d).setScale(_scale, HALF_UP).toDouble
+          BigDecimal(d).setScale(_scale, mode).toDouble
         }
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val ce = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val ce = child.genCode(ctx)
 
     val evaluationCode = child.dataType match {
       case _: DecimalType =>
         s"""
-        if (${ce.value}.changePrecision(${ce.value}.precision(), ${_scale})) {
+        if (${ce.value}.changePrecision(${ce.value}.precision(), ${_scale},
+            java.math.BigDecimal.${modeStr})) {
           ${ev.value} = ${ce.value};
         } else {
           ${ev.isNull} = true;
@@ -894,7 +890,7 @@ case class Round(child: Expression, scale: Expression)
         if (_scale < 0) {
           s"""
           ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).byteValue();"""
+            setScale(${_scale}, java.math.BigDecimal.${modeStr}).byteValue();"""
         } else {
           s"${ev.value} = ${ce.value};"
         }
@@ -902,7 +898,7 @@ case class Round(child: Expression, scale: Expression)
         if (_scale < 0) {
           s"""
           ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).shortValue();"""
+            setScale(${_scale}, java.math.BigDecimal.${modeStr}).shortValue();"""
         } else {
           s"${ev.value} = ${ce.value};"
         }
@@ -910,7 +906,7 @@ case class Round(child: Expression, scale: Expression)
         if (_scale < 0) {
           s"""
           ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).intValue();"""
+            setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValue();"""
         } else {
           s"${ev.value} = ${ce.value};"
         }
@@ -918,7 +914,7 @@ case class Round(child: Expression, scale: Expression)
         if (_scale < 0) {
           s"""
           ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).longValue();"""
+            setScale(${_scale}, java.math.BigDecimal.${modeStr}).longValue();"""
         } else {
           s"${ev.value} = ${ce.value};"
         }
@@ -928,7 +924,7 @@ case class Round(child: Expression, scale: Expression)
             ${ev.value} = ${ce.value};
           } else {
             ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
-              setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).floatValue();
+              setScale(${_scale}, java.math.BigDecimal.${modeStr}).floatValue();
           }"""
       case DoubleType => // if child eval to NaN or Infinity, just return it.
         s"""
@@ -936,24 +932,49 @@ case class Round(child: Expression, scale: Expression)
             ${ev.value} = ${ce.value};
           } else {
             ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
-              setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).doubleValue();
+              setScale(${_scale}, java.math.BigDecimal.${modeStr}).doubleValue();
           }"""
     }
 
     if (scaleV == null) { // if scale is null, no need to eval its child at all
-      s"""
+      ev.copy(code = s"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      """
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
     } else {
-      s"""
+      ev.copy(code = s"""
         ${ce.code}
         boolean ${ev.isNull} = ${ce.isNull};
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         if (!${ev.isNull}) {
           $evaluationCode
-        }
-      """
+        }""")
     }
   }
+}
+
+/**
+ * Round an expression to d decimal places using HALF_UP rounding mode.
+ * round(2.5) == 3.0, round(3.5) == 4.0.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(x, d) - Round x to d decimal places using HALF_UP rounding mode.",
+  extended = "> SELECT _FUNC_(2.5, 0);\n 3.0")
+case class Round(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
+    with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression) = this(child, Literal(0))
+}
+
+/**
+ * Round an expression to d decimal places using HALF_EVEN rounding mode,
+ * also known as Gaussian rounding or bankers' rounding.
+ * round(2.5) = 2.0, round(3.5) = 4.0.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(x, d) - Round x to d decimal places using HALF_EVEN rounding mode.",
+  extended = "> SELECT _FUNC_(2.5, 0);\n 2.0")
+case class BRound(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
+    with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression) = this(child, Literal(0))
 }

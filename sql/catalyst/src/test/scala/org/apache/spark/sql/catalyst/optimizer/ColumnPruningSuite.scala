@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -267,17 +266,11 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on Window with useless aggregate functions") {
     val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
+    val winSpec = windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
 
-    val originalQuery =
-      input.groupBy('a, 'c, 'd)('a, 'c, 'd,
-        WindowExpression(
-          AggregateExpression(Count('b), Complete, isDistinct = false),
-          WindowSpecDefinition( 'a :: Nil,
-            SortOrder('b, Ascending) :: Nil,
-            UnspecifiedFrame)).as('window)).select('a, 'c)
-
+    val originalQuery = input.groupBy('a, 'c, 'd)('a, 'c, 'd, winExpr.as('window)).select('a, 'c)
     val correctAnswer = input.select('a, 'c, 'd).groupBy('a, 'c, 'd)('a, 'c).analyze
-
     val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, correctAnswer)
@@ -285,25 +278,15 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on Window with selected agg expressions") {
     val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
+    val winSpec = windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
 
     val originalQuery =
-      input.select('a, 'b, 'c, 'd,
-        WindowExpression(
-          AggregateExpression(Count('b), Complete, isDistinct = false),
-          WindowSpecDefinition( 'a :: Nil,
-            SortOrder('b, Ascending) :: Nil,
-            UnspecifiedFrame)).as('window)).where('window > 1).select('a, 'c)
-
+      input.select('a, 'b, 'c, 'd, winExpr.as('window)).where('window > 1).select('a, 'c)
     val correctAnswer =
       input.select('a, 'b, 'c)
-        .window(WindowExpression(
-          AggregateExpression(Count('b), Complete, isDistinct = false),
-          WindowSpecDefinition( 'a :: Nil,
-            SortOrder('b, Ascending) :: Nil,
-            UnspecifiedFrame)).as('window) :: Nil,
-          'a :: Nil, 'b.asc :: Nil)
+        .window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
         .where('window > 1).select('a, 'c).analyze
-
     val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, correctAnswer)
@@ -311,17 +294,11 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on Window in select") {
     val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
+    val winSpec = windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
 
-    val originalQuery =
-      input.select('a, 'b, 'c, 'd,
-        WindowExpression(
-          AggregateExpression(Count('b), Complete, isDistinct = false),
-          WindowSpecDefinition( 'a :: Nil,
-            SortOrder('b, Ascending) :: Nil,
-            UnspecifiedFrame)).as('window)).select('a, 'c)
-
+    val originalQuery = input.select('a, 'b, 'c, 'd, winExpr.as('window)).select('a, 'c)
     val correctAnswer = input.select('a, 'c).analyze
-
     val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, correctAnswer)
@@ -343,16 +320,16 @@ class ColumnPruningSuite extends PlanTest {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          SubqueryAlias("x", input),
-          BroadcastHint(SubqueryAlias("y", input)), Inner, None)).analyze
+          SubqueryAlias("x", input, None),
+          BroadcastHint(SubqueryAlias("y", input, None)), Inner, None)).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected =
       Join(
-        Project(Seq($"x.key"), SubqueryAlias("x", input)),
+        Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
         BroadcastHint(
-          Project(Seq($"y.key"), SubqueryAlias("y", input))),
+          Project(Seq($"y.key"), SubqueryAlias("y", input, None))),
         Inner, None).analyze
 
     comparePlans(optimized, expected)
@@ -367,6 +344,21 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer1 =
       MapPartitions(func, Project(Seq('_1, '_2), input)).analyze
     comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
+  }
+
+  test("push project down into sample") {
+    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+    val x = testRelation.subquery('x)
+
+    val query1 = Sample(0.0, 0.6, false, 11L, x)().select('a)
+    val optimized1 = Optimize.execute(query1.analyze)
+    val expected1 = Sample(0.0, 0.6, false, 11L, x.select('a))()
+    comparePlans(optimized1, expected1.analyze)
+
+    val query2 = Sample(0.0, 0.6, false, 11L, x)().select('a as 'aa)
+    val optimized2 = Optimize.execute(query2.analyze)
+    val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a))().select('a as 'aa)
+    comparePlans(optimized2, expected2.analyze)
   }
 
   // todo: add more tests for column pruning

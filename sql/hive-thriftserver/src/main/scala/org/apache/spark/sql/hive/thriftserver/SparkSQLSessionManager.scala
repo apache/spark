@@ -27,12 +27,13 @@ import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 
-private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext: HiveContext)
+private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends SessionManager(hiveServer)
   with ReflectedCompositeService {
 
@@ -71,20 +72,21 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    val ctx = if (hiveContext.hiveThriftServerSingleSession) {
-      hiveContext
+    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
+    val ctx = if (sessionState.hiveThriftServerSingleSession) {
+      sqlContext
     } else {
-      hiveContext.newSession()
+      sqlContext.newSession()
     }
-    ctx.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
-    sparkSqlOperationManager.sessionToContexts += sessionHandle -> ctx
+    ctx.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
+    sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
-    sparkSqlOperationManager.sessionToActivePool -= sessionHandle
+    sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
   }
 }

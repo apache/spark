@@ -69,6 +69,23 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
   }
 
+  test("assert_true") {
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(false, BooleanType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Cast(Literal(0), BooleanType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
+    }
+    checkEvaluation(AssertTrue(Literal.create(true, BooleanType)), null)
+    checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
+  }
+
   private val structOfString = new StructType().add("str", StringType)
   private val structOfUDT = new StructType().add("udt", new ExamplePointUDT, false)
   private val arrayOfString = ArrayType(StringType)
@@ -128,7 +145,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
     val encoder = RowEncoder(inputSchema)
     val seed = scala.util.Random.nextInt()
-    test(s"murmur3/xxHash64 hash: ${inputSchema.simpleString}") {
+    test(s"murmur3/xxHash64/hive hash: ${inputSchema.simpleString}") {
       for (_ <- 1 to 10) {
         val input = encoder.toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
         val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
@@ -137,6 +154,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         // Only test the interpreted version has same result with codegen version.
         checkEvaluation(Murmur3Hash(literals, seed), Murmur3Hash(literals, seed).eval())
         checkEvaluation(XxHash64(literals, seed), XxHash64(literals, seed).eval())
+        checkEvaluation(HiveHash(literals), HiveHash(literals).eval())
       }
     }
   }

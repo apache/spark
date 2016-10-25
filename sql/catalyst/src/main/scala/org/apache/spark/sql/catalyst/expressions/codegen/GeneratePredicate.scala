@@ -39,8 +39,9 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
 
   protected def create(predicate: Expression): ((InternalRow) => Boolean) = {
     val ctx = newCodeGenContext()
-    val eval = predicate.gen(ctx)
-    val code = s"""
+    val eval = predicate.genCode(ctx)
+
+    val codeBody = s"""
       public SpecificPredicate generate(Object[] references) {
         return new SpecificPredicate(references);
       }
@@ -48,12 +49,13 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
       class SpecificPredicate extends ${classOf[Predicate].getName} {
         private final Object[] references;
         ${ctx.declareMutableStates()}
-        ${ctx.declareAddedFunctions()}
 
         public SpecificPredicate(Object[] references) {
           this.references = references;
           ${ctx.initMutableStates()}
         }
+
+        ${ctx.declareAddedFunctions()}
 
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
           ${eval.code}
@@ -61,6 +63,8 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
         }
       }"""
 
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
     val p = CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]

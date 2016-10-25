@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types._
@@ -36,10 +37,34 @@ class OptimizeInSuite extends PlanTest {
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
-        OptimizeIn) :: Nil
+        OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true))) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+
+  test("OptimizedIn test: Remove deterministic repetitions") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"),
+          Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("b"),
+          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
+            Rand(0), Rand(0))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("b"),
+          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
+            Rand(0), Rand(0))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 
   test("OptimizedIn test: In clause not optimized to InSet when less than 10 items") {
     val originalQuery =
@@ -128,4 +153,23 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("OptimizedIn test: Setting the threshold for turning Set into InSet.") {
+    val plan =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), Literal(3))))
+        .analyze
+
+    val notOptimizedPlan = OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true))(plan)
+    comparePlans(notOptimizedPlan, plan)
+
+    // Reduce the threshold to turning into InSet.
+    val optimizedPlan = OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true,
+        optimizerInSetConversionThreshold = 2))(plan)
+    optimizedPlan match {
+      case Filter(cond, _)
+        if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].getHSet().size == 3 =>
+          // pass
+      case _ => fail("Unexpected result for OptimizedIn")
+    }
+  }
 }

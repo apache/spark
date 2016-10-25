@@ -20,22 +20,24 @@ package org.apache.spark.ml.tuning
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
+import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
 
 class TrainValidationSplitSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
+
   test("train validation with logistic regression") {
-    val dataset = sqlContext.createDataFrame(
-      sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
+    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
 
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()
@@ -58,9 +60,10 @@ class TrainValidationSplitSuite
   }
 
   test("train validation with linear regression") {
-    val dataset = sqlContext.createDataFrame(
-        sc.parallelize(LinearDataGenerator.generateLinearInput(
-            6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
+    val dataset = sc.parallelize(
+      LinearDataGenerator.generateLinearInput(
+        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2)
+      .map(_.asML).toDF()
 
     val trainer = new LinearRegression().setSolver("l-bfgs")
     val lrParamMaps = new ParamGridBuilder()
@@ -127,6 +130,7 @@ class TrainValidationSplitSuite
     val tvs2 = testDefaultReadWrite(tvs, testParams = false)
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
+    assert(tvs.getSeed === tvs2.getSeed)
   }
 
   test("read/write: TrainValidationSplitModel") {
@@ -149,6 +153,7 @@ class TrainValidationSplitSuite
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.validationMetrics === tvs2.validationMetrics)
+    assert(tvs.getSeed === tvs2.getSeed)
   }
 }
 

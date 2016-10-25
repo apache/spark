@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import java.util.Comparator
+
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
-import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
+import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
+import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -35,7 +38,7 @@ private[sql] object InferSchema {
    */
   def infer(
       json: RDD[String],
-      columnNameOfCorruptRecords: String,
+      columnNameOfCorruptRecord: String,
       configOptions: JSONOptions): StructType = {
     require(configOptions.samplingRatio > 0,
       s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
@@ -58,15 +61,13 @@ private[sql] object InferSchema {
           }
         } catch {
           case _: JsonParseException if shouldHandleCorruptRecord =>
-            Some(StructType(Seq(StructField(columnNameOfCorruptRecords, StringType))))
+            Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
           case _: JsonParseException =>
             None
         }
       }
-    }.treeAggregate[DataType](
-      StructType(Seq()))(
-      compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord),
-      compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord))
+    }.fold(StructType(Seq()))(
+      compatibleRootType(columnNameOfCorruptRecord, shouldHandleCorruptRecord))
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st
@@ -74,6 +75,23 @@ private[sql] object InferSchema {
         // canonicalizeType erases all empty structs, including the only one we want to keep
         StructType(Seq())
     }
+  }
+
+  private[this] val structFieldComparator = new Comparator[StructField] {
+    override def compare(o1: StructField, o2: StructField): Int = {
+      o1.name.compare(o2.name)
+    }
+  }
+
+  private def isSorted(arr: Array[StructField]): Boolean = {
+    var i: Int = 0
+    while (i < arr.length - 1) {
+      if (structFieldComparator.compare(arr(i), arr(i + 1)) > 0) {
+        return false
+      }
+      i += 1
+    }
+    true
   }
 
   /**
@@ -99,15 +117,17 @@ private[sql] object InferSchema {
 
       case VALUE_STRING => StringType
       case START_OBJECT =>
-        val builder = Seq.newBuilder[StructField]
+        val builder = Array.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {
           builder += StructField(
             parser.getCurrentName,
             inferField(parser, configOptions),
             nullable = true)
         }
-
-        StructType(builder.result().sortBy(_.name))
+        val fields: Array[StructField] = builder.result()
+        // Note: other code relies on this sorting for correctness, so don't remove it!
+        java.util.Arrays.sort(fields, structFieldComparator)
+        StructType(fields)
 
       case START_ARRAY =>
         // If this JSON array is empty, we use NullType as a placeholder.
@@ -191,7 +211,11 @@ private[sql] object InferSchema {
     if (!struct.fieldNames.contains(columnNameOfCorruptRecords)) {
       // If this given struct does not have a column used for corrupt records,
       // add this field.
-      struct.add(columnNameOfCorruptRecords, StringType, nullable = true)
+      val newFields: Array[StructField] =
+        StructField(columnNameOfCorruptRecords, StringType, nullable = true) +: struct.fields
+      // Note: other code relies on this sorting for correctness, so don't remove it!
+      java.util.Arrays.sort(newFields, structFieldComparator)
+      StructType(newFields)
     } else {
       // Otherwise, just return this struct.
       struct
@@ -223,11 +247,13 @@ private[sql] object InferSchema {
     case (ty1, ty2) => compatibleType(ty1, ty2)
   }
 
+  private[this] val emptyStructFieldArray = Array.empty[StructField]
+
   /**
    * Returns the most general data type for two given data types.
    */
   def compatibleType(t1: DataType, t2: DataType): DataType = {
-    HiveTypeCoercion.findTightestCommonTypeOfTwo(t1, t2).getOrElse {
+    TypeCoercion.findTightestCommonTypeOfTwo(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
         // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
@@ -246,12 +272,43 @@ private[sql] object InferSchema {
           }
 
         case (StructType(fields1), StructType(fields2)) =>
-          val newFields = (fields1 ++ fields2).groupBy(field => field.name).map {
-            case (name, fieldTypes) =>
-              val dataType = fieldTypes.view.map(_.dataType).reduce(compatibleType)
-              StructField(name, dataType, nullable = true)
+          // Both fields1 and fields2 should be sorted by name, since inferField performs sorting.
+          // Therefore, we can take advantage of the fact that we're merging sorted lists and skip
+          // building a hash map or performing additional sorting.
+          assert(isSorted(fields1), s"StructType's fields were not sorted: ${fields1.toSeq}")
+          assert(isSorted(fields2), s"StructType's fields were not sorted: ${fields2.toSeq}")
+
+          val newFields = new java.util.ArrayList[StructField]()
+
+          var f1Idx = 0
+          var f2Idx = 0
+
+          while (f1Idx < fields1.length && f2Idx < fields2.length) {
+            val f1Name = fields1(f1Idx).name
+            val f2Name = fields2(f2Idx).name
+            val comp = f1Name.compareTo(f2Name)
+            if (comp == 0) {
+              val dataType = compatibleType(fields1(f1Idx).dataType, fields2(f2Idx).dataType)
+              newFields.add(StructField(f1Name, dataType, nullable = true))
+              f1Idx += 1
+              f2Idx += 1
+            } else if (comp < 0) { // f1Name < f2Name
+              newFields.add(fields1(f1Idx))
+              f1Idx += 1
+            } else { // f1Name > f2Name
+              newFields.add(fields2(f2Idx))
+              f2Idx += 1
+            }
           }
-          StructType(newFields.toSeq.sortBy(_.name))
+          while (f1Idx < fields1.length) {
+            newFields.add(fields1(f1Idx))
+            f1Idx += 1
+          }
+          while (f2Idx < fields2.length) {
+            newFields.add(fields2(f2Idx))
+            f2Idx += 1
+          }
+          StructType(newFields.toArray(emptyStructFieldArray))
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)

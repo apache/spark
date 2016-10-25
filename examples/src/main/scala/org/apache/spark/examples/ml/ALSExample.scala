@@ -18,39 +18,40 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.recommendation.ALS
 // $example off$
-import org.apache.spark.sql.SQLContext
-// $example on$
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
-// $example off$
+import org.apache.spark.sql.SparkSession
 
+/**
+ * An example demonstrating ALS.
+ * Run with
+ * {{{
+ * bin/run-example ml.ALSExample
+ * }}}
+ */
 object ALSExample {
 
   // $example on$
   case class Rating(userId: Int, movieId: Int, rating: Float, timestamp: Long)
-  object Rating {
-    def parseRating(str: String): Rating = {
-      val fields = str.split("::")
-      assert(fields.size == 4)
-      Rating(fields(0).toInt, fields(1).toInt, fields(2).toFloat, fields(3).toLong)
-    }
+  def parseRating(str: String): Rating = {
+    val fields = str.split("::")
+    assert(fields.size == 4)
+    Rating(fields(0).toInt, fields(1).toInt, fields(2).toFloat, fields(3).toLong)
   }
   // $example off$
 
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("ALSExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession
+      .builder
+      .appName("ALSExample")
+      .getOrCreate()
+    import spark.implicits._
 
     // $example on$
-    val ratings = sc.textFile("data/mllib/als/sample_movielens_ratings.txt")
-      .map(Rating.parseRating)
+    val ratings = spark.read.textFile("data/mllib/als/sample_movielens_ratings.txt")
+      .map(parseRating)
       .toDF()
     val Array(training, test) = ratings.randomSplit(Array(0.8, 0.2))
 
@@ -65,8 +66,6 @@ object ALSExample {
 
     // Evaluate the model by computing the RMSE on the test data
     val predictions = model.transform(test)
-      .withColumn("rating", col("rating").cast(DoubleType))
-      .withColumn("prediction", col("prediction").cast(DoubleType))
 
     val evaluator = new RegressionEvaluator()
       .setMetricName("rmse")
@@ -75,7 +74,8 @@ object ALSExample {
     val rmse = evaluator.evaluate(predictions)
     println(s"Root-mean-square error = $rmse")
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
 // scalastyle:on println

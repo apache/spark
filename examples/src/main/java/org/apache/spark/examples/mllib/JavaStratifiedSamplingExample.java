@@ -37,22 +37,19 @@ public class JavaStratifiedSamplingExample {
 
     @SuppressWarnings("unchecked")
     // $example on$
-    List<Tuple2<Integer, Character>> list = new ArrayList<>(
-      Arrays.<Tuple2<Integer, Character>>asList(
-        new Tuple2(1, 'a'),
-        new Tuple2(1, 'b'),
-        new Tuple2(2, 'c'),
-        new Tuple2(2, 'd'),
-        new Tuple2(2, 'e'),
-        new Tuple2(3, 'f')
-      )
+    List<Tuple2<Integer, Character>> list = Arrays.asList(
+        new Tuple2<>(1, 'a'),
+        new Tuple2<>(1, 'b'),
+        new Tuple2<>(2, 'c'),
+        new Tuple2<>(2, 'd'),
+        new Tuple2<>(2, 'e'),
+        new Tuple2<>(3, 'f')
     );
 
     JavaPairRDD<Integer, Character> data = jsc.parallelizePairs(list);
 
-    // specify the exact fraction desired from each key Map<K, Object>
-    ImmutableMap<Integer, Object> fractions =
-      ImmutableMap.of(1, (Object)0.1, 2, (Object) 0.6, 3, (Object) 0.3);
+    // specify the exact fraction desired from each key Map<K, Double>
+    ImmutableMap<Integer, Double> fractions = ImmutableMap.of(1, 0.1, 2, 0.6, 3, 0.3);
 
     // Get an approximate sample from each stratum
     JavaPairRDD<Integer, Character> approxSample = data.sampleByKey(false, fractions);

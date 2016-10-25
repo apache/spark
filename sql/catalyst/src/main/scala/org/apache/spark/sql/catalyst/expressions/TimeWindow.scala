@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.commons.lang.StringUtils
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -45,12 +45,12 @@ case class TimeWindow(
       slideDuration: Expression,
       startTime: Expression) = {
     this(timeColumn, TimeWindow.parseExpression(windowDuration),
-      TimeWindow.parseExpression(windowDuration), TimeWindow.parseExpression(startTime))
+      TimeWindow.parseExpression(slideDuration), TimeWindow.parseExpression(startTime))
   }
 
   def this(timeColumn: Expression, windowDuration: Expression, slideDuration: Expression) = {
     this(timeColumn, TimeWindow.parseExpression(windowDuration),
-      TimeWindow.parseExpression(windowDuration), 0)
+      TimeWindow.parseExpression(slideDuration), 0)
   }
 
   def this(timeColumn: Expression, windowDuration: Expression) = {
@@ -158,11 +158,11 @@ object TimeWindow {
 case class PreciseTimestamp(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
   override def dataType: DataType = LongType
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
-    eval.code +
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ev.copy(code = eval.code +
       s"""boolean ${ev.isNull} = ${eval.isNull};
          |${ctx.javaType(dataType)} ${ev.value} = ${eval.value};
-       """.stripMargin
+       """.stripMargin)
   }
 }

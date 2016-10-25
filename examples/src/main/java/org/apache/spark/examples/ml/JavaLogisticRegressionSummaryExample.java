@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.classification.BinaryLogisticRegressionSummary;
 import org.apache.spark.ml.classification.LogisticRegression;
@@ -26,18 +24,19 @@ import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.classification.LogisticRegressionTrainingSummary;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
 // $example off$
 
 public class JavaLogisticRegressionSummaryExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaLogisticRegressionSummaryExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaLogisticRegressionSummaryExample")
+      .getOrCreate();
 
     // Load training data
-    Dataset<Row> training = sqlContext.read().format("libsvm")
+    Dataset<Row> training = spark.read().format("libsvm")
       .load("data/mllib/sample_libsvm_data.txt");
 
     LogisticRegression lr = new LogisticRegression()
@@ -80,6 +79,6 @@ public class JavaLogisticRegressionSummaryExample {
     lrModel.setThreshold(bestThreshold);
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

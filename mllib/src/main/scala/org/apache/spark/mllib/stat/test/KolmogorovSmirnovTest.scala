@@ -45,7 +45,7 @@ import org.apache.spark.rdd.RDD
  * many elements are in each partition. Once these three values have been returned for every
  * partition, we can collect and operate locally. Locally, we can now adjust each distance by the
  * appropriate constant (the cumulative sum of number of elements in the prior partitions divided by
- * thedata set size). Finally, we take the maximum absolute value, and this is the statistic.
+ * the data set size). Finally, we take the maximum absolute value, and this is the statistic.
  */
 private[stat] object KolmogorovSmirnovTest extends Logging {
 

@@ -108,7 +108,7 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     val C = A.multiply(B)
     val localA = A.toBreeze()
     val localC = C.toBreeze()
-    val expected = localA * B.toBreeze.asInstanceOf[BDM[Double]]
+    val expected = localA * B.asBreeze.asInstanceOf[BDM[Double]]
     assert(localC === expected)
   }
 
@@ -119,7 +119,7 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
       (90.0, 12.0, 24.0),
       (12.0, 17.0, 22.0),
       (24.0, 22.0, 30.0))
-    assert(G.toBreeze === expected)
+    assert(G.asBreeze === expected)
   }
 
   test("svd") {
@@ -128,8 +128,8 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(svd.U.isInstanceOf[IndexedRowMatrix])
     val localA = A.toBreeze()
     val U = svd.U.toBreeze()
-    val s = svd.s.toBreeze.asInstanceOf[BDV[Double]]
-    val V = svd.V.toBreeze.asInstanceOf[BDM[Double]]
+    val s = svd.s.asBreeze.asInstanceOf[BDV[Double]]
+    val V = svd.V.asBreeze.asInstanceOf[BDM[Double]]
     assert(closeToZero(U.t * U - BDM.eye[Double](n)))
     assert(closeToZero(V.t * V - BDM.eye[Double](n)))
     assert(closeToZero(U * brzDiag(s) * V.t - localA))
@@ -155,7 +155,7 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("similar columns") {
     val A = new IndexedRowMatrix(indexedRows)
-    val gram = A.computeGramianMatrix().toBreeze.toDenseMatrix
+    val gram = A.computeGramianMatrix().asBreeze.toDenseMatrix
 
     val G = A.columnSimilarities().toBreeze()
 

@@ -203,6 +203,9 @@ private[deploy] class Worker(
     activeMasterWebUiUrl = uiUrl
     master = Some(masterRef)
     connected = true
+    if (conf.getBoolean("spark.ui.reverseProxy", false)) {
+      logInfo(s"WorkerWebUI is available at $activeMasterWebUiUrl/proxy/$workerId")
+    }
     // Cancel any outstanding re-registration attempts because we found a new master
     cancelLastRegistrationRetry()
   }
@@ -496,7 +499,7 @@ private[deploy] class Worker(
 
     case KillExecutor(masterUrl, appId, execId) =>
       if (masterUrl != activeMasterUrl) {
-        logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor " + execId)
+        logWarning("Invalid Master (" + masterUrl + ") attempted to kill executor " + execId)
       } else {
         val fullId = appId + "/" + execId
         executors.get(fullId) match {

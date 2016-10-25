@@ -192,11 +192,28 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <check customId="awaitresult" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Await\.result</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use Await.result? In most cases, you should use ThreadUtils.awaitResult instead.
+      If you must use Await.result, wrap the code block with
+      // scalastyle:off awaitresult
+      Await.result(...)
+      // scalastyle:on awaitresult
+    ]]></customMessage>
+  </check>
+
   <!-- As of SPARK-9613 JavaConversions should be replaced with JavaConverters -->
   <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConversions</parameter></parameters>
     <customMessage>Instead of importing implicits in scala.collection.JavaConversions._, import
     scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
+  </check>
+
+  <check customId="commonslang2" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
+    <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead
+    of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.ImportOrderChecker" enabled="true">
@@ -233,6 +250,14 @@ This file is divided into 3 sections:
     <customMessage>Omit braces in case clauses.</customMessage>
   </check>
 
+  <!-- SPARK-16877: Avoid Java annotations -->
+  <check customId="OverrideJavaCase" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">^Override$</parameter></parameters>
+    <customMessage>override modifier should be used instead of @java.lang.Override.</customMessage>
+  </check>
+
+  <check level="error" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="true"></check>
+
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
   <!-- ================================================================================ -->
@@ -251,7 +276,7 @@ This file is divided into 3 sections:
   </check>
 
   <!-- Should turn this on, but we have a few places that need to be fixed first -->
-  <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="true"></check>
 
   <!-- ================================================================================ -->
   <!--                               rules we don't want                                -->

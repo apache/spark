@@ -47,8 +47,14 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   private val keySchema = StructType(Seq(StructField("key", StringType, true)))
   private val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
 
+  before {
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
+
   after {
     StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
   }
 
   test("get, put, remove, commit, and all data iterator") {
@@ -182,7 +188,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       provider.getStore(-1)
     }
 
-    // Prepare some data in the stoer
+    // Prepare some data in the store
     val store = provider.getStore(0)
     put(store, "a", 1)
     assert(store.commit() === 1)
@@ -352,7 +358,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     }
   }
 
-  ignore("maintenance") {
+  test("maintenance") {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
@@ -366,20 +372,26 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val provider = new HDFSBackedStateStoreProvider(
       storeId, keySchema, valueSchema, storeConf, hadoopConf)
 
+
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
+          require(!StateStore.isMaintenanceRunning, "StateStore is unexpectedly running")
+
           for (i <- 1 to 20) {
             val store = StateStore.get(
               storeId, keySchema, valueSchema, i - 1, storeConf, hadoopConf)
             put(store, "a", i)
             store.commit()
           }
+
           eventually(timeout(10 seconds)) {
             assert(coordinatorRef.getLocation(storeId).nonEmpty, "active instance was not reported")
           }
 
           // Background maintenance should clean up and generate snapshots
+          assert(StateStore.isMaintenanceRunning, "Maintenance task is not running")
+
           eventually(timeout(10 seconds)) {
             // Earliest delta file should get cleaned up
             assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
@@ -418,6 +430,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       require(SparkEnv.get === null)
       eventually(timeout(10 seconds)) {
         assert(!StateStore.isLoaded(storeId))
+        assert(!StateStore.isMaintenanceRunning)
       }
     }
   }

@@ -55,6 +55,8 @@ private[spark] class StaticMemoryManager(
     (maxOnHeapStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
+  override def maxOffHeapStorageMemory: Long = 0L
+
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
@@ -104,6 +106,8 @@ private[spark] class StaticMemoryManager(
 
 private[spark] object StaticMemoryManager {
 
+  private val MIN_MEMORY_BYTES = 32 * 1024 * 1024
+
   /**
    * Return the total amount of memory available for the storage region, in bytes.
    */
@@ -119,6 +123,20 @@ private[spark] object StaticMemoryManager {
    */
   private def getMaxExecutionMemory(conf: SparkConf): Long = {
     val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
+
+    if (systemMaxMemory < MIN_MEMORY_BYTES) {
+      throw new IllegalArgumentException(s"System memory $systemMaxMemory must " +
+        s"be at least $MIN_MEMORY_BYTES. Please increase heap size using the --driver-memory " +
+        s"option or spark.driver.memory in Spark configuration.")
+    }
+    if (conf.contains("spark.executor.memory")) {
+      val executorMemory = conf.getSizeAsBytes("spark.executor.memory")
+      if (executorMemory < MIN_MEMORY_BYTES) {
+        throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
+          s"$MIN_MEMORY_BYTES. Please increase executor memory using the " +
+          s"--executor-memory option or spark.executor.memory in Spark configuration.")
+      }
+    }
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
     val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
     (systemMaxMemory * memoryFraction * safetyFraction).toLong

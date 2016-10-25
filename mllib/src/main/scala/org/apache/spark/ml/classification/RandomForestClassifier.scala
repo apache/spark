@@ -20,14 +20,14 @@ package org.apache.spark.ml.classification
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
@@ -36,15 +36,13 @@ import org.apache.spark.sql.functions._
 
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for
  * classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
 @Since("1.4.0")
-@Experimental
-final class RandomForestClassifier @Since("1.4.0") (
+class RandomForestClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestClassifierParams with DefaultParamsWritable {
@@ -101,21 +99,29 @@ final class RandomForestClassifier @Since("1.4.0") (
   override protected def train(dataset: Dataset[_]): RandomForestClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
-      case Some(n: Int) => n
-      case None => throw new IllegalArgumentException("RandomForestClassifier was given input" +
-        s" with invalid label column ${$(labelCol)}, without the number of classes" +
-        " specified. See StringIndexer.")
-      // TODO: Automatically index labels: SPARK-7126
+    val numClasses: Int = getNumClasses(dataset)
+
+    if (isDefined(thresholds)) {
+      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+        ".train() called with non-matching numClasses and thresholds.length." +
+        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
-    val trees =
-      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
-        .map(_.asInstanceOf[DecisionTreeClassificationModel])
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+
+    val trees = RandomForest
+      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .map(_.asInstanceOf[DecisionTreeClassificationModel])
+
     val numFeatures = oldDataset.first().features.size
-    new RandomForestClassificationModel(trees, numFeatures, numClasses)
+    val m = new RandomForestClassificationModel(trees, numFeatures, numClasses)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.4.1")
@@ -123,7 +129,6 @@ final class RandomForestClassifier @Since("1.4.0") (
 }
 
 @Since("1.4.0")
-@Experimental
 object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifier] {
   /** Accessor for supported impurity settings: entropy, gini */
   @Since("1.4.0")
@@ -139,7 +144,6 @@ object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifi
 }
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
@@ -148,8 +152,7 @@ object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifi
  *                Warning: These have null parents.
  */
 @Since("1.4.0")
-@Experimental
-final class RandomForestClassificationModel private[ml] (
+class RandomForestClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
     @Since("1.6.0") override val numFeatures: Int,
@@ -181,7 +184,7 @@ final class RandomForestClassificationModel private[ml] (
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
+    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
     val predictUDF = udf { (features: Any) =>
       bcastModel.value.predict(features.asInstanceOf[Vector])
     }
@@ -281,7 +284,7 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
         "numFeatures" -> instance.numFeatures,
         "numClasses" -> instance.numClasses,
         "numTrees" -> instance.getNumTrees)
-      EnsembleModelReadWrite.saveImpl(instance, path, sqlContext, extraMetadata)
+      EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }
 
@@ -295,7 +298,7 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     override def load(path: String): RandomForestClassificationModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], _) =
-        EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]

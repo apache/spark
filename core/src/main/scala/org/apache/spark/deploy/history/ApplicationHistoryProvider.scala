@@ -77,7 +77,7 @@ private[history] abstract class ApplicationHistoryProvider {
    *
    * @return List of all know applications.
    */
-  def getListing(): Iterable[ApplicationHistoryInfo]
+  def getListing(): Iterator[ApplicationHistoryInfo]
 
   /**
    * Returns the Spark UI for a specific application.
@@ -108,5 +108,10 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   @throws(classOf[SparkException])
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
+
+  /**
+   * @return the [[ApplicationHistoryInfo]] for the appId if it exists.
+   */
+  def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo]
 
 }

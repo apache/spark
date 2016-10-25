@@ -43,7 +43,7 @@ class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev)
   @transient private val startIndices: Array[Long] = {
     val n = prev.partitions.length
     if (n == 0) {
-      Array[Long]()
+      Array.empty
     } else if (n == 1) {
       Array(0L)
     } else {

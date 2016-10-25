@@ -411,10 +411,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     val testRDD1 = sc.parallelize(testData, 2)
 
     val testRDD2 = sc.parallelize(
-      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.toBreeze * 1.0E3))), 2)
+      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.asBreeze * 1.0E3))), 2)
 
     val testRDD3 = sc.parallelize(
-      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.toBreeze * 1.0E6))), 2)
+      testData.map(x => LabeledPoint(x.label, Vectors.fromBreeze(x.features.asBreeze * 1.0E6))), 2)
 
     testRDD1.cache()
     testRDD2.cache()

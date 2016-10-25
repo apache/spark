@@ -207,6 +207,9 @@ object SizeEstimator extends Logging {
     val cls = obj.getClass
     if (cls.isArray) {
       visitArray(obj, cls, state)
+    } else if (cls.getName.startsWith("scala.reflect")) {
+      // Many objects in the scala.reflect package reference global reflection objects which, in
+      // turn, reference many other large global objects. Do nothing in this case.
     } else if (obj.isInstanceOf[ClassLoader] || obj.isInstanceOf[Class[_]]) {
       // Hadoop JobConfs created in the interpreter have a ClassLoader, which greatly confuses
       // the size estimator since it references the whole REPL. Do nothing in this case. In

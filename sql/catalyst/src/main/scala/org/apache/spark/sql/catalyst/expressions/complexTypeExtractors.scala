@@ -106,7 +106,7 @@ trait ExtractValue extends Expression
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
   extends UnaryExpression with ExtractValue {
 
-  private[sql] lazy val childSchema = child.dataType.asInstanceOf[StructType]
+  lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
   override def dataType: DataType = childSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
@@ -122,7 +122,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
       if (nullable) {
         s"""
@@ -179,7 +179,7 @@ case class GetArrayStructFields(
     new GenericArrayData(result)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, eval => {
       val n = ctx.freshName("n")
@@ -239,7 +239,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
       s"""
@@ -302,7 +302,7 @@ case class GetMapValue(child: Expression, key: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")

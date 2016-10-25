@@ -29,16 +29,7 @@ if sys.version >= '3':
     xrange = range
 
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
-from py4j.java_collections import ListConverter
-
 from pyspark.serializers import read_int
-
-
-# patching ListConverter, or it will convert bytearray into Java ArrayList
-def can_convert_list(self, obj):
-    return isinstance(obj, (list, tuple, xrange))
-
-ListConverter.can_convert = can_convert_list
 
 
 def launch_gateway():
@@ -116,6 +107,7 @@ def launch_gateway():
     java_import(gateway.jvm, "org.apache.spark.SparkConf")
     java_import(gateway.jvm, "org.apache.spark.api.java.*")
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
+    java_import(gateway.jvm, "org.apache.spark.ml.python.*")
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
     # TODO(davies): move into sql
     java_import(gateway.jvm, "org.apache.spark.sql.*")

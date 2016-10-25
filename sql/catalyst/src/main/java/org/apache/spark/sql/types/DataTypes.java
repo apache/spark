@@ -191,7 +191,7 @@ public class DataTypes {
    * Creates a StructType with the given list of StructFields ({@code fields}).
    */
   public static StructType createStructType(List<StructField> fields) {
-    return createStructType(fields.toArray(new StructField[0]));
+    return createStructType(fields.toArray(new StructField[fields.size()]));
   }
 
   /**

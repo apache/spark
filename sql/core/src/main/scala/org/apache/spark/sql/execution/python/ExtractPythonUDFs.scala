@@ -18,11 +18,67 @@
 package org.apache.spark.sql.execution.python
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.SparkPlan
+
+
+/**
+ * Extracts all the Python UDFs in logical aggregate, which depends on aggregate expression or
+ * grouping key, evaluate them after aggregate.
+ */
+object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
+
+  /**
+   * Returns whether the expression could only be evaluated within aggregate.
+   */
+  private def belongAggregate(e: Expression, agg: Aggregate): Boolean = {
+    e.isInstanceOf[AggregateExpression] ||
+      agg.groupingExpressions.exists(_.semanticEquals(e))
+  }
+
+  private def hasPythonUdfOverAggregate(expr: Expression, agg: Aggregate): Boolean = {
+    expr.find {
+      e => e.isInstanceOf[PythonUDF] && e.find(belongAggregate(_, agg)).isDefined
+    }.isDefined
+  }
+
+  private def extract(agg: Aggregate): LogicalPlan = {
+    val projList = new ArrayBuffer[NamedExpression]()
+    val aggExpr = new ArrayBuffer[NamedExpression]()
+    agg.aggregateExpressions.foreach { expr =>
+      if (hasPythonUdfOverAggregate(expr, agg)) {
+        // Python UDF can only be evaluated after aggregate
+        val newE = expr transformDown {
+          case e: Expression if belongAggregate(e, agg) =>
+            val alias = e match {
+              case a: NamedExpression => a
+              case o => Alias(e, "agg")()
+            }
+            aggExpr += alias
+            alias.toAttribute
+        }
+        projList += newE.asInstanceOf[NamedExpression]
+      } else {
+        aggExpr += expr
+        projList += expr.toAttribute
+      }
+    }
+    // There is no Python UDF over aggregate expression
+    Project(projList, agg.copy(aggregateExpressions = aggExpr))
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case agg: Aggregate if agg.aggregateExpressions.exists(hasPythonUdfOverAggregate(_, agg)) =>
+      extract(agg)
+  }
+}
+
 
 /**
  * Extracts PythonUDFs from operators, rewriting the query plan so that the UDF can be evaluated
@@ -34,7 +90,7 @@ import org.apache.spark.sql.execution.SparkPlan
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-private[spark] object ExtractPythonUDFs extends Rule[SparkPlan] {
+object ExtractPythonUDFs extends Rule[SparkPlan] {
 
   private def hasPythonUDF(e: Expression): Boolean = {
     e.find(_.isInstanceOf[PythonUDF]).isDefined
@@ -59,10 +115,12 @@ private[spark] object ExtractPythonUDFs extends Rule[SparkPlan] {
   }
 
   /**
-   * Extract all the PythonUDFs from the current operator.
+   * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
-  def extract(plan: SparkPlan): SparkPlan = {
+  private def extract(plan: SparkPlan): SparkPlan = {
     val udfs = plan.expressions.flatMap(collectEvaluatableUDF)
+      // ignore the PythonUDF that come from second/third aggregate, which is not used
+      .filter(udf => udf.references.subsetOf(plan.inputSet))
     if (udfs.isEmpty) {
       // If there aren't any, we are done.
       plan
@@ -74,12 +132,12 @@ private[spark] object ExtractPythonUDFs extends Rule[SparkPlan] {
         val validUdfs = udfs.filter { case udf =>
           // Check to make sure that the UDF can be evaluated with only the input of this child.
           udf.references.subsetOf(child.outputSet)
-        }
+        }.toArray  // Turn it into an array since iterators cannot be serialized in Scala 2.10
         if (validUdfs.nonEmpty) {
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
-          val evaluation = BatchPythonEvaluation(validUdfs, child.output ++ resultAttrs, child)
+          val evaluation = BatchEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
           attributeMap ++= validUdfs.zip(resultAttrs)
           evaluation
         } else {
@@ -89,23 +147,19 @@ private[spark] object ExtractPythonUDFs extends Rule[SparkPlan] {
       // Other cases are disallowed as they are ambiguous or would require a cartesian
       // product.
       udfs.filterNot(attributeMap.contains).foreach { udf =>
-        if (udf.references.subsetOf(plan.inputSet)) {
-          sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
-        } else {
-          sys.error(s"Unable to evaluate PythonUDF $udf. Missing input attributes.")
-        }
+        sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
-      val rewritten = plan.transformExpressions {
+      val rewritten = plan.withNewChildren(newChildren).transformExpressions {
         case p: PythonUDF if attributeMap.contains(p) =>
           attributeMap(p)
-      }.withNewChildren(newChildren)
+      }
 
       // extract remaining python UDFs recursively
       val newPlan = extract(rewritten)
       if (newPlan.output != plan.output) {
         // Trim away the new UDF value if it was only used for filtering or something.
-        execution.Project(plan.output, newPlan)
+        execution.ProjectExec(plan.output, newPlan)
       } else {
         newPlan
       }

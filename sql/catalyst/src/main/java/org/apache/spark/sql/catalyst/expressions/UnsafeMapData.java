@@ -25,12 +25,12 @@ import org.apache.spark.unsafe.Platform;
 /**
  * An Unsafe implementation of Map which is backed by raw memory instead of Java objects.
  *
- * Currently we just use 2 UnsafeArrayData to represent UnsafeMapData, with extra 4 bytes at head
+ * Currently we just use 2 UnsafeArrayData to represent UnsafeMapData, with extra 8 bytes at head
  * to indicate the number of bytes of the unsafe key array.
  * [unsafe key array numBytes] [unsafe key array] [unsafe value array]
  */
 // TODO: Use a more efficient format which doesn't depend on unsafe array.
-public class UnsafeMapData extends MapData {
+public final class UnsafeMapData extends MapData {
 
   private Object baseObject;
   private long baseOffset;
@@ -65,14 +65,15 @@ public class UnsafeMapData extends MapData {
    * @param sizeInBytes the size of this map's backing data, in bytes
    */
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
-    // Read the numBytes of key array from the first 4 bytes.
-    final int keyArraySize = Platform.getInt(baseObject, baseOffset);
-    final int valueArraySize = sizeInBytes - keyArraySize - 4;
+    // Read the numBytes of key array from the first 8 bytes.
+    final long keyArraySize = Platform.getLong(baseObject, baseOffset);
     assert keyArraySize >= 0 : "keyArraySize (" + keyArraySize + ") should >= 0";
+    assert keyArraySize <= Integer.MAX_VALUE : "keyArraySize (" + keyArraySize + ") should <= Integer.MAX_VALUE";
+    final int valueArraySize = sizeInBytes - (int)keyArraySize - 8;
     assert valueArraySize >= 0 : "valueArraySize (" + valueArraySize + ") should >= 0";
 
-    keys.pointTo(baseObject, baseOffset + 4, keyArraySize);
-    values.pointTo(baseObject, baseOffset + 4 + keyArraySize, valueArraySize);
+    keys.pointTo(baseObject, baseOffset + 8, (int)keyArraySize);
+    values.pointTo(baseObject, baseOffset + 8 + keyArraySize, valueArraySize);
 
     assert keys.numElements() == values.numElements();
 
