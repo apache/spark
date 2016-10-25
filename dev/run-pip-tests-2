@@ -57,8 +57,8 @@ python setup.py sdist
 echo "Installing dist into virtual env"
 cd dist
 # Verify that the dist directory only contains one thing to install
-sdists=(*.targ.gz)
-if [ ! $sdists == 1 ]; then
+sdists=(*.tar.gz)
+if [ ${#sdists[@]} -ne 1 ]; then
   echo "Unexpected number of targets found in dist directory - please cleanup existing sdists first."
   exit -1
 fi
