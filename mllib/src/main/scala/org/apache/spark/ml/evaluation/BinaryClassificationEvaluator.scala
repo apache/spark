@@ -78,11 +78,11 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
     val scoreAndLabels =
-      dataset.select(col($(rawPredictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
+      dataset.select(col($(rawPredictionCol)), col($(labelCol)).cast(DoubleType))
         .rdd
         .map {
         case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
-        case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
+        case Row(rawPrediction: Float, label: Double) => (rawPrediction.toDouble, label)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val metric = $(metricName) match {
