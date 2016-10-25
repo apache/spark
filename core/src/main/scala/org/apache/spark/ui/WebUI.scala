@@ -149,7 +149,7 @@ private[spark] abstract class WebUI(
   /** Return the url of web interface. Only valid after bind(). */
   def webUrl: String = {
     val protocol = if (sslOptions.enabled) "https" else "http"
-      s"$protocol://$publicHostName:$boundPort"
+    s"$protocol://$publicHostName:$boundPort"
   }
 
   /** Return the actual port to which this server is bound. Only valid after bind(). */
