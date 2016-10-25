@@ -18,8 +18,8 @@ guide, on the [project web page](http://spark.apache.org/documentation.html)
 ## Python Packaging
 
 This README file only contains basic information related to pip installed PySpark.
-This packaging is currently expiremental and may change in future versions (although we will do our best to keep compatability).
-Using PySpark requires the Spark JARs, and if you are building this from source please see the builder instractions at at
+This packaging is currently experimental and may change in future versions (although we will do our best to keep compatibility).
+Using PySpark requires the Spark JARs, and if you are building this from source please see the builder instructions at
 ["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
 
 The Python packaging for Spark is not intended to replace all of the other use cases. This Python packaged version of Spark is suitable for interacting with an existing cluster (be it Spark standalone, YARN, or Mesos) - but does not contain the tools required to setup your own standalone Spark cluster. You can download the full version of Spark from the [Apache Spark downloads page](http://spark.apache.org/downloads.html).
