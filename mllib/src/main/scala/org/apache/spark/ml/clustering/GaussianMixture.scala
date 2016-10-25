@@ -335,12 +335,13 @@ class GaussianMixture @Since("2.0.0") (
 
     val sc = dataset.sparkSession.sparkContext
     val _k = $(k)
-    // Extract the number of features.
-    val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
 
     val instances: RDD[Vector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(features: Vector) => features
-    }
+    }.cache()
+
+    // Extract the number of features.
+    val numFeatures = instances.first().size
 
     val instr = Instrumentation.create(this, instances)
     instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
