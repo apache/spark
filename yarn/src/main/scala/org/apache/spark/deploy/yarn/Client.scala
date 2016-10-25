@@ -598,8 +598,12 @@ private[spark] class Client(
     ).foreach { case (flist, resType, addToClasspath) =>
       flist.foreach { file =>
         val (_, localizedPath) = distribute(file, resType = resType)
-        if (addToClasspath && localizedPath != null) {
-          cachedSecondaryJarLinks += localizedPath
+        if (addToClasspath) {
+          if (localizedPath != null) {
+             cachedSecondaryJarLinks += localizedPath
+          }
+        } else {
+          require(localizedPath !=null)
         }
       }
     }
