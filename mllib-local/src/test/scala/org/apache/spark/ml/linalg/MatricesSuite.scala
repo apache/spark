@@ -200,7 +200,7 @@ class MatricesSuite extends SparkMLFunSuite {
       dm2 = 0.0 4.0 5.0
             0.0 2.0 0.0
 
-      dm1 = 0.0 0.0 0.0
+      dm3 = 0.0 0.0 0.0
             0.0 0.0 0.0
      */
     val dm1 = new DenseMatrix(2, 3, Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
@@ -230,10 +230,12 @@ class MatricesSuite extends SparkMLFunSuite {
     val sm5 = dm3.toSparse(true)
     assert(sm5 === dm3)
     assert(sm5.values === Array.empty[Double])
+    assert(!sm5.isTransposed)
 
     val sm6 = dm3.toSparse(false)
     assert(sm6 === dm3)
     assert(sm6.values === Array.empty[Double])
+    assert(sm6.isTransposed)
   }
 
   test("sparse to sparse") {
@@ -342,6 +344,10 @@ class MatricesSuite extends SparkMLFunSuite {
     /*
       dm1 = 1.0 0.0 0.0 0.0
             1.0 0.0 0.0 0.0
+            0.0 0.0 0.0 0.0
+
+      dm2 = 1.0 1.0 0.0 0.0
+            0.0 0.0 0.0 0.0
             0.0 0.0 0.0 0.0
      */
     // this should compress to a sparse matrix
