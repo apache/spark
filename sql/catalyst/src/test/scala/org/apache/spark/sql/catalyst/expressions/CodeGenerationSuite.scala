@@ -97,6 +97,38 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual(0) == cases)
   }
 
+  test("SPARK-18091: split large if expressions into blocks due to JVM code size limit") {
+    val row = create_row("afafFAFFsqcategory2dadDADcategory8sasasadscategory24", 0)
+    val inputStr = 'a.string.at(0)
+    val inputIdx = 'a.int.at(1)
+
+    val length = 10
+    val valuesToCompareTo = for (i <- 1 to (length + 1)) yield ("category" + i)
+
+    val initCondition = EqualTo(RegExpExtract(inputStr, Literal("category1"), inputIdx),
+      valuesToCompareTo(0))
+    var res: Expression = If(initCondition, Literal("category1"), Literal("NULL"))
+    var cummulativeCondition: Expression = Not(initCondition)
+    for (index <- 1 to length) {
+      val valueExtractedFromInput = RegExpExtract(inputStr,
+        Literal("category" + (index + 1).toString), inputIdx)
+      val currComparee = If(cummulativeCondition, valueExtractedFromInput, Literal("NULL"))
+      val currCondition = EqualTo(currComparee, valuesToCompareTo(index))
+      val combinedCond = And(cummulativeCondition, currCondition)
+      res = If(combinedCond, If(combinedCond, valueExtractedFromInput, Literal("NULL")), res)
+      cummulativeCondition = And(Not(currCondition), cummulativeCondition)
+    }
+
+    val expressions = Seq(res)
+    val plan = GenerateUnsafeProjection.generate(expressions, true)
+    val actual = plan(row).toSeq(expressions.map(_.dataType))
+    val expected = Seq(UTF8String.fromString("category2"))
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
   test("SPARK-14793: split wide array creation into blocks due to JVM code size limit") {
     val length = 5000
     val expressions = Seq(CreateArray(List.fill(length)(EqualTo(Literal(1), Literal(1)))))
