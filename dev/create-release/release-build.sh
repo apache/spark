@@ -162,6 +162,9 @@ if [[ "$1" == "package" ]]; then
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
 
+    # Write out the NAME and VERSION to PySpark version info
+    echo "__version__='$VERSION.$NAME'" > ./spark-$SPARK_VERSION-bin-$NAME/python/pyspark/version.py
+
     # Get maven home set by MVN
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
 
@@ -169,7 +172,6 @@ if [[ "$1" == "package" ]]; then
       -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
     cd ..
     cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
-
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
       --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
       --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
@@ -179,6 +181,19 @@ if [[ "$1" == "package" ]]; then
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
       SHA512 spark-$SPARK_VERSION-bin-$NAME.tgz > \
       spark-$SPARK_VERSION-bin-$NAME.tgz.sha
+
+    PYTHON_DIST_NAME=`ls -a1 python/dist/*.tar.gz`
+    cp spark-$SPARK_VERSION-bin-$NAME/python/pyspark/dist/*.tgz .
+
+    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+      --output $PYTHON_DIST_NAME.asc \
+      --detach-sig $PYTHON_DIST_NAME.tgz
+    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+      MD5 $PYTHON_DIST_NAME.tgz > \
+      $PYTHON_DIST_NAME.tgz.md5
+    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+      SHA512 spark-$SPARK_VERSION-bin-$NAME.tgz > \
+      $PYTHON_DIST_NAME.tgz.sha
   }
 
   # TODO: Check exit codes of children here:
