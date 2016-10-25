@@ -144,6 +144,10 @@ object FileSourceStrategy extends Strategy with Logging {
   private def generateStructFieldsContainsNesting(
       projects: Seq[Expression],
       fullSchema: StructType) : Seq[StructField] = {
+    // By traverse projects, we can fisrt generate the access path of nested struct, then use the
+    // access path reconstruct the schema after pruning.
+    // In the process of traversing, we should deal with all expressions releted with complex
+    // struct type like GetArrayItem, GetArrayStructFields, GetMapValue and GetStructField
     def generateStructField(
         curField: List[String],
         node: Expression) : Seq[StructField] = {
@@ -157,6 +161,8 @@ object FileSourceStrategy extends Strategy with Logging {
         case mv: GetMapValue =>
           generateStructField(List.empty[String], mv.child)
         case attr: AttributeReference =>
+          // Finally reach the leaf node AttributeReference, call getFieldRecursively
+          // and pass the access path of current nested struct
           Seq(getFieldRecursively(fullSchema, attr.name :: curField))
         case sf: GetStructField =>
           generateStructField(sf.name.get :: curField, sf.child)
@@ -169,9 +175,7 @@ object FileSourceStrategy extends Strategy with Logging {
       }
     }
 
-    def getFieldRecursively(
-        schema: StructType,
-        name: List[String]): StructField = {
+    def getFieldRecursively(schema: StructType, name: List[String]): StructField = {
       if (name.length > 1) {
         val curField = name.head
         val curFieldType = schema(curField)
