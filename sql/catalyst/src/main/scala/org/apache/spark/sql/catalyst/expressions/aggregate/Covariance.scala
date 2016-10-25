@@ -76,7 +76,6 @@ abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggre
   }
 }
 
-
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.",
   extended = """

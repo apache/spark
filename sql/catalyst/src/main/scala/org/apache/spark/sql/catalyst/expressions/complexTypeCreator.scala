@@ -441,8 +441,8 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
       keyValueDelim - a string literal that defines the delimiter to separate the key and value in the pair. For example, ":". Default is ":".
 
     Examples:
-     > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
-      map("a":"1","b":"2","c":"3")
+      > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
+       map("a":"1","b":"2","c":"3")
   """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)

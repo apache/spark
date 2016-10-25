@@ -261,7 +261,6 @@ case class IsNaN(child: Expression) extends UnaryExpression
   }
 }
 
-
 /**
  * An Expression evaluates to `left` iff it's not NaN, or evaluates to `right` otherwise.
  * This Expression is useful for mapping NaN values to null.
