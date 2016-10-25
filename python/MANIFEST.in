@@ -2,4 +2,4 @@ recursive-include deps/jars *.jar
 recursive-include deps/bin *
 recursive-include deps/examples *.py
 recursive-include lib *.zip
-inlcude README.md
+include README.md

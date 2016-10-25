@@ -3,7 +3,7 @@ import os, sys
 from setuptools import setup, find_packages
 from shutil import copyfile
 
-VERSION = '2.1.0-SNAPSHOT'
+VERSION = '2.1.0.dev'
 # A temporary path so we can access above the Python project root and fetch scripts and jars we need
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
