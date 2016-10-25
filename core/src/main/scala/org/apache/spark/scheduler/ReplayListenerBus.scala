@@ -44,18 +44,32 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
    * @param sourceName Filename (or other source identifier) from whence @logData is being read
    * @param maybeTruncated Indicate whether log file might be truncated (some abnormal situations
    *        encountered, log file might not finished writing) or not
+   * @param eventsFilter Filter function to select JSON event strings in the log data stream that
+   *        should be parsed and replayed. When not specified, all event strings in the log data
+   *        are parsed and replayed.
    */
   def replay(
       logData: InputStream,
       sourceName: String,
-      maybeTruncated: Boolean = false): Unit = {
+      maybeTruncated: Boolean = false,
+      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
+
     var currentLine: String = null
-    var lineNumber: Int = 1
+    var lineNumber: Int = 0
+
     try {
-      val lines = Source.fromInputStream(logData).getLines()
-      while (lines.hasNext) {
-        currentLine = lines.next()
+      val lineEntries = Source.fromInputStream(logData)
+        .getLines()
+        .zipWithIndex
+        .filter { case (line, _) => eventsFilter(line) }
+
+      while (lineEntries.hasNext) {
         try {
+          val entry = lineEntries.next()
+
+          currentLine = entry._1
+          lineNumber = entry._2 + 1
+
           postToAll(JsonProtocol.sparkEventFromJson(parse(currentLine)))
         } catch {
           case e: ClassNotFoundException if KNOWN_REMOVED_CLASSES.contains(e.getMessage) =>
@@ -64,14 +78,15 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
             logWarning(s"Dropped incompatible Structured Streaming log: $currentLine")
           case jpe: JsonParseException =>
             // We can only ignore exception from last line of the file that might be truncated
-            if (!maybeTruncated || lines.hasNext) {
+            // the last entry may not be the very last line in the event log, but we treat it
+            // as such in a best effort to replay the given input
+            if (!maybeTruncated || lineEntries.hasNext) {
               throw jpe
             } else {
               logWarning(s"Got JsonParseException from log file $sourceName" +
                 s" at line $lineNumber, the file might not have finished writing cleanly.")
             }
         }
-        lineNumber += 1
       }
     } catch {
       case ioe: IOException =>
@@ -84,7 +99,13 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
 
 }
 
+
 private[spark] object ReplayListenerBus {
+
+  type ReplayEventsFilter = (String) => Boolean
+
+  // utility filter that selects all event logs during replay
+  val SELECT_ALL_FILTER: ReplayEventsFilter = { (eventString: String) => true }
 
   /**
    * Classes that were removed. Structured Streaming doesn't use them any more. However, parsing
