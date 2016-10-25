@@ -280,7 +280,7 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
     }
 
     // Cholesky also fails when regularization is added but we don't wish to standardize
-    val wls = new WeightedLeastSquares(true, regParam = 0.5, elasticNetParam = 0.0,
+    val wls = new WeightedLeastSquares(fitIntercept = true, regParam = 0.5, elasticNetParam = 0.0,
       standardizeFeatures = false, standardizeLabel = false,
       solverType = WeightedLeastSquares.Cholesky)
     intercept[SingularMatrixException] {
@@ -470,10 +470,11 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
     var idx = 0
     for (fitIntercept <- Seq(false, true);
          regParam <- Seq(0.1, 0.5, 1.0);
-         standardizeFeatures <- Seq(false, true);
+         standardization <- Seq(false, true);
          elasticNetParam <- Seq(0.1, 0.5, 1.0)) {
-      val wls = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = elasticNetParam,
-        standardizeFeatures, standardizeLabel = true, solverType = WeightedLeastSquares.Auto)
+      val wls = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam,
+        standardizeFeatures = standardization, standardizeLabel = true,
+        solverType = WeightedLeastSquares.Auto)
         .fit(instances)
       val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
       assert(actual ~== expected(idx) absTol 1e-4)
@@ -528,10 +529,10 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
     var idx = 0
     for (fitIntercept <- Seq(false, true);
          regParam <- Seq(0.0, 0.1, 1.0);
-         standardizeFeatures <- Seq(false, true)) {
+         standardization <- Seq(false, true)) {
       for (solver <- WeightedLeastSquares.supportedSolvers) {
         val wls = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
-          standardizeFeatures, standardizeLabel = true, solverType = solver)
+          standardizeFeatures = standardization, standardizeLabel = true, solverType = solver)
           .fit(instances)
         val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
         assert(actual ~== expected(idx) absTol 1e-4)
