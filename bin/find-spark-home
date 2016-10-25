@@ -17,14 +17,19 @@
 # limitations under the License.
 #
 
-# Attempts to find a proper value for SPARK_HOME
+# Attempts to find a proper value for SPARK_HOME. Should be included using "source" directive.
 
 FIND_SPARK_HOME_PYTHON_SCRIPT="$(cd "`dirname "$0"`"; pwd)/find_spark_home.py"
 
+# Short cirtuit if the user already has this set.
 if [ ! -z "${SPARK_HOME}" ]; then
    exit 0
 elif [ ! -f $FIND_SPARK_HOME_PYTHON_SCRIPT ]; then
-  # If we are not in the same directory as find_spark_home.py we are not pip installed
+  # If we are not in the same directory as find_spark_home.py we are not pip installed so we don't
+  # need to search the different Python directories for a Spark installation.
+  # Note only that, if the user has pip installed PySpark but is directly calling pyspark-shell or
+  # spark-submit in another directory we want to use that version of PySpark rather than the
+  # pip installed version of PySpark.
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 else
   # We are pip installed, use the Python script to resolve a reasonable SPARK_HOME
