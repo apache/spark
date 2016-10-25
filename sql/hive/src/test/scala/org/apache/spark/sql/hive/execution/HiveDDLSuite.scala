@@ -200,9 +200,8 @@ class HiveDDLSuite
         val message = intercept[AnalysisException] {
           sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
         }
-        assert(message.getMessage.contains(
-          "Partition spec is invalid. The spec (ds, unknowncol) must be contained within the " +
-            "partition spec (ds, hr) defined in table '`default`.`exttable_with_partitions`'"))
+        assert(message.getMessage.contains("unknownCol is not a valid partition column in table " +
+          "`default`.`exttable_with_partitions`"))
 
         sql(
           s"""
