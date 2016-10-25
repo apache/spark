@@ -215,12 +215,18 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("default value of WAREHOUSE_PATH") {
+    def appendTrailingSlashIfNecessary(path: String): String = {
+      if (!path.endsWith("/")) path + "/" else path
+    }
+
     val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
     try {
       // to get the default value, always unset it
       spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      assert(new Path(Utils.resolveURI("spark-warehouse")).toString ===
-        spark.sessionState.conf.warehousePath + "/")
+      // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
+      // In our comparison, add trailing slash to both sides if necessary, to account for both cases
+      assert(appendTrailingSlashIfNecessary(new Path(Utils.resolveURI("spark-warehouse"))
+        .toString) === appendTrailingSlashIfNecessary(spark.sessionState.conf.warehousePath))
     } finally {
       sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
     }
