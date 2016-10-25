@@ -52,17 +52,11 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 5)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
-    assert(model.clusterCenters.head ~== center absTol 1E-5)
-
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
-    assert(model.clusterCenters.head ~== center absTol 1E-5)
-
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
+    model = KMeans.train(data, k = 1, maxIterations = 1, initializationMode = RANDOM)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
     model = KMeans.train(
-      data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL)
+      data, k = 1, maxIterations = 1, initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
   }
 
@@ -81,7 +75,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.clusterCenters.length === 1)
   }
 
-    test("unique cluster centers") {
+  test("unique cluster centers") {
     val rng = new Random(seed)
     val numDistinctPoints = 10
     val points = (0 until numDistinctPoints).map(i => Vectors.dense(Array.fill(3)(rng.nextDouble)))
@@ -103,18 +97,27 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(finalCenters.length === finalCenters.distinct.length)
 
     // run local k-means
-    val km2 = new KMeans().setK(10)
+    val k = 10
+    val km2 = new KMeans().setK(k)
       .setMaxIterations(5)
       .setInitializationMode("k-means||")
       .setInitializationSteps(10)
       .setSeed(seed)
     val initialCenters2 = km2.initKMeansParallel(normedData).map(_.vector)
     assert(initialCenters2.length === initialCenters2.distinct.length)
-    assert(initialCenters2.length === 10)
+    assert(initialCenters2.length === k)
 
     val model2 = km2.run(data)
     val finalCenters2 = model2.clusterCenters
     assert(finalCenters2.length === finalCenters2.distinct.length)
+
+    val km3 = new KMeans().setK(k)
+      .setMaxIterations(5)
+      .setInitializationMode("random")
+      .setSeed(seed)
+    val model3 = km3.run(data)
+    val finalCenters3 = model3.clusterCenters
+    assert(finalCenters3.length === finalCenters3.distinct.length)
   }
 
   test("deterministic initialization") {
@@ -124,11 +127,11 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
       // Create three deterministic models and compare cluster means
-      val model1 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
+      val model1 = KMeans.train(rdd, k = 10, maxIterations = 2,
         initializationMode = initMode, seed = seed)
       val centers1 = model1.clusterCenters
 
-      val model2 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
+      val model2 = KMeans.train(rdd, k = 10, maxIterations = 2,
         initializationMode = initMode, seed = seed)
       val centers2 = model2.clusterCenters
 
@@ -161,17 +164,10 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 5)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
+    model = KMeans.train(data, k = 1, maxIterations = 1, initializationMode = RANDOM)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
-    assert(model.clusterCenters.head ~== center absTol 1E-5)
-
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
-    assert(model.clusterCenters.head ~== center absTol 1E-5)
-
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1,
-      initializationMode = K_MEANS_PARALLEL)
+    model = KMeans.train(data, k = 1, maxIterations = 1, initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
   }
 
@@ -206,17 +202,10 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 5)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
+    model = KMeans.train(data, k = 1, maxIterations = 1, initializationMode = RANDOM)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 5)
-    assert(model.clusterCenters.head ~== center absTol 1E-5)
-
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
-    assert(model.clusterCenters.head ~== center absTol 1E-5)
-
-    model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1,
-      initializationMode = K_MEANS_PARALLEL)
+    model = KMeans.train(data, k = 1, maxIterations = 1, initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
     data.unpersist()
@@ -257,11 +246,6 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     model = KMeans.train(rdd, k = 5, maxIterations = 10)
     assert(model.clusterCenters.sortBy(VectorWithCompare(_))
       .zip(points.sortBy(VectorWithCompare(_))).forall(x => x._1 ~== (x._2) absTol 1E-5))
-
-    // Neither should more runs
-    model = KMeans.train(rdd, k = 5, maxIterations = 10, runs = 5)
-    assert(model.clusterCenters.sortBy(VectorWithCompare(_))
-      .zip(points.sortBy(VectorWithCompare(_))).forall(x => x._1 ~== (x._2) absTol 1E-5))
   }
 
   test("two clusters") {
@@ -277,7 +261,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
       // Two iterations are sufficient no matter where the initial centers are.
-      val model = KMeans.train(rdd, k = 2, maxIterations = 2, runs = 1, initMode)
+      val model = KMeans.train(rdd, k = 2, maxIterations = 2, initMode)
 
       val predicts = model.predict(rdd).collect()
 
