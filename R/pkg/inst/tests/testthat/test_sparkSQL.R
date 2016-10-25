@@ -2270,6 +2270,10 @@ test_that("show/head on Columns", {
 
   # Columns without parent DataFrame
   expect_equal(is.numeric(head(rand())), TRUE)
+
+  # Columns with NULL parent DataFrame
+  expect_equal(length(head(column("abc"))), 0)
+
 })
 
 test_that("Minimal column test.", {
