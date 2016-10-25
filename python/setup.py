@@ -1,9 +1,28 @@
+#!/usr/bin/env python
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import print_function
 import os, sys
 from setuptools import setup, find_packages
 from shutil import copyfile
 
-VERSION = '2.1.0.dev'
+exec(open('pyspark/version.py').read())
+VERSION = __version__
 # A temporary path so we can access above the Python project root and fetch scripts and jars we need
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
@@ -13,6 +32,10 @@ SCRIPTS_PATH = "%s/bin" % SPARK_HOME
 SCRIPTS_TARGET = "%s/bin" % TEMP_PATH
 JARS_TARGET = "%s/jars" % TEMP_PATH
 EXAMPLES_TARGET = "%s/examples" % TEMP_PATH
+
+if sys.version_info < (2, 7):
+        print("Python versions prior to 2.7 are not supported.", file=sys.stderr)
+        exit(-1)
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 # This is important because we only want to build the symlink farm while under Spark otherwise we
@@ -103,7 +126,20 @@ try:
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy<=1.7'],
             'sql': ['pandas']
-        }
+        },
+        classifiers=[
+            'Development Status :: 5 - Production/Stable',
+            'License :: OSI Approved :: Apache Software License',
+            'Programming Language :: Python :: 2.7',
+            'Programming Language :: Python :: 3',
+            'Programming Language :: Python :: 3.0',
+            'Programming Language :: Python :: 3.1',
+            'Programming Language :: Python :: 3.2',
+            'Programming Language :: Python :: 3.3',
+            'Programming Language :: Python :: 3.4',
+            'Programming Language :: Python :: 3.5',
+            'Programming Language :: Python :: Implementation :: CPython',
+            'Programming Language :: Python :: Implementation :: PyPy']
     )
 finally:
     # We only cleanup the symlink farm if we were in Spark, otherwise we are installing rather than
