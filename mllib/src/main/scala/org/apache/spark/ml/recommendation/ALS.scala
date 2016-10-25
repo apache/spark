@@ -485,8 +485,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       alpha = $(alpha), nonnegative = $(nonnegative),
       intermediateRDDStorageLevel = StorageLevel.fromString($(intermediateStorageLevel)),
       finalRDDStorageLevel = StorageLevel.fromString($(finalStorageLevel)),
-      threshold = $(threshold), checkpointInterval = $(checkpointInterval),
-      seed = $(seed))
+      checkpointInterval = $(checkpointInterval),
+      seed = $(seed), threshold = $(threshold))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
@@ -721,9 +721,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       nonnegative: Boolean = false,
       intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
-      threshold: Int = 1024,
       checkpointInterval: Int = 10,
-      seed: Long = 0L)(
+      seed: Long = 0L,
+      threshold: Int = 1024)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
