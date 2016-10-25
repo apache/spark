@@ -203,15 +203,18 @@ sealed trait Matrix extends Serializable {
 
   /** Gets the size of the dense representation of this `Matrix`. */
   private[ml] def getDenseSizeInBytes: Long = {
-    8L * numRows * numCols + 16L
+    Matrices.getDenseSize(numCols, numRows)
   }
 
   /** Gets the size of the minimal sparse representation of this `Matrix`. */
   private[ml] def getSparseSizeInBytes(columnMajor: Boolean): Long = {
     val nnz = numNonzeros
     val numPtrs = if (columnMajor) numCols + 1L else numRows + 1L
-    8L * nnz + 4L * nnz + 4L * numPtrs + 32L
+    Matrices.getSparseSize(nnz, numPtrs)
   }
+
+  /** Get the current size in bytes of this `Matrix`. Useful for testing */
+  private[ml] def getSizeInBytes: Long
 
   /**
    * Find the number of non-zero active values.
@@ -443,6 +446,8 @@ class DenseMatrix @Since("2.0.0") (
       }
     }
   }
+
+  private[ml] def getSizeInBytes: Long = Matrices.getDenseSize(numCols, numRows)
 }
 
 /**
@@ -809,6 +814,8 @@ class SparseMatrix @Since("2.0.0") (
       }
     }
   }
+
+  private[ml] def getSizeInBytes: Long = Matrices.getSparseSize(numActives, colPtrs.length)
 }
 
 /**
@@ -1257,4 +1264,15 @@ object Matrices {
       SparseMatrix.fromCOO(numRows, numCols, entries)
     }
   }
+
+  private[ml] def getSparseSize(numActives: Long, numPtrs: Long): Long = {
+    // 8 * values.length + 4 * rowIndices.length + 4 * colPtrs.length + 8 + 8 + 1
+    12L * numActives + 4L * numPtrs + 17L
+  }
+
+  private[ml] def getDenseSize(numCols: Long, numRows: Long): Long = {
+    // 8 * values.length + 8 + 1
+    8L * numCols * numRows + 9L
+  }
+
 }
