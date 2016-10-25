@@ -79,7 +79,7 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     conf.set("spark.ssl.protocol", "SSLv3")
 
     val defaultOpts = SSLOptions.parse(conf, "spark.ssl", defaults = None)
-    val opts = SSLOptions.parse(conf, "spark.ui.ssl", defaults = Some(defaultOpts))
+    val opts = SSLOptions.parse(conf, "spark.ssl.ui", defaults = Some(defaultOpts))
 
     assert(opts.enabled === true)
     assert(opts.trustStore.isDefined === true)
@@ -102,20 +102,20 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val conf = new SparkConf
     conf.set("spark.ssl.enabled", "true")
-    conf.set("spark.ui.ssl.enabled", "false")
+    conf.set("spark.ssl.ui.enabled", "false")
     conf.set("spark.ssl.keyStore", keyStorePath)
     conf.set("spark.ssl.keyStorePassword", "password")
-    conf.set("spark.ui.ssl.keyStorePassword", "12345")
+    conf.set("spark.ssl.ui.keyStorePassword", "12345")
     conf.set("spark.ssl.keyPassword", "password")
     conf.set("spark.ssl.trustStore", trustStorePath)
     conf.set("spark.ssl.trustStorePassword", "password")
     conf.set("spark.ssl.enabledAlgorithms",
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
-    conf.set("spark.ui.ssl.enabledAlgorithms", "ABC, DEF")
+    conf.set("spark.ssl.ui.enabledAlgorithms", "ABC, DEF")
     conf.set("spark.ssl.protocol", "SSLv3")
 
     val defaultOpts = SSLOptions.parse(conf, "spark.ssl", defaults = None)
-    val opts = SSLOptions.parse(conf, "spark.ui.ssl", defaults = Some(defaultOpts))
+    val opts = SSLOptions.parse(conf, "spark.ssl.ui", defaults = Some(defaultOpts))
 
     assert(opts.enabled === false)
     assert(opts.trustStore.isDefined === true)
