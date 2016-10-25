@@ -264,9 +264,9 @@ class BisectingKMeans @Since("2.0.0") (
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    val m = model.setSummary(summary)
-    instr.logSuccess(m)
-    m
+    model.setSummary(summary)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("2.0.0")
