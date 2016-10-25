@@ -68,9 +68,6 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class SparkSaslSuite {
 
-  private static final String BLOCK_SIZE_CONF = "spark.network.sasl.maxEncryptedBlockSize";
-  private static final String AES_ENABLED_CONF = "spark.authenticate.sasl.encryption.aes.enabled";
-
   /** Provides a secret key holder which returns secret key == appId */
   private SecretKeyHolder secretKeyHolder = new SecretKeyHolder() {
     @Override
@@ -380,19 +377,19 @@ public class SparkSaslSuite {
 
   @Test
   public void testSaslEncryptionAes() throws Exception {
-    System.setProperty(BLOCK_SIZE_CONF, "10k");
-    System.setProperty(AES_ENABLED_CONF, "true");
-
     final AtomicReference<ManagedBuffer> response = new AtomicReference<>();
     final File file = File.createTempFile("sasltest", ".txt");
     SaslTestCtx ctx = null;
     try {
       final TransportConf conf = new TransportConf("rpc", new SystemPropertyConfigProvider());
+      final TransportConf spyConf = spy(conf);
+      doReturn(true).when(spyConf).AesEncryptionEnabled();
+
       StreamManager sm = mock(StreamManager.class);
       when(sm.getChunk(anyLong(), anyInt())).thenAnswer(new Answer<ManagedBuffer>() {
         @Override
         public ManagedBuffer answer(InvocationOnMock invocation) {
-          return new FileSegmentManagedBuffer(conf, file, 0, file.length());
+          return new FileSegmentManagedBuffer(spyConf, file, 0, file.length());
         }
       });
 
@@ -438,8 +435,6 @@ public class SparkSaslSuite {
       if (response.get() != null) {
         response.get().release();
       }
-      System.clearProperty(BLOCK_SIZE_CONF);
-      System.clearProperty(AES_ENABLED_CONF);
     }
   }
 
@@ -460,6 +455,11 @@ public class SparkSaslSuite {
       throws Exception {
 
       TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+
+      if (aesEnable) {
+        conf = spy(conf);
+        doReturn(true).when(conf).AesEncryptionEnabled();
+      }
 
       SecretKeyHolder keyHolder = mock(SecretKeyHolder.class);
       when(keyHolder.getSaslUser(anyString())).thenReturn("user");

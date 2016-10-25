@@ -26,7 +26,7 @@ import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
 
 /**
- * The AES cipher options for SASL encryption negotiation.
+ * The AES cipher options for encryption negotiation.
  */
 public class AesConfigMessage implements Encodable {
   /** Serialization tag used to catch incorrect payloads. */
@@ -39,22 +39,6 @@ public class AesConfigMessage implements Encodable {
   public byte[] outIv;
 
   public AesConfigMessage(int keySize, byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
-    this.keySize = keySize;
-    this.inKey = inKey;
-    this.inIv = inIv;
-    this.outKey = outKey;
-    this.outIv = outIv;
-  }
-
-  /**
-   * Set key and input vector for cipher option
-   * @param keySize the size of key in byte.
-   * @param inKey The decrypt key of one side.
-   * @param inIv The input vector of one side.
-   * @param outKey The decrypt key of another side.
-   * @param outIv The input vector of another side.
-   */
-  public void setParameters(int keySize, byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
     this.keySize = keySize;
     this.inKey = inKey;
     this.inIv = inIv;
@@ -110,15 +94,11 @@ public class AesConfigMessage implements Encodable {
 
     int keySize = buf.readInt();
 
-    if (buf.readableBytes() > 0) {
-      byte[] inKey = Encoders.ByteArrays.decode(buf);
-      byte[] inIv = Encoders.ByteArrays.decode(buf);
-      byte[] outKey = Encoders.ByteArrays.decode(buf);
-      byte[] outIv = Encoders.ByteArrays.decode(buf);
-      return new AesConfigMessage(keySize, inKey, inIv, outKey, outIv);
-    } else {
-      return new AesConfigMessage(keySize, null, null, null, null);
-    }
+    byte[] outKey = Encoders.ByteArrays.decode(buf);
+    byte[] outIv = Encoders.ByteArrays.decode(buf);
+    byte[] inKey = Encoders.ByteArrays.decode(buf);
+    byte[] inIv = Encoders.ByteArrays.decode(buf);
+    return new AesConfigMessage(keySize, inKey, inIv, outKey, outIv);
   }
 
 }

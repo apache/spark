@@ -1435,19 +1435,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.authenticate.sasl.encryption.aes.enabled</code></td>
+  <td><code>spark.authenticate.encryption.aes.enabled</code></td>
   <td>false</td>
   <td>
-    Enable AES cipher as SASL authentication encryption backend, when SASL authentication
-    is enabled.
+    Enable AES for over-the-wire encryption
   </td>
 </tr>
 <tr>
-  <td><code>spark.authenticate.sasl.encryption.aes.cipher.keySizeBits</code></td>
-  <td>128</td>
+  <td><code>spark.authenticate.encryption.aes.cipher.keySizeBits</code></td>
+  <td>16</td>
   <td>
-    The bits of AES cipher key which is effective when AES cipher is enabled. AES
-    works with 128, 192 and 256 bit keys.
+    The bytes of AES cipher key which is effective when AES cipher is enabled. AES
+    works with 16, 24 and 32 bit keys.
   </td>
 </tr>
 <tr>

@@ -28,8 +28,6 @@ import org.slf4j.LoggerFactory;
 
 
 public class ByteArrayReadableChannel implements ReadableByteChannel {
-  private final Logger logger = LoggerFactory.getLogger(ByteArrayReadableChannel.class);
-
   private byte[] backArray;
   private ByteBuf data;
 
@@ -50,7 +48,6 @@ public class ByteArrayReadableChannel implements ReadableByteChannel {
   public void feedData(ByteBuf buf) {
     int toFeed = Math.min(data.writableBytes(), buf.readableBytes());
     buf.readBytes(data, toFeed);
-    logger.debug("ByteReadableChannel: get {} bytes", toFeed);
   }
 
   @Override

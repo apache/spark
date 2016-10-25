@@ -118,45 +118,38 @@ class SaslRpcHandler extends RpcHandler {
     if (saslServer.isComplete()) {
       if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("SASL authentication successful for channel {}", client);
-        saslServer.dispose();
-        saslServer = null;
-        isComplete = true;
+        complete(true);
         return ;
       }
 
-      if (!conf.saslEncryptionAesEnabled()) {
+      if (!conf.AesEncryptionEnabled()) {
         logger.debug("Enabling encryption for channel {}", client);
         SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
-      } else {
-        // Extra negotiation should happen after authentication, so return directly while
-        // processing authenticate.
-        if (!isAuthenticated) {
-          logger.debug("SASL authentication successful for channel {}", client);
-          isAuthenticated = true;
-          return;
-        } else {
-          try {
-            AesConfigMessage configMessage = AesConfigMessage.decodeMessage(message);
-            configMessage = AesCipher.responseConfigMessage(configMessage);
-            AesCipher cipher = new AesCipher(configMessage);
-
-            ByteBuffer buf = configMessage.encodeMessage();
-
-            // Encrypt the config message.
-            ByteBuffer encrypted = ByteBuffer.wrap(
-              saslServer.wrap(buf.array(), 0, buf.array().length));
-            callback.onSuccess(encrypted);
-
-            logger.info("Enabling AES cipher for Server channel {}", client);
-            cipher.addToChannel(channel);
-          } catch (IOException ioe) {
-            throw new RuntimeException(ioe);
-          }
-        }
+        complete(false);
+        return;
       }
 
-      saslServer = null;
-      isComplete = true;
+      // Extra negotiation should happen after authentication, so return directly while
+      // processing authenticate.
+      if (!isAuthenticated) {
+        logger.debug("SASL authentication successful for channel {}", client);
+        isAuthenticated = true;
+        return;
+      }
+
+      // Create AES cipher when it is authenticated
+      try {
+        AesConfigMessage configMessage = AesConfigMessage.decodeMessage(message);
+        AesCipher cipher = new AesCipher(configMessage);
+
+        // Send response back to client to confirm that server accept config.
+        callback.onSuccess(JavaUtils.stringToBytes(AesCipher.TRANSFORM));
+        logger.info("Enabling AES cipher for Server channel {}", client);
+        cipher.addToChannel(channel);
+        complete(true);
+      } catch (IOException ioe) {
+        throw new RuntimeException(ioe);
+      }
     }
   }
 
@@ -189,6 +182,19 @@ class SaslRpcHandler extends RpcHandler {
   @Override
   public void exceptionCaught(Throwable cause, TransportClient client) {
     delegate.exceptionCaught(cause, client);
+  }
+
+  private void complete(boolean dispose) {
+    if (dispose) {
+      try {
+        saslServer.dispose();
+      } catch (RuntimeException e) {
+        logger.error("Error while disposing SASL server", e);
+      }
+    }
+
+    saslServer = null;
+    isComplete = true;
   }
 
 }

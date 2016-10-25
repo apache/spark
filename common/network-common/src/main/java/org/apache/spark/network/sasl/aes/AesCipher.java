@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
-import java.util.HashMap;
 import java.util.Properties;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
@@ -58,9 +57,6 @@ public class AesCipher {
   private final IvParameterSpec outIvSpec;
   private Properties properties;
 
-  private HashMap<ReadableByteChannel, CryptoInputStream> inputStreamMap;
-  private HashMap<WritableByteChannel, CryptoOutputStream> outputStreamMap;
-
   public static final int STREAM_BUFFER_SIZE = 1024 * 32;
   public static final String TRANSFORM = "AES/CTR/NoPadding";
 
@@ -73,9 +69,6 @@ public class AesCipher {
     properties.setProperty(CryptoInputStream.STREAM_BUFFER_SIZE_KEY,
       String.valueOf(STREAM_BUFFER_SIZE));
     this.properties = properties;
-
-    inputStreamMap = new HashMap<>();
-    outputStreamMap= new HashMap<>();
 
     inKeySpec = new SecretKeySpec(inKey, "AES");
     inIvSpec = new IvParameterSpec(inIv);
@@ -95,11 +88,7 @@ public class AesCipher {
    * @throws IOException
    */
   public CryptoOutputStream CreateOutputStream(WritableByteChannel ch) throws IOException {
-    if (!outputStreamMap.containsKey(ch)) {
-      outputStreamMap.put(ch, new CryptoOutputStream(TRANSFORM, properties, ch, outKeySpec, outIvSpec));
-    }
-
-    return outputStreamMap.get(ch);
+    return new CryptoOutputStream(TRANSFORM, properties, ch, outKeySpec, outIvSpec);
   }
 
   /**
@@ -109,11 +98,7 @@ public class AesCipher {
    * @throws IOException
    */
   public CryptoInputStream CreateInputStream(ReadableByteChannel ch) throws IOException {
-    if (!inputStreamMap.containsKey(ch)) {
-      inputStreamMap.put(ch, new CryptoInputStream(TRANSFORM, properties, ch, inKeySpec, inIvSpec));
-    }
-
-    return inputStreamMap.get(ch);
+    return new CryptoInputStream(TRANSFORM, properties, ch, inKeySpec, inIvSpec);
   }
 
   /**
@@ -128,34 +113,19 @@ public class AesCipher {
   }
 
   /**
-   * Generate a request config message which send to remote peer.
+   * Create the configuration message
    * @param conf is the local transport configuration.
    * @return Config message for sending.
    */
-  public static AesConfigMessage requestConfigMessage(TransportConf conf) {
-    int keySize = conf.saslEncryptionAesCipherKeySizeBits();
-    if (keySize % 8 != 0) {
-      throw new IllegalArgumentException("The AES cipher key size in bits should be a multiple " +
-        "of byte");
-    }
-    return new AesConfigMessage(keySize/8, null, null, null, null);
-  }
-
-  /**
-   * Generate the configuration message according to request config message.
-   * @param configMessage The request config message comes from remote.
-   * @return Configuration message for sending.
-   */
-  public static AesConfigMessage responseConfigMessage(AesConfigMessage configMessage){
-
+  public static AesConfigMessage createConfigMessage(TransportConf conf){
+    int keySize = conf.AesCipherKeySize();
     Properties properties = new Properties();
-    int keyLen = configMessage.keySize;
 
     try {
       int paramLen = CryptoCipherFactory.getCryptoCipher(AesCipher.TRANSFORM, properties)
         .getBlockSize();
-      byte[] inKey = new byte[keyLen];
-      byte[] outKey = new byte[keyLen];
+      byte[] inKey = new byte[keySize];
+      byte[] outKey = new byte[keySize];
       byte[] inIv = new byte[paramLen];
       byte[] outIv = new byte[paramLen];
 
@@ -165,18 +135,16 @@ public class AesCipher {
       random.nextBytes(inIv);
       random.nextBytes(outIv);
 
-      configMessage.setParameters(keyLen, inKey, inIv, outKey, outIv);
+      return new AesConfigMessage(keySize, inKey, inIv, outKey, outIv);
     } catch (Exception e) {
-      logger.error("AES negotiation exception", e);
+      logger.error("AES config error", e);
       throw Throwables.propagate(e);
     }
-
-    return configMessage;
   }
 
   private static class AesEncryptHandler extends ChannelOutboundHandlerAdapter {
-    private ByteArrayWritableChannel byteChannel;
-    private CryptoOutputStream cos;
+    private final ByteArrayWritableChannel byteChannel;
+    private final CryptoOutputStream cos;
 
     AesEncryptHandler(AesCipher cipher) throws IOException {
       byteChannel = new ByteArrayWritableChannel(AesCipher.STREAM_BUFFER_SIZE);
@@ -197,15 +165,15 @@ public class AesCipher {
   }
 
   private static class AesDecryptHandler extends ChannelInboundHandlerAdapter {
-    private final Logger logger = LoggerFactory.getLogger(AesDecryptHandler.class);
-    private CryptoInputStream cis;
-    private ByteArrayReadableChannel byteChannel;
+    private static Logger logger = LoggerFactory.getLogger(AesDecryptHandler.class);
+    private final CryptoInputStream cis;
+    private final ByteArrayReadableChannel byteChannel;
     private long totalDecrypted;
 
     AesDecryptHandler(AesCipher cipher) throws IOException {
       byteChannel = new ByteArrayReadableChannel(AesCipher.STREAM_BUFFER_SIZE);
       cis = cipher.CreateInputStream(byteChannel);
-      totalDecrypted = 0;
+      this.totalDecrypted = 0;
     }
 
     @Override
@@ -235,13 +203,13 @@ public class AesCipher {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
       cis.close();
-      logger.debug("{} channel decrypted {} bytes", ctx.channel(), totalDecrypted);
+      logger.debug("{} channel decrypted {} bytes.", ctx.channel(), totalDecrypted);
       super.channelInactive(ctx);
     }
   }
 
   private static class EncryptMessage extends AbstractReferenceCounted implements FileRegion {
-    private final Logger logger = LoggerFactory.getLogger(EncryptMessage.class);
+    private static final Logger logger = LoggerFactory.getLogger(EncryptMessage.class);
 
     private final boolean isByteBuf;
     private final ByteBuf buf;
