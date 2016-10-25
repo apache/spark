@@ -2679,31 +2679,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
-
-  test("SPARK-17733 InferFiltersFromConstraints rule never terminates for query") {
-    withTempView("tmpv") {
-      spark.range(10).toDF("a").createTempView("tmpv")
-
-      // Just ensure the following query will successfully execute complete.
-      val query =
-        """
-          |SELECT
-          |  *
-          |FROM (
-          |  SELECT
-          |    COALESCE(t1.a, t2.a) AS int_col,
-          |    t1.a,
-          |    t2.a AS b
-          |  FROM tmpv t1
-          |  CROSS JOIN tmpv t2
-          |) t1
-          |INNER JOIN tmpv t2
-          |ON (((t2.a) = (t1.a)) AND ((t2.a) = (t1.int_col))) AND ((t2.a) = (t1.b))
-        """.stripMargin
-
-      eventually(timeout(60 seconds)) {
-        assert(sql(query).count() > 0)
-      }
-    }
-  }
 }

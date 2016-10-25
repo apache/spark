@@ -131,14 +131,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val originalQuery = t1.select('a, Coalesce(Seq('a, 'b)).as('int_col)).as("t")
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze
-    val currectAnswer = t1.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'b)))
-        &&'a === Coalesce(Seq('a, 'b)))
+    val correctAnswer = t1
+      .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === Coalesce(Seq('a, 'b)))
       .select('a, Coalesce(Seq('a, 'b)).as('int_col)).as("t")
       .join(t2.where(IsNotNull('a)), Inner,
         Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, currectAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("inner join with alias: alias contains single attributes") {
@@ -148,14 +148,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val originalQuery = t1.select('a, 'b.as('d)).as("t")
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
-    val currectAnswer = t1.where(IsNotNull('a) && IsNotNull('b)
-        && 'a <=> 'a && 'b <=> 'b &&'a === 'b)
+    val correctAnswer = t1
+      .where(IsNotNull('a) && IsNotNull('b) && 'a <=> 'a && 'b <=> 'b &&'a === 'b)
       .select('a, 'b.as('d)).as("t")
       .join(t2.where(IsNotNull('a) && 'a <=> 'a), Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, currectAnswer)
+    comparePlans(optimized, correctAnswer)
   }
 
   test("inner join with alias: don't generate constraints for recursive functions") {
@@ -168,18 +168,20 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
           && "t.d".attr === "t2.a".attr
           && "t.int_col".attr === "t2.a".attr))
       .analyze
-    val correctAnswer = t1.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-      && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
-      && Coalesce(Seq('a, 'a)) <=> 'b && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))
-      && 'a === 'b && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === Coalesce(Seq('a, 'b))
-      && Coalesce(Seq('a, 'b)) <=> Coalesce(Seq('b, 'b)) && Coalesce(Seq('a, 'b)) === 'b
-      && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b)))
-      && 'b === Coalesce(Seq('b, 'b)) && 'b <=> Coalesce(Seq('b, 'b))
-      && Coalesce(Seq('b, 'b)) <=> Coalesce(Seq('b, 'b)) && 'b <=> 'b)
+    val correctAnswer = t1
+      .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
+        && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
+        && Coalesce(Seq('a, 'a)) <=> 'b && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))
+        && 'a === 'b && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === Coalesce(Seq('a, 'b))
+        && Coalesce(Seq('a, 'b)) <=> Coalesce(Seq('b, 'b)) && Coalesce(Seq('a, 'b)) === 'b
+        && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b)))
+        && 'b === Coalesce(Seq('b, 'b)) && 'b <=> Coalesce(Seq('b, 'b))
+        && Coalesce(Seq('b, 'b)) <=> Coalesce(Seq('b, 'b)) && 'b <=> 'b)
       .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
-      .join(t2.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-      && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
-      && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))), Inner,
+      .join(t2
+        .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
+          && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
+          && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))), Inner,
         Some("t.a".attr === "t2.a".attr
           && "t.d".attr === "t2.a".attr
           && "t.int_col".attr === "t2.a".attr

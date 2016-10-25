@@ -68,24 +68,22 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     case _ => Seq.empty[Attribute]
   }
 
-  /**
-   * Infers an additional set of constraints from a given set of equality constraints.
-   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
-   * additional constraint of the form `b = 5`
-   */
-  private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
-    // Collect alias from expressions to avoid producing non-converging set of constraints
-    // for recursive functions.
-    //
-    // Don't apply transform on constraints if the replacement will cause an recursive deduction,
-    // when that happens a non-converging set of constraints will be created and finally throw
-    // OOM Exception.
-    // For more details, refer to https://issues.apache.org/jira/browse/SPARK-17733
-    val aliasMap = AttributeMap((expressions ++ children.flatMap(_.expressions)).collect {
+  // Collect aliases from expressions, so we may avoid producing recursive constraints.
+  private lazy val aliasMap = AttributeMap(
+    (expressions ++ children.flatMap(_.expressions)).collect {
       case a: Alias => (a.toAttribute, a.child)
     })
 
-    val equalExprSets = generateEqualExpressionSets(constraints, aliasMap)
+  /**
+   * Infers an additional set of constraints from a given set of equality constraints.
+   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
+   * additional constraint of the form `b = 5`.
+   *
+   * [SPARK-17733] We explicitly prevent producing recursive constraints of the form `a = f(a, b)`
+   * as they are often useless and can lead to a non-converging set of constraints.
+   */
+  private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    val constraintClasses = generateEquivalentConstraintClasses(constraints)
 
     var inferredConstraints = Set.empty[Expression]
     constraints.foreach {
@@ -93,11 +91,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
         val candidateConstraints = constraints - eq
         inferredConstraints ++= candidateConstraints.map(_ transform {
           case a: Attribute if a.semanticEquals(l) &&
-            !isRecursiveDeduction(r, aliasMap, equalExprSets) => r
+            !isRecursiveDeduction(r, constraintClasses) => r
         })
         inferredConstraints ++= candidateConstraints.map(_ transform {
           case a: Attribute if a.semanticEquals(r) &&
-            !isRecursiveDeduction(l, aliasMap, equalExprSets) => l
+            !isRecursiveDeduction(l, constraintClasses) => l
         })
       case _ => // No inference
     }
@@ -110,58 +108,60 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * expression sets: (Set(a, b, c), Set(e, f)). This will be used to search all expressions equal
    * to an selected attribute.
    */
-  private def generateEqualExpressionSets(
-      constraints: Set[Expression],
-      aliasMap: AttributeMap[Expression]): Seq[Set[Expression]] = {
-    var equalExprSets = Seq.empty[Set[Expression]]
+  private def generateEquivalentConstraintClasses(
+      constraints: Set[Expression]): Seq[Set[Expression]] = {
+    var constraintClasses = Seq.empty[Set[Expression]]
     constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
         // Transform [[Alias]] to its child.
         val left = aliasMap.getOrElse(l, l)
         val right = aliasMap.getOrElse(r, r)
-        // Get the expression set for equivalence class of expressions.
-        val leftEqualSet = getEqualExprSet(left, equalExprSets).getOrElse(Set.empty[Expression])
-        val rightEqualSet = getEqualExprSet(right, equalExprSets).getOrElse(Set.empty[Expression])
-        if (!leftEqualSet.isEmpty && !rightEqualSet.isEmpty) {
+        // Get the expression set for an equivalence constraint class.
+        val leftConstraintClass = getConstraintClass(left, constraintClasses)
+        val rightConstraintClass = getConstraintClass(right, constraintClasses)
+        if (leftConstraintClass.nonEmpty && rightConstraintClass.nonEmpty) {
           // Combine the two sets.
-          equalExprSets = equalExprSets.diff(leftEqualSet :: rightEqualSet :: Nil) :+
-            (leftEqualSet ++ rightEqualSet)
-        } else if (!leftEqualSet.isEmpty) { // && rightEqualSet.isEmpty
+          constraintClasses = constraintClasses
+            .diff(leftConstraintClass :: rightConstraintClass :: Nil) :+
+            (leftConstraintClass ++ rightConstraintClass)
+        } else if (leftConstraintClass.nonEmpty) { // && rightConstraintClass.isEmpty
           // Update equivalence class of `left` expression.
-          equalExprSets = equalExprSets.diff(leftEqualSet :: Nil) :+ (leftEqualSet + right)
-        } else if (!rightEqualSet.isEmpty) { // && leftEqualSet.isEmpty
+          constraintClasses = constraintClasses
+            .diff(leftConstraintClass :: Nil) :+ (leftConstraintClass + right)
+        } else if (rightConstraintClass.nonEmpty) { // && leftConstraintClass.isEmpty
           // Update equivalence class of `right` expression.
-          equalExprSets = equalExprSets.diff(rightEqualSet :: Nil) :+ (rightEqualSet + left)
-        } else { // leftEqualSet.isEmpty && rightEqualSet.isEmpty
-          // Create new equivalence class since both expression don't present in any classes.
-          equalExprSets = equalExprSets :+ Set(left, right)
+          constraintClasses = constraintClasses
+            .diff(rightConstraintClass :: Nil) :+ (rightConstraintClass + left)
+        } else { // leftConstraintClass.isEmpty && rightConstraintClass.isEmpty
+          // Create new equivalence constraint class since neither expression presents
+          // in any classes.
+          constraintClasses = constraintClasses :+ Set(left, right)
         }
       case _ => // Skip
     }
 
-    equalExprSets
+    constraintClasses
   }
 
   /*
    * Get all expressions equivalent to the selected expression.
    */
-  private def getEqualExprSet(
+  private def getConstraintClass(
       expr: Expression,
-      equalExprSets: Seq[Set[Expression]]): Option[Set[Expression]] =
-    equalExprSets.filter(_.contains(expr)).headOption
+      constraintClasses: Seq[Set[Expression]]): Set[Expression] =
+    constraintClasses.find(_.contains(expr)).getOrElse(Set.empty[Expression])
 
   /*
-   *  Check whether replace by an [[Attribute]] will cause an recursive deduction. Generally it
-   *  has an form like: `a -> f(a, b)`, where `a` and `b` are expressions and `f` is an function.
+   *  Check whether replace by an [[Attribute]] will cause a recursive deduction. Generally it
+   *  has the form like: `a -> f(a, b)`, where `a` and `b` are expressions and `f` is a function.
    *  Here we first get all expressions equal to `attr` and then check whether at least one of them
-   *  is child of the referenced expression.
+   *  is a child of the referenced expression.
    */
   private def isRecursiveDeduction(
       attr: Attribute,
-      aliasMap: AttributeMap[Expression],
-      equalExprSets: Seq[Set[Expression]]): Boolean = {
+      constraintClasses: Seq[Set[Expression]]): Boolean = {
     val expr = aliasMap.getOrElse(attr, attr)
-    getEqualExprSet(expr, equalExprSets).getOrElse(Set.empty[Expression]).exists { e =>
+    getConstraintClass(expr, constraintClasses).exists { e =>
       expr.children.exists(_.semanticEquals(e))
     }
   }
