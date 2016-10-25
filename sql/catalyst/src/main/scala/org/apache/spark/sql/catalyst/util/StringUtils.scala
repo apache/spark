@@ -24,13 +24,23 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils {
 
-  /** Convert 'like' pattern to Java regex. */
-  def escapeLikeRegex(str: String): String = {
-    val in = str.toIterator
+  /**
+   * Validate and convert SQL 'like' pattern to a Java regular expression.
+   *
+   * Underscores (_) are converted to '.' and percent signs (%) are converted to '.*', other
+   * characters are quoted literally. Escaping is done according to the rules specified in
+   * [[org.apache.spark.sql.catalyst.expressions.Like]] usage documentation. An invalid pattern will
+   * throw an [[AnalysisException]].
+   *
+   * @param pattern the SQL pattern to convert
+   * @return the equivalent Java regular expression of the pattern
+   */
+  def escapeLikeRegex(pattern: String): String = {
+    val in = pattern.toIterator
     val out = new StringBuilder()
 
     def fail(message: String) = throw new AnalysisException(
-      s"the pattern '$str' is invalid, $message")
+      s"the pattern '$pattern' is invalid, $message")
 
     while (in.hasNext) {
       in.next match {
