@@ -1148,7 +1148,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       if (isDatasourceTable) {
         if (spec.isDefined) {
           assert(storageFormat.properties.isEmpty)
-          assert(storageFormat.locationUri.isEmpty)
+          assert(storageFormat.locationUri === Some(expected))
         } else {
           assert(storageFormat.properties.get("path") === Some(expected))
           assert(storageFormat.locationUri === Some(expected))
@@ -1161,18 +1161,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
     verifyLocation("/path/to/your/lovely/heart")
     // set table partition location
-    maybeWrapException(isDatasourceTable) {
-      sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
-    }
+    sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
     verifyLocation("/path/to/part/ways", Some(partSpec))
     // set table location without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
     verifyLocation("/swanky/steak/place")
     // set table partition location without explicitly specifying database
-    maybeWrapException(isDatasourceTable) {
-      sql("ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
-    }
+    sql("ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
     verifyLocation("vienna", Some(partSpec))
     // table to alter does not exist
     intercept[AnalysisException] {
@@ -1652,7 +1648,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
 
       // supported since partitions are stored in the metastore
-      assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+      sql("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
       assert(spark.table("rectangles2").collect().isEmpty)
     }
   }
