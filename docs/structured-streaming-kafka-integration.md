@@ -151,15 +151,24 @@ The following options must be set for the Kafka source.
 <table class="table">
 <tr><th>Option</th><th>value</th><th>meaning</th></tr>
 <tr>
+  <td>assign</td>
+  <td>json string {"topicA":[0,1],"topicB":[2,4]}</td>
+  <td>Specific TopicPartitions to consume.
+  Only one of "assign", "subscribe" or "subscribePattern"
+  options can be specified for Kafka source.</td>
+</tr>
+<tr>
   <td>subscribe</td>
   <td>A comma-separated list of topics</td>
-  <td>The topic list to subscribe. Only one of "subscribe" and "subscribePattern" options can be
-  specified for Kafka source.</td>
+  <td>The topic list to subscribe.
+  Only one of "assign", "subscribe" or "subscribePattern"
+  options can be specified for Kafka source.</td>
 </tr>
 <tr>
   <td>subscribePattern</td>
   <td>Java regex string</td>
-  <td>The pattern used to subscribe the topic. Only one of "subscribe" and "subscribePattern"
+  <td>The pattern used to subscribe to topic(s).
+  Only one of "assign, "subscribe" or "subscribePattern"
   options can be specified for Kafka source.</td>
 </tr>
 <tr>
@@ -174,16 +183,21 @@ The following configurations are optional:
 <table class="table">
 <tr><th>Option</th><th>value</th><th>default</th><th>meaning</th></tr>
 <tr>
-  <td>startingOffset</td>
-  <td>["earliest", "latest"]</td>
-  <td>"latest"</td>
-  <td>The start point when a query is started, either "earliest" which is from the earliest offset, 
-  or "latest" which is just from the latest offset. Note: This only applies when a new Streaming q
-  uery is started, and that resuming will always pick up from where the query left off.</td>
+  <td>startingOffsets</td>
+  <td>earliest, latest, or json string
+  {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}}
+  </td>
+  <td>latest</td>
+  <td>The start point when a query is started, either "earliest" which is from the earliest offsets,
+  "latest" which is just from the latest offsets, or a json string specifying a starting offset for
+  each TopicPartition.  In the json, -2 as an offset can be used to refer to earliest, -1 to latest.
+  Note: This only applies when a new Streaming query is started, and that resuming will always pick
+  up from where the query left off. Newly discovered partitions during a query will start at
+  earliest.</td>
 </tr>
 <tr>
   <td>failOnDataLoss</td>
-  <td>[true, false]</td>
+  <td>true or false</td>
   <td>true</td>
   <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or 
   offsets are out of range). This may be a false alarm. You can disable it when it doesn't work
@@ -215,10 +229,10 @@ Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.
 
 Note that the following Kafka params cannot be set and the Kafka source will throw an exception:
 - **group.id**: Kafka source will create a unique group id for each query automatically.
-- **auto.offset.reset**: Set the source option `startingOffset` to `earliest` or `latest` to specify
+- **auto.offset.reset**: Set the source option `startingOffsets` to specify
  where to start instead. Structured Streaming manages which offsets are consumed internally, rather 
  than rely on the kafka Consumer to do it. This will ensure that no data is missed when when new 
- topics/partitions are dynamically subscribed. Note that `startingOffset` only applies when a new
+ topics/partitions are dynamically subscribed. Note that `startingOffsets` only applies when a new
  Streaming query is started, and that resuming will always pick up from where the query left off.
 - **key.deserializer**: Keys are always deserialized as byte arrays with ByteArrayDeserializer. Use 
  DataFrame operations to explicitly deserialize the keys.

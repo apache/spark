@@ -123,6 +123,9 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
 class SimpleTextOutputWriter(
     stagingDir: String, fileNamePrefix: String, context: TaskAttemptContext)
   extends OutputWriter {
+
+  override val path: String = new Path(stagingDir, fileNamePrefix).toString
+
   private val recordWriter: RecordWriter[NullWritable, Text] =
     new AppendingTextOutputFormat(new Path(stagingDir), fileNamePrefix).getRecordWriter(context)
 

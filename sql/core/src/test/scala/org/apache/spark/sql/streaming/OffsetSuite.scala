@@ -35,10 +35,11 @@ trait OffsetSuite extends SparkFunSuite {
 class LongOffsetSuite extends OffsetSuite {
   val one = LongOffset(1)
   val two = LongOffset(2)
+  val three = LongOffset(3)
   compare(one, two)
 
   compare(LongOffset(SerializedOffset(one.json)),
-          LongOffset(SerializedOffset(two.json)))
+          LongOffset(SerializedOffset(three.json)))
 }
 
 
