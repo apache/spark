@@ -2080,9 +2080,6 @@ object CleanupAliases extends Rule[LogicalPlan] {
       case c: CreateStruct if !stop =>
         stop = true
         c.copy(children = c.children.map(trimNonTopLevelAliases))
-      case c: CreateStructUnsafe if !stop =>
-        stop = true
-        c.copy(children = c.children.map(trimNonTopLevelAliases))
       case Alias(child, _) if !stop => child
     }
   }
@@ -2119,9 +2116,6 @@ object CleanupAliases extends Rule[LogicalPlan] {
       var stop = false
       other transformExpressionsDown {
         case c: CreateStruct if !stop =>
-          stop = true
-          c.copy(children = c.children.map(trimNonTopLevelAliases))
-        case c: CreateStructUnsafe if !stop =>
           stop = true
           c.copy(children = c.children.map(trimNonTopLevelAliases))
         case Alias(child, _) if !stop => child

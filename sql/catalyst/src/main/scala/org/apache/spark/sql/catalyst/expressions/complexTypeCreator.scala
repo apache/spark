@@ -36,7 +36,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
 
-  override def dataType: DataType = {
+  override def dataType: ArrayType = {
     ArrayType(
       children.headOption.map(_.dataType).getOrElse(NullType),
       containsNull = children.exists(_.nullable))
@@ -44,34 +44,53 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = false
 
+  @transient private lazy val unsafeProj =
+    UnsafeProjection.create(BoundReference(0, dataType, false))
+
   override def eval(input: InternalRow): Any = {
-    new GenericArrayData(children.map(_.eval(input)).toArray)
+    val safeArray = new GenericArrayData(children.map(_.eval(input)).toArray)
+    unsafeProj(InternalRow(safeArray)).getArray(0)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
+    val safeArray = ctx.freshName("safeArray")
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
-    ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
-      this.$values = new Object[${children.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        children.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
-            if (${eval.isNull}) {
-              $values[$i] = null;
-            } else {
-              $values[$i] = ${eval.value};
-            }
-           """
-        }) +
+    val holder = ctx.freshName("holder")
+    val holderClass = classOf[BufferHolder].getName
+    ctx.addMutableState(holderClass, holder,
+      s"this.$holder = new $holderClass(new UnsafeRow(0));")
+
+    val setValues = ctx.splitExpressions(ctx.INPUT_ROW, children.zipWithIndex.map { case (e, i) =>
+      val eval = e.genCode(ctx)
       s"""
-        final ArrayData ${ev.value} = new $arrayClass($values);
-        this.$values = null;
-      """)
+        ${eval.code}
+        if (${eval.isNull}) {
+          $values[$i] = null;
+        } else {
+          $values[$i] = ${eval.value};
+        }
+      """
+    })
+
+    // TODO(cloud-fan): should optimize for primitive array.
+    val writeUnsafeArray = GenerateUnsafeProjection.writeArrayToBuffer(
+      ctx, safeArray, dataType.elementType, holder)
+    val code =
+      s"""
+        $holder.reset();
+        $values = new Object[${children.size}];
+        $setValues
+        final ArrayData $safeArray = new $arrayClass($values);
+        $writeUnsafeArray
+        final UnsafeArrayData ${ev.value} = new UnsafeArrayData();
+        ${ev.value}.pointTo($holder.buffer, Platform.BYTE_ARRAY_OFFSET, $holder.totalSize());
+        $values = null;
+      """
+
+    ev.copy(code = code, isNull = "false")
   }
 
   override def prettyName: String = "array"
@@ -103,7 +122,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: DataType = {
+  override def dataType: MapType = {
     MapType(
       keyType = keys.headOption.map(_.dataType).getOrElse(NullType),
       valueType = values.headOption.map(_.dataType).getOrElse(NullType),
@@ -112,13 +131,18 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = false
 
+  @transient private lazy val unsafeProj =
+    UnsafeProjection.create(BoundReference(0, dataType, false))
+
   override def eval(input: InternalRow): Any = {
     val keyArray = keys.map(_.eval(input)).toArray
     if (keyArray.contains(null)) {
       throw new RuntimeException("Cannot use null as map key!")
     }
     val valueArray = values.map(_.eval(input)).toArray
-    new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
+    val safeMap =
+      new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
+    unsafeProj(InternalRow(safeMap)).getMap(0)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -126,46 +150,59 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val mapClass = classOf[ArrayBasedMapData].getName
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
+    val safeMap = ctx.freshName("safeMap")
     ctx.addMutableState("Object[]", keyArray, s"this.$keyArray = null;")
     ctx.addMutableState("Object[]", valueArray, s"this.$valueArray = null;")
 
+    val holder = ctx.freshName("holder")
+    val holderClass = classOf[BufferHolder].getName
+    ctx.addMutableState(holderClass, holder,
+      s"this.$holder = new $holderClass(new UnsafeRow(0));")
+
+    val setKeys = ctx.splitExpressions(ctx.INPUT_ROW, keys.zipWithIndex.map { case (e, i) =>
+      val eval = e.genCode(ctx)
+      s"""
+        ${eval.code}
+        if (${eval.isNull}) {
+          throw new RuntimeException("Cannot use null as map key!");
+        } else {
+          $keyArray[$i] = ${eval.value};
+        }
+      """
+    })
+
+    val setValues = ctx.splitExpressions(ctx.INPUT_ROW, values.zipWithIndex.map { case (e, i) =>
+      val eval = e.genCode(ctx)
+      s"""
+        ${eval.code}
+        if (${eval.isNull}) {
+          $valueArray[$i] = null;
+        } else {
+          $valueArray[$i] = ${eval.value};
+        }
+      """
+    })
+
     val keyData = s"new $arrayClass($keyArray)"
     val valueData = s"new $arrayClass($valueArray)"
-    ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
-      $keyArray = new Object[${keys.size}];
-      $valueArray = new Object[${values.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        keys.zipWithIndex.map { case (key, i) =>
-          val eval = key.genCode(ctx)
-          s"""
-            ${eval.code}
-            if (${eval.isNull}) {
-              throw new RuntimeException("Cannot use null as map key!");
-            } else {
-              $keyArray[$i] = ${eval.value};
-            }
-          """
-        }) +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        values.zipWithIndex.map { case (value, i) =>
-          val eval = value.genCode(ctx)
-          s"""
-            ${eval.code}
-            if (${eval.isNull}) {
-              $valueArray[$i] = null;
-            } else {
-              $valueArray[$i] = ${eval.value};
-            }
-          """
-        }) +
+    val writeUnsafeMap = GenerateUnsafeProjection.writeMapToBuffer(
+      ctx, safeMap, dataType.keyType, dataType.valueType, holder)
+    val code =
       s"""
-        final MapData ${ev.value} = new $mapClass($keyData, $valueData);
-        this.$keyArray = null;
-        this.$valueArray = null;
-      """)
+        $holder.reset();
+        $keyArray = new Object[${keys.size}];
+        $valueArray = new Object[${values.size}];
+        $setKeys
+        $setValues
+        final MapData $safeMap = new $mapClass($keyData, $valueData);
+        $writeUnsafeMap
+        final UnsafeMapData ${ev.value} = new UnsafeMapData();
+        ${ev.value}.pointTo($holder.buffer, Platform.BYTE_ARRAY_OFFSET, $holder.totalSize());
+        $keyArray = null;
+        $valueArray = null;
+      """
+
+    ev.copy(code = code, isNull = "false")
   }
 
   override def prettyName: String = "map"
@@ -194,33 +231,14 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = false
 
+  @transient private lazy val unsafeProj = UnsafeProjection.create(dataType)
+
   override def eval(input: InternalRow): Any = {
-    InternalRow(children.map(_.eval(input)): _*)
+    unsafeProj(InternalRow(children.map(_.eval(input)): _*))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rowClass = classOf[GenericInternalRow].getName
-    val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
-
-    ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
-      this.$values = new Object[${children.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        children.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
-            if (${eval.isNull}) {
-              $values[$i] = null;
-            } else {
-              $values[$i] = ${eval.value};
-            }"""
-        }) +
-      s"""
-        final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
-      """)
+    GenerateUnsafeProjection.createCode(ctx, children)
   }
 
   override def prettyName: String = "struct"
@@ -284,115 +302,19 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     }
   }
 
+  @transient private lazy val unsafeProj = UnsafeProjection.create(dataType)
+
   override def eval(input: InternalRow): Any = {
-    InternalRow(valExprs.map(_.eval(input)): _*)
+    unsafeProj(InternalRow(valExprs.map(_.eval(input)): _*))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rowClass = classOf[GenericInternalRow].getName
-    val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
-
-    ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
-      $values = new Object[${valExprs.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        valExprs.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }"""
-        }) +
-      s"""
-        final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
-      """)
+    GenerateUnsafeProjection.createCode(ctx, valExprs)
   }
 
   override def prettyName: String = "named_struct"
 }
 
-/**
- * Returns a Row containing the evaluation of all children expressions. This is a variant that
- * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
- * this expression automatically at runtime.
- */
-case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
-
-  override def foldable: Boolean = children.forall(_.foldable)
-
-  override lazy val resolved: Boolean = childrenResolved
-
-  override lazy val dataType: StructType = {
-    val fields = children.zipWithIndex.map { case (child, idx) =>
-      child match {
-        case ne: NamedExpression =>
-          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-        case _ =>
-          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
-      }
-    }
-    StructType(fields)
-  }
-
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(children.map(_.eval(input)): _*)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = GenerateUnsafeProjection.createCode(ctx, children)
-    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
-  }
-
-  override def prettyName: String = "struct_unsafe"
-}
-
-
-/**
- * Creates a struct with the given field names and values. This is a variant that returns
- * UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
- * this expression automatically at runtime.
- *
- * @param children Seq(name1, val1, name2, val2, ...)
- */
-case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression {
-
-  private lazy val (nameExprs, valExprs) =
-    children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
-
-  private lazy val names = nameExprs.map(_.eval(EmptyRow).toString)
-
-  override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map {
-      case (name, valExpr: NamedExpression) =>
-        StructField(name, valExpr.dataType, valExpr.nullable, valExpr.metadata)
-      case (name, valExpr) =>
-        StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
-    }
-    StructType(fields)
-  }
-
-  override def foldable: Boolean = valExprs.forall(_.foldable)
-
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(valExprs.map(_.eval(input)): _*)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
-  }
-
-  override def prettyName: String = "named_struct_unsafe"
-}
 
 /**
  * Creates a map after splitting the input text into key/value pairs using delimiters

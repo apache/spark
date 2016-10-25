@@ -167,7 +167,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   // TODO: if the nullability of array element is correct, we can use it to save null check.
-  private def writeArrayToBuffer(
+  def writeArrayToBuffer(
       ctx: CodegenContext,
       input: String,
       elementType: DataType,
@@ -245,7 +245,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   }
 
   // TODO: if the nullability of value element is correct, we can use it to save null check.
-  private def writeMapToBuffer(
+  def writeMapToBuffer(
       ctx: CodegenContext,
       input: String,
       keyType: DataType,

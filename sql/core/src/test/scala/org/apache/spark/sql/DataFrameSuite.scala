@@ -28,6 +28,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, Union}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -1648,5 +1649,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     dates.union(widenTypedRows).collect()
     dates.except(widenTypedRows).collect()
     dates.intersect(widenTypedRows).collect()
+  }
+
+  test("complex type creator should always output unsafe format") {
+    // map is not tested here as it's not order-able.
+    val df = Seq((Array(1), 1 -> 1, 1)).toDF("array", "struct", "int")
+
+    def namedStruct(field1: Column, field2: Column): Column = {
+      Column(CreateNamedStruct(Seq(Literal("_1"), field1.expr, Literal("_2"), field2.expr)))
+    }
+
+    // test interpreted version, we will call `eval` when optimize foldable expressions.
+    assert(df.filter($"array" === array(lit(1))).count() == 1)
+    assert(df.filter($"struct" === namedStruct(lit(1), lit(1))).count() == 1)
+
+    // test codegen version
+    assert(df.filter($"array" === array($"int")).count() == 1)
+    assert(df.filter($"struct" === namedStruct($"int", $"int")).count() == 1)
   }
 }
