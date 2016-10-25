@@ -2668,6 +2668,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(numRecordsRead.value === 10)
   }
 
+  test("SPARK-18079: CollectLimitExec.executeToIterator should perform per-partition limits") {
+    val numRecordsRead = spark.sparkContext.longAccumulator
+    val iter = spark.range(1, 100, 1, numPartitions = 10).map { x =>
+      numRecordsRead.add(1)
+      x
+    }.limit(1).toLocalIterator()
+    var localCount = 0
+    while (iter.hasNext) {
+      iter.next()
+      localCount += 1
+    }
+    assert(numRecordsRead.value === 1)
+    assert(localCount === 1)
+  }
+
   test("CREATE TABLE USING should not fail if a same-name temp view exists") {
     withTable("same_name") {
       withTempView("same_name") {
