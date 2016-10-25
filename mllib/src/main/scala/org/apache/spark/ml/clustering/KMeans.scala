@@ -41,18 +41,16 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   with HasSeed with HasPredictionCol with HasTol {
 
   /**
-   * The number of clusters to create (k). Must be > 1. Default: 2.
+   * The number of clusters to create (k). Must be > 1. Note that it is possible for fewer than
+   * k clusters to be returned, for example, if there are fewer than k distinct points to cluster.
+   * Default: 2.
    * @group param
    */
   @Since("1.5.0")
   final val k = new IntParam(this, "k", "The number of clusters to create. " +
     "Must be > 1.", ParamValidators.gt(1))
 
-  /**
-   * Number of clusters to create (k). Note that it is possible for fewer than k clusters to
-   * be returned, for example, if there are fewer than k distinct points to cluster.
-   * @group getParam
-   */
+  /** @group getParam */
   @Since("1.5.0")
   def getK: Int = $(k)
 
@@ -283,11 +281,7 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  /**
-   * Set the number of clusters to create (k). Note that it is possible for fewer than k clusters to
-   * be returned, for example, if there are fewer than k distinct points to cluster.
-   * @group setParam
-   */
+  /** @group setParam */
   @Since("1.5.0")
   def setK(value: Int): this.type = set(k, value)
 

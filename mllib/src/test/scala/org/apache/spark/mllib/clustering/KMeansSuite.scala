@@ -29,6 +29,8 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import org.apache.spark.mllib.clustering.KMeans.{K_MEANS_PARALLEL, RANDOM}
 
+  private val seed = 42
+
   test("single cluster") {
     val data = sc.parallelize(Array(
       Vectors.dense(1.0, 2.0, 6.0),
@@ -79,55 +81,22 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.clusterCenters.length === 1)
   }
 
+    test("unique cluster centers") {
+    val rng = new Random(seed)
+    val numDistinctPoints = 10
+    val points = (0 until numDistinctPoints).map(i => Vectors.dense(Array.fill(3)(rng.nextDouble)))
+    val data = sc.parallelize(points.flatMap(Array.fill(1 + rng.nextInt(3))(_)), 2)
+    val normedData = data.map(new VectorWithNorm(_))
 
-  test("fewer clusters than points") {
-    val data = sc.parallelize(
-      Array(
-        Vectors.dense(1.0, 2.0, 3.0),
-        Vectors.dense(1.0, 3.0, 4.0)),
-      2)
-
-    var model = KMeans.train(data, k = 1, maxIterations = 1, initializationMode = "random")
-    assert(model.clusterCenters.length === 1)
-
-    model = KMeans.train(data, k = 1, maxIterations = 1, initializationMode = "k-means||")
-    assert(model.clusterCenters.length === 1)
-  }
-
-  test("more clusters than points") {
-    val data = sc.parallelize(
-      Array(
-        Vectors.dense(1.0, 2.0, 3.0),
-        Vectors.dense(1.0, 3.0, 4.0)),
-      2)
-
-    var model = KMeans.train(data, k = 3, maxIterations = 1, initializationMode = "random")
-    assert(model.clusterCenters.length === 2)
-
-    model = KMeans.train(data, k = 3, maxIterations = 1, initializationMode = "k-means||")
-    assert(model.clusterCenters.length === 2)
-  }
-
-  test("unique cluster centers") {
-    val rng = new scala.util.Random(42)
-    val points = (0 until 10).map(i => Vectors.dense(Array.fill(3)(rng.nextDouble)))
-    val data = sc.parallelize(
-      points.flatMap { point =>
-        Array.fill(rng.nextInt(4))(point)
-      }, 2
-    )
-    val norms = data.map(Vectors.norm(_, 2.0))
-    val zippedData = data.zip(norms).map { case (v, norm) =>
-      new VectorWithNorm(v, norm)
-    }
     // less centers than k
     val km = new KMeans().setK(50)
-      .setMaxIterations(10)
+      .setMaxIterations(5)
       .setInitializationMode("k-means||")
       .setInitializationSteps(10)
-      .setSeed(42)
-    val initialCenters = km.initKMeansParallel(zippedData).map(_.vector)
+      .setSeed(seed)
+    val initialCenters = km.initKMeansParallel(normedData).map(_.vector)
     assert(initialCenters.length === initialCenters.distinct.length)
+    assert(initialCenters.length <= numDistinctPoints)
 
     val model = km.run(data)
     val finalCenters = model.clusterCenters
@@ -135,14 +104,15 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // run local k-means
     val km2 = new KMeans().setK(10)
-      .setMaxIterations(10)
+      .setMaxIterations(5)
       .setInitializationMode("k-means||")
       .setInitializationSteps(10)
-      .setSeed(42)
-    val initialCenters2 = km2.initKMeansParallel(zippedData).map(_.vector)
+      .setSeed(seed)
+    val initialCenters2 = km2.initKMeansParallel(normedData).map(_.vector)
     assert(initialCenters2.length === initialCenters2.distinct.length)
+    assert(initialCenters2.length === 10)
 
-    val model2 = km.run(data)
+    val model2 = km2.run(data)
     val finalCenters2 = model2.clusterCenters
     assert(finalCenters2.length === finalCenters2.distinct.length)
   }
@@ -155,11 +125,11 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
       // Create three deterministic models and compare cluster means
       val model1 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
-        initializationMode = initMode, seed = 42)
+        initializationMode = initMode, seed = seed)
       val centers1 = model1.clusterCenters
 
       val model2 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
-        initializationMode = initMode, seed = 42)
+        initializationMode = initMode, seed = seed)
       val centers2 = model2.clusterCenters
 
       centers1.zip(centers2).foreach { case (c1, c2) =>
