@@ -104,8 +104,7 @@ case class CatalogTablePartition(
    */
   def toRow(partitionSchema: StructType): InternalRow = {
     InternalRow.fromSeq(partitionSchema.map { field =>
-      // The partition columns in partition specification are always lower cased.
-      Cast(Literal(spec(field.name.toLowerCase)), field.dataType).eval()
+      Cast(Literal(spec(field.name)), field.dataType).eval()
     })
   }
 }
@@ -157,8 +156,6 @@ case class CatalogTable(
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty) {
-
-  import CatalogTable._
 
   /** schema of this table's partition columns */
   def partitionSchema: StructType = StructType(schema.filter {
@@ -225,6 +222,7 @@ case class CatalogTable(
    * @return whether this table's partition metadata is stored in the Hive metastore.
    */
   def partitionProviderIsHive: Boolean = {
+    import CatalogTable._
     provider == Some("hive") ||
       properties.get(PARTITION_PROVIDER_KEY) == Some(PARTITION_PROVIDER_HIVE)
   }
