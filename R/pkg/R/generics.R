@@ -980,6 +980,36 @@ setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") 
 #' @export
 setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
 
+#' Return the first part of a SparkDataFrame or Column
+#' 
+#' If \code{x} is a SparkDataFrame, its first 
+#' rows will be returned as a data.frame. If the dataset is a \code{Column}, its first 
+#' elements will be returned as a vector. The number of elements to be returned
+#' is given by parameter \code{num}. Default value for \code{num} is 6.
+#' @param x a SparkDataFrame or Column
+#' @param num the number of rows to return. Default is 6.
+#' @return A data.frame.
+#'
+#' @family SparkDataFrame functions
+#' @aliases head,SparkDataFrame-method
+#' @rdname head
+#' @name head
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' 
+#' # Create a DataFrame from the Iris dataset
+#' df <- as.DataFrame(airquality)
+#' 
+#' # Get the first 6 elements of the DataFrame
+#' head(df)
+#' 
+#' # Get the first 20 elements of a Column
+#' head(df$Ozone, 20)
+#' }
+#' @note head since 1.4.0
+
 #' @rdname hex
 #' @export
 setGeneric("hex", function(x) { standardGeneric("hex") })
