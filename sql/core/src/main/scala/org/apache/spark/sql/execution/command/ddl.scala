@@ -348,8 +348,13 @@ case class AlterTableAddPartitionCommand(
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE ADD PARTITION")
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
+      val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
+        spec,
+        table.partitionColumnNames,
+        table.identifier.quotedString,
+        sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
-      CatalogTablePartition(spec, table.storage.copy(locationUri = location))
+      CatalogTablePartition(normalizedSpec, table.storage.copy(locationUri = location))
     }
     catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
     Seq.empty[Row]
@@ -376,8 +381,21 @@ case class AlterTableRenamePartitionCommand(
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE RENAME PARTITION")
+
+    val normalizedOldPartition = PartitioningUtils.normalizePartitionSpec(
+      oldPartition,
+      table.partitionColumnNames,
+      table.identifier.quotedString,
+      sparkSession.sessionState.conf.resolver)
+
+    val normalizedNewPartition = PartitioningUtils.normalizePartitionSpec(
+      newPartition,
+      table.partitionColumnNames,
+      table.identifier.quotedString,
+      sparkSession.sessionState.conf.resolver)
+
     catalog.renamePartitions(
-      tableName, Seq(oldPartition), Seq(newPartition))
+      tableName, Seq(normalizedOldPartition), Seq(normalizedNewPartition))
     Seq.empty[Row]
   }
 
@@ -409,7 +427,17 @@ case class AlterTableDropPartitionCommand(
     val table = catalog.getTableMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
-    catalog.dropPartitions(table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
+
+    val normalizedSpecs = specs.map { spec =>
+      PartitioningUtils.normalizePartitionSpec(
+        spec,
+        table.partitionColumnNames,
+        table.identifier.quotedString,
+        sparkSession.sessionState.conf.resolver)
+    }
+
+    catalog.dropPartitions(
+      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
 

@@ -96,8 +96,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
-      properties =
-        Map(CatalogTable.PARTITION_PROVIDER_KEY -> CatalogTable.PARTITION_PROVIDER_HIVE))
+      properties = Map(
+        CatalogTable.PARTITION_PROVIDER_KEY -> CatalogTable.PARTITION_PROVIDER_HIVE))
   }
 
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
@@ -1073,16 +1073,18 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties
+      catalog.getTableMetadata(tableIdent).properties.filter { case (key, _) =>
+        key != CatalogTable.PARTITION_PROVIDER_KEY
+      }
     }
+    assert(getProps.isEmpty)
     // set table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
-    assert(Map("andrew" -> "or14", "kor" -> "bel").toSet.subsetOf(getProps.toSet))
+    assert(getProps == Map("andrew" -> "or14", "kor" -> "bel"))
     // set table properties without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
-    assert(
-      Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol").toSet.subsetOf(getProps.toSet))
+    assert(getProps == Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
@@ -1098,18 +1100,18 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties
+      catalog.getTableMetadata(tableIdent).properties.filter { case (key, _) =>
+        key != CatalogTable.PARTITION_PROVIDER_KEY
+      }
     }
     // unset table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
     sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
-    assert(Map("p" -> "an", "c" -> "lan", "x" -> "y").toSet.subsetOf(getProps.toSet))
-    assert(!getProps.contains("j"))
+    assert(getProps == Map("p" -> "an", "c" -> "lan", "x" -> "y"))
     // unset table properties without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
-    assert(Map("c" -> "lan", "x" -> "y").toSet.subsetOf(getProps.toSet))
-    assert(!getProps.contains("p"))
+    assert(getProps == Map("c" -> "lan", "x" -> "y"))
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')")
@@ -1121,8 +1123,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(e.getMessage.contains("xyz"))
     // property to unset does not exist, but "IF EXISTS" is specified
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
-    assert(Map("x" -> "y").toSet.subsetOf(getProps.toSet))
-    assert(!getProps.contains("c"))
+    assert(getProps == Map("x" -> "y"))
   }
 
   private def testSetLocation(isDatasourceTable: Boolean): Unit = {
@@ -1292,6 +1293,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val part2 = Map("a" -> "2", "b" -> "6")
     val part3 = Map("a" -> "3", "b" -> "7")
     val part4 = Map("a" -> "4", "b" -> "8")
+    val part5 = Map("a" -> "9", "b" -> "9")
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
     createTablePartition(catalog, part1, tableIdent)
@@ -1300,8 +1302,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
 
-    sql("ALTER TABLE dbx.tab1 ADD IF NOT EXISTS PARTITION (a='2', b='6') LOCATION 'paris' " +
-      "PARTITION (a='3', b='7')")
+    // basic add partition
+    sql("ALTER TABLE dbx.tab1 ADD IF NOT EXISTS " +
+      "PARTITION (a='2', b='6') LOCATION 'paris' PARTITION (a='3', b='7')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
     assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isEmpty)
     assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option("paris"))
@@ -1323,9 +1326,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("ALTER TABLE tab1 ADD PARTITION (a='4', b='8')")
     }
 
+    // partition to add already exists when using IF NOT EXISTS
     sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (a='4', b='8')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(part1, part2, part3, part4))
+
+    // partition spec in ADD PARTITION should be case insensitive by default
+    sql("ALTER TABLE tab1 ADD PARTITION (A='9', B='9')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(part1, part2, part3, part4, part5))
   }
 
   private def testDropPartitions(isDatasourceTable: Boolean): Unit = {
@@ -1347,6 +1356,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
 
+    // basic drop partition
     sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (a='4', b='8'), PARTITION (a='3', b='7')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2))
 
@@ -1359,12 +1369,19 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist DROP IF EXISTS PARTITION (a='2')")
     }
+
     // partition to drop does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE tab1 DROP PARTITION (a='300')")
     }
+
+    // partition to drop does not exist when using IF EXISTS
     sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='300')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+
+    // partition spec in DROP PARTITION should be case insensitive by default
+    sql("ALTER TABLE tab1 DROP PARTITION (A='1', B='5')")
+    assert(catalog.listPartitions(tableIdent).isEmpty)
   }
 
   private def testRenamePartitions(isDatasourceTable: Boolean): Unit = {
@@ -1378,12 +1395,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     createTablePartition(catalog, part1, tableIdent)
     createTablePartition(catalog, part2, tableIdent)
     createTablePartition(catalog, part3, tableIdent)
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3))
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
     if (isDatasourceTable) {
       convertToDatasourceTable(catalog, tableIdent)
     }
 
+    // basic rename partition
     sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
     sql("ALTER TABLE dbx.tab1 PARTITION (a='2', b='c') RENAME TO PARTITION (a='20', b='c')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
@@ -1404,6 +1421,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[NoSuchPartitionException] {
       sql("ALTER TABLE tab1 PARTITION (a='not_found', b='1') RENAME TO PARTITION (a='1', b='2')")
     }
+
+    // partition spec in RENAME PARTITION should be case insensitive by default
+    sql("ALTER TABLE tab1 PARTITION (A='10', B='p') RENAME TO PARTITION (A='1', B='p')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> "1", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
   }
 
   test("drop build-in function") {
@@ -1630,7 +1652,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
 
       // supported since partitions are stored in the metastore
-      spark.sql("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+      assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
       assert(spark.table("rectangles2").collect().isEmpty)
     }
   }
