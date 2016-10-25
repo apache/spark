@@ -193,7 +193,8 @@ class PlannerSuite extends SharedSQLContext {
 
   test("GlobalLimit can appear in the middle of a plan when caching is used") {
     val query = testData.select('key, 'value).limit(2).cache()
-    val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
+    val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation].child
+      .asInstanceOf[WholeStageCodegenExec]
     assert(planned.child.isInstanceOf[GlobalLimitExec])
   }
 
