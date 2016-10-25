@@ -683,6 +683,27 @@ setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
 #' @export
 setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") })
 
+#' show
+#'
+#' Print class and type information of a Spark object.
+#'
+#' @param object a Spark object. Can be a SparkDataFrame, Column, GroupedData, WindowSpec.
+#'
+#' @family SparkDataFrame functions
+#' @rdname show
+#' @aliases show,SparkDataFrame-method
+#' @name show
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' show(df)
+#'}
+#' @note show(SparkDataFrame) since 1.4.0
+NULL
+
 #' @rdname showDF
 #' @export
 setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
@@ -1009,6 +1030,7 @@ setGeneric("greatest", function(x, ...) { standardGeneric("greatest") })
 #' head(df$Ozone, 20)
 #' }
 #' @note head since 1.4.0
+NULL
 
 #' @rdname hex
 #' @export
