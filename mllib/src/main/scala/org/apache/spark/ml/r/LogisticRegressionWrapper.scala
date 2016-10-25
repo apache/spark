@@ -41,26 +41,20 @@ private[r] class LogisticRegressionWrapper private (
 
   lazy val objectiveHistory: Array[Double] = logisticRegressionModel.summary.objectiveHistory
 
-  lazy val roc: DataFrame =
-    logisticRegressionModel.summary.asInstanceOf[BinaryLogisticRegressionSummary].roc
-
-  lazy val areaUnderROC: Double =
-    logisticRegressionModel.summary.asInstanceOf[BinaryLogisticRegressionSummary].areaUnderROC
-
-  lazy val pr: DataFrame =
-    logisticRegressionModel.summary.asInstanceOf[BinaryLogisticRegressionSummary].pr
-
-  lazy val fMeasureByThreshold: DataFrame =
+  lazy val blrSummary =
     logisticRegressionModel.summary.asInstanceOf[BinaryLogisticRegressionSummary]
-      .fMeasureByThreshold
 
-  lazy val precisionByThreshold: DataFrame =
-    logisticRegressionModel.summary.asInstanceOf[BinaryLogisticRegressionSummary]
-      .precisionByThreshold
+  lazy val roc: DataFrame = blrSummary.roc
 
-  lazy val recallByThreshold: DataFrame =
-    logisticRegressionModel.summary.asInstanceOf[BinaryLogisticRegressionSummary]
-      .recallByThreshold
+  lazy val areaUnderROC: Double = blrSummary.areaUnderROC
+
+  lazy val pr: DataFrame = blrSummary.pr
+
+  lazy val fMeasureByThreshold: DataFrame = blrSummary.fMeasureByThreshold
+
+  lazy val precisionByThreshold: DataFrame = blrSummary.precisionByThreshold
+
+  lazy val recallByThreshold: DataFrame = blrSummary.recallByThreshold
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset).drop(logisticRegressionModel.getFeaturesCol)
@@ -157,7 +151,7 @@ private[r] object LogisticRegressionWrapper
       val features = (rMetadata \ "features").extract[Array[String]]
 
       val pipeline = PipelineModel.load(pipelinePath)
-      new LogisticRegressionWrapper(pipeline, features, true)
+      new LogisticRegressionWrapper(pipeline, features, isLoaded = true)
     }
   }
 }

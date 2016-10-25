@@ -664,8 +664,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param regParam the regularization parameter. Default is 0.0.
-#' @param elasticNetParam the ElasticNet mixing parameter. For alpha = 0, the penalty is an L2 penalty.
-#'                        For alpha = 1, it is an L1 penalty. For 0 < alpha < 1, the penalty is a combination
+#' @param elasticNetParam the ElasticNet mixing parameter. For alpha = 0.0, the penalty is an L2 penalty.
+#'                        For alpha = 1.0, it is an L1 penalty. For 0.0 < alpha < 1.0, the penalty is a combination
 #'                        of L1 and L2. Default is 0.0 which is an L2 penalty.
 #' @param maxIter maximum iteration number.
 #' @param tol convergence tolerance of iterations.
@@ -674,7 +674,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'               Supported options:
 #'                 \itemize{
 #'                   \item{"auto": Automatically select the family based on the number of classes:
-#'                           If numClasses == 1 || numClasses == 2, set to "binomial".
+#'                           If number of classes == 1 || number of classes == 2, set to "binomial".
 #'                           Else, set to "multinomial".}
 #'                   \item{"binomial": Binary logistic regression with pivoting.}
 #'                   \item{"multinomial": Multinomial logistic (softmax) regression without pivoting.
@@ -712,8 +712,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
 #' feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
 #' binary_data <- as.data.frame(cbind(label, feature))
-#' binary_df <- suppressWarnings(createDataFrame(binary_data))
-#' blr_model <- spark.logit(binary_df, label ~ feature, threshold = 1.0)
+#' binary_df <- createDataFrame(binary_data)
+#' blr_model <- spark.logit(binary_df, label ~ feature, thresholds = 1.0)
 #' blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
 #'
 #' # summary of binary logistic regression
@@ -723,9 +723,10 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' path <- "path/to/model"
 #' write.ml(blr_model, path)
 #'
-#' # can also read back the saved model and print
+#' # can also read back the saved model and predict
+#' Note that summary deos not work on loaded model
 #' savedModel <- read.ml(path)
-#' summary(savedModel)
+#' blr_predict2 <- collect(select(predict(savedModel, binary_df), "prediction"))
 #'
 #' # multinomial logistic regression
 #'
@@ -737,6 +738,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
 #' df <- createDataFrame(data)
 #'
+#' Note that summary of multinomial logistic regression is not implemented yet
 #' model <- spark.logit(df, label ~ ., family = "multinomial", thresholds=c(0, 1, 1))
 #' predict1 <- collect(select(predict(model, df), "prediction"))
 #' }
@@ -799,20 +801,15 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 
             pr <- dataFrame(callJMethod(jobj, "pr"))
 
-            fMeasureByThreshold <-
-              dataFrame(callJMethod(jobj, "fMeasureByThreshold"))
+            fMeasureByThreshold <- dataFrame(callJMethod(jobj, "fMeasureByThreshold"))
 
-            precisionByThreshold <-
-              dataFrame(callJMethod(jobj, "precisionByThreshold"))
+            precisionByThreshold <- dataFrame(callJMethod(jobj, "precisionByThreshold"))
 
-            recallByThreshold <-
-              dataFrame(callJMethod(jobj, "recallByThreshold"))
+            recallByThreshold <- dataFrame(callJMethod(jobj, "recallByThreshold"))
 
-            totalIterations <-
-              callJMethod(jobj, "totalIterations")
+            totalIterations <- callJMethod(jobj, "totalIterations")
 
-            objectiveHistory <-
-              callJMethod(jobj, "objectiveHistory")
+            objectiveHistory <- callJMethod(jobj, "objectiveHistory")
 
             list(roc = roc, areaUnderROC = areaUnderROC, pr = pr,
                  fMeasureByThreshold = fMeasureByThreshold,

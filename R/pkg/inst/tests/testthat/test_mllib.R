@@ -594,10 +594,10 @@ test_that("spark.logit", {
   binary_data <- as.data.frame(cbind(label, feature))
   binary_df <- createDataFrame(binary_data)
 
-  blr_model <- spark.logit(binary_df, label ~ feature, threshold = 1.0)
+  blr_model <- spark.logit(binary_df, label ~ feature, thresholds = 1.0)
   blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
   expect_equal(blr_predict$prediction, c(0, 0, 0, 0, 0))
-  blr_model1 <- spark.logit(binary_df, label ~ feature, threshold = 0.0)
+  blr_model1 <- spark.logit(binary_df, label ~ feature, thresholds = 0.0)
   blr_predict1 <- collect(select(predict(blr_model1, binary_df), "prediction"))
   expect_equal(blr_predict1$prediction, c(1, 1, 1, 1, 1))
 
@@ -623,6 +623,8 @@ test_that("spark.logit", {
   blr_model2 <- read.ml(modelPath)
   blr_predict2 <- collect(select(predict(blr_model2, binary_df), "prediction"))
   expect_equal(blr_predict$prediction, blr_predict2$prediction)
+  expect_error(summary(blr_model2))
+  unlink(modelPath)
 
   # test multinomial logistic regression
   label <- c(0.0, 1.0, 2.0, 0.0, 0.0)
