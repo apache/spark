@@ -238,20 +238,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
 
-          val res = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
-            replayBus)
+          val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
 
-          res.map { case (_, envInfo) =>
+          val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+
+          if (appListener.appId.isDefined) {
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
             // make sure to set admin acls before view acls so they are properly picked up
-            ui.getSecurityManager.setAdminAcls(envInfo.adminAcls.getOrElse(""))
+            ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
             ui.getSecurityManager.setViewAcls(attempt.sparkUser,
-              envInfo.viewAcls.getOrElse(""))
-            ui.getSecurityManager.setAdminAclsGroups(envInfo.adminAclsGroups.getOrElse(""))
-            ui.getSecurityManager.setViewAclsGroups(envInfo.viewAclsGroups.getOrElse(""))
-            LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize))
+              appListener.viewAcls.getOrElse(""))
+            ui.getSecurityManager.setAdminAclsGroups(appListener.adminAclsGroups.getOrElse(""))
+            ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
+            Some(LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize)))
+          } else {
+            None
           }
+
         }
       }
     } catch {
@@ -401,30 +405,48 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private def mergeApplicationListing(fileStatus: FileStatus): Unit = {
     val newAttempts = try {
-        val eventsFilter: ReplayEventsFilter = { eventString =>
-          eventString.startsWith(APPL_START_EVENT_PREFIX) ||
-            eventString.startsWith(APPL_END_EVENT_PREFIX)
-        }
-
-        val res = replay(fileStatus, new ReplayListenerBus(), eventsFilter)
-
-        res match {
-          case Some((attempt, _)) =>
-            logDebug(s"Application log ${attempt.logPath} loaded successfully: $attempt")
-            Some(attempt)
-          case None =>
-            logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
-              "The application may have not started.")
-            None
-        }
-
-      } catch {
-        case e: Exception =>
-          logError(
-            s"Exception encountered when attempting to load application log ${fileStatus.getPath}",
-            e)
-          None
+      val eventsFilter: ReplayEventsFilter = { eventString =>
+        eventString.startsWith(APPL_START_EVENT_PREFIX) ||
+          eventString.startsWith(APPL_END_EVENT_PREFIX)
       }
+
+      val logPath = fileStatus.getPath()
+
+      val appCompleted = isApplicationCompleted(fileStatus)
+
+      val appListener = replay(fileStatus, appCompleted, new ReplayListenerBus(), eventsFilter)
+
+      // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
+      // try to show their UI.
+      if (appListener.appId.isDefined) {
+        val attemptInfo = new FsApplicationAttemptInfo(
+          logPath.getName(),
+          appListener.appName.getOrElse(NOT_STARTED),
+          appListener.appId.getOrElse(logPath.getName()),
+          appListener.appAttemptId,
+          appListener.startTime.getOrElse(-1L),
+          appListener.endTime.getOrElse(-1L),
+          fileStatus.getModificationTime(),
+          appListener.sparkUser.getOrElse(NOT_STARTED),
+          appCompleted,
+          fileStatus.getLen()
+        )
+        fileToAppInfo(logPath) = attemptInfo
+        logDebug(s"Application log ${attemptInfo.logPath} loaded successfully: $attemptInfo")
+        Some(attemptInfo)
+      } else {
+        logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
+          "The application may have not started.")
+        None
+      }
+
+    } catch {
+      case e: Exception =>
+        logError(
+          s"Exception encountered when attempting to load application log ${fileStatus.getPath}",
+          e)
+        None
+    }
 
     if (newAttempts.isEmpty) {
       return
@@ -557,17 +579,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * Replays the events in the specified log file and returns information about the associated
-   * application. Return `None` if the application ID cannot be located.
-   *
-   * Depending on the eventsFilter, return values may not be populated or get returned as `None`
-   * because the events carrying the needed data are filtered out and therefore not replayed.
+   * Replays the events in the specified log file on the supplied `ReplayListenerBus`. Returns
+   * an `ApplicationEventListener` instance with event data captured from the replay.
+   * `ReplayEventsFilter` determines what events are replayed and can therefore limit the
+   * data captured in the returned `ApplicationEventListener` instance.
    */
   private def replay(
       eventLog: FileStatus,
+      appCompleted: Boolean,
       bus: ReplayListenerBus,
-      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER)
-  : (Option[(FsApplicationAttemptInfo, FsApplicationEnvACLInfo)]) = {
+      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): ApplicationEventListener = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
     // Note that the eventLog may have *increased* in size since when we grabbed the filestatus,
@@ -579,37 +600,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val logInput = EventLoggingListener.openEventLog(logPath, fs)
     try {
       val appListener = new ApplicationEventListener
-      val appCompleted = isApplicationCompleted(eventLog)
       bus.addListener(appListener)
       bus.replay(logInput, logPath.toString, !appCompleted, eventsFilter)
-
-      // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
-      // try to show their UI.
-      if (appListener.appId.isDefined) {
-        val attemptInfo = new FsApplicationAttemptInfo(
-          logPath.getName(),
-          appListener.appName.getOrElse(NOT_STARTED),
-          appListener.appId.getOrElse(logPath.getName()),
-          appListener.appAttemptId,
-          appListener.startTime.getOrElse(-1L),
-          appListener.endTime.getOrElse(-1L),
-          eventLog.getModificationTime(),
-          appListener.sparkUser.getOrElse(NOT_STARTED),
-          appCompleted,
-          eventLog.getLen()
-        )
-        fileToAppInfo(logPath) = attemptInfo
-
-        val appEnvInfo = new FsApplicationEnvACLInfo(
-          appListener.adminAcls,
-          appListener.adminAcls,
-          appListener.viewAclsGroups,
-          appListener.adminAclsGroups)
-
-        Some(attemptInfo, appEnvInfo)
-      } else {
-        None
-      }
+      appListener
     } finally {
       logInput.close()
     }
@@ -739,19 +732,6 @@ private class FsApplicationAttemptInfo(
       s" ${super.toString}, source=$logPath, size=$fileSize"
   }
 }
-
-/**
- * Application environment ACL information
- * @param viewAcls view ACL individuals
- * @param adminAcls admin ACL individuals
- * @param viewAclsGroups view ACL groups
- * @param adminAclsGroups admin ACL groups
- */
-private[spark] case class FsApplicationEnvACLInfo(
-    viewAcls: Option[String],
-    adminAcls: Option[String],
-    viewAclsGroups: Option[String],
-    adminAclsGroups: Option[String])
 
 /**
  * Application history information
