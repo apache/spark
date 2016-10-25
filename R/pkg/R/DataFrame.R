@@ -633,7 +633,7 @@ setMethod("persist",
 #' @param ... further arguments to be passed to or from other methods.
 #'
 #' @family SparkDataFrame functions
-#' @rdname unpersist-methods
+#' @rdname unpersist
 #' @aliases unpersist,SparkDataFrame-method
 #' @name unpersist
 #' @export
@@ -661,7 +661,7 @@ setMethod("unpersist",
 #' @param x the SparkDataFrame to get the storageLevel.
 #'
 #' @family SparkDataFrame functions
-#' @rdname storageLevel-methods
+#' @rdname storageLevel
 #' @aliases storageLevel,SparkDataFrame-method
 #' @name storageLevel
 #' @export
