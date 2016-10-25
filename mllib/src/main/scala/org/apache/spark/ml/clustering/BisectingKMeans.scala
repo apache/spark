@@ -289,10 +289,10 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  * :: Experimental ::
  * Summary of BisectingKMeans.
  *
- * @param predictions  [[DataFrame]] produced by [[BisectingKMeansModel.transform()]]
- * @param predictionCol  Name for column of predicted clusters in `predictions`
- * @param featuresCol  Name for column of features in `predictions`
- * @param k  Number of clusters
+ * @param predictions  [[DataFrame]] produced by [[BisectingKMeansModel.transform()]].
+ * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param featuresCol  Name for column of features in `predictions`.
+ * @param k  Number of clusters.
  */
 @Since("2.1.0")
 @Experimental
@@ -300,10 +300,4 @@ class BisectingKMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
-    k: Int)
-  extends ClusteringSummary (
-    predictions,
-    predictionCol,
-    featuresCol,
-    k
-  )
+    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)

@@ -346,10 +346,10 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  * :: Experimental ::
  * Summary of KMeans.
  *
- * @param predictions  [[DataFrame]] produced by [[KMeansModel.transform()]]
- * @param predictionCol  Name for column of predicted clusters in `predictions`
- * @param featuresCol  Name for column of features in `predictions`
- * @param k  Number of clusters
+ * @param predictions  [[DataFrame]] produced by [[KMeansModel.transform()]].
+ * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param featuresCol  Name for column of features in `predictions`.
+ * @param k  Number of clusters.
  */
 @Since("2.0.0")
 @Experimental
@@ -357,22 +357,16 @@ class KMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
-    k: Int)
-  extends ClusteringSummary (
-    predictions,
-    predictionCol,
-    featuresCol,
-    k
-  )
+    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
 
 /**
  * :: Experimental ::
- * Summary of clustering.
+ * Summary of clustering algorithms.
  *
- * @param predictions  [[DataFrame]] produced by model.transform()
- * @param predictionCol  Name for column of predicted clusters in `predictions`
- * @param featuresCol  Name for column of features in `predictions`
- * @param k  Number of clusters
+ * @param predictions  [[DataFrame]] produced by model.transform().
+ * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param featuresCol  Name for column of features in `predictions`.
+ * @param k  Number of clusters.
  */
 @Experimental
 class ClusteringSummary private[clustering] (

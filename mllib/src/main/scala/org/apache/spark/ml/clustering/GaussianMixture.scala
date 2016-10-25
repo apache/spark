@@ -356,11 +356,12 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  * :: Experimental ::
  * Summary of GaussianMixture.
  *
- * @param predictions  [[DataFrame]] produced by [[GaussianMixtureModel.transform()]]
- * @param predictionCol  Name for column of predicted clusters in `predictions`
- * @param probabilityCol  Name for column of predicted probability of each cluster in `predictions`
- * @param featuresCol  Name for column of features in `predictions`
- * @param k  Number of clusters
+ * @param predictions  [[DataFrame]] produced by [[GaussianMixtureModel.transform()]].
+ * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param probabilityCol  Name for column of predicted probability of each cluster
+ *                        in `predictions`.
+ * @param featuresCol  Name for column of features in `predictions`.
+ * @param k  Number of clusters.
  */
 @Since("2.0.0")
 @Experimental
@@ -369,12 +370,7 @@ class GaussianMixtureSummary private[clustering] (
     predictionCol: String,
     val probabilityCol: String,
     featuresCol: String,
-    k: Int)
-  extends ClusteringSummary (
-    predictions,
-    predictionCol,
-    featuresCol,
-    k) {
+    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
 
   /**
    * Probability of each cluster.
