@@ -76,7 +76,9 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     SchemaUtils.checkNumericType(schema, $(labelCol))
 
     val predictionAndLabels =
-      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType)).rdd.map {
+      dataset.select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
+        .rdd
+        .map {
         case Row(prediction: Double, label: Double) => (prediction, label)
       }
     val metrics = new MulticlassMetrics(predictionAndLabels)
