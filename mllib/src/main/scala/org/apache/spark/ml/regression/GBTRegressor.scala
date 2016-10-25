@@ -127,7 +127,6 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
     instr.logNumFeatures(numFeatures)
-    instr.logNumClasses(0)
 
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
       $(seed))
