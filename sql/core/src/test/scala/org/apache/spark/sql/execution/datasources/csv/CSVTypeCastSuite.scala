@@ -144,13 +144,12 @@ class CSVTypeCastSuite extends SparkFunSuite {
       DateTimeUtils.millisToDays(DateTimeUtils.stringToTime("2015-01-01").getTime))
   }
 
-  test("Float and Double Types are cast correctly with Locale") {
+  test("Float and Double Types are cast without respect to platform default Locale") {
     val originalLocale = Locale.getDefault
     try {
-      val locale : Locale = new Locale("fr", "FR")
-      Locale.setDefault(locale)
-      assert(CSVTypeCast.castTo("1,00", FloatType) == 1.0)
-      assert(CSVTypeCast.castTo("1,00", DoubleType) == 1.0)
+      Locale.setDefault(new Locale("fr", "FR"))
+      assert(CSVTypeCast.castTo("1,00", FloatType) == 100.0) // Would parse as 1.0 in fr-FR
+      assert(CSVTypeCast.castTo("1,00", DoubleType) == 100.0)
     } finally {
       Locale.setDefault(originalLocale)
     }
