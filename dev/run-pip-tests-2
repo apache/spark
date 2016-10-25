@@ -65,6 +65,8 @@ fi
 # Do the actual installation
 pip install --upgrade --force-reinstall *.tar.gz
 
+cd /
+
 echo "Run basic sanity check on pip installed version with spark-submit"
 spark-submit $FWDIR/dev/pip-sanity-check.py
 echo "Run basic sanity check with import based"

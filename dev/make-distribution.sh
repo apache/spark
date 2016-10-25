@@ -204,6 +204,7 @@ cp -r "$SPARK_HOME/data" "$DISTDIR"
 # Make pip package
 cd python
 python setup.py sdist
+cd ..
 
 # Copy other things
 mkdir "$DISTDIR"/conf
