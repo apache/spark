@@ -148,10 +148,7 @@ private[spark] abstract class WebUI(
 
   /** Return the url of web interface. Only valid after bind(). */
   def webUrl: String = {
-    var protocol = "http"
-    if(conf.get("spark.ssl.enabled") == "true") {
-      protocol = "https"
-    }
+    val protocol = if (sslOptions.enabled) "https" else "http"
       s"$protocol://$publicHostName:$boundPort"
   }
 
