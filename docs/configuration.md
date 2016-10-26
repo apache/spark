@@ -1664,10 +1664,12 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
-        <td><code>spark.ssl.port</code></td>
-        <td>None</td>
+        <td><code>spark.ssl.<particular protocol>.port</code></td>
+        <td>0</td>
         <td>
-            A port number hen connecting with SSL.
+            A port number hen connecting with SSL. Default value 0 means to be determined automatically.
+            Attention that the port should be separated for each particular protocol.
+            Not configure as <code>spark.ssl.port<code> but configure <code>spark.ssl.<particular protocol>.port<code>.
         </td>
     </tr>
     <tr>
