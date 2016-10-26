@@ -88,7 +88,7 @@ class HistogramEndpointsQuerySuite extends QueryTest with SharedSQLContext {
            |  histogram_endpoints(c9, $numBins),
            |  histogram_endpoints(c10, $numBins)
            |FROM $table
-	        """.stripMargin)
+        """.stripMargin)
     }
 
     val ints = ArrayBuffer(7, 5, 3, 1)
