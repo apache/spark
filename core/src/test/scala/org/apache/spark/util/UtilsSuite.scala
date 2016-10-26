@@ -402,7 +402,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       (0, -1L + Int.MaxValue), (1, 0L + Int.MaxValue), (2, 1L + Int.MaxValue)
     ))
     intercept[IllegalArgumentException] {
-      Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), 0L)
+      Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L)
     }
   }
 
