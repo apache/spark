@@ -85,8 +85,8 @@ try:
     script_names = os.listdir(SCRIPTS_TARGET)
     scripts = map(lambda script: SCRIPTS_TARGET + "/" + script, script_names)
 
-    # Parse the README markdown file into rst for PyPi
-    long_description = "!!!!! missing pandoc do not upload to PyPi !!!!"
+    # Parse the README markdown file into rst for PyPI
+    long_description = "!!!!! missing pandoc do not upload to PyPI !!!!"
     try:
         import pypandoc
         long_description = pypandoc.convert('README.md', 'rst')
