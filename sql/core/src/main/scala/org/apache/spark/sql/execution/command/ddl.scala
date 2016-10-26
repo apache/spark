@@ -529,7 +529,10 @@ case class AlterTableRecoverPartitionsCommand(
     logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
     addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
-    DDLUtils.setPartitionProviderHive(spark, table)
+    // Updates the table to indicate that its partition metadata is stored in the Hive metastore.
+    // This is always the case for Hive format tables, but is not true for Datasource tables created
+    // before Spark 2.1 unless they are converted via `msck repair table`.
+    spark.sessionState.catalog.alterTable(table.copy(partitionProviderIsHive = true))
     catalog.refreshTable(tableName)
     logInfo(s"Recovered all partitions ($total).")
     Seq.empty[Row]
@@ -703,17 +706,6 @@ case class AlterTableSetLocationCommand(
 object DDLUtils {
   def isDatasourceTable(table: CatalogTable): Boolean = {
     table.provider.isDefined && table.provider.get != "hive"
-  }
-
-  /**
-   * Updates a table to indicate that its partition metadata is stored in the Hive metastore.
-   * This is always the case for Hive format tables, but is not true for Datasource tables created
-   * before Spark 2.1 unless they are converted via `msck repair table`.
-   */
-  def setPartitionProviderHive(spark: SparkSession, table: CatalogTable): Unit = {
-    spark.sessionState.catalog.alterTable(
-      table.copy(properties = table.properties ++
-        Map(CatalogTable.PARTITION_PROVIDER_KEY -> CatalogTable.PARTITION_PROVIDER_HIVE)))
   }
 
   /**

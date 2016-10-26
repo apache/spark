@@ -39,7 +39,7 @@ import org.apache.spark.util.SerializableConfiguration
  *
  * @param parameters as set of options to control partition discovery
  * @param userPartitionSchema an optional partition schema that will be use to provide types for
- *                             the discovered partitions
+ *                            the discovered partitions
  */
 abstract class PartitioningAwareFileCatalog(
     sparkSession: SparkSession,

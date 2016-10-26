@@ -91,21 +91,15 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       table.storage.properties
     }
 
-    val newProps = if (partitionColumnNames.nonEmpty &&
-        sparkSession.sqlContext.conf.manageFilesourcePartitions) {
-      // Start off with partition provider hive, but no partitions in the metastore. The user
-      // has to call `msck repair table` to populate the table partitions.
-      table.properties ++
-        Map(CatalogTable.PARTITION_PROVIDER_KEY -> CatalogTable.PARTITION_PROVIDER_HIVE)
-    } else {
-      table.properties
-    }
-
     val newTable = table.copy(
       storage = table.storage.copy(properties = optionsWithPath),
       schema = dataSource.schema,
       partitionColumnNames = partitionColumnNames,
-      properties = newProps)
+      // If metastore partition management for file source tables is enabled, we start off with
+      // partition provider hive, but no partitions in the metastore. The user has to call
+      // `msck repair table` to populate the table partitions.
+      partitionProviderIsHive = partitionColumnNames.nonEmpty &&
+        sparkSession.sessionState.conf.manageFilesourcePartitions)
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)

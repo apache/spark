@@ -138,6 +138,8 @@ case class BucketSpec(
  *                 Can be None if this table is a View, should be "hive" for hive serde tables.
  * @param unsupportedFeatures is a list of string descriptions of features that are used by the
  *        underlying table but not supported by Spark SQL yet.
+ * @param partitionProviderIsHive whether this table's partition metadata is stored in the Hive
+ *                                metastore.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -155,7 +157,8 @@ case class CatalogTable(
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
-    unsupportedFeatures: Seq[String] = Seq.empty) {
+    unsupportedFeatures: Seq[String] = Seq.empty,
+    partitionProviderIsHive: Boolean = false) {
 
   /** schema of this table's partition columns */
   def partitionSchema: StructType = StructType(schema.filter {
@@ -213,29 +216,13 @@ case class CatalogTable(
         comment.map("Comment: " + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
         if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
-        s"$storage")
+        s"$storage",
+        if (partitionProviderIsHive) "Partition Provider: Hive" else "")
 
     output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
   }
-
-  /**
-   * @return whether this table's partition metadata is stored in the Hive metastore.
-   */
-  def partitionProviderIsHive: Boolean = {
-    import CatalogTable._
-    provider == Some("hive") ||
-      properties.get(PARTITION_PROVIDER_KEY) == Some(PARTITION_PROVIDER_HIVE)
-  }
 }
 
-object CatalogTable {
-  val PARTITION_PROVIDER_KEY = "org.apache.spark/partitionProvider"
-  val PARTITION_PROVIDER_HIVE = "hive"
-
-  def isSparkManagedTableProp(prop: String): Boolean = {
-    prop == PARTITION_PROVIDER_KEY  // only one for now
-  }
-}
 
 case class CatalogTableType private(name: String)
 object CatalogTableType {

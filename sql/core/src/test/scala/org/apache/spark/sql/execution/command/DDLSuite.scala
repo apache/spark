@@ -96,8 +96,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
-      properties = Map(
-        CatalogTable.PARTITION_PROVIDER_KEY -> CatalogTable.PARTITION_PROVIDER_HIVE))
+      partitionProviderIsHive = true)
   }
 
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
@@ -1073,9 +1072,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties.filter { case (key, _) =>
-        key != CatalogTable.PARTITION_PROVIDER_KEY
-      }
+      catalog.getTableMetadata(tableIdent).properties
     }
     assert(getProps.isEmpty)
     // set table properties
@@ -1100,9 +1097,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties.filter { case (key, _) =>
-        key != CatalogTable.PARTITION_PROVIDER_KEY
-      }
+      catalog.getTableMetadata(tableIdent).properties
     }
     // unset table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")

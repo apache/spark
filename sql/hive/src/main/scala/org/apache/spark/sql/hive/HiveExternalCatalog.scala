@@ -106,13 +106,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * metastore.
    */
   private def verifyTableProperties(table: CatalogTable): Unit = {
-    val invalidKeys = table.properties.keys.filter { key =>
-      key.startsWith(DATASOURCE_PREFIX) || key.startsWith(STATISTICS_PREFIX)
-    }
+    val invalidKeys = table.properties.keys.filter(_.startsWith(SPARK_SQL_PREFIX))
     if (invalidKeys.nonEmpty) {
       throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
-        s"as table property keys may not start with '$DATASOURCE_PREFIX' or '$STATISTICS_PREFIX':" +
-        s" ${invalidKeys.mkString("[", ", ", "]")}")
+        s"as table property keys may not start with '$SPARK_SQL_PREFIX': " +
+        invalidKeys.mkString("[", ", ", "]"))
     }
     // External users are not allowed to set/switch the table type. In Hive metastore, the table
     // type can be switched by changing the value of a case-sensitive table property `EXTERNAL`.
@@ -191,11 +189,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       throw new TableAlreadyExistsException(db = db, table = table)
     }
     // Before saving data source table metadata into Hive metastore, we should:
-    //  1. Put table schema, partition column names and bucket specification in table properties.
+    //  1. Put table provider, schema, partition column names, bucket specification and partition
+    //     provider in table properties.
     //  2. Check if this table is hive compatible
     //    2.1  If it's not hive compatible, set schema, partition columns and bucket spec to empty
     //         and save table metadata to Hive.
-    //    2.1  If it's hive compatible, set serde information in table metadata and try to save
+    //    2.2  If it's hive compatible, set serde information in table metadata and try to save
     //         it to Hive. If it fails, treat it as not hive compatible and go back to 2.1
     if (DDLUtils.isDatasourceTable(tableDefinition)) {
       // data source table always have a provider, it's guaranteed by `DDLUtils.isDatasourceTable`.
@@ -205,6 +204,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
       val tableProperties = new scala.collection.mutable.HashMap[String, String]
       tableProperties.put(DATASOURCE_PROVIDER, provider)
+      if (tableDefinition.partitionProviderIsHive) {
+        tableProperties.put(TABLE_PARTITION_PROVIDER, "hive")
+      }
 
       // Serialized JSON schema string may be too long to be stored into a single metastore table
       // property. In this case, we split the JSON string and store each part as a separate table
@@ -420,12 +422,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is. Also add old data source properties to table
       // properties, to retain the data source table format.
-      val oldDataSourceProps = oldDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
+      val oldDataSourceProps = oldDef.properties.filter(_._1.startsWith(SPARK_SQL_PREFIX))
+      val partitionProviderProp = if (tableDefinition.partitionProviderIsHive) {
+        TABLE_PARTITION_PROVIDER -> "hive"
+      } else {
+        TABLE_PARTITION_PROVIDER -> "builtin"
+      }
       val newDef = withStatsProps.copy(
         schema = oldDef.schema,
         partitionColumnNames = oldDef.partitionColumnNames,
         bucketSpec = oldDef.bucketSpec,
-        properties = oldDataSourceProps ++ withStatsProps.properties)
+        properties = oldDataSourceProps ++ withStatsProps.properties + partitionProviderProp)
 
       client.alterTable(newDef)
     } else {
@@ -449,7 +456,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * properties, and filter out these special entries from table properties.
    */
   private def restoreTableMetadata(table: CatalogTable): CatalogTable = {
-    val catalogTable = if (table.tableType == VIEW || conf.get(DEBUG_MODE)) {
+    val tableWithSchema = if (table.tableType == VIEW || conf.get(DEBUG_MODE)) {
       table
     } else {
       getProviderFromTableProperties(table).map { provider =>
@@ -474,30 +481,32 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           provider = Some(provider),
           partitionColumnNames = getPartitionColumnsFromTableProperties(table),
           bucketSpec = getBucketSpecFromTableProperties(table),
-          properties = getOriginalTableProperties(table))
+          partitionProviderIsHive = table.properties.get(TABLE_PARTITION_PROVIDER) == Some("hive"))
       } getOrElse {
-        table.copy(provider = Some("hive"))
+        table.copy(provider = Some("hive"), partitionProviderIsHive = true)
       }
     }
+
     // construct Spark's statistics from information in Hive metastore
-    val statsProps = catalogTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
-    if (statsProps.nonEmpty) {
+    val statsProps = tableWithSchema.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
+    val tableWithStats = if (statsProps.nonEmpty) {
       val colStatsProps = statsProps.filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX))
         .map { case (k, v) => (k.drop(STATISTICS_COL_STATS_PREFIX.length), v) }
-      val colStats: Map[String, ColumnStat] = catalogTable.schema.collect {
+      val colStats: Map[String, ColumnStat] = tableWithSchema.schema.collect {
         case f if colStatsProps.contains(f.name) =>
           val numFields = ColumnStatStruct.numStatFields(f.dataType)
           (f.name, ColumnStat(numFields, colStatsProps(f.name)))
       }.toMap
-      catalogTable.copy(
-        properties = removeStatsProperties(catalogTable),
+      tableWithSchema.copy(
         stats = Some(Statistics(
-          sizeInBytes = BigInt(catalogTable.properties(STATISTICS_TOTAL_SIZE)),
-          rowCount = catalogTable.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
+          sizeInBytes = BigInt(tableWithSchema.properties(STATISTICS_TOTAL_SIZE)),
+          rowCount = tableWithSchema.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
           colStats = colStats)))
     } else {
-      catalogTable
+      tableWithSchema
     }
+
+    tableWithStats.copy(properties = getOriginalTableProperties(table))
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
@@ -749,7 +758,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 }
 
 object HiveExternalCatalog {
-  val DATASOURCE_PREFIX = "spark.sql.sources."
+  val SPARK_SQL_PREFIX = "spark.sql."
+
+  val DATASOURCE_PREFIX = SPARK_SQL_PREFIX + "sources."
   val DATASOURCE_PROVIDER = DATASOURCE_PREFIX + "provider"
   val DATASOURCE_SCHEMA = DATASOURCE_PREFIX + "schema"
   val DATASOURCE_SCHEMA_PREFIX = DATASOURCE_SCHEMA + "."
@@ -763,21 +774,20 @@ object HiveExternalCatalog {
   val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
   val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
 
-  val STATISTICS_PREFIX = "spark.sql.statistics."
+  val STATISTICS_PREFIX = SPARK_SQL_PREFIX + "statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
   val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
   val STATISTICS_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
 
-  def removeStatsProperties(metadata: CatalogTable): Map[String, String] = {
-    metadata.properties.filterNot { case (key, _) => key.startsWith(STATISTICS_PREFIX) }
-  }
+  val TABLE_PARTITION_PROVIDER = SPARK_SQL_PREFIX + "partitionProvider"
+
 
   def getProviderFromTableProperties(metadata: CatalogTable): Option[String] = {
     metadata.properties.get(DATASOURCE_PROVIDER)
   }
 
   def getOriginalTableProperties(metadata: CatalogTable): Map[String, String] = {
-    metadata.properties.filterNot { case (key, _) => key.startsWith(DATASOURCE_PREFIX) }
+    metadata.properties.filterNot { case (key, _) => key.startsWith(SPARK_SQL_PREFIX) }
   }
 
   // A persisted data source table always store its schema in the catalog.
