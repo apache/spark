@@ -45,21 +45,34 @@ public class ByteArrayMethods {
    * @return true if the arrays are equal, false otherwise
    */
   public static boolean arrayEquals(
-      Object leftBase, long leftOffset, Object rightBase, long rightOffset, final long length) {
-    int i = 0;
-    while (i <= length - 8) {
-      if (Platform.getLong(leftBase, leftOffset + i) !=
-        Platform.getLong(rightBase, rightOffset + i)) {
+      final Object leftBase, long leftOffset, final Object rightBase,
+      long rightOffset, final long length) {
+    long endOffset = leftOffset + length - 8;
+    while (leftOffset <= endOffset) {
+      if (Platform.getLong(leftBase, leftOffset) !=
+        Platform.getLong(rightBase, rightOffset)) {
         return false;
       }
-      i += 8;
+      leftOffset += 8;
+      rightOffset += 8;
     }
-    while (i < length) {
-      if (Platform.getByte(leftBase, leftOffset + i) !=
-        Platform.getByte(rightBase, rightOffset + i)) {
+    endOffset += 4;
+    while (leftOffset <= endOffset) {
+      if (Platform.getInt(leftBase, leftOffset) !=
+          Platform.getInt(rightBase, rightOffset)) {
         return false;
       }
-      i += 1;
+      leftOffset += 4;
+      rightOffset += 4;
+    }
+    endOffset += 4;
+    while (leftOffset < endOffset) {
+      if (Platform.getByte(leftBase, leftOffset) !=
+        Platform.getByte(rightBase, rightOffset)) {
+        return false;
+      }
+      leftOffset++;
+      rightOffset++;
     }
     return true;
   }

@@ -364,6 +364,13 @@ subprojects {
 task generateSources {
   dependsOn subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion + ':generateGrammarSource'
   dependsOn subprojectBase + 'snappy-spark-streaming-flume-sink_' + scalaBinaryVersion + ':generateAvroJava'
+  // copy extra-resources in normal resource path for IDEA
+  def coreProject = project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+  copy {
+    from "${coreProject.buildDir}/extra-resources"
+    include 'spark-version-info.properties'
+    into "${coreProject.buildDir}/resources/main"
+  }
 }
 
 if (rootProject.name == 'snappy-spark') {
