@@ -278,8 +278,9 @@ class ChiSqSelector(object):
     `numTopFeatures` chooses the `k` top features according to a chi-squared test.
     `percentile` is similar but chooses a fraction of all features instead of a fixed number.
     `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
-     positive rate of selection.
-    By default, the selection method is `numTopFeatures`, the default number of top features is 50.
+    positive rate of selection.
+    By default, the selection method is `numTopFeatures`, with the default number of top features
+    set to 50.
 
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
