@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io.File
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.rdd.ZipPartitionsRDDUtils
 
 class ZipPartitionsRDDUtilsSuite extends SparkFunSuite with SharedSparkContext {
 

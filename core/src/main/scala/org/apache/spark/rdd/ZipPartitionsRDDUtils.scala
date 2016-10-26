@@ -15,12 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
-
-import org.apache.spark.rdd.{RDD, ZippedPartitionsRDD2, ZippedPartitionsRDD3,
-  ZippedPartitionsRDD4}
 
 object ZipPartitionsRDDUtils {
 
@@ -30,14 +27,17 @@ object ZipPartitionsRDDUtils {
    * the fisrt zipped RDD. If the fisrt zipped RDD do not have preferred location,
    * it will fallback to the default `zipPartition` preferred location strategy.
    * This helper function can be used when one large RDD zipped with other small RDDs, we can set
-   * the first zipped RDD (the majorRdd parameter) to be the large RDD to improve data locality.
+   * the first zipped RDD (the `majorRdd` parameter) to be the large RDD to improve data locality.
+   *
+   * `preservesPartitioner` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   def zipPartitionsWithPreferredLocation[A: ClassTag, B: ClassTag, V: ClassTag]
-      (majorRdd: RDD[A], rdd2: RDD[B], preservesPartitioning: Boolean)
+      (majorRdd: RDD[A], rdd2: RDD[B], preservesPartitioner: Boolean)
       (f: (Iterator[A], Iterator[B]) => Iterator[V]): RDD[V] = {
     val sc = majorRdd.sparkContext
     majorRdd.withScope {
-      new ZippedPartitionsRDD2(sc, sc.clean(f), majorRdd, rdd2, preservesPartitioning,
+      new ZippedPartitionsRDD2(sc, sc.clean(f), majorRdd, rdd2, preservesPartitioner,
         useFirstParentPreferredLocations = true)
     }
   }
@@ -45,34 +45,34 @@ object ZipPartitionsRDDUtils {
   def zipPartitionsWithPreferredLocation[A: ClassTag, B: ClassTag, V: ClassTag]
       (majorRdd: RDD[A], rdd2: RDD[B])
       (f: (Iterator[A], Iterator[B]) => Iterator[V]): RDD[V] = {
-    zipPartitionsWithPreferredLocation(majorRdd, rdd2, preservesPartitioning = false)(f)
+    zipPartitionsWithPreferredLocation(majorRdd, rdd2, preservesPartitioner = false)(f)
   }
 
   def zipPartitionsWithPreferredLocation[A: ClassTag, B: ClassTag, C: ClassTag, V: ClassTag]
-      (majorRdd: RDD[A], rdd2: RDD[B], rdd3: RDD[C], preservesPartitioning: Boolean)
+      (majorRdd: RDD[A], rdd2: RDD[B], rdd3: RDD[C], preservesPartitioner: Boolean)
       (f: (Iterator[A], Iterator[B], Iterator[C]) => Iterator[V]): RDD[V] = {
     val sc = majorRdd.sparkContext
     majorRdd.withScope {
       new ZippedPartitionsRDD3(sc, sc.clean(f), majorRdd, rdd2, rdd3,
-        preservesPartitioning, useFirstParentPreferredLocations = true)
+        preservesPartitioner, useFirstParentPreferredLocations = true)
     }
   }
 
   def zipPartitionsWithPreferredLocation[A: ClassTag, B: ClassTag, C: ClassTag, V: ClassTag]
       (majorRdd: RDD[A], rdd2: RDD[B], rdd3: RDD[C])
       (f: (Iterator[A], Iterator[B], Iterator[C]) => Iterator[V]): RDD[V] = {
-    zipPartitionsWithPreferredLocation(majorRdd, rdd2, rdd3, preservesPartitioning = false)(f)
+    zipPartitionsWithPreferredLocation(majorRdd, rdd2, rdd3, preservesPartitioner = false)(f)
   }
 
   def zipPartitionsWithPreferredLocation
       [A: ClassTag, B: ClassTag, C: ClassTag, D: ClassTag, V: ClassTag]
       (majorRdd: RDD[A], rdd2: RDD[B], rdd3: RDD[C], rdd4: RDD[D],
-        preservesPartitioning: Boolean)
+        preservesPartitioner: Boolean)
       (f: (Iterator[A], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V]): RDD[V] = {
     val sc = majorRdd.sparkContext
     majorRdd.withScope {
       new ZippedPartitionsRDD4(sc, sc.clean(f), majorRdd, rdd2, rdd3, rdd4,
-        preservesPartitioning, useFirstParentPreferredLocations = true)
+        preservesPartitioner, useFirstParentPreferredLocations = true)
     }
   }
 
@@ -81,7 +81,7 @@ object ZipPartitionsRDDUtils {
       (majorRdd: RDD[A], rdd2: RDD[B], rdd3: RDD[C], rdd4: RDD[D])
       (f: (Iterator[A], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V]): RDD[V] = {
     zipPartitionsWithPreferredLocation(
-      majorRdd, rdd2, rdd3, rdd4, preservesPartitioning = false)(f)
+      majorRdd, rdd2, rdd3, rdd4, preservesPartitioner = false)(f)
   }
 
 }
