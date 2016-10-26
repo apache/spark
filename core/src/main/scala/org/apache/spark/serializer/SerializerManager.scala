@@ -180,11 +180,12 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
    * Deserializes an InputStream into an iterator of values and disposes of it when the end of
    * the iterator is reached.
    */
-  def dataDeserializeStream[T: ClassTag](
+  def dataDeserializeStream[T](
       blockId: BlockId,
-      inputStream: InputStream): Iterator[T] = {
+      inputStream: InputStream)
+      (classTag: ClassTag[T]): Iterator[T] = {
     val stream = new BufferedInputStream(inputStream)
-    getSerializer(implicitly[ClassTag[T]])
+    getSerializer(classTag)
       .newInstance()
       .deserializeStream(wrapStream(blockId, stream))
       .asIterator.asInstanceOf[Iterator[T]]

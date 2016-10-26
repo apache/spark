@@ -56,7 +56,8 @@ class FileStreamSink(
 
   private val basePath = new Path(path)
   private val logPath = new Path(basePath, FileStreamSink.metadataDir)
-  private val fileLog = new FileStreamSinkLog(sparkSession, logPath.toUri.toString)
+  private val fileLog =
+    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toUri.toString)
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
   private val fs = basePath.getFileSystem(hadoopConf)
 

@@ -22,7 +22,6 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
@@ -32,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveDDLSuite
@@ -200,9 +200,8 @@ class HiveDDLSuite
         val message = intercept[AnalysisException] {
           sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
         }
-        assert(message.getMessage.contains(
-          "Partition spec is invalid. The spec (ds, unknowncol) must be contained within the " +
-            "partition spec (ds, hr) defined in table '`default`.`exttable_with_partitions`'"))
+        assert(message.getMessage.contains("unknownCol is not a valid partition column in table " +
+          "`default`.`exttable_with_partitions`"))
 
         sql(
           s"""
@@ -300,8 +299,50 @@ class HiveDDLSuite
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         }.getMessage
         assert(message.contains(
-          "Attempted to unset non-existent property 'p' in table '`view1`'"))
+          "Attempted to unset non-existent property 'p' in table '`default`.`view1`'"))
       }
+    }
+  }
+
+  private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
+    val message = intercept[AnalysisException](sql(sqlText)).getMessage
+    assert(message.contains("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+  }
+
+  private def assertErrorForAlterViewOnTable(sqlText: String): Unit = {
+    val message = intercept[AnalysisException](sql(sqlText)).getMessage
+    assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+  }
+
+  test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      val message = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $tabName (height INT, length INT) TBLPROPERTIES('EXTERNAL'='TRUE')")
+      }.getMessage
+      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
+    }
+  }
+
+  test("alter table - SET TBLPROPERTIES EXTERNAL to TRUE") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      val catalog = spark.sessionState.catalog
+      sql(s"CREATE TABLE $tabName (height INT, length INT)")
+      assert(
+        catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
+      val message = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')")
+      }.getMessage
+      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
+      // The table type is not changed to external
+      assert(
+        catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
+      // The table property is case sensitive. Thus, external is allowed
+      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('external' = 'TRUE')")
+      // The table type is not changed to external
+      assert(
+        catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
     }
   }
 
@@ -317,45 +358,42 @@ class HiveDDLSuite
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
 
-        var message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName RENAME TO $newViewName")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName RENAME TO $newViewName")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
       }
     }
   }
@@ -496,6 +534,25 @@ class HiveDDLSuite
           Row("b", "int", null)
         )
       ))
+    }
+  }
+
+  test("desc formatted table for permanent view") {
+    withTable("tbl") {
+      withView("view1") {
+        sql("CREATE TABLE tbl(a int)")
+        sql("CREATE VIEW view1 AS SELECT * FROM tbl")
+        assert(sql("DESC FORMATTED view1").collect().containsSlice(
+          Seq(
+            Row("# View Information", "", ""),
+            Row("View Original Text:", "SELECT * FROM tbl", ""),
+            Row("View Expanded Text:",
+              "SELECT `gen_attr_0` AS `a` FROM (SELECT `gen_attr_0` FROM " +
+              "(SELECT `a` AS `gen_attr_0` FROM `default`.`tbl`) AS gen_subquery_0) AS tbl",
+              "")
+          )
+        ))
+      }
     }
   }
 
@@ -671,8 +728,8 @@ class HiveDDLSuite
           .createTempView(sourceViewName)
         sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
 
-        val sourceTable = spark.sessionState.catalog.getTableMetadata(
-          TableIdentifier(sourceViewName, None))
+        val sourceTable = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
+          TableIdentifier(sourceViewName))
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
 
@@ -1026,26 +1083,29 @@ class HiveDDLSuite
     }
   }
 
-  test("datasource table property keys are not allowed") {
+  test("datasource and statistics table property keys are not allowed") {
     import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_PREFIX
+    import org.apache.spark.sql.hive.HiveExternalCatalog.STATISTICS_PREFIX
 
     withTable("tbl") {
       sql("CREATE TABLE tbl(a INT) STORED AS parquet")
 
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo' = 'loser')")
-      }
-      assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+      Seq(DATASOURCE_PREFIX, STATISTICS_PREFIX).foreach { forbiddenPrefix =>
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${forbiddenPrefix}foo' = 'loser')")
+        }
+        assert(e.getMessage.contains(forbiddenPrefix + "foo"))
 
-      val e2 = intercept[AnalysisException] {
-        sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo')")
-      }
-      assert(e2.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+        val e2 = intercept[AnalysisException] {
+          sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${forbiddenPrefix}foo')")
+        }
+        assert(e2.getMessage.contains(forbiddenPrefix + "foo"))
 
-      val e3 = intercept[AnalysisException] {
-        sql(s"CREATE TABLE tbl TBLPROPERTIES ('${DATASOURCE_PREFIX}foo'='anything')")
+        val e3 = intercept[AnalysisException] {
+          sql(s"CREATE TABLE tbl TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
+        }
+        assert(e3.getMessage.contains(forbiddenPrefix + "foo"))
       }
-      assert(e3.getMessage.contains(DATASOURCE_PREFIX + "foo"))
     }
   }
 }

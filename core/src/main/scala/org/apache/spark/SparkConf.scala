@@ -422,6 +422,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       configsWithAlternatives.get(key).toSeq.flatten.exists { alt => contains(alt.key) }
   }
 
+  private[spark] def contains(entry: ConfigEntry[_]): Boolean = contains(entry.key)
+
   /** Copy this object */
   override def clone: SparkConf = {
     val cloned = new SparkConf(false)
@@ -634,7 +636,9 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
-      DeprecatedConfig("spark.rpc", "2.0", "Not used any more.")
+      DeprecatedConfig("spark.rpc", "2.0", "Not used any more."),
+      DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
+        "Please use the new blacklisting options, spark.blacklist.*")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)

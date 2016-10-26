@@ -100,7 +100,7 @@ sparkR.stop <- function() {
 #' @param sparkEnvir Named list of environment variables to set on worker nodes
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
 #' @param sparkJars Character vector of jar files to pass to the worker nodes
-#' @param sparkPackages Character vector of packages from spark-packages.org
+#' @param sparkPackages Character vector of package coordinates
 #' @seealso \link{sparkR.session}
 #' @rdname sparkR.init-deprecated
 #' @export
@@ -327,7 +327,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' @param sparkHome Spark Home directory.
 #' @param sparkConfig named list of Spark configuration to set on worker nodes.
 #' @param sparkJars character vector of jar files to pass to the worker nodes.
-#' @param sparkPackages character vector of packages from spark-packages.org
+#' @param sparkPackages character vector of package coordinates
 #' @param enableHiveSupport enable support for Hive, fallback if not built with Hive support; once
 #'        set, this cannot be turned off on an existing session
 #' @param ... named Spark properties passed to the method.
@@ -491,6 +491,10 @@ sparkConfToSubmitOps[["spark.driver.memory"]]           <- "--driver-memory"
 sparkConfToSubmitOps[["spark.driver.extraClassPath"]]   <- "--driver-class-path"
 sparkConfToSubmitOps[["spark.driver.extraJavaOptions"]] <- "--driver-java-options"
 sparkConfToSubmitOps[["spark.driver.extraLibraryPath"]] <- "--driver-library-path"
+sparkConfToSubmitOps[["spark.master"]] <- "--master"
+sparkConfToSubmitOps[["spark.yarn.keytab"]] <- "--keytab"
+sparkConfToSubmitOps[["spark.yarn.principal"]] <- "--principal"
+
 
 # Utility function that returns Spark Submit arguments as a string
 #

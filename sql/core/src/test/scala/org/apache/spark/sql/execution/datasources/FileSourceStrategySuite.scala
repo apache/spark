@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.File
+import java.io._
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.GZIPOutputStream
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
@@ -395,7 +396,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
         val fileCatalog = new ListingFileCatalog(
           sparkSession = spark,
-          paths = Seq(new Path(tempDir)),
+          rootPaths = Seq(new Path(tempDir)),
           parameters = Map.empty[String, String],
           partitionSchema = None)
         // This should not fail.
@@ -515,6 +516,40 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     assert(result == expextResult)
   }
 
+  test("spark.files.ignoreCorruptFiles should work in SQL") {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.text(inputFile.toURI.toString).collect()
+        }
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)
+      }
+    } finally {
+      inputFile.delete()
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
@@ -582,7 +617,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       val bucketed = df.queryExecution.analyzed transform {
         case l @ LogicalRelation(r: HadoopFsRelation, _, _) =>
           l.copy(relation =
-            r.copy(bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil))))
+            r.copy(bucketSpec =
+              Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))
       }
       Dataset.ofRows(spark, bucketed)
     } else {

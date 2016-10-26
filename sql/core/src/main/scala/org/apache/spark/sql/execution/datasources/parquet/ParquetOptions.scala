@@ -35,7 +35,7 @@ private[parquet] class ParquetOptions(
    * Compression codec to use. By default use the value specified in SQLConf.
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
    */
-  val compressionCodec: String = {
+  val compressionCodecClassName: String = {
     val codecName = parameters.getOrElse("compression", sqlConf.parquetCompressionCodec).toLowerCase
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
@@ -52,7 +52,7 @@ private[parquet] class ParquetOptions(
   val mergeSchema: Boolean = parameters
     .get(MERGE_SCHEMA)
     .map(_.toBoolean)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
+    .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
 }
 
 

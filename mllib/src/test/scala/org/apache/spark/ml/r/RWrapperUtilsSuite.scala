@@ -35,22 +35,14 @@ class RWrapperUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     // after checking, model build is ok
     RWrapperUtils.checkDataColumns(rFormula, data)
 
-    assert(rFormula.getLabelCol == "label_output")
-    assert(rFormula.getFeaturesCol == "features_output")
+    assert(rFormula.getLabelCol == "label")
+    assert(rFormula.getFeaturesCol.startsWith("features_"))
 
     val model = rFormula.fit(data)
     assert(model.isInstanceOf[RFormulaModel])
 
-    assert(model.getLabelCol == "label_output")
-    assert(model.getFeaturesCol == "features_output")
-  }
-
-  test("generate unique name by appending a sequence number") {
-    val originalName = "label"
-    val fieldNames = Array("label_output", "label_output1", "label_output2")
-    val newName = RWrapperUtils.convertToUniqueName(originalName, fieldNames)
-
-    assert(newName === "label_output3")
+    assert(model.getLabelCol == "label")
+    assert(model.getFeaturesCol.startsWith("features_"))
   }
 
 }

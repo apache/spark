@@ -150,12 +150,12 @@ class SizeEstimatorSuite
 
     val buf = new ArrayBuffer[DummyString]()
     for (i <- 0 until 5000) {
-      buf.append(new DummyString(new Array[Char](10)))
+      buf += new DummyString(new Array[Char](10))
     }
     assertResult(340016)(SizeEstimator.estimate(buf.toArray))
 
     for (i <- 0 until 5000) {
-      buf.append(new DummyString(arr))
+      buf += new DummyString(arr)
     }
     assertResult(683912)(SizeEstimator.estimate(buf.toArray))
 

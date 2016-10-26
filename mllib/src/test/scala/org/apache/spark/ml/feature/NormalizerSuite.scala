@@ -27,6 +27,8 @@ import org.apache.spark.sql.{DataFrame, Row}
 
 class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   @transient var data: Array[Vector] = _
   @transient var dataFrame: DataFrame = _
   @transient var normalizer: Normalizer = _
@@ -61,7 +63,7 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       Vectors.sparse(3, Seq())
     )
 
-    dataFrame = spark.createDataFrame(sc.parallelize(data, 2).map(NormalizerSuite.FeatureData))
+    dataFrame = data.map(NormalizerSuite.FeatureData).toSeq.toDF()
     normalizer = new Normalizer()
       .setInputCol("features")
       .setOutputCol("normalized_features")

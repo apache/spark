@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.catalog
 import java.util.Date
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
@@ -86,7 +86,27 @@ object CatalogStorageFormat {
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
     storage: CatalogStorageFormat,
-    parameters: Map[String, String] = Map.empty)
+    parameters: Map[String, String] = Map.empty) {
+
+  override def toString: String = {
+    val output =
+      Seq(
+        s"Partition Values: [${spec.values.mkString(", ")}]",
+        s"$storage",
+        s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+
+    output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+  }
+
+  /**
+   * Given the partition schema, returns a row with that schema holding the partition values.
+   */
+  def toRow(partitionSchema: StructType): InternalRow = {
+    InternalRow.fromSeq(partitionSchema.map { field =>
+      Cast(Literal(spec(field.name)), field.dataType).eval()
+    })
+  }
+}
 
 
 /**
@@ -130,6 +150,7 @@ case class CatalogTable(
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
+    stats: Option[Statistics] = None,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
     comment: Option[String] = None,
@@ -155,9 +176,9 @@ case class CatalogTable(
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
       serde: Option[String] = storage.serde,
-      serdeProperties: Map[String, String] = storage.properties): CatalogTable = {
+      properties: Map[String, String] = storage.properties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
+      locationUri, inputFormat, outputFormat, serde, compressed, properties))
   }
 
   override def toString: String = {
@@ -190,6 +211,7 @@ case class CatalogTable(
         viewText.map("View: " + _).getOrElse(""),
         comment.map("Comment: " + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
+        if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
         s"$storage")
 
     output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")

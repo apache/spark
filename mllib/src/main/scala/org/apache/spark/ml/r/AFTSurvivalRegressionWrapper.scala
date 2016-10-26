@@ -99,6 +99,7 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
     val aft = new AFTSurvivalRegression()
       .setCensorCol(censorCol)
       .setFitIntercept(rFormula.hasIntercept)
+      .setFeaturesCol(rFormula.getFeaturesCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, aft))

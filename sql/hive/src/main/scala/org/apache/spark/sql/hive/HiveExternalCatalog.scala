@@ -29,14 +29,17 @@ import org.apache.thrift.TException
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
+import org.apache.spark.sql.execution.command.{ColumnStatStruct, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 
 /**
@@ -102,11 +105,18 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * metastore.
    */
   private def verifyTableProperties(table: CatalogTable): Unit = {
-    val datasourceKeys = table.properties.keys.filter(_.startsWith(DATASOURCE_PREFIX))
-    if (datasourceKeys.nonEmpty) {
+    val invalidKeys = table.properties.keys.filter { key =>
+      key.startsWith(DATASOURCE_PREFIX) || key.startsWith(STATISTICS_PREFIX)
+    }
+    if (invalidKeys.nonEmpty) {
       throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
-        s"as table property keys may not start with '$DATASOURCE_PREFIX': " +
-        datasourceKeys.mkString("[", ", ", "]"))
+        s"as table property keys may not start with '$DATASOURCE_PREFIX' or '$STATISTICS_PREFIX':" +
+        s" ${invalidKeys.mkString("[", ", ", "]")}")
+    }
+    // External users are not allowed to set/switch the table type. In Hive metastore, the table
+    // type can be switched by changing the value of a case-sensitive table property `EXTERNAL`.
+    if (table.properties.contains("EXTERNAL")) {
+      throw new AnalysisException("Cannot set or change the preserved property key: 'EXTERNAL'")
     }
   }
 
@@ -198,11 +208,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Serialized JSON schema string may be too long to be stored into a single metastore table
       // property. In this case, we split the JSON string and store each part as a separate table
       // property.
-      // TODO: the threshold should be set by `spark.sql.sources.schemaStringLengthThreshold`,
-      // however the current SQLConf is session isolated, which is not applicable to external
-      // catalog. We should re-enable this conf instead of hard code the value here, after we have
-      // global SQLConf.
-      val threshold = 4000
+      val threshold = conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
       val schemaJsonString = tableDefinition.schema.json
       // Split the JSON string.
       val parts = schemaJsonString.grouped(threshold).toSeq
@@ -246,10 +252,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
 
       // converts the table metadata to Hive compatible format, i.e. set the serde information.
-      def newHiveCompatibleMetastoreTable(serde: HiveSerDe, path: String): CatalogTable = {
+      def newHiveCompatibleMetastoreTable(serde: HiveSerDe): CatalogTable = {
+        val location = if (tableDefinition.tableType == EXTERNAL) {
+          // When we hit this branch, we are saving an external data source table with hive
+          // compatible format, which means the data source is file-based and must have a `path`.
+          val map = new CaseInsensitiveMap(tableDefinition.storage.properties)
+          require(map.contains("path"),
+            "External file-based data source table must have a `path` entry in storage properties.")
+          Some(new Path(map("path")).toUri.toString)
+        } else {
+          None
+        }
+
         tableDefinition.copy(
           storage = tableDefinition.storage.copy(
-            locationUri = Some(new Path(path).toUri.toString),
+            locationUri = location,
             inputFormat = serde.inputFormat,
             outputFormat = serde.outputFormat,
             serde = serde.serde
@@ -259,11 +276,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
       val qualifiedTableName = tableDefinition.identifier.quotedString
       val maybeSerde = HiveSerDe.sourceToSerDe(tableDefinition.provider.get)
-      val maybePath = new CaseInsensitiveMap(tableDefinition.storage.properties).get("path")
       val skipHiveMetadata = tableDefinition.storage.properties
         .getOrElse("skipHiveMetadata", "false").toBoolean
 
-      val (hiveCompatibleTable, logMessage) = (maybeSerde, maybePath) match {
+      val (hiveCompatibleTable, logMessage) = maybeSerde match {
         case _ if skipHiveMetadata =>
           val message =
             s"Persisting data source table $qualifiedTableName into Hive metastore in" +
@@ -277,17 +293,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
               "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. "
           (None, message)
 
-        case (Some(serde), Some(path)) =>
+        case Some(serde) =>
           val message =
-            s"Persisting file based data source table $qualifiedTableName with an input path " +
-              s"into Hive metastore in Hive compatible format."
-          (Some(newHiveCompatibleMetastoreTable(serde, path)), message)
-
-        case (Some(_), None) =>
-          val message =
-            s"Data source table $qualifiedTableName is not file based. Persisting it into " +
-              s"Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
-          (None, message)
+            s"Persisting file based data source table $qualifiedTableName into " +
+              s"Hive metastore in Hive compatible format."
+          (Some(newHiveCompatibleMetastoreTable(serde)), message)
 
         case _ =>
           val provider = tableDefinition.provider.get
@@ -388,21 +398,37 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireTableExists(db, tableDefinition.identifier.table)
     verifyTableProperties(tableDefinition)
 
-    if (DDLUtils.isDatasourceTable(tableDefinition)) {
-      val oldDef = client.getTable(db, tableDefinition.identifier.table)
+    // convert table statistics to properties so that we can persist them through hive api
+    val withStatsProps = if (tableDefinition.stats.isDefined) {
+      val stats = tableDefinition.stats.get
+      var statsProperties: Map[String, String] =
+        Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
+      if (stats.rowCount.isDefined) {
+        statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
+      }
+      stats.colStats.foreach { case (colName, colStat) =>
+        statsProperties += (STATISTICS_COL_STATS_PREFIX + colName) -> colStat.toString
+      }
+      tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
+    } else {
+      tableDefinition
+    }
+
+    if (DDLUtils.isDatasourceTable(withStatsProps)) {
+      val oldDef = client.getTable(db, withStatsProps.identifier.table)
       // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is. Also add old data source properties to table
       // properties, to retain the data source table format.
       val oldDataSourceProps = oldDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
-      val newDef = tableDefinition.copy(
+      val newDef = withStatsProps.copy(
         schema = oldDef.schema,
         partitionColumnNames = oldDef.partitionColumnNames,
         bucketSpec = oldDef.bucketSpec,
-        properties = oldDataSourceProps ++ tableDefinition.properties)
+        properties = oldDataSourceProps ++ withStatsProps.properties)
 
       client.alterTable(newDef)
     } else {
-      client.alterTable(tableDefinition)
+      client.alterTable(withStatsProps)
     }
   }
 
@@ -422,7 +448,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * properties, and filter out these special entries from table properties.
    */
   private def restoreTableMetadata(table: CatalogTable): CatalogTable = {
-    if (table.tableType == VIEW) {
+    val catalogTable = if (table.tableType == VIEW || conf.get(DEBUG_MODE)) {
       table
     } else {
       getProviderFromTableProperties(table).map { provider =>
@@ -451,6 +477,25 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       } getOrElse {
         table.copy(provider = Some("hive"))
       }
+    }
+    // construct Spark's statistics from information in Hive metastore
+    val statsProps = catalogTable.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
+    if (statsProps.nonEmpty) {
+      val colStatsProps = statsProps.filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX))
+        .map { case (k, v) => (k.drop(STATISTICS_COL_STATS_PREFIX.length), v) }
+      val colStats: Map[String, ColumnStat] = catalogTable.schema.collect {
+        case f if colStatsProps.contains(f.name) =>
+          val numFields = ColumnStatStruct.numStatFields(f.dataType)
+          (f.name, ColumnStat(numFields, colStatsProps(f.name)))
+      }.toMap
+      catalogTable.copy(
+        properties = removeStatsProperties(catalogTable),
+        stats = Some(Statistics(
+          sizeInBytes = BigInt(catalogTable.properties(STATISTICS_TOTAL_SIZE)),
+          rowCount = catalogTable.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
+          colStats = colStats)))
+    } else {
+      catalogTable
     }
   }
 
@@ -597,6 +642,40 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.getPartitions(db, table, partialSpec)
   }
 
+  override def listPartitionsByFilter(
+      db: String,
+      table: String,
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = withClient {
+    val catalogTable = client.getTable(db, table)
+    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+    val nonPartitionPruningPredicates = predicates.filterNot {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+
+    if (nonPartitionPruningPredicates.nonEmpty) {
+        sys.error("Expected only partition pruning predicates: " +
+          predicates.reduceLeft(And))
+    }
+
+    val partitionSchema = catalogTable.partitionSchema
+
+    if (predicates.nonEmpty) {
+      val clientPrunedPartitions =
+        client.getPartitionsByFilter(catalogTable, predicates)
+      val boundPredicate =
+        InterpretedPredicate.create(predicates.reduce(And).transform {
+          case att: AttributeReference =>
+            val index = partitionSchema.indexWhere(_.name == att.name)
+            BoundReference(index, partitionSchema(index).dataType, nullable = true)
+        })
+      clientPrunedPartitions.filter { case p: CatalogTablePartition =>
+        boundPredicate(p.toRow(partitionSchema))
+      }
+    } else {
+      client.getPartitions(catalogTable)
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Functions
   // --------------------------------------------------------------------------
@@ -656,6 +735,15 @@ object HiveExternalCatalog {
   val DATASOURCE_SCHEMA_PARTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "partCol."
   val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
   val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
+
+  val STATISTICS_PREFIX = "spark.sql.statistics."
+  val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
+  val STATISTICS_NUM_ROWS = STATISTICS_PREFIX + "numRows"
+  val STATISTICS_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
+
+  def removeStatsProperties(metadata: CatalogTable): Map[String, String] = {
+    metadata.properties.filterNot { case (key, _) => key.startsWith(STATISTICS_PREFIX) }
+  }
 
   def getProviderFromTableProperties(metadata: CatalogTable): Option[String] = {
     metadata.properties.get(DATASOURCE_PROVIDER)

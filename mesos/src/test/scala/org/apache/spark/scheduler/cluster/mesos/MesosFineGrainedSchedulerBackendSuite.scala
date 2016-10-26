@@ -236,16 +236,16 @@ class MesosFineGrainedSchedulerBackendSuite
     mesosOffers.add(createOffer(3, minMem, minCpu))
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](2)
-    expectedWorkerOffers.append(new WorkerOffer(
+    expectedWorkerOffers += new WorkerOffer(
       mesosOffers.get(0).getSlaveId.getValue,
       mesosOffers.get(0).getHostname,
       (minCpu - backend.mesosExecutorCores).toInt
-    ))
-    expectedWorkerOffers.append(new WorkerOffer(
+    )
+    expectedWorkerOffers += new WorkerOffer(
       mesosOffers.get(2).getSlaveId.getValue,
       mesosOffers.get(2).getHostname,
       (minCpu - backend.mesosExecutorCores).toInt
-    ))
+    )
     val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
     when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
@@ -283,7 +283,7 @@ class MesosFineGrainedSchedulerBackendSuite
     mesosOffers2.add(createOffer(1, minMem, minCpu))
     reset(taskScheduler)
     reset(driver)
-    when(taskScheduler.resourceOffers(any(classOf[Seq[WorkerOffer]]))).thenReturn(Seq(Seq()))
+    when(taskScheduler.resourceOffers(any(classOf[IndexedSeq[WorkerOffer]]))).thenReturn(Seq(Seq()))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
     when(driver.declineOffer(mesosOffers2.get(0).getId)).thenReturn(Status.valueOf(1))
 
@@ -339,11 +339,11 @@ class MesosFineGrainedSchedulerBackendSuite
     val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](1)
-    expectedWorkerOffers.append(new WorkerOffer(
+    expectedWorkerOffers += new WorkerOffer(
       mesosOffers.get(0).getSlaveId.getValue,
       mesosOffers.get(0).getHostname,
       2 // Deducting 1 for executor
-    ))
+    )
 
     val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
     when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))

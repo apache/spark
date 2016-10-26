@@ -20,13 +20,17 @@ package org.apache.spark.sql.execution.datasources.text
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
+import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
+import org.apache.hadoop.util.ReflectionUtils
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -71,14 +75,11 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     new OutputWriterFactory {
       override def newInstance(
-          path: String,
-          bucketId: Option[Int],
+          stagingDir: String,
+          fileNamePrefix: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        if (bucketId.isDefined) {
-          throw new AnalysisException("Text doesn't support bucketing")
-        }
-        new TextOutputWriter(path, dataSchema, context)
+        new TextOutputWriter(stagingDir, fileNamePrefix, dataSchema, context)
       }
     }
   }
@@ -100,6 +101,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     (file: PartitionedFile) => {
       val reader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => reader.close()))
 
       if (requiredSchema.isEmpty) {
         val emptyUnsafeRow = new UnsafeRow(0)
@@ -121,19 +123,24 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 }
 
-class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
+class TextOutputWriter(
+    stagingDir: String,
+    fileNamePrefix: String,
+    dataSchema: StructType,
+    context: TaskAttemptContext)
   extends OutputWriter {
+
+  override val path: String = {
+    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
+    new Path(stagingDir, fileNamePrefix + ".txt" + compressionExtension).toString
+  }
 
   private[this] val buffer = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.txt$extension")
+        new Path(path)
       }
     }.getRecordWriter(context)
   }
@@ -148,5 +155,19 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
 
   override def close(): Unit = {
     recordWriter.close(context)
+  }
+}
+
+
+object TextOutputWriter {
+  /** Returns the compression codec extension to be used in a file name, e.g. ".gzip"). */
+  def getCompressionExtension(context: TaskAttemptContext): String = {
+    // Set the compression extension, similar to code in TextOutputFormat.getDefaultWorkFile
+    if (FileOutputFormat.getCompressOutput(context)) {
+      val codecClass = FileOutputFormat.getOutputCompressorClass(context, classOf[GzipCodec])
+      ReflectionUtils.newInstance(codecClass, context.getConfiguration).getDefaultExtension
+    } else {
+      ""
+    }
   }
 }

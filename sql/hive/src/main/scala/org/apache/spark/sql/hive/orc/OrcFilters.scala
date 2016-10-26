@@ -84,6 +84,7 @@ private[orc] object OrcFilters extends Logging {
       // the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
       case ByteType | ShortType | FloatType | DoubleType => true
       case IntegerType | LongType | StringType | BooleanType => true
+      case TimestampType | _: DecimalType => true
       case _ => false
     }
 

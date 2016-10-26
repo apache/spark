@@ -57,20 +57,37 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * Reorder associative integral-type operators and fold all constants into one.
  */
 object ReorderAssociativeOperator extends Rule[LogicalPlan] {
-  private def flattenAdd(e: Expression): Seq[Expression] = e match {
-    case Add(l, r) => flattenAdd(l) ++ flattenAdd(r)
+  private def flattenAdd(
+    expression: Expression,
+    groupSet: ExpressionSet): Seq[Expression] = expression match {
+    case expr @ Add(l, r) if !groupSet.contains(expr) =>
+      flattenAdd(l, groupSet) ++ flattenAdd(r, groupSet)
     case other => other :: Nil
   }
 
-  private def flattenMultiply(e: Expression): Seq[Expression] = e match {
-    case Multiply(l, r) => flattenMultiply(l) ++ flattenMultiply(r)
+  private def flattenMultiply(
+    expression: Expression,
+    groupSet: ExpressionSet): Seq[Expression] = expression match {
+    case expr @ Multiply(l, r) if !groupSet.contains(expr) =>
+      flattenMultiply(l, groupSet) ++ flattenMultiply(r, groupSet)
     case other => other :: Nil
+  }
+
+  private def collectGroupingExpressions(plan: LogicalPlan): ExpressionSet = plan match {
+    case Aggregate(groupingExpressions, aggregateExpressions, child) =>
+      ExpressionSet.apply(groupingExpressions)
+    case _ => ExpressionSet(Seq())
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
+    case q: LogicalPlan =>
+      // We have to respect aggregate expressions which exists in grouping expressions when plan
+      // is an Aggregate operator, otherwise the optimized expression could not be derived from
+      // grouping expressions.
+      val groupingExpressionSet = collectGroupingExpressions(q)
+      q transformExpressionsDown {
       case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenAdd(a).partition(_.foldable)
+        val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
           val foldableExpr = foldables.reduce((x, y) => Add(x, y))
           val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
@@ -79,7 +96,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
           a
         }
       case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenMultiply(m).partition(_.foldable)
+        val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
           val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
           val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)

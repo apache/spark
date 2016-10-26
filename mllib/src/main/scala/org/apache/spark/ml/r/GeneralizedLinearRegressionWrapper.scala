@@ -89,6 +89,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setMaxIter(maxIter)
       .setWeightCol(weightCol)
       .setRegParam(regParam)
+      .setFeaturesCol(rFormula.getFeaturesCol)
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, glr))
       .fit(data)

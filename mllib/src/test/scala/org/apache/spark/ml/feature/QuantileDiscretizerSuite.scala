@@ -52,12 +52,12 @@ class QuantileDiscretizerSuite
       "Bucket sizes are not within expected relative error tolerance.")
   }
 
-  test("Test Bucketizer on duplicated splits") {
+  test("Test on data with high proportion of duplicated values") {
     val spark = this.spark
     import spark.implicits._
 
-    val datasetSize = 12
     val numBuckets = 5
+    val expectedNumBuckets = 3
     val df = sc.parallelize(Array(1.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 2.0, 2.0, 2.0, 1.0, 3.0))
       .map(Tuple1.apply).toDF("input")
     val discretizer = new QuantileDiscretizer()
@@ -65,10 +65,31 @@ class QuantileDiscretizerSuite
       .setOutputCol("result")
       .setNumBuckets(numBuckets)
     val result = discretizer.fit(df).transform(df)
-
     val observedNumBuckets = result.select("result").distinct.count
-    assert(2 <= observedNumBuckets && observedNumBuckets <= numBuckets,
-      "Observed number of buckets are not within expected range.")
+    assert(observedNumBuckets == expectedNumBuckets,
+      s"Observed number of buckets are not correct." +
+        s" Expected $expectedNumBuckets but found $observedNumBuckets")
+  }
+
+  test("Test transform on data with NaN value") {
+    val spark = this.spark
+    import spark.implicits._
+
+    val numBuckets = 3
+    val df = sc.parallelize(Array(1.0, 1.0, 1.0, Double.NaN))
+      .map(Tuple1.apply).toDF("input")
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setOutputCol("result")
+      .setNumBuckets(numBuckets)
+
+    // Reserve extra one bucket for NaN
+    val expectedNumBuckets = discretizer.fit(df).getSplits.length - 1
+    val result = discretizer.fit(df).transform(df)
+    val observedNumBuckets = result.select("result").distinct.count
+    assert(observedNumBuckets == expectedNumBuckets,
+      s"Observed number of buckets are not correct." +
+        s" Expected $expectedNumBuckets but found $observedNumBuckets")
   }
 
   test("Test transform method on unseen data") {

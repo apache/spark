@@ -173,7 +173,6 @@ private[spark] class ApplicationMaster(
       sys.props.remove(e.key)
     }
 
-    logInfo("Prepared Local resources " + resources)
     resources.toMap
   }
 
@@ -184,6 +183,8 @@ private[spark] class ApplicationMaster(
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
+
+      var attemptID: Option[String] = None
 
       if (isClusterMode) {
         // Set the web ui port to be ephemeral for yarn so we don't conflict with
@@ -197,7 +198,12 @@ private[spark] class ApplicationMaster(
         // Set this internal configuration if it is running on cluster mode, this
         // configuration will be checked in SparkContext to avoid misuse of yarn cluster mode.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
+
+        attemptID = Option(appAttemptId.getAttemptId.toString)
       }
+
+      new CallerContext("APPMASTER",
+        Option(appAttemptId.getApplicationId.toString), attemptID).setCurrentContext()
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 
@@ -329,7 +335,7 @@ private[spark] class ApplicationMaster(
     val appId = client.getAttemptId().getApplicationId().toString()
     val attemptId = client.getAttemptId().getAttemptId().toString()
     val historyAddress =
-      sparkConf.get(HISTORY_SERVER_ADDRESS)
+      _sparkConf.get(HISTORY_SERVER_ADDRESS)
         .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
         .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
         .getOrElse("")
@@ -338,6 +344,18 @@ private[spark] class ApplicationMaster(
       _sparkConf.get("spark.driver.host"),
       _sparkConf.get("spark.driver.port").toInt,
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+
+    // Before we initialize the allocator, let's log the information about how executors will
+    // be run up front, to avoid printing this out for every single executor being launched.
+    // Use placeholders for information that changes such as executor IDs.
+    logInfo {
+      val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
+      val executorCores = sparkConf.get(EXECUTOR_CORES)
+      val dummyRunner = new ExecutorRunnable(None, yarnConf, sparkConf, driverUrl, "<executorId>",
+        "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources)
+      dummyRunner.launchContextDebugInfo()
+    }
+
     allocator = client.register(driverUrl,
       driverRef,
       yarnConf,

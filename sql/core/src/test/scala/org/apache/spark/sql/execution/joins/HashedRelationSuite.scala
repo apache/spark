@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.joins
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
+import scala.util.Random
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.serializer.KryoSerializer
@@ -195,6 +197,60 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       assert(map.getValue(Long.MinValue, row) eq null)
       map.free()
     }
+  }
+
+  test("LongToUnsafeRowMap with random keys") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new StaticMemoryManager(
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+
+    val N = 1000000
+    val rand = new Random
+    val keys = (0 to N).map(x => rand.nextLong()).toArray
+
+    val map = new LongToUnsafeRowMap(taskMemoryManager, 10)
+    keys.foreach { k =>
+      map.append(k, unsafeProj(InternalRow(k)))
+    }
+    map.optimize()
+
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    map.writeExternal(out)
+    out.flush()
+    val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
+    val map2 = new LongToUnsafeRowMap(taskMemoryManager, 1)
+    map2.readExternal(in)
+
+    val row = unsafeProj(InternalRow(0L)).copy()
+    keys.foreach { k =>
+      val r = map2.get(k, row)
+      assert(r.hasNext)
+      var c = 0
+      while (r.hasNext) {
+        val rr = r.next()
+        assert(rr.getLong(0) === k)
+        c += 1
+      }
+    }
+    var i = 0
+    while (i < N * 10) {
+      val k = rand.nextLong()
+      val r = map2.get(k, row)
+      if (r != null) {
+        assert(r.hasNext)
+        while (r.hasNext) {
+          assert(r.next().getLong(0) === k)
+        }
+      }
+      i += 1
+    }
+    map.free()
   }
 
   test("Spark-14521") {
