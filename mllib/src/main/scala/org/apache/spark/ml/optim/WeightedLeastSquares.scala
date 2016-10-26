@@ -137,48 +137,57 @@ private[ml] class WeightedLeastSquares(
     val bbBar = summary.bbBar / (bStd * bStd)
 
     val aStd = summary.aStd
+    val aStdValues = aStd.values
+
     val aBar = {
       val _aBar = summary.aBar
+      val _aBarValues = _aBar.values
       var i = 0
       // scale aBar to standardized space in-place
       while (i < numFeatures) {
-        if (aStd(i) == 0.0) {
-          _aBar.values(i) = 0.0
+        if (aStdValues(i) == 0.0) {
+          _aBarValues(i) = 0.0
         } else {
-          _aBar.values(i) /= aStd(i)
+          _aBarValues(i) /= aStdValues(i)
         }
         i += 1
       }
       _aBar
     }
+    val aBarValues = aBar.values
+
     val abBar = {
       val _abBar = summary.abBar
+      val _abBarValues = _abBar.values
       var i = 0
       // scale abBar to standardized space in-place
       while (i < numFeatures) {
-        if (aStd(i) == 0.0) {
-          _abBar.values(i) = 0.0
+        if (aStdValues(i) == 0.0) {
+          _abBarValues(i) = 0.0
         } else {
-          _abBar.values(i) /= (aStd(i) * bStd)
+          _abBarValues(i) /= (aStdValues(i) * bStd)
         }
         i += 1
       }
       _abBar
     }
+    val abBarValues = abBar.values
+
     val aaBar = {
       val _aaBar = summary.aaBar
+      val _aaBarValues = _aaBar.values
       var j = 0
       var p = 0
       // scale aaBar to standardized space in-place
       while (j < numFeatures) {
-        val aStdJ = aStd.values(j)
+        val aStdJ = aStdValues(j)
         var i = 0
         while (i <= j) {
-          val aStdI = aStd.values(i)
+          val aStdI = aStdValues(i)
           if (aStdJ == 0.0 || aStdI == 0.0) {
-            _aaBar.values(p) = 0.0
+            _aaBarValues(p) = 0.0
           } else {
-            _aaBar.values(p) /= (aStdI * aStdJ)
+            _aaBarValues(p) /= (aStdI * aStdJ)
           }
           p += 1
           i += 1
@@ -187,6 +196,7 @@ private[ml] class WeightedLeastSquares(
       }
       _aaBar
     }
+    val aaBarValues = aaBar.values
 
     val effectiveRegParam = regParam / bStd
     val effectiveL1RegParam = elasticNetParam * effectiveRegParam
@@ -198,7 +208,7 @@ private[ml] class WeightedLeastSquares(
     while (i < triK) {
       var lambda = effectiveL2RegParam
       if (!standardizeFeatures) {
-        val std = aStd(j - 2)
+        val std = aStdValues(j - 2)
         if (std != 0.0) {
           lambda /= (std * std)
         } else {
@@ -208,13 +218,13 @@ private[ml] class WeightedLeastSquares(
       if (!standardizeLabel) {
         lambda *= bStd
       }
-      aaBar.values(i) += lambda
+      aaBarValues(i) += lambda
       i += j
       j += 1
     }
 
-    val aa = getAtA(aaBar.values, aBar.values)
-    val ab = getAtB(abBar.values, bBar)
+    val aa = getAtA(aaBarValues, aBarValues)
+    val ab = getAtB(abBarValues, bBar)
 
     val solver = if ((solverType == WeightedLeastSquares.Auto && elasticNetParam != 0.0 &&
       regParam != 0.0) || (solverType == WeightedLeastSquares.QuasiNewton)) {
@@ -226,7 +236,7 @@ private[ml] class WeightedLeastSquares(
               if (standardizeFeatures) {
                 effectiveL1RegParam
               } else {
-                if (aStd.values(index) != 0.0) effectiveL1RegParam / aStd.values(index) else 0.0
+                if (aStdValues(index) != 0.0) effectiveL1RegParam / aStdValues(index) else 0.0
               }
             }
           })
@@ -249,8 +259,8 @@ private[ml] class WeightedLeastSquares(
             logWarning("Cholesky solver failed due to singular covariance matrix. " +
               "Retrying with Quasi-Newton solver.")
             // ab and aa were modified in place, so reconstruct them
-            val _aa = getAtA(aaBar.values, aBar.values)
-            val _ab = getAtB(abBar.values, bBar)
+            val _aa = getAtA(aaBarValues, aBarValues)
+            val _ab = getAtB(abBarValues, bBar)
             val newSolver = new QuasiNewtonSolver(fitIntercept, maxIter, tol, None)
             newSolver.solve(bBar, bbBar, _ab, _aa, aBar)
         }
@@ -269,7 +279,7 @@ private[ml] class WeightedLeastSquares(
     var q = 0
     val len = coefficientArray.length
     while (q < len) {
-      coefficientArray(q) *= { if (aStd.values(q) != 0.0) bStd / aStd.values(q) else 0.0 }
+      coefficientArray(q) *= { if (aStdValues(q) != 0.0) bStd / aStdValues(q) else 0.0 }
       q += 1
     }
 
@@ -279,7 +289,7 @@ private[ml] class WeightedLeastSquares(
         val multiplier = if (i == k && fitIntercept) {
           1.0
         } else {
-          aStd.values(i - 1) * aStd.values(i - 1)
+          aStdValues(i - 1) * aStdValues(i - 1)
         }
         inv(i + (i - 1) * i / 2 - 1) / (wSum * multiplier)
       }.toArray)
