@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchange}
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.util.Utils
 
 /**
@@ -33,17 +33,8 @@ import org.apache.spark.util.Utils
 trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   val limit: Int
   override def output: Seq[Attribute] = child.output
-  override def executeCollect(): Array[InternalRow] = {
-    child match {
-      // Shuffling is inserted under whole stage codegen.
-      case InputAdapter(ShuffleExchange(_, WholeStageCodegenExec(l: LocalLimitExec), _)) =>
-        l.executeCollect()
-      // Shuffling is inserted without whole stage codegen.
-      case ShuffleExchange(_, l: LocalLimitExec, _) => l.executeCollect()
-      // No shuffling happened.
-      case _ => child.executeTake(limit)
-    }
-  }
+  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
+  override def executeTake(n: Int): Array[InternalRow] = child.executeTake(limit)
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
@@ -72,8 +63,9 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
     s"""
        | if ($countTerm < $limit) {
        |   $countTerm += 1;
-       |   if ($countTerm == $limit) $stopEarly = true;
        |   ${consume(ctx, input)}
+       | } else {
+       |   $stopEarly = true;
        | }
      """.stripMargin
   }

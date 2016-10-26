@@ -663,15 +663,6 @@ case class HashAggregateExec(
          """.stripMargin
     }
 
-    ctx.addNewFunction("releaseResource", s"""
-      @Override
-      protected void releaseResource() {
-        $iterTerm.close();
-        if ($sorterTerm == null) {
-          $hashMapTerm.free();
-        }
-      }
-    """)
 
     val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
