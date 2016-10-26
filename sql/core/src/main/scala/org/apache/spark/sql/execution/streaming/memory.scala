@@ -148,6 +148,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   def reset(): Unit = synchronized {
     batches.clear()
     currentOffset = new LongOffset(-1)
+    lastOffsetCommitted = new LongOffset(-1)
   }
 }
 
