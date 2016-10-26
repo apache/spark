@@ -127,19 +127,19 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def commit(end: Offset): Unit = synchronized {
-    if (end.isInstanceOf[LongOffset]) {
-      val newOffset = end.asInstanceOf[LongOffset]
-      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
+    end match {
+      case newOffset: LongOffset =>
+        val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
-      if (offsetDiff < 0) {
-        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
-      }
+        if (offsetDiff < 0) {
+          sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
+        }
 
-      batches.trimStart(offsetDiff)
-      lastOffsetCommitted = newOffset
-    } else {
-      sys.error(s"MemoryStream.commit() received an offset ($end) that did not originate with " +
-        s"an instance of this class")
+        batches.trimStart(offsetDiff)
+        lastOffsetCommitted = newOffset
+      case _ =>
+        sys.error(s"MemoryStream.commit() received an offset ($end) that did not originate with " +
+          "an instance of this class")
     }
   }
 
