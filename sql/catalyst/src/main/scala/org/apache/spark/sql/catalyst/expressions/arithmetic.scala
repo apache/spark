@@ -29,6 +29,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
   extended = """
     Arguments:
       expr - a numeric or interval expression.
+    Examples:
+      > SELECT _FUNC_(1);
+       -1
   """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
@@ -428,7 +431,7 @@ case class Remainder(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the positive modulo.",
+  usage = "_FUNC_(expr1, expr2) - Returns the positive value of expr1 mod expr2.",
   extended = """
     Arguments:
       expr1 - a numeric expression.

@@ -1507,7 +1507,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             |       2
             |  """.stripMargin) ::
         Row("Function: ^") ::
-        Row("Usage: expr1 ^ expr2 - Bitwise exclusive OR.") :: Nil
+        Row("Usage: expr1 ^ expr2 - Returns the result of " +
+          "bitwise exclusive OR of expr1 and expr2.") :: Nil
     )
   }
 

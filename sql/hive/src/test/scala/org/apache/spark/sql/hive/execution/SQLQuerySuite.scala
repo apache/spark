@@ -274,7 +274,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkKeywordsExist(sql("describe functioN  `~`"),
       "Function: ~",
       "Class: org.apache.spark.sql.catalyst.expressions.BitwiseNot",
-      "Usage: ~ expr - Bitwise NOT.")
+      "Usage: ~ expr - Returns the result of bitwise NOT of expr.")
 
     // Hard coded describe functions
     checkKeywordsExist(sql("describe function  `<>`"),
