@@ -719,7 +719,7 @@ object DDLUtils {
         s"$action is not allowed on $tableName since filesource partition management is " +
           "disabled (spark.sql.hive.manageFilesourcePartitions = false).")
     }
-    if (!table.partitionProviderIsHive) {
+    if (!table.partitionProviderIsHive && isDatasourceTable(table)) {
       throw new AnalysisException(
         s"$action is not allowed on $tableName since its partition metadata is not stored in " +
           "the Hive metastore. To import this information into the metastore, run " +
