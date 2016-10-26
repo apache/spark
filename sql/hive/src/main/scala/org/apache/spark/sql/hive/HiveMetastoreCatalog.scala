@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{Partition => _, _}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.types._
@@ -226,16 +226,14 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         Some(partitionSchema))
 
       val logicalRelation = cached.getOrElse {
-        val db = metastoreRelation.databaseName
-        val table = metastoreRelation.tableName
         val sizeInBytes = metastoreRelation.statistics.sizeInBytes.toLong
         val fileCatalog = {
           val catalog = new TableFileCatalog(
-            sparkSession, db, table, Some(partitionSchema), sizeInBytes)
+            sparkSession, metastoreRelation.catalogTable, sizeInBytes)
           if (lazyPruningEnabled) {
             catalog
           } else {
-            catalog.cachedAllPartitions
+            catalog.filterPartitions(Nil)  // materialize all the partitions in memory
           }
         }
         val partitionSchemaColumnNames = partitionSchema.map(_.name.toLowerCase).toSet

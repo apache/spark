@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.util.UUID
 
 import scala.util.Random
@@ -1598,6 +1599,24 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
 
+  test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
+    withTable("bar") {
+      withTempView("foo") {
+        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
+          sql("select 0 as id").createOrReplaceTempView("foo")
+          val df = sql("select * from foo group by id")
+          // If we optimize the query in CTAS more than once, the following saveAsTable will fail
+          // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
+          df.write.mode("overwrite").saveAsTable("bar")
+          checkAnswer(spark.table("bar"), Row(0) :: Nil)
+          val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
+          assert(tableMetadata.provider == Some("json"),
+            "the expected table is a data source table using json")
+        }
+      }
+    }
+  }
+
   test("copy results for sampling with replacement") {
     val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
     val sampleDf = df.sample(true, 2.00)
@@ -1614,5 +1633,29 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
       qe.assertAnalyzed()
     }
+  }
+
+  test("SPARK-17123: Performing set operations that combine non-scala native types") {
+    val dates = Seq(
+      (new Date(0), BigDecimal.valueOf(1), new Timestamp(2)),
+      (new Date(3), BigDecimal.valueOf(4), new Timestamp(5))
+    ).toDF("date", "timestamp", "decimal")
+
+    val widenTypedRows = Seq(
+      (new Timestamp(2), 10.5D, "string")
+    ).toDF("date", "timestamp", "decimal")
+
+    dates.union(widenTypedRows).collect()
+    dates.except(widenTypedRows).collect()
+    dates.intersect(widenTypedRows).collect()
+  }
+
+  test("SPARK-18070 binary operator should not consider nullability when comparing input types") {
+    val rows = Seq(Row(Seq(1), Seq(1)))
+    val schema = new StructType()
+      .add("array1", ArrayType(IntegerType))
+      .add("array2", ArrayType(IntegerType, containsNull = false))
+    val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
+    assert(df.filter($"array1" === $"array2").count() == 1)
   }
 }

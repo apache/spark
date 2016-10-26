@@ -124,11 +124,11 @@ object EvaluatePython {
     case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
       new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
-    case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
-      val keyValues = c.asScala.toSeq
-      val keys = keyValues.map(kv => fromJava(kv._1, keyType)).toArray
-      val values = keyValues.map(kv => fromJava(kv._2, valueType)).toArray
-      ArrayBasedMapData(keys, values)
+    case (javaMap: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
+      ArrayBasedMapData(
+        javaMap,
+        (key: Any) => fromJava(key, keyType),
+        (value: Any) => fromJava(value, valueType))
 
     case (c, StructType(fields)) if c.getClass.isArray =>
       val array = c.asInstanceOf[Array[_]]

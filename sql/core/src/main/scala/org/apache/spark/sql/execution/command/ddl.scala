@@ -351,8 +351,13 @@ case class AlterTableAddPartitionCommand(
         "ALTER TABLE ADD PARTITION is not allowed for tables defined using the datasource API")
     }
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
+      val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
+        spec,
+        table.partitionColumnNames,
+        table.identifier.quotedString,
+        sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
-      CatalogTablePartition(spec, table.storage.copy(locationUri = location))
+      CatalogTablePartition(normalizedSpec, table.storage.copy(locationUri = location))
     }
     catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
     Seq.empty[Row]
@@ -382,8 +387,21 @@ case class AlterTableRenamePartitionCommand(
         "ALTER TABLE RENAME PARTITION is not allowed for tables defined using the datasource API")
     }
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+
+    val normalizedOldPartition = PartitioningUtils.normalizePartitionSpec(
+      oldPartition,
+      table.partitionColumnNames,
+      table.identifier.quotedString,
+      sparkSession.sessionState.conf.resolver)
+
+    val normalizedNewPartition = PartitioningUtils.normalizePartitionSpec(
+      newPartition,
+      table.partitionColumnNames,
+      table.identifier.quotedString,
+      sparkSession.sessionState.conf.resolver)
+
     catalog.renamePartitions(
-      tableName, Seq(oldPartition), Seq(newPartition))
+      tableName, Seq(normalizedOldPartition), Seq(normalizedNewPartition))
     Seq.empty[Row]
   }
 
@@ -418,7 +436,17 @@ case class AlterTableDropPartitionCommand(
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
-    catalog.dropPartitions(table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
+
+    val normalizedSpecs = specs.map { spec =>
+      PartitioningUtils.normalizePartitionSpec(
+        spec,
+        table.partitionColumnNames,
+        table.identifier.quotedString,
+        sparkSession.sessionState.conf.resolver)
+    }
+
+    catalog.dropPartitions(
+      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
 

@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -56,7 +57,7 @@ object SQLConf {
   val WAREHOUSE_PATH = SQLConfigBuilder("spark.sql.warehouse.dir")
     .doc("The default location for managed databases and tables.")
     .stringConf
-    .createWithDefault("${system:user.dir}/spark-warehouse")
+    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
@@ -265,16 +266,26 @@ object SQLConf {
   val HIVE_METASTORE_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
-           "unmatching partitions can be eliminated earlier.")
+           "unmatching partitions can be eliminated earlier. This only affects Hive tables " +
+           "not converted to filesource relations (see HiveUtils.CONVERT_METASTORE_PARQUET and " +
+           "HiveUtils.CONVERT_METASTORE_ORC for more information).")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val HIVE_FILESOURCE_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.hive.filesourcePartitionPruning")
-      .doc("When true, enable metastore partition pruning for file source tables as well. " +
+      .doc("When true, enable metastore partition pruning for filesource relations as well. " +
            "This is currently implemented for converted Hive tables only.")
       .booleanConf
       .createWithDefault(true)
+
+  val HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE =
+    SQLConfigBuilder("spark.sql.hive.filesourcePartitionFileCacheSize")
+      .doc("When nonzero, enable caching of partition file metadata in memory. All table share " +
+           "a cache that can use up to specified num bytes for file metadata. This conf only " +
+           "applies if filesource partition pruning is also enabled.")
+      .longConf
+      .createWithDefault(250 * 1024 * 1024)
 
   val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
@@ -339,13 +350,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val PARTITION_MAX_FILES =
-    SQLConfigBuilder("spark.sql.sources.maxConcurrentWrites")
-      .doc("The maximum number of concurrent files to open before falling back on sorting when " +
-            "writing out files using dynamic partitioning.")
-      .intConf
-      .createWithDefault(1)
-
   val BUCKETING_ENABLED = SQLConfigBuilder("spark.sql.sources.bucketing.enabled")
     .doc("When false, we will treat bucketed table as normal table")
     .booleanConf
@@ -387,14 +391,6 @@ object SQLConf {
         "LibSVM data sources.")
       .intConf
       .createWithDefault(32)
-
-  // Whether to perform eager analysis when constructing a dataframe.
-  // Set to false when debugging requires the ability to look at invalid query plans.
-  val DATAFRAME_EAGER_ANALYSIS = SQLConfigBuilder("spark.sql.eagerAnalysis")
-    .internal()
-    .doc("When true, eagerly applies query analysis on DataFrame operations.")
-    .booleanConf
-    .createWithDefault(true)
 
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
@@ -685,6 +681,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def filesourcePartitionPruning: Boolean = getConf(HIVE_FILESOURCE_PARTITION_PRUNING)
 
+  def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
+
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
@@ -741,14 +739,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def partitionColumnTypeInferenceEnabled: Boolean =
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
 
-  def partitionMaxFiles: Int = getConf(PARTITION_MAX_FILES)
-
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
-
-  def dataFrameEagerAnalysis: Boolean = getConf(DATAFRAME_EAGER_ANALYSIS)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

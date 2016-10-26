@@ -238,7 +238,7 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("CTAS of decimal calculation") {
+  test("SPARK-17409: CTAS of decimal calculation") {
     withTable("tab2") {
       withTempView("tab1") {
         spark.range(99, 101).createOrReplaceTempView("tab1")
