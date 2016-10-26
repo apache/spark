@@ -1664,6 +1664,13 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
+        <td><code>spark.ssl.port</code></td>
+        <td>None</td>
+        <td>
+            A port number hen connecting with SSL.
+        </td>
+    </tr>
+    <tr>
         <td><code>spark.ssl.needClientAuth</code></td>
         <td>false</td>
         <td>

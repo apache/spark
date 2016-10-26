@@ -56,6 +56,7 @@ private[spark] case class SSLOptions(
     trustStorePassword: Option[String] = None,
     trustStoreType: Option[String] = None,
     protocol: Option[String] = None,
+    port: Int = 0,
     enabledAlgorithms: Set[String] = Set.empty)
     extends Logging {
 
@@ -147,6 +148,7 @@ private[spark] object SSLOptions extends Logging {
    * $ - `[ns].trustStorePassword` - a password to the trust-store file
    * $ - `[ns].trustStoreType` - the type of trust-store
    * $ - `[ns].protocol` - a protocol name supported by a particular Java version
+   * $ - `[ns].port` - a port number
    * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
    *
    * For a list of protocols and ciphers supported by particular Java versions, you may go to
@@ -191,6 +193,8 @@ private[spark] object SSLOptions extends Logging {
     val protocol = conf.getOption(s"$ns.protocol")
         .orElse(defaults.flatMap(_.protocol))
 
+    val port = conf.getInt(s"$ns.port", defaultValue = defaults.map(_.port).getOrElse(0))
+
     val enabledAlgorithms = conf.getOption(s"$ns.enabledAlgorithms")
         .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSet)
         .orElse(defaults.map(_.enabledAlgorithms))
@@ -207,6 +211,7 @@ private[spark] object SSLOptions extends Logging {
       trustStorePassword,
       trustStoreType,
       protocol,
+      port,
       enabledAlgorithms)
   }
 

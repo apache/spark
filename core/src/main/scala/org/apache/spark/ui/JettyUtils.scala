@@ -308,21 +308,40 @@ private[spark] object JettyUtils extends Logging {
 
       sslOptions.createJettySslContextFactory().foreach { factory =>
         // If the new port wraps around, do not try a privileged port.
-        val securePort =
-          if (currentPort != 0) {
-            (currentPort + 400 - 1024) % (65536 - 1024) + 1024
-          } else {
-            0
-          }
+
+        require(sslOptions.port == 0 || (1024 <= sslOptions.port && sslOptions.port < 65536))
+        val maxRetries = Utils.portMaxRetries(conf)
+
         val scheme = "https"
         // Create a connector on port securePort to listen for HTTPS requests
-        val connector = new ServerConnector(server, factory)
-        connector.setPort(securePort)
-
-        connectors += connector
-
-        // redirect the HTTP requests to HTTPS port
-        collection.addHandler(createRedirectHttpsHandler(securePort, scheme))
+        var offset = 0
+        var connected = false
+        while (offset < maxRetries && connected == false) {
+          val securePort =
+            if (currentPort != 0) {
+              if (1024 < sslOptions.port && sslOptions.port < 65536) {
+                sslOptions.port + offset
+              } else {
+                (currentPort + 400 - 1024) % (65536 - 1024) + 1024
+              }
+            } else {
+              0
+            }
+          val connector = new ServerConnector(server, factory)
+          connector.setPort(securePort)
+          connectors += connector
+          try{
+            // redirect the HTTP requests to HTTPS port
+            collection.addHandler(createRedirectHttpsHandler(securePort, scheme))
+            connected = true
+          } catch {
+            case e: Exception =>
+              if (offset >= maxRetries) {
+                throw e
+              }
+          }
+          offset += 1
+        }
       }
 
       gzipHandlers.foreach(collection.addHandler)
