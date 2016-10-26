@@ -19,12 +19,9 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.math.MathContext
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
