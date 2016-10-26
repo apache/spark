@@ -368,7 +368,7 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
 class GaussianMixtureSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
-    val probabilityCol: String,
+    @Since("2.0.0") val probabilityCol: String,
     featuresCol: String,
     k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
 

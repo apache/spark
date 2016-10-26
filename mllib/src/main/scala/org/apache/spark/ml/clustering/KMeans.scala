@@ -358,37 +358,3 @@ class KMeansSummary private[clustering] (
     predictionCol: String,
     featuresCol: String,
     k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
-
-/**
- * :: Experimental ::
- * Summary of clustering algorithms.
- *
- * @param predictions  [[DataFrame]] produced by model.transform().
- * @param predictionCol  Name for column of predicted clusters in `predictions`.
- * @param featuresCol  Name for column of features in `predictions`.
- * @param k  Number of clusters.
- */
-@Experimental
-class ClusteringSummary private[clustering] (
-    @transient val predictions: DataFrame,
-    val predictionCol: String,
-    val featuresCol: String,
-    val k: Int) extends Serializable {
-
-  /**
-   * Cluster centers of the transformed data.
-   */
-  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
-
-  /**
-   * Size of (number of data points in) each cluster.
-   */
-  lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
-      case Row(cluster: Int, count: Long) => sizes(cluster) = count
-    }
-    sizes
-  }
-
-}
