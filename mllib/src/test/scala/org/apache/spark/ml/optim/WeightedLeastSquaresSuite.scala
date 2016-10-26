@@ -361,14 +361,13 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
     for (fitIntercept <- Seq(false, true);
          standardization <- Seq(false, true);
          (lambda, alpha) <- Seq((0.0, 0.0), (0.5, 0.0), (0.5, 0.5), (0.5, 1.0))) {
-      for (solver <- Seq(WeightedLeastSquares.Auto, WeightedLeastSquares.Cholesky)) {
-        val wls = new WeightedLeastSquares(fitIntercept, regParam = lambda, elasticNetParam = alpha,
-          standardizeFeatures = standardization, standardizeLabel = true,
-          solverType = WeightedLeastSquares.QuasiNewton)
-        val model = wls.fit(constantFeaturesInstances)
-        val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-        assert(actual ~== expectedQuasiNewton(idx) absTol 1e-6)
-      }
+      val wls = new WeightedLeastSquares(fitIntercept, regParam = lambda, elasticNetParam = alpha,
+        standardizeFeatures = standardization, standardizeLabel = true,
+        solverType = WeightedLeastSquares.QuasiNewton)
+      val model = wls.fit(constantFeaturesInstances)
+      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      assert(actual ~== expectedQuasiNewton(idx) absTol 1e-6)
+
       idx += 1
     }
   }
