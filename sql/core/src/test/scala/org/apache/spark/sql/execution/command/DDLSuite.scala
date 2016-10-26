@@ -926,23 +926,33 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createPartitionedTable(tableIdent, isDatasourceTable = false)
+
+    // basic rename partition
     sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
     sql("ALTER TABLE dbx.tab1 PARTITION (a='2', b='c') RENAME TO PARTITION (a='20', b='c')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(Map("a" -> "100", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
+
     // rename without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 PARTITION (a='100', b='p') RENAME TO PARTITION (a='10', b='p')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(Map("a" -> "10", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
+
     // table to alter does not exist
     intercept[NoSuchTableException] {
       sql("ALTER TABLE does_not_exist PARTITION (c='3') RENAME TO PARTITION (c='333')")
     }
+
     // partition to rename does not exist
     intercept[NoSuchPartitionException] {
       sql("ALTER TABLE tab1 PARTITION (a='not_found', b='1') RENAME TO PARTITION (a='1', b='2')")
     }
+
+    // partition spec in RENAME PARTITION should be case insensitive by default
+    sql("ALTER TABLE tab1 PARTITION (A='10', B='p') RENAME TO PARTITION (A='1', B='p')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> "1", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
   }
 
   test("alter table: rename partition (datasource table)") {
@@ -1334,6 +1344,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val part2 = Map("a" -> "2", "b" -> "6")
     val part3 = Map("a" -> "3", "b" -> "7")
     val part4 = Map("a" -> "4", "b" -> "8")
+    val part5 = Map("a" -> "9", "b" -> "9")
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
     createTablePartition(catalog, part1, tableIdent)
@@ -1341,6 +1352,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+
+    // basic add partition
     maybeWrapException(isDatasourceTable) {
       sql("ALTER TABLE dbx.tab1 ADD IF NOT EXISTS " +
         "PARTITION (a='2', b='6') LOCATION 'paris' PARTITION (a='3', b='7')")
@@ -1351,6 +1364,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option("paris"))
       assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isEmpty)
     }
+
     // add partitions without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     maybeWrapException(isDatasourceTable) {
@@ -1360,20 +1374,33 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
         Set(part1, part2, part3, part4))
     }
+
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist ADD IF NOT EXISTS PARTITION (a='4', b='9')")
     }
+
     // partition to add already exists
     intercept[AnalysisException] {
       sql("ALTER TABLE tab1 ADD PARTITION (a='4', b='8')")
     }
+
+    // partition to add already exists when using IF NOT EXISTS
     maybeWrapException(isDatasourceTable) {
       sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (a='4', b='8')")
     }
     if (!isDatasourceTable) {
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
         Set(part1, part2, part3, part4))
+    }
+
+    // partition spec in ADD PARTITION should be case insensitive by default
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 ADD PARTITION (A='9', B='9')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(part1, part2, part3, part4, part5))
     }
   }
 
@@ -1395,12 +1422,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     if (isDatasourceTable) {
       convertToDatasourceTable(catalog, tableIdent)
     }
+
+    // basic drop partition
     maybeWrapException(isDatasourceTable) {
       sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (a='4', b='8'), PARTITION (a='3', b='7')")
     }
     if (!isDatasourceTable) {
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2))
     }
+
     // drop partitions without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     maybeWrapException(isDatasourceTable) {
@@ -1409,19 +1439,31 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     if (!isDatasourceTable) {
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
     }
+
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist DROP IF EXISTS PARTITION (a='2')")
     }
+
     // partition to drop does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE tab1 DROP PARTITION (a='300')")
     }
+
+    // partition to drop does not exist when using IF EXISTS
     maybeWrapException(isDatasourceTable) {
       sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='300')")
     }
     if (!isDatasourceTable) {
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+    }
+
+    // partition spec in DROP PARTITION should be case insensitive by default
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 DROP PARTITION (A='1', B='5')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).isEmpty)
     }
   }
 
