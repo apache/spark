@@ -202,7 +202,8 @@ fi
 cp -r "$SPARK_HOME/data" "$DISTDIR"
 
 # Make pip package
-cd python
+echo "Building python distribution package"
+cd $SPARK_HOME/python
 python setup.py sdist
 cd ..
 
