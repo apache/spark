@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem
 import org.apache.hadoop.mapreduce.Job
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{util, InternalRow}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
