@@ -293,7 +293,7 @@ class ChiSqSelector(object):
     SparseVector(1, {})
     >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
     DenseVector([8.0])
-    >>> model = ChiSqSelector().setSelectorType("fpr").setAlpha(0.1).fit(
+    >>> model = ChiSqSelector().setSelectorType("fpr").setFpr(0.1).fit(
     ...     sc.parallelize(data))
     >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
     SparseVector(1, {})
