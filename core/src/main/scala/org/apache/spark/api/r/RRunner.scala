@@ -333,7 +333,7 @@ private[r] object RRunner {
     var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
     rCommand = sparkConf.get("spark.r.command", rCommand)
 
-    val rConnectionTimeout = SparkEnv.get.conf.getInt(
+    val rConnectionTimeout = sparkConf.getInt(
       "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
