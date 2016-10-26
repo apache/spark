@@ -83,7 +83,7 @@ private[scheduler] class BlacklistTracker (
    * there cannot be many blacklisted executors on one node, before we stop requesting more
    * executors on that node, and we periodically clean up the list of blacklisted executors.
    */
-  val nodeToFailedExecs = new HashMap[String, HashSet[String]]()
+  val nodeToBlacklistedExecs = new HashMap[String, HashSet[String]]()
 
   /**
    * Un-blacklists executors and nodes that have been blacklisted for at least
@@ -101,10 +101,10 @@ private[scheduler] class BlacklistTracker (
           s"for those executors has timed out")
         execsToUnblacklist.foreach { exec =>
           val status = executorIdToBlacklistStatus.remove(exec).get
-          val failedExecsOnNode = nodeToFailedExecs(status.node)
+          val failedExecsOnNode = nodeToBlacklistedExecs(status.node)
           failedExecsOnNode.remove(exec)
           if (failedExecsOnNode.isEmpty) {
-            nodeToFailedExecs.remove(status.node)
+            nodeToBlacklistedExecs.remove(status.node)
           }
         }
       }
@@ -168,7 +168,7 @@ private[scheduler] class BlacklistTracker (
 
         // In addition to blacklisting the executor, we also update the data for failures on the
         // node, and potentially put the entire node into a blacklist as well.
-        val blacklistedExecsOnNode = nodeToFailedExecs.getOrElseUpdate(node, HashSet[String]())
+        val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(node, HashSet[String]())
         blacklistedExecsOnNode += exec
         if (blacklistedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE) {
           logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +

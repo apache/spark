@@ -220,7 +220,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assert(blacklist.isNodeBlacklisted("hostA"))
     // make sure we don't leak memory
     assert(!blacklist.executorIdToBlacklistStatus.contains("1"))
-    assert(!blacklist.nodeToFailedExecs("hostA").contains("1"))
+    assert(!blacklist.nodeToBlacklistedExecs("hostA").contains("1"))
     clock.advance(blacklist.BLACKLIST_TIMEOUT_MILLIS)
     blacklist.applyBlacklistTimeout()
     assert(!blacklist.nodeIdToBlacklistExpiryTime.contains("hostA"))
