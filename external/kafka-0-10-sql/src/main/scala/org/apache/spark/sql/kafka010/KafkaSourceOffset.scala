@@ -19,8 +19,9 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.common.TopicPartition
 import org.json4s.{DefaultFormats, FieldSerializer}
+import org.json4s.jackson.Serialization
 
-import org.apache.spark.sql.execution.streaming.Offset
+import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
 
 /**
  * An [[Offset]] for the [[KafkaSource]]. This one tracks all partitions of subscribed topics and
@@ -28,9 +29,8 @@ import org.apache.spark.sql.execution.streaming.Offset
  */
 private[kafka010]
 case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends Offset {
-  import org.json4s.jackson.Serialization.{write}
 
-  override val json = write(partitionToOffsets.toList)(KafkaSourceOffset.formats)
+  override val json = Serialization.write(partitionToOffsets.toList)(KafkaSourceOffset.formats)
 
   override def toString(): String = {
     partitionToOffsets.toSeq.sortBy(_._1.toString).mkString("[", ", ", "]")
@@ -39,7 +39,6 @@ case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) exte
 
 /** Companion object of the [[KafkaSourceOffset]] */
 private[kafka010] object KafkaSourceOffset {
-  import org.json4s.jackson.Serialization.{read}
   implicit val formats = DefaultFormats + FieldSerializer[TopicPartition]()
 
 
@@ -61,7 +60,7 @@ private[kafka010] object KafkaSourceOffset {
     KafkaSourceOffset(offsetTuples.map { case(t, p, o) => (new TopicPartition(t, p), o) }.toMap)
   }
 
-  def apply(serialized: Offset): KafkaSourceOffset = {
-    KafkaSourceOffset(read[List[(TopicPartition, Long)]](serialized.json).toMap)
+  def apply(serialized: SerializedOffset): KafkaSourceOffset = {
+    KafkaSourceOffset(Serialization.read[List[(TopicPartition, Long)]](serialized.json).toMap)
   }
 }

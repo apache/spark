@@ -24,15 +24,15 @@ package org.apache.spark.sql.execution.streaming
  * new data has arrived.
  */
 abstract class Offset {
+
+  /**
+   * A JSON-serialized representation of an Offset that is
+   * used for saving offsets to the offset log.
+   *
+   * @return JSON string encoding
+   */
   def json: String
 }
 
 /** Used when loading */
-class SerializedOffset(override val json: String) extends Offset
-
-
-object SerializedOffset {
-
-  def apply(json: String): SerializedOffset = new SerializedOffset(json)
-
-}
+case class SerializedOffset(override val json: String) extends Offset
