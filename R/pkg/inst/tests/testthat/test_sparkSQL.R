@@ -2698,7 +2698,7 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
                      "in 'spark.sql.sources.default' configuration by default."))
 
   expect_warning(read.json(jsonPath, a = 1, 2, 3, "a"),
-                 "Non-named arguments ignored: 2, 3, a.")
+                 "Unnamed arguments ignored: 2, 3, a.")
 })
 
 unlink(parquetPath)
