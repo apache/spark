@@ -843,14 +843,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("Set Spark CallerContext") {
     val context = "test"
-    try {
+    new CallerContext(context).setCurrentContext()
+    if (CallerContext.callerContextSupported) {
       val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-      assert(new CallerContext(context).setCurrentContext())
       assert(s"SPARK_$context" ===
         callerContext.getMethod("getCurrent").invoke(null).toString)
-    } catch {
-      case e: ClassNotFoundException =>
-        assert(!new CallerContext(context).setCurrentContext())
     }
   }
 
