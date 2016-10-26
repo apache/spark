@@ -65,6 +65,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
 
+  test("query global temp view") {
+    val df = Seq(1).toDF("i1")
+    df.createGlobalTempView("tbl1")
+    checkAnswer(spark.sql("select * from global_temp.tbl1"), Row(1))
+    spark.sql("drop view global_temp.tbl1")
+  }
+
+  test("non-existent global temp view") {
+    val message = intercept[AnalysisException] {
+      spark.sql("select * from global_temp.nonexistentview")
+    }.getMessage
+    assert(message.contains("Table or view not found"))
+  }
+
   test("script") {
     val scriptFilePath = getTestResourcePath("test_script.sh")
     if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
