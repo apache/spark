@@ -1368,6 +1368,11 @@ setGeneric("spark.perplexity", function(object, data) { standardGeneric("spark.p
 #' @export
 setGeneric("spark.isoreg", function(data, formula, ...) { standardGeneric("spark.isoreg") })
 
+#' @rdname spark.decisionTree
+#' @export
+setGeneric("spark.decisionTree",
+           function(data, formula, ...) { standardGeneric("spark.decisionTree") })
+
 #' @rdname spark.gaussianMixture
 #' @export
 setGeneric("spark.gaussianMixture",
