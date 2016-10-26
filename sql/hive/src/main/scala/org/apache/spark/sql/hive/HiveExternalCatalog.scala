@@ -506,7 +506,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       tableWithSchema
     }
 
-    tableWithStats.copy(properties = getOriginalTableProperties(table))
+    if (conf.get(DEBUG_MODE)) {
+      tableWithStats
+    } else {
+      tableWithStats.copy(properties = getOriginalTableProperties(table))
+    }
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
