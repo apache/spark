@@ -279,6 +279,10 @@ object ApproximatePercentile {
 
     final def serialize(obj: PercentileDigest): Array[Byte] = {
       val summary = obj.quantileSummaries
+      serializeSummaries(summary)
+    }
+
+    final def serializeSummaries(summary: QuantileSummaries): Array[Byte] = {
       val buffer = ByteBuffer.wrap(new Array(length(summary)))
       buffer.putInt(summary.compressThreshold)
       buffer.putDouble(summary.relativeError)

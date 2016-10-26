@@ -94,7 +94,7 @@ case class HistogramEndpoints(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!numBinsExpression.foldable || !accuracyExpression.foldable) {
-      TypeCheckFailure("The maximum number of bins provided must be a constant literal")
+      TypeCheckFailure("The maximum number of bins or accuracy provided must be a constant literal")
     } else if (numBins < 2) {
       TypeCheckFailure(
         "The maximum number of bins provided must be a positive integer literal >= 2 " +
@@ -129,7 +129,8 @@ case class HistogramEndpoints(
 
   override def eval(buffer: EndpointsDigest): Any = {
     if (buffer.invalid) {
-      null
+      // return empty map
+      ArrayBasedMapData(Map.empty)
     } else {
       buffer match {
         case stringDigest: StringEndpointsDigest =>
@@ -142,7 +143,8 @@ case class HistogramEndpoints(
             ArrayBasedMapData(sorted.keys.toArray, sorted.values.toArray)
           } else {
             val percentiles = numericDigest.percentileDigest.getPercentiles(percentages)
-            val padding = new Array[Double](percentiles.length)
+            // we only need percentiles, this is for constructing MapData
+            val padding = new Array[Long](percentiles.length)
             ArrayBasedMapData(percentiles.toArray, padding.toArray)
           }
       }
@@ -166,10 +168,9 @@ case class HistogramEndpoints(
   override def createAggregationBuffer(): EndpointsDigest = {
     child.dataType match {
       case StringType =>
-        StringEndpointsDigest(mutable.HashMap.empty[UTF8String, Long])
+        StringEndpointsDigest()
       case _ =>
-        NumericEndpointsDigest(
-          mutable.HashMap.empty[Double, Long], new PercentileDigest(1.0D / accuracy))
+        NumericEndpointsDigest(new PercentileDigest(1.0D / accuracy))
     }
   }
 
@@ -181,7 +182,7 @@ case class HistogramEndpoints(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
   }
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
   override def dataType: DataType = {
     child.dataType match {
@@ -245,7 +246,8 @@ trait EndpointsDigest {
  * @param bins A HashMap to maintain frequency of each distinct value.
  */
 case class StringEndpointsDigest(
-    bins: mutable.HashMap[UTF8String, Long]) extends EndpointsDigest {
+    bins: mutable.HashMap[UTF8String, Long] = mutable.HashMap.empty[UTF8String, Long])
+  extends EndpointsDigest {
 
   def this(bins: mutable.HashMap[UTF8String, Long], invalid: Boolean) = {
     this(bins)
@@ -329,17 +331,18 @@ object StringEndpointsDigest {
  * @param percentileDigest A helper class to compute approximate percentiles.
  */
 case class NumericEndpointsDigest(
-    bins: mutable.HashMap[Double, Long],
-    percentileDigest: PercentileDigest) extends EndpointsDigest {
+    percentileDigest: PercentileDigest,
+    bins: mutable.HashMap[Double, Long] = mutable.HashMap.empty[Double, Long])
+  extends EndpointsDigest {
 
   var mapInvalid = false
 
   def this(
-      bins: mutable.HashMap[Double, Long],
       percentileDigest: PercentileDigest,
+      bins: mutable.HashMap[Double, Long],
       invalid: Boolean,
       mapInvalid: Boolean) = {
-    this(bins, percentileDigest)
+    this(percentileDigest, bins)
     this.invalid = invalid
     this.mapInvalid = mapInvalid
   }
@@ -350,14 +353,14 @@ case class NumericEndpointsDigest(
       val double = decimal.toDouble
       if (double == Double.PositiveInfinity || double == Double.NegativeInfinity) {
         // This value has too great a magnitude to represent as a Double.
-        // We use Double to represent endpoints (in histograms) for simplicity.
-        // Loss of precision is acceptable because we are computing approximate answers anyway.
         invalid = true
         clear()
         return
       }
     }
 
+    // We use Double to represent endpoints (in histograms) for simplicity.
+    // Loss of precision is acceptable because we are computing approximate answers anyway.
     val doubleValue = dataType match {
       case n: NumericType =>
         n.numeric.toDouble(value.asInstanceOf[n.InternalType])
@@ -366,11 +369,9 @@ case class NumericEndpointsDigest(
       case t: TimestampType =>
         value.asInstanceOf[Long].toDouble
     }
-
-    if (mapInvalid) {
-      // update percentileDigest
-      percentileDigest.add(doubleValue)
-    } else {
+    // update percentileDigest
+    percentileDigest.add(doubleValue)
+    if (!mapInvalid) {
       // update hashmap
       val success = updateMap(baseMap = bins, doubleValue, numBins)
       if (!success) {
@@ -383,10 +384,13 @@ case class NumericEndpointsDigest(
 
   override def merge(otherDigest: EndpointsDigest, numBins: Int): Unit = {
     val other = otherDigest.asInstanceOf[NumericEndpointsDigest]
-    if (mapInvalid) {
-      // merge percentileDigest
-      percentileDigest.merge(other.percentileDigest)
-    } else {
+    // merge percentileDigest
+    percentileDigest.merge(other.percentileDigest)
+    if (other.mapInvalid) {
+      bins.clear()
+      mapInvalid = true
+    }
+    if (!mapInvalid) {
       // merge hashmap
       val success = mergeMaps(baseMap = bins, otherMap = other.bins, numBins)
       if (!success) {
@@ -410,19 +414,19 @@ object NumericEndpointsDigest {
 
   val percentileDigestSerializer: PercentileDigestSerializer = new PercentileDigestSerializer
 
-  private final def length(obj: NumericEndpointsDigest): Int = {
+  final def serialize(obj: NumericEndpointsDigest): Array[Byte] = {
     // invalid, mapInvalid, size of bins
-    var len: Int = Ints.BYTES + Ints.BYTES + Ints.BYTES
+    var length: Int = Ints.BYTES + Ints.BYTES + Ints.BYTES
     obj.bins.foreach { case (key, value) =>
       // key, value
-      len += Doubles.BYTES + Longs.BYTES
+      length += Doubles.BYTES + Longs.BYTES
     }
+    val summaries = obj.percentileDigest.quantileSummaries
+    val summaryLength = percentileDigestSerializer.length(summaries)
     // length of PercentileDigest, PercentileDigest
-    len + Ints.BYTES + percentileDigestSerializer.length(obj.percentileDigest.summaries)
-  }
+    length += Ints.BYTES + summaryLength
 
-  final def serialize(obj: NumericEndpointsDigest): Array[Byte] = {
-    val buffer = ByteBuffer.wrap(new Array(length(obj)))
+    val buffer = ByteBuffer.wrap(new Array(length))
     buffer.putInt(if (obj.invalid) 0 else 1)
     buffer.putInt(if (obj.mapInvalid) 0 else 1)
     buffer.putInt(obj.bins.size)
@@ -430,8 +434,8 @@ object NumericEndpointsDigest {
       buffer.putDouble(key)
       buffer.putLong(value)
     }
-    buffer.putInt(percentileDigestSerializer.length(obj.percentileDigest.summaries))
-    buffer.put(percentileDigestSerializer.serialize(obj.percentileDigest))
+    buffer.putInt(summaryLength)
+    buffer.put(percentileDigestSerializer.serializeSummaries(summaries))
     buffer.array()
   }
 
@@ -456,6 +460,6 @@ object NumericEndpointsDigest {
       j += 1
     }
     val percentileDigest = percentileDigestSerializer.deserialize(percentileDigestBytes)
-    new NumericEndpointsDigest(bins, percentileDigest, invalid = invalid, mapInvalid = mapInvalid)
+    new NumericEndpointsDigest(percentileDigest, bins, invalid = invalid, mapInvalid = mapInvalid)
   }
 }
