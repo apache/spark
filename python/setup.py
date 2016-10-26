@@ -78,7 +78,7 @@ try:
         copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if not os.path.isdir(SCRIPTS_TARGET):
-        print("For packaging reasons you must first create a source dist and install that source dist.", file=sys.stderr)
+        print("You must first create a source dist and install that source dist.", file=sys.stderr)
         exit(-1)
 
     # Scripts directive requires a list of each script path and does not take wild cards.
