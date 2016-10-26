@@ -1375,6 +1375,10 @@ setGeneric("spark.gaussianMixture",
              standardGeneric("spark.gaussianMixture")
            })
 
+#' @rdname spark.logit
+#' @export
+setGeneric("spark.logit", function(data, formula, ...) { standardGeneric("spark.logit") })
+
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.
 #' @param ... additional argument(s) passed to the method.
