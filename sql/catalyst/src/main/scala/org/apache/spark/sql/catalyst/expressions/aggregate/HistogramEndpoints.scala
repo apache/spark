@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * of equi-width histogram when the number of distinct values is less than or equal to the
  * specified maximum number of bins. Otherwise, for column of string type, it returns an empty
  * map; for column of numeric type, it returns endpoints of equi-height histogram - approximate
- * percentiles at percentages 1/numBins, 2/numBins, ..., (numBins-1)/numBins.
+ * percentiles at percentages 0.0, 1/numBins, 2/numBins, ..., (numBins-1)/numBins, 1.0.
  *
  * @param child child expression that can produce column value with `child.eval(inputRow)`
  * @param numBinsExpression The maximum number of bins.
@@ -52,8 +52,8 @@ import org.apache.spark.unsafe.types.UTF8String
       of equi-width histogram when the number of distinct values is less than or equal to the
       specified maximum number of bins. Otherwise, for column of string type, it returns an empty
       map; for column of numeric type, it returns endpoints of equi-height histogram - approximate
-      percentiles at percentages 1/numBins, 2/numBins, ..., (numBins-1)/numBins. The `accuracy`
-      parameter (default: 10000) is a positive integer literal which controls percentiles
+      percentiles at percentages 0.0, 1/numBins, 2/numBins, ..., (numBins-1)/numBins, 1.0. The
+      `accuracy` parameter (default: 10000) is a positive integer literal which controls percentiles
       approximation accuracy at the cost of memory. Higher value of `accuracy` yields better
       accuracy, `1.0/accuracy` is the relative error of the approximation.
     """)
@@ -145,7 +145,7 @@ case class HistogramEndpoints(
             val percentiles = numericDigest.percentileDigest.getPercentiles(percentages)
             // we only need percentiles, this is for constructing MapData
             val padding = new Array[Long](percentiles.length)
-            ArrayBasedMapData(percentiles.toArray, padding.toArray)
+            ArrayBasedMapData(percentiles, padding)
           }
       }
     }
