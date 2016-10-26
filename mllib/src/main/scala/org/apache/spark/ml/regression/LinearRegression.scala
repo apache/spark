@@ -204,6 +204,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         Instance(label, weight, features)
     }
 
+    val instr = Instrumentation.create(this, instances)
+    instr.logParams(params : _*)
+    instr.logNumFeatures(numFeatures)
+
     if (($(solver) == "auto" &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
@@ -225,6 +229,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         summaryModel,
         model.diagInvAtWA.toArray,
         model.objectiveHistory)
+      instr.logSuccess(lrModel)
 
       return lrModel.setSummary(Some(trainingSummary))
     }
@@ -279,6 +284,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           model,
           Array(0D),
           Array(0D))
+        instr.logSuccess(model)
         return model.setSummary(Some(trainingSummary))
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
@@ -401,6 +407,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       model,
       Array(0D),
       objectiveHistory)
+    instr.logSuccess(model)
     model.setSummary(Some(trainingSummary))
   }
 
