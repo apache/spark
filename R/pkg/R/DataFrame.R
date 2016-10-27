@@ -761,7 +761,8 @@ setMethod("toJSON",
 
 #' Save the contents of SparkDataFrame as a JSON file
 #'
-#' Save the contents of a SparkDataFrame as a JSON file (one object per line). Files written out
+#' Save the contents of a SparkDataFrame as a JSON file (\href{http://jsonlines.org/}{
+#' JSON Lines text format or newline-delimited JSON}). Files written out
 #' with this method can be read back in as a SparkDataFrame using read.json().
 #'
 #' @param x A SparkDataFrame
