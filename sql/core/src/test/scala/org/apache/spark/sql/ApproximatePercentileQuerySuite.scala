@@ -66,11 +66,11 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
 
   test("percentile_approx, multiple records with the minimum value in a partition") {
     withTempView(table) {
-      spark.sparkContext.makeRDD(Seq(1, 1, 3, 3, 5, 5, 7, 7), 2).toDF("col")
+      spark.sparkContext.makeRDD(Seq(1, 1, 2, 1, 1, 3, 1, 1, 4, 1, 1, 5), 4).toDF("col")
         .createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(s"SELECT percentile_approx(col, array(0.25, 0.5, 0.75)) FROM $table"),
-        Row(Seq(1.0D, 3.0D, 5.0D))
+        spark.sql(s"SELECT percentile_approx(col, array(0.5)) FROM $table"),
+        Row(Seq(1.0D))
       )
     }
   }
