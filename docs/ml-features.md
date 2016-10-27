@@ -731,8 +731,41 @@ for more details on the API.
 
 ## Interaction
 
-`Implements` is a `Transformer` which implements interaction transform.
- This transformer takes in Double and Vector type columns and outputs a flattened vector of their feature interactions.
+`Interaction` is a `Transformer` which takes a list of vector/double columns, and generate a single vector column 
+that contains the interactions (multiplication) among them with proper handling of feature names.
+
+**Examples**
+
+Assume that we have the following DataFrame with columns tree input column:
+
+~~~~
+
+id1 | id2 | id3
+----|-----|-----
+ 0  |  1  | 2
+ 1  |  4  | 3
+ 2  |  6  | 1
+ 3  | 10  | 8
+ 4  |  9  | 2
+ 5  |  1  | 1
+~~~~
+
+Applying `Interaction` with `id1`, `id2`, `id3` as the input columns,
+then `interactedCol` as the output column contains:
+
+~~~~
+id1 | id2 | id3 | interactedCol
+----|-----|-----|---------------
+ 0  |  1  | 2   |       [0.0]
+ 1  |  4  | 3   |       [0.0]
+ 2  |  6  | 1   |      [12.0]
+ 3  | 10  | 8   |     [240.0]
+ 4  |  9  | 2   |      [72.0]
+ 5  |  1  | 1   |       [5.0]
+
+~~~~
+
+Each vector represents the token counts of the document over the vocabulary.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
