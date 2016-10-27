@@ -30,13 +30,14 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
+ *
  * Model produced by [[MinHash]], where multiple hash functions are stored. Each hash function is
  * a perfect hash function:
- *    g_i(x) = (x * k_i mod prime) mod numEntries
- * where c_i is the i-th coefficient
+ *    `g_i(x) = (x * k_i mod prime) mod numEntries`
+ * where `k_i` is the i-th coefficient
  *
  * Reference:
- * https://en.wikipedia.org/wiki/Perfect_hash_function
+ * [[https://en.wikipedia.org/wiki/Perfect_hash_function Wikipedia on Perfect Hash Function]]
  *
  * @param numEntries The number of entries of the hash functions.
  * @param randCoefficients An array of random coefficients, each used by one hash function.
@@ -87,6 +88,7 @@ class MinHashModel private[ml] (
 
 /**
  * :: Experimental ::
+ *
  * LSH class for Jaccard distance.
  *
  * The input can be dense or sparse vectors, but it is more efficient if it is sparse. For example,
@@ -96,7 +98,7 @@ class MinHashModel private[ml] (
  * as binary "1" values.
  *
  * References:
- * https://en.wikipedia.org/wiki/MinHash
+ * [[https://en.wikipedia.org/wiki/MinHash Wikipedia on MinHash]]
  */
 @Experimental
 @Since("2.1.0")

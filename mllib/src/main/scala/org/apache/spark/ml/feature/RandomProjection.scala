@@ -33,12 +33,14 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
+ *
  * Params for [[RandomProjection]].
  */
 private[ml] trait RandomProjectionParams extends Params {
 
   /**
    * The length of each hash bucket, a larger bucket lowers the false negative rate.
+   *
    *
    * If input vectors are normalized, 1-10 times of pow(numRecords, -1/inputDim) would be a
    * reasonable value
@@ -54,6 +56,7 @@ private[ml] trait RandomProjectionParams extends Params {
 
 /**
  * :: Experimental ::
+ *
  * Model produced by [[RandomProjection]]
  * @param randUnitVectors An array of random unit vectors. Each vector represents a hash function.
  */
@@ -94,6 +97,7 @@ class RandomProjectionModel private[ml] (
 
 /**
  * :: Experimental ::
+ *
  * This [[RandomProjection]] implements Locality Sensitive Hashing functions for Euclidean
  * distance metrics.
  *
@@ -102,7 +106,10 @@ class RandomProjectionModel private[ml] (
  * dimension is calculated by the same hash function.
  *
  * References:
- * 1. https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions
+ *
+ * 1. [[https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions
+ * Wikipedia on Stable Distributions]]
+ *
  * 2. Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
  * arXiv:1408.2927 (2014).
  */
@@ -174,6 +181,7 @@ object RandomProjectionModel extends MLReadable[RandomProjectionModel] {
   private[RandomProjectionModel] class RandomProjectionModelWriter(instance: RandomProjectionModel)
     extends MLWriter {
 
+    // TODO: Save using the existing format of Array[Vector] once SPARK-12878 is resolved.
     private case class Data(randUnitVectors: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
