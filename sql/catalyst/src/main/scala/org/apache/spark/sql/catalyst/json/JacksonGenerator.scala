@@ -122,9 +122,8 @@ private[sql] class JacksonGenerator(
     case _ =>
       (row: SpecializedGetters, ordinal: Int) =>
         val v = row.get(ordinal, dataType)
-        throw new SparkSQLJsonProcessingException(
-          s"Failed to convert value $v (class of ${v.getClass}}) " +
-            s"with the type of $dataType to JSON.")
+        sys.error(s"Failed to convert value $v (class of ${v.getClass}}) " +
+          s"with the type of $dataType to JSON.")
   }
 
   private def writeObject(f: => Unit): Unit = {

@@ -139,6 +139,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(to_json($"c")).collect()
     }
     assert(e.getMessage.contains(
-      "JSON conversion does not support to process calendarinterval type"))
+      "Unable to convert column a of type calendarinterval to JSON."))
   }
 }
