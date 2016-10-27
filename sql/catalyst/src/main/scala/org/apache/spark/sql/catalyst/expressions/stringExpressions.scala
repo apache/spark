@@ -784,7 +784,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
   extended = """
     Arguments:
       str - a string expression.
-      len - a numeric expression that defines the number of pad.
+      len - a numeric expression that defines the number of pads.
       pad - a string expression that represents the string for padding.
 
     Examples:

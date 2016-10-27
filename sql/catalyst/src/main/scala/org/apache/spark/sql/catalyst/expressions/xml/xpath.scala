@@ -34,7 +34,7 @@ abstract class XPathExtract extends BinaryExpression with ExpectsInputTypes with
   override def left: Expression = xml
   override def right: Expression = path
 
-  /** an XPath expressions are always nullable, e.g. if the xml string is empty. */
+  /** XPath expressions are always nullable, e.g. if the xml string is empty. */
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
@@ -80,7 +80,7 @@ case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract 
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns a short value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  usage = "_FUNC_(xml, xpath) - Returns a short integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
   extended = """
     Arguments:
       xml - a string expression that represents an XML document.
