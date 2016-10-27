@@ -111,8 +111,9 @@ setClass("LogisticRegressionModel", representation(jobj = "jobj"))
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.lda}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
-#' @seealso \link{spark.logit}, \link{read.ml}
+#' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
+#' @seealso \link{spark.survreg}
+#' @seealso \link{read.ml}
 NULL
 
 #' Makes predictions from a MLlib model
@@ -124,7 +125,7 @@ NULL
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}, \link{spark.logit}
+#' @seealso \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
 NULL
 
 write_internal <- function(object, path, overwrite = FALSE) {
@@ -671,14 +672,13 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param tol convergence tolerance of iterations.
 #' @param fitIntercept whether to fit an intercept term. Default is TRUE.
 #' @param family the name of family which is a description of the label distribution to be used in the model.
-#'               Supported options:
+#'               Supported options: Default is "auto".
 #'                 \itemize{
 #'                   \item{"auto": Automatically select the family based on the number of classes:
 #'                           If number of classes == 1 || number of classes == 2, set to "binomial".
 #'                           Else, set to "multinomial".}
 #'                   \item{"binomial": Binary logistic regression with pivoting.}
-#'                   \item{"multinomial": Multinomial logistic (softmax) regression without pivoting.
-#'                           Default is "auto".}
+#'                   \item{"multinomial": Multinomial logistic (softmax) regression without pivoting.}
 #'                 }
 #' @param standardization whether to standardize the training features before fitting the model. The coefficients
 #'                        of models will be always returned on the original scale, so it will be transparent for
@@ -687,14 +687,10 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param thresholds in binary classification, in range [0, 1]. If the estimated probability of class label 1
 #'                  is > threshold, then predict 1, else 0. A high threshold encourages the model to predict 0
 #'                  more often; a low threshold encourages the model to predict 1 more often. Note: Setting this with
-#'                  threshold p is equivalent to setting thresholds c(1-p, p). When threshold is set, any user-set
-#'                  value for thresholds will be cleared. If both threshold and thresholds are set, then they must be
-#'                  equivalent. In multiclass (or binary) classification to adjust the probability of
+#'                  threshold p is equivalent to setting thresholds c(1-p, p). In multiclass (or binary) classification to adjust the probability of
 #'                  predicting each class. Array must have length equal to the number of classes, with values > 0,
 #'                  excepting that at most one value may be 0. The class with largest value p/t is predicted, where p
-#'                  is the original probability of that class and t is the class's threshold. Note: When thresholds
-#'                  is set, any user-set value for threshold will be cleared. If both threshold and thresholds are
-#'                  set, then they must be equivalent. Default is 0.5.
+#'                  is the original probability of that class and t is the class's threshold. Default is 0.5.
 #' @param weightCol The weight column name.
 #' @param aggregationDepth depth for treeAggregate (>= 2). If the dimensions of features or the number of partitions
 #'                         are large, this param could be adjusted to a larger size. Default is 2.
@@ -724,7 +720,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' write.ml(blr_model, path)
 #'
 #' # can also read back the saved model and predict
-#' Note that summary deos not work on loaded model
+#' # Note that summary deos not work on loaded model
 #' savedModel <- read.ml(path)
 #' blr_predict2 <- collect(select(predict(savedModel, binary_df), "prediction"))
 #'
@@ -738,8 +734,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
 #' df <- createDataFrame(data)
 #'
-#' Note that summary of multinomial logistic regression is not implemented yet
-#' model <- spark.logit(df, label ~ ., family = "multinomial", thresholds=c(0, 1, 1))
+#' # Note that summary of multinomial logistic regression is not implemented yet
+#' model <- spark.logit(df, label ~ ., family = "multinomial", thresholds = c(0, 1, 1))
 #' predict1 <- collect(select(predict(model, df), "prediction"))
 #' }
 #' @note spark.logit since 2.1.0
