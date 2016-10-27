@@ -221,6 +221,12 @@ The following configurations are optional:
   <td>10</td>
   <td>milliseconds to wait before retrying to fetch Kafka offsets</td>
 </tr>
+<tr>
+  <td>maxOffsetsPerTrigger</td>
+  <td>long</td>
+  <td>none</td>
+  <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
+</tr>
 </table>
 
 Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.` prefix, e.g, 
