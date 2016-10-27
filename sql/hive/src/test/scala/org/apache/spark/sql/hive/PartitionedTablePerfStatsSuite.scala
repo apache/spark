@@ -28,7 +28,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
-class HiveTablePerfStatsSuite
+class PartitionedTablePerfStatsSuite
   extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterEach {
 
   override def beforeEach(): Unit = {
@@ -41,25 +41,54 @@ class HiveTablePerfStatsSuite
     FileStatusCache.resetForTesting()
   }
 
-  private def setupPartitionedTable(tableName: String, dir: File): Unit = {
-    spark.range(5).selectExpr("id", "id as partCol1", "id as partCol2").write
+  private case class TestSpec(setupTable: (String, File) => Unit, isDatasourceTable: Boolean)
+
+  /**
+   * Runs a test against both converted hive and native datasource tables. The test can use the
+   * passed TestSpec object for setup and inspecting test parameters.
+   */
+  private def genericTest(testName: String)(fn: TestSpec => Unit): Unit = {
+    test("hive table: " + testName) {
+      fn(TestSpec(setupPartitionedHiveTable, false))
+    }
+    test("datasource table: " + testName) {
+      fn(TestSpec(setupPartitionedDatasourceTable, true))
+    }
+  }
+
+  private def setupPartitionedHiveTable(tableName: String, dir: File): Unit = {
+    spark.range(5).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
       .partitionBy("partCol1", "partCol2")
       .mode("overwrite")
       .parquet(dir.getAbsolutePath)
 
     spark.sql(s"""
-      |create external table $tableName (id long)
+      |create external table $tableName (fieldOne long)
       |partitioned by (partCol1 int, partCol2 int)
       |stored as parquet
       |location "${dir.getAbsolutePath}"""".stripMargin)
     spark.sql(s"msck repair table $tableName")
   }
 
-  test("partitioned pruned table reports only selected files") {
+  private def setupPartitionedDatasourceTable(tableName: String, dir: File): Unit = {
+    spark.range(5).selectExpr("id as fieldOne", "id as partCol1", "id as partCol2").write
+      .partitionBy("partCol1", "partCol2")
+      .mode("overwrite")
+      .parquet(dir.getAbsolutePath)
+
+    spark.sql(s"""
+      |create table $tableName (fieldOne long, partCol1 int, partCol2 int)
+      |using parquet
+      |options (path "${dir.getAbsolutePath}")
+      |partitioned by (partCol1, partCol2)""".stripMargin)
+    spark.sql(s"msck repair table $tableName")
+  }
+
+  genericTest("partitioned pruned table reports only selected files") { spec =>
     assert(spark.sqlContext.getConf(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
     withTable("test") {
       withTempDir { dir =>
-        setupPartitionedTable("test", dir)
+        spec.setupTable("test", dir)
         val df = spark.sql("select * from test")
         assert(df.count() == 5)
         assert(df.inputFiles.length == 5)  // unpruned
@@ -75,17 +104,24 @@ class HiveTablePerfStatsSuite
         val df4 = spark.sql("select * from test where partCol1 = 999")
         assert(df4.count() == 0)
         assert(df4.inputFiles.length == 0)
+
+        // TODO(ekl) enable for hive tables as well once SPARK-17983 is fixed
+        if (spec.isDatasourceTable) {
+          val df5 = spark.sql("select * from test where fieldOne = 4")
+          assert(df5.count() == 1)
+          assert(df5.inputFiles.length == 5)
+        }
       }
     }
   }
 
-  test("lazy partition pruning reads only necessary partition data") {
+  genericTest("lazy partition pruning reads only necessary partition data") { spec =>
     withSQLConf(
-        SQLConf.HIVE_FILESOURCE_PARTITION_PRUNING.key -> "true",
+        SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true",
         SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key -> "0") {
       withTable("test") {
         withTempDir { dir =>
-          setupPartitionedTable("test", dir)
+          spec.setupTable("test", dir)
           HiveCatalogMetrics.reset()
           spark.sql("select * from test where partCol1 = 999").count()
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
@@ -120,13 +156,13 @@ class HiveTablePerfStatsSuite
     }
   }
 
-  test("lazy partition pruning with file status caching enabled") {
+  genericTest("lazy partition pruning with file status caching enabled") { spec =>
     withSQLConf(
-        "spark.sql.hive.filesourcePartitionPruning" -> "true",
-        "spark.sql.hive.filesourcePartitionFileCacheSize" -> "9999999") {
+        SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true",
+        SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key -> "9999999") {
       withTable("test") {
         withTempDir { dir =>
-          setupPartitionedTable("test", dir)
+          spec.setupTable("test", dir)
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test where partCol1 = 999").count() == 0)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
@@ -161,13 +197,13 @@ class HiveTablePerfStatsSuite
     }
   }
 
-  test("file status caching respects refresh table and refreshByPath") {
+  genericTest("file status caching respects refresh table and refreshByPath") { spec =>
     withSQLConf(
-        "spark.sql.hive.filesourcePartitionPruning" -> "true",
-        "spark.sql.hive.filesourcePartitionFileCacheSize" -> "9999999") {
+        SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true",
+        SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key -> "9999999") {
       withTable("test") {
         withTempDir { dir =>
-          setupPartitionedTable("test", dir)
+          spec.setupTable("test", dir)
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
@@ -190,13 +226,13 @@ class HiveTablePerfStatsSuite
     }
   }
 
-  test("file status cache respects size limit") {
+  genericTest("file status cache respects size limit") { spec =>
     withSQLConf(
-        "spark.sql.hive.filesourcePartitionPruning" -> "true",
-        "spark.sql.hive.filesourcePartitionFileCacheSize" -> "1" /* 1 byte */) {
+        SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true",
+        SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key -> "1" /* 1 byte */) {
       withTable("test") {
         withTempDir { dir =>
-          setupPartitionedTable("test", dir)
+          spec.setupTable("test", dir)
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
@@ -209,11 +245,11 @@ class HiveTablePerfStatsSuite
     }
   }
 
-  test("all partitions read and cached when filesource partition pruning is off") {
-    withSQLConf(SQLConf.HIVE_FILESOURCE_PARTITION_PRUNING.key -> "false") {
+  test("hive table: files read and cached when filesource partition management is off") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
       withTable("test") {
         withTempDir { dir =>
-          setupPartitionedTable("test", dir)
+          setupPartitionedHiveTable("test", dir)
 
           // We actually query the partitions from hive each time the table is resolved in this
           // mode. This is kind of terrible, but is needed to preserve the legacy behavior
@@ -232,6 +268,34 @@ class HiveTablePerfStatsSuite
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 5)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
+        }
+      }
+    }
+  }
+
+  test("datasource table: all partition data cached in memory when partition management is off") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedDatasourceTable("test", dir)
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test where partCol1 = 999").count() == 0)
+
+          // not using metastore
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
+
+          // reads and caches all the files initially
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test where partCol1 < 2").count() == 2)
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
+
+          HiveCatalogMetrics.reset()
+          assert(spark.sql("select * from test").count() == 5)
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
         }
       }
