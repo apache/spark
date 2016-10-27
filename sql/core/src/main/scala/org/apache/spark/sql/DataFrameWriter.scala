@@ -25,7 +25,7 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, OverwriteOptions, Union}
 import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, CreateTable, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.types.StructType
@@ -259,7 +259,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
         child = df.logicalPlan,
-        overwrite = mode == SaveMode.Overwrite,
+        overwrite = OverwriteOptions(mode == SaveMode.Overwrite),
         ifNotExists = false)).toRdd
   }
 
@@ -391,6 +391,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         val createCmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
         val cmd = if (tableDesc.partitionColumnNames.nonEmpty &&
             df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
+          println("alter table recover partitions")
           // Need to recover partitions into the metastore so our saved data is visible.
           val recoverPartitionCmd = AlterTableRecoverPartitionsCommand(tableDesc.identifier)
           Union(createCmd, recoverPartitionCmd)
