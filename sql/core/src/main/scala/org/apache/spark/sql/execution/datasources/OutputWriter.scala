@@ -34,18 +34,24 @@ abstract class OutputWriterFactory extends Serializable {
    * When writing to a [[HadoopFsRelation]], this method gets called by each task on executor side
    * to instantiate new [[OutputWriter]]s.
    *
-   * @param path Path of the file to which this [[OutputWriter]] is supposed to write.  Note that
-   *        this may not point to the final output file.  For example, `FileOutputFormat` writes to
-   *        temporary directories and then merge written files back to the final destination.  In
-   *        this case, `path` points to a temporary output file under the temporary directory.
+   * @param stagingDir Base path (directory) of the file to which this [[OutputWriter]] is supposed
+   *                   to write.  Note that this may not point to the final output file.  For
+   *                   example, `FileOutputFormat` writes to temporary directories and then merge
+   *                   written files back to the final destination.  In this case, `path` points to
+   *                   a temporary output file under the temporary directory.
+   * @param fileNamePrefix Prefix of the file name. The returned OutputWriter must make sure this
+   *                       prefix is used in the actual file name. For example, if the prefix is
+   *                       "part-1-2-3", then the file name must start with "part_1_2_3" but can
+   *                       end in arbitrary extension that is deterministic given the configuration
+   *                       (i.e. the suffix extension should not depend on any task id, attempt id,
+   *                       or partition id).
    * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
    *        schema if the relation being written is partitioned.
    * @param context The Hadoop MapReduce task context.
-   * @since 1.4.0
    */
   def newInstance(
-      path: String,
-      bucketId: Option[Int], // TODO: This doesn't belong here...
+      stagingDir: String,
+      fileNamePrefix: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter
 
@@ -57,7 +63,6 @@ abstract class OutputWriterFactory extends Serializable {
    * and not modify it (do not add subdirectories, extensions, etc.). All other
    * file-format-specific information needed to create the writer must be passed
    * through the [[OutputWriterFactory]] implementation.
-   * @since 2.0.0
    */
   def newWriter(path: String): OutputWriter = {
     throw new UnsupportedOperationException("newInstance with just path not supported")
@@ -72,19 +77,22 @@ abstract class OutputWriterFactory extends Serializable {
  * executor side.  This instance is used to persist rows to this single output file.
  */
 abstract class OutputWriter {
+
+  /**
+   * The path of the file to be written out. This path should include the staging directory and
+   * the file name prefix passed into the associated createOutputWriter function.
+   */
+  def path: String
+
   /**
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned
    * tables, dynamic partition columns are not included in rows to be written.
-   *
-   * @since 1.4.0
    */
   def write(row: Row): Unit
 
   /**
    * Closes the [[OutputWriter]]. Invoked on the executor side after all rows are persisted, before
    * the task output is committed.
-   *
-   * @since 1.4.0
    */
   def close(): Unit
 

@@ -226,16 +226,14 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         Some(partitionSchema))
 
       val logicalRelation = cached.getOrElse {
-        val db = metastoreRelation.databaseName
-        val table = metastoreRelation.tableName
         val sizeInBytes = metastoreRelation.statistics.sizeInBytes.toLong
         val fileCatalog = {
           val catalog = new TableFileCatalog(
-            sparkSession, db, table, Some(partitionSchema), sizeInBytes)
+            sparkSession, metastoreRelation.catalogTable, sizeInBytes)
           if (lazyPruningEnabled) {
             catalog
           } else {
-            catalog.allPartitions
+            catalog.filterPartitions(Nil)  // materialize all the partitions in memory
           }
         }
         val partitionSchemaColumnNames = partitionSchema.map(_.name.toLowerCase).toSet

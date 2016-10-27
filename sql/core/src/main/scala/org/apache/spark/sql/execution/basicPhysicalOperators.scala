@@ -78,6 +78,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 
@@ -214,6 +216,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 /**
@@ -233,6 +237,8 @@ case class SampleExec(
     seed: Long,
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -517,7 +523,9 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
 
   override def output: Seq[Attribute] = child.output
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def sameResult(o: SparkPlan): Boolean = o match {
@@ -562,7 +570,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
   }
 
   override def executeCollect(): Array[InternalRow] = {
-    ThreadUtils.awaitResult(relationFuture, Duration.Inf)
+    ThreadUtils.awaitResultInForkJoinSafely(relationFuture, Duration.Inf)
   }
 }
 

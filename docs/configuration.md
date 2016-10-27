@@ -632,7 +632,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>
-    Allows stages and corresponding jobs to be killed from the web ui.
+    Allows jobs and stages to be killed from the web UI.
   </td>
 </tr>
 <tr>
@@ -797,6 +797,14 @@ Apart from these, the following properties are also available, and may be useful
     <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kryo.unsafe</code></td>
+  <td>false</td>
+  <td>
+    Whether to use unsafe based Kryo serializer. Can be
+    substantially faster by using Unsafe Based IO.
   </td>
 </tr>
 <tr>
