@@ -401,6 +401,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(iterator.toArray === Array(
       (0, -1L + Int.MaxValue), (1, 0L + Int.MaxValue), (2, 1L + Int.MaxValue)
     ))
+    intercept[IllegalArgumentException] {
+      Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L)
+    }
   }
 
   test("doesDirectoryContainFilesNewerThan") {
@@ -843,14 +846,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("Set Spark CallerContext") {
     val context = "test"
-    try {
+    new CallerContext(context).setCurrentContext()
+    if (CallerContext.callerContextSupported) {
       val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-      assert(new CallerContext(context).setCurrentContext())
       assert(s"SPARK_$context" ===
         callerContext.getMethod("getCurrent").invoke(null).toString)
-    } catch {
-      case e: ClassNotFoundException =>
-        assert(!new CallerContext(context).setCurrentContext())
     }
   }
 

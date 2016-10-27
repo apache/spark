@@ -176,6 +176,15 @@ class FileStreamSource(
 
   override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
 
+  /**
+   * Informs the source that Spark has completed processing all data for offsets less than or
+   * equal to `end` and will only request offsets greater than `end` in the future.
+   */
+  override def commit(end: Offset): Unit = {
+    // No-op for now; FileStreamSource currently garbage-collects files based on timestamp
+    // and the value of the maxFileAge parameter.
+  }
+
   override def stop() {}
 }
 
