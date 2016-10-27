@@ -137,7 +137,7 @@ private[kafka010] case class KafkaSource(
     val offsets = maxOffsetsPerTrigger match {
       case None =>
         latest
-      case Some(limit) if !currentPartitionOffsets.isDefined =>
+      case Some(limit) if currentPartitionOffsets.isEmpty =>
         rateLimit(limit, initialPartitionOffsets, latest)
       case Some(limit) =>
         rateLimit(limit, currentPartitionOffsets.get, latest)
@@ -265,6 +265,12 @@ private[kafka010] case class KafkaSource(
 
     logInfo("GetBatch generating RDD of offset range: " +
       offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
+
+    // On recovery, getBatch will get called before getOffset
+    if (currentPartitionOffsets.isEmpty) {
+      currentPartitionOffsets = Some(untilPartitionOffsets)
+    }
+
     sqlContext.createDataFrame(rdd, schema)
   }
 

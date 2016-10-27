@@ -23,6 +23,8 @@ import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.TopicPartition
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
@@ -153,17 +155,48 @@ class KafkaSourceSuite extends KafkaSourceTest {
     val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
 
     val clock = new StreamManualClock
+
+    val waitUntilBatchProcessed = AssertOnQuery { q =>
+      eventually(Timeout(streamingTimeout)) {
+        if (!q.exception.isDefined) {
+          assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+        }
+      }
+      if (q.exception.isDefined) {
+        throw q.exception.get
+      }
+      true
+    }
+
     testStream(mapped)(
       StartStream(ProcessingTime(100), clock),
-      AdvanceManualClock(100),
+      waitUntilBatchProcessed,
       // 1 from smallest, 1 from middle, 8 from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107),
       AdvanceManualClock(100),
+      waitUntilBatchProcessed,
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
         11, 108, 109, 110, 111, 112, 113, 114, 115, 116
       ),
-      StopStream
+      StopStream,
+      StartStream(ProcessingTime(100), clock),
+      waitUntilBatchProcessed,
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed,
+      // smallest now empty, 1 more from middle, 9 more from biggest
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+        12, 117, 118, 119, 120, 121, 122, 123, 124, 125
+      ),
+      AdvanceManualClock(100),
+      waitUntilBatchProcessed,
+      // smallest now empty, 1 more from middle, 9 more from biggest
+      CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
+        11, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+        12, 117, 118, 119, 120, 121, 122, 123, 124, 125,
+        13, 126, 127, 128, 129, 130, 131, 132, 133, 134
+      )
     )
   }
 
