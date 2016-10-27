@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.command.AlterTableAddPartitionCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
@@ -258,6 +259,28 @@ case class InsertIntoHiveTable(
             partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
+          // SPARK-18107: Insert overwrite runs much slower than hive-client.
+          // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
+          // version and we may not want to catch up new Hive version every time. We delete the
+          // Hive partition first and then load data file into the Hive partition.
+          if (oldPart.nonEmpty && overwrite) {
+            externalCatalog.dropPartitions(
+              table.catalogTable.database,
+              table.catalogTable.identifier.table,
+              parts = Seq(partitionSpec),
+              ignoreIfNotExists = true,
+              purge = false)
+            // Although `externalCatalog.loadPartition` will create the partition,
+            // the old partition may use custom properties such as location, so we need to create
+            // it manually.
+            val partitionSpecAndLocation = Seq((partitionSpec, oldPart.get.storage.locationUri))
+            AlterTableAddPartitionCommand(
+              tableName = table.catalogTable.identifier,
+              partitionSpecsAndLocs = partitionSpecAndLocation,
+              ifNotExists = true
+            ).run(sqlContext.sparkSession)
+          }
+
           // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
           // which is currently considered as a Hive native command.
           val inheritTableSpecs = true
