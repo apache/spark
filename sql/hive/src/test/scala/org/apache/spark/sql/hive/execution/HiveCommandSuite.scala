@@ -415,10 +415,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         .mode(SaveMode.Overwrite)
         .saveAsTable("part_datasrc")
 
-      val message1 = intercept[AnalysisException] {
-        sql("SHOW PARTITIONS part_datasrc")
-      }.getMessage
-      assert(message1.contains("is not allowed on a datasource table"))
+      assert(sql("SHOW PARTITIONS part_datasrc").count() == 3)
     }
   }
 }

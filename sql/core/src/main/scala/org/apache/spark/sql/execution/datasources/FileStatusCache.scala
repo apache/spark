@@ -64,7 +64,7 @@ object FileStatusCache {
    */
   def newCache(session: SparkSession): FileStatusCache = {
     synchronized {
-      if (session.sqlContext.conf.filesourcePartitionPruning &&
+      if (session.sqlContext.conf.manageFilesourcePartitions &&
           session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
         if (sharedCache == null) {
           sharedCache = new SharedInMemoryCache(

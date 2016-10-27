@@ -50,7 +50,8 @@ case class AnalyzeColumnCommand(
           AnalyzeTableCommand.calculateTotalSize(sessionState, catalogRel.catalogTable))
 
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
-        updateStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
+        updateStats(logicalRel.catalogTable.get,
+          AnalyzeTableCommand.calculateTotalSize(sessionState, logicalRel.catalogTable.get))
 
       case otherRelation =>
         throw new AnalysisException("ANALYZE TABLE is not supported for " +

@@ -51,7 +51,8 @@ case class AnalyzeTableCommand(
 
       // data source tables have been converted into LogicalRelations
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
-        updateTableStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
+        updateTableStats(logicalRel.catalogTable.get,
+          AnalyzeTableCommand.calculateTotalSize(sessionState, logicalRel.catalogTable.get))
 
       case otherRelation =>
         throw new AnalysisException("ANALYZE TABLE is not supported for " +

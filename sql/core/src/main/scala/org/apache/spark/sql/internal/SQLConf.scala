@@ -272,18 +272,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val HIVE_FILESOURCE_PARTITION_PRUNING =
-    SQLConfigBuilder("spark.sql.hive.filesourcePartitionPruning")
-      .doc("When true, enable metastore partition pruning for filesource relations as well. " +
-           "This is currently implemented for converted Hive tables only.")
+  val HIVE_MANAGE_FILESOURCE_PARTITIONS =
+    SQLConfigBuilder("spark.sql.hive.manageFilesourcePartitions")
+      .doc("When true, enable metastore partition management for file source tables as well. " +
+           "This includes both datasource and converted Hive tables. When partition managment " +
+           "is enabled, datasource tables store partition in the Hive metastore, and use the " +
+           "metastore to prune partitions during query planning.")
       .booleanConf
       .createWithDefault(true)
 
   val HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE =
     SQLConfigBuilder("spark.sql.hive.filesourcePartitionFileCacheSize")
-      .doc("When nonzero, enable caching of partition file metadata in memory. All table share " +
+      .doc("When nonzero, enable caching of partition file metadata in memory. All tables share " +
            "a cache that can use up to specified num bytes for file metadata. This conf only " +
-           "applies if filesource partition pruning is also enabled.")
+           "has an effect when hive filesource partition management is enabled.")
       .longConf
       .createWithDefault(250 * 1024 * 1024)
 
@@ -679,7 +681,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  def filesourcePartitionPruning: Boolean = getConf(HIVE_FILESOURCE_PARTITION_PRUNING)
+  def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
 
