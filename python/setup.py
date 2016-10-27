@@ -136,7 +136,7 @@ try:
         setup_requires=['pypandoc'],
         extras_require={
             'ml': ['numpy>=1.7'],
-            'mllib': ['numpy<=1.7'],
+            'mllib': ['numpy>=1.7'],
             'sql': ['pandas']
         },
         classifiers=[
