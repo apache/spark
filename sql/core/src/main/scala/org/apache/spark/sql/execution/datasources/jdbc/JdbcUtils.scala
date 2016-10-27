@@ -112,7 +112,25 @@ object JdbcUtils extends Logging {
    */
   def insertStatement(conn: Connection, table: String, rddSchema: StructType, dialect: JdbcDialect)
       : PreparedStatement = {
-    val columns = rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
+    // Use database column names instead of RDD schema column names
+    val tableSchemaQuery = conn.prepareStatement(dialect.getSchemaQuery(table))
+    var columns: String = ""
+    try {
+      val tableSchema = getSchema(tableSchemaQuery.executeQuery(), dialect)
+      val nameMap = tableSchema.fields.map(f => f.name -> f.name).toMap
+      val lowercaseNameMap = tableSchema.fields.map(f => f.name.toLowerCase -> f.name).toMap
+      columns = rddSchema.fields.map { x =>
+        if (nameMap.isDefinedAt(x.name)) {
+          dialect.quoteIdentifier(x.name)
+        } else if (lowercaseNameMap.isDefinedAt(x.name.toLowerCase)) {
+          dialect.quoteIdentifier(nameMap(x.name.toLowerCase))
+        } else {
+          throw new SQLException(s"""Column "${x.name}" not found""")
+        }
+      }.mkString(",")
+    } finally {
+      tableSchemaQuery.close()
+    }
     val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
     val sql = s"INSERT INTO $table ($columns) VALUES ($placeholders)"
     conn.prepareStatement(sql)

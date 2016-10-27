@@ -96,6 +96,10 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       StructField("id", IntegerType) ::
       StructField("seq", IntegerType) :: Nil)
 
+  private lazy val schema4 = StructType(
+      StructField("NAME", StringType) ::
+      StructField("ID", IntegerType) :: Nil)
+
   test("Basic CREATE") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
@@ -158,6 +162,16 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   test("CREATE then INSERT to append") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+
+    df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
+    df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
+    assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).count())
+    assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
+  }
+
+  test("SPARK-18123 Append with column names with different cases") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema4)
 
     df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
     df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
