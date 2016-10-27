@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql._
@@ -85,9 +85,16 @@ class QuantileDiscretizerSuite
       .setOutputCol("result")
       .setNumBuckets(numBuckets)
 
+    withClue("QuantileDiscretizer with handleInvalid=error should throw exception for NaN values") {
+      val dataFrame: DataFrame = validData.toSeq.toDF("input")
+      intercept[SparkException] {
+        discretizer.fit(dataFrame).transform(dataFrame).collect()
+      }
+    }
+
     List(("keep", expectedKeep), ("skip", expectedSkip)).foreach{
       case(u, v) =>
-        discretizer.sethandleInvalid(u)
+        discretizer.setHandleInvalid(u)
         val dataFrame: DataFrame = validData.zip(v).toSeq.toDF("input", "expected")
         val result = discretizer.fit(dataFrame).transform(dataFrame)
         result.select("result", "expected").collect().foreach {

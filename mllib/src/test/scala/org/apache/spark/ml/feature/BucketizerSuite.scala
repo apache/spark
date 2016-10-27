@@ -98,21 +98,33 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCol("feature")
       .setOutputCol("result")
       .setSplits(splits)
-      .sethandleInvalid("keep")
 
+    bucketizer.setHandleInvalid("keep")
     bucketizer.transform(dataFrame).select("result", "expected").collect().foreach {
       case Row(x: Double, y: Double) =>
         assert(x === y,
           s"The feature value is not correct after bucketing.  Expected $y but found $x")
     }
+
+    bucketizer.setHandleInvalid("skip")
+    val skipResults: Array[Double] = bucketizer.transform(dataFrame)
+      .select("result").as[Double].collect()
+    assert(skipResults.length === 7)
+    assert(skipResults.forall(_ !== 4.0))
+
+    bucketizer.setHandleInvalid("error")
+    withClue("Bucketizer should throw error when setHandleInvalid=error and given NaN values") {
+      intercept[SparkException] {
+        bucketizer.transform(dataFrame).collect()
+      }
+    }
   }
 
   test("Bucket continuous features, with NaN splits") {
     val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity, Double.NaN)
-    withClue("Invalid NaN split was not caught as an invalid split!") {
+    withClue("Invalid NaN split was not caught during Bucketizer initialization") {
       intercept[IllegalArgumentException] {
-        val bucketizer: Bucketizer = new Bucketizer()
-          .setSplits(splits)
+        new Bucketizer().setSplits(splits)
       }
     }
   }

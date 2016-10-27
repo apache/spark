@@ -47,6 +47,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * also includes y. Splits should be of length >= 3 and strictly increasing.
    * Values at -inf, inf must be explicitly provided to cover all Double values;
    * otherwise, values outside the splits specified will be treated as errors.
+   *
+   * See also [[handleInvalid]], which can optionally create an additional bucket for NaN values.
+   *
    * @group param
    */
   @Since("1.4.0")
@@ -75,37 +78,36 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Param for how to handle invalid entries. Options are skip (which will filter out rows with
-   * invalid values), or error (which will throw an error), or keep (which will keep the invalid
-   * values in certain way).
+   * Param for how to handle invalid entries. Options are skip (filter out rows with
+   * invalid values), error (throw an error), or keep (keep invalid values in a special additional
+   * bucket).
    * Default: "error"
    * @group param
    */
   @Since("2.1.0")
   val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle" +
-    "invalid entries. Options are skip (which will filter out rows with invalid values), or" +
-    "error (which will throw an error), or keep (which will keep the invalid values" +
-    " in certain way). Default behaviour is to report an error for invalid entries.",
-    ParamValidators.inArray(Array("skip", "error", "keep")))
+    "invalid entries. Options are skip (filter out rows with invalid values), " +
+    "error (throw an error), or keep (keep invalid values in a special additional bucket).",
+    ParamValidators.inArray(Bucketizer.supportedHandleInvalid))
 
   /** @group getParam */
   @Since("2.1.0")
-  def gethandleInvalid: String = $(handleInvalid)
+  def getHandleInvalid: String = $(handleInvalid)
 
   /** @group setParam */
   @Since("2.1.0")
-  def sethandleInvalid(value: String): this.type = set(handleInvalid, value)
-  setDefault(handleInvalid, "error")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
     val (filteredDataset, keepInvalid) = {
-      if ("skip" == gethandleInvalid) {
+      if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
         // "skip" NaN option is set, will filter out NaN values in the dataset
-        (dataset.na.drop.toDF(), false)
+        (dataset.na.drop().toDF(), false)
       } else {
-        (dataset.toDF(), "keep" == gethandleInvalid)
+        (dataset.toDF(), getHandleInvalid == Bucketizer.KEEP_INVALID)
       }
     }
 
@@ -140,6 +142,12 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 @Since("1.6.0")
 object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
+  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val ERROR_INVALID: String = "error"
+  private[feature] val KEEP_INVALID: String = "keep"
+  private[feature] val supportedHandleInvalid: Array[String] =
+    Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+
   /**
    * We require splits to be of length >= 3 and to be in strictly increasing order.
    * No NaN split should be accepted.
@@ -173,9 +181,13 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
       splits: Array[Double],
       feature: Double,
       keepInvalid: Boolean): Double = {
-    if (feature.isNaN && keepInvalid) {
-      // NaN data point found plus "keep" NaN option is set
-      splits.length - 1
+    if (feature.isNaN) {
+      if (keepInvalid) {
+        splits.length - 1
+      } else {
+        throw new SparkException("Bucketizer encountered NaN value. To handle or skip NaNs," +
+          " try setting Bucketizer.handleInvalid.")
+      }
     } else if (feature == splits.last) {
       splits.length - 2
     } else {
