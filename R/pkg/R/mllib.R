@@ -127,7 +127,7 @@ setClass("RandomForestClassificationModel", representation(jobj = "jobj"))
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
 #' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
 #' @seealso \link{spark.randomForest}, \link{spark.survreg},
-\#' @seealso \link{read.ml}
+#' @seealso \link{read.ml}
 NULL
 
 #' Makes predictions from a MLlib model

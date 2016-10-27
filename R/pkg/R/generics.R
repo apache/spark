@@ -1384,6 +1384,8 @@ setGeneric("spark.randomForest",
 #' @export
 setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
 
+#' @rdname spark.lda
+#' @export
 setGeneric("spark.posterior", function(object, newData) { standardGeneric("spark.posterior") })
 
 #' @rdname spark.lda
