@@ -729,21 +729,6 @@ for more details on the API.
 </div>
 </div>
 
-## Interaction
-
-`Implements` is a `Transformer` which implements interaction transform.
- This transformer takes in Double and Vector type columns and outputs a flattened vector of their feature interactions.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-Refer to the [Normalizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Interaction)
-for more details on the API.
-
-{% include_example scala/org/apache/spark/examples/ml/InteractionExample.scala %}
-</div>
-
-
 
 ## Normalizer
 
