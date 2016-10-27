@@ -91,7 +91,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   setDefault(regParam -> 0.0)
 
   /**
-   * Set if we should fit the intercept
+   * Set if we should fit the intercept.
    * Default is true.
    *
    * @group setParam
@@ -256,10 +256,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val rawYStd = math.sqrt(ySummarizer.variance(0))
     if (rawYStd == 0.0) {
       if ($(fitIntercept) || yMean == 0.0) {
-        // If the rawYStd is zero and fitIntercept=true, then the intercept is yMean with
+        // If the rawYStd==0 and fitIntercept==true, then the intercept is yMean with
         // zero coefficient; as a result, training is not needed.
         // Also, if yMean==0 and rawYStd==0, all the coefficients are zero regardless of
-        // the fitIntercept
+        // the fitIntercept.
         if (yMean == 0.0) {
           logWarning(s"Mean and standard deviation of the label are zero, so the coefficients " +
             s"and the intercept will all be zero; as a result, training is not needed.")
