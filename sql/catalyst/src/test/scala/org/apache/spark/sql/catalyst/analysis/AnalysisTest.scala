@@ -60,7 +60,7 @@ trait AnalysisTest extends PlanTest {
       plan2: LogicalPlan,
       checkAnalysis: Boolean = false): Unit = {
     // Analysis tests may have not been fully resolved, so skip checkAnalysis.
-    super.comparePlans(plan1, plan2, checkAnalysis = false)
+    super.comparePlans(plan1, plan2, checkAnalysis)
   }
 
   protected def assertAnalysisSuccess(
