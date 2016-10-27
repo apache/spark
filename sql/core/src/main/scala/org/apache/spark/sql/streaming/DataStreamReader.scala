@@ -134,7 +134,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Loads a JSON file stream (one object per line) and returns the result as a [[DataFrame]].
+   * Loads a JSON file stream ([[http://jsonlines.org/ JSON Lines text format or newline-delimited
+   * JSON]]) and returns the result as a [[DataFrame]].
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.

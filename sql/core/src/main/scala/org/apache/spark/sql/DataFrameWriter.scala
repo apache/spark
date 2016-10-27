@@ -434,7 +434,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in JSON format at the specified path.
+   * Saves the content of the [[DataFrame]] in JSON format ([[http://jsonlines.org/ JSON Lines text
+   * format or newline-delimited JSON]]) at the specified path.
    * This is equivalent to:
    * {{{
    *   format("json").save(path)

@@ -324,7 +324,8 @@ setMethod("toDF", signature(x = "RDD"),
 
 #' Create a SparkDataFrame from a JSON file.
 #'
-#' Loads a JSON file (one object per line), returning the result as a SparkDataFrame
+#' Loads a JSON file (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
+#' ), returning the result as a SparkDataFrame
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.

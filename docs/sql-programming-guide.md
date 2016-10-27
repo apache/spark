@@ -316,7 +316,7 @@ Serializable and has getters and setters for all of its fields.
 
 Spark SQL can convert an RDD of Row objects to a DataFrame, inferring the datatypes. Rows are constructed by passing a list of
 key/value pairs as kwargs to the Row class. The keys of this list define the column names of the table,
-and the types are inferred by sampling the whole datase, similar to the inference that is performed on JSON files.
+and the types are inferred by sampling the whole dataset, similar to the inference that is performed on JSON files.
 
 {% include_example schema_inferring python/sql/basic.py %}
 </div>
@@ -832,8 +832,9 @@ This conversion can be done using `SparkSession.read.json()` on either an RDD of
 or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. As a consequence,
-a regular multi-line JSON file will most often fail.
+line must contain a separate, self-contained valid JSON object. For more information, please see
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
+consequence, a regular multi-line JSON file will most often fail.
 
 {% include_example json_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -844,8 +845,9 @@ This conversion can be done using `SparkSession.read().json()` on either an RDD 
 or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. As a consequence,
-a regular multi-line JSON file will most often fail.
+line must contain a separate, self-contained valid JSON object. For more information, please see
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
+consequence, a regular multi-line JSON file will most often fail.
 
 {% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
@@ -855,8 +857,9 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using `SparkSession.read.json` on a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. As a consequence,
-a regular multi-line JSON file will most often fail.
+line must contain a separate, self-contained valid JSON object. For more information, please see
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
+consequence, a regular multi-line JSON file will most often fail.
 
 {% include_example json_dataset python/sql/datasource.py %}
 </div>
@@ -867,8 +870,9 @@ the `read.json()` function, which loads data from a directory of JSON files wher
 files is a JSON object.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. As a consequence,
-a regular multi-line JSON file will most often fail.
+line must contain a separate, self-contained valid JSON object. For more information, please see
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
+consequence, a regular multi-line JSON file will most often fail.
 
 {% include_example json_dataset r/RSparkSQLExample.R %}
 
