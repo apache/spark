@@ -1489,4 +1489,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(sql("show user functions").count() === 1L)
     }
   }
+
+  test("SPARK-18009 calling toLocalIterator on commands") {
+    import scala.collection.JavaConverters._
+    val df = sql("show databases")
+    val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
+    assert(rows.length > 0)
+  }
 }
