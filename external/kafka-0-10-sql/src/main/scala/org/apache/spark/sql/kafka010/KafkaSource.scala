@@ -154,7 +154,8 @@ private[kafka010] case class KafkaSource(
       from: Map[TopicPartition, Long],
       until: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
     val fromNew = fetchNewPartitionEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
-    val sizes = until.flatMap { case (tp, end) =>
+    val sizes = until.flatMap {
+      case (tp, end) =>
         // If begin isn't defined, something's wrong, but let alert logic in getBatch handle it
         from.get(tp).orElse(fromNew.get(tp)).flatMap { begin =>
           val size = end - begin
@@ -166,7 +167,8 @@ private[kafka010] case class KafkaSource(
     if (total < 1) {
       until
     } else {
-      until.map { case (tp, end) =>
+      until.map {
+        case (tp, end) =>
           tp -> sizes.get(tp).map { size =>
             val begin = from.get(tp).getOrElse(fromNew(tp))
             val prorate = limit * (size / total)
