@@ -697,7 +697,8 @@ case class AlterTableSetLocationCommand(
           } else {
             table.withNewStorage(locationUri = Some(location))
           }
-        catalog.alterTable(newTable)
+        val newTableWithInvalidatedStats = newTable.copy(stats = None)
+        catalog.alterTable(newTableWithInvalidatedStats)
     }
     Seq.empty[Row]
   }
