@@ -30,8 +30,9 @@ TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
 JARS_PATH = "%s/assembly/target/scala-2.11/jars/" % SPARK_HOME
 
+# Use the release jars path if we are in release mode.
 if (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1):
-        JARS_PATH= "%s/jars/" % SPARK_HOME
+    JARS_PATH = "%s/jars/" % SPARK_HOME
 
 EXAMPLES_PATH = "%s/examples/src/main/python" % SPARK_HOME
 SCRIPTS_PATH = "%s/bin" % SPARK_HOME
@@ -61,7 +62,7 @@ if (in_spark):
 try:
     if (in_spark):
         # Construct the symlink farm
-        if getattr(os, "symlink", None) != None:
+        if getattr(os, "symlink", None) is not None:
             os.symlink(JARS_PATH, JARS_TARGET)
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
@@ -157,7 +158,7 @@ finally:
     # packaging.
     if (in_spark):
         # Depending on cleaning up the symlink farm or copied version
-        if getattr(os, "symlink", None) != None:
+        if getattr(os, "symlink", None) is not None:
             os.remove("%s/jars" % TEMP_PATH)
             os.remove("%s/bin" % TEMP_PATH)
             os.remove("%s/examples" % TEMP_PATH)
