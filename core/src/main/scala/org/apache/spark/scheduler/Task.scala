@@ -26,6 +26,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
@@ -94,7 +95,7 @@ private[spark] abstract class Task[T](
 
     new CallerContext(
       "TASK",
-      SparkEnv.get.conf.getOption("spark.hadoop.callerContext"),
+      SparkEnv.get.conf.get(APP_CALLER_CONTEXT),
       appId,
       appAttemptId,
       jobId,

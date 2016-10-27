@@ -206,4 +206,8 @@ package object config {
       "encountering corrupt files and contents that have been read will still be returned.")
     .booleanConf
     .createWithDefault(false)
+
+  private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.upstreamApp.callerContext")
+    .stringConf
+    .createOptional
 }

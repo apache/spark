@@ -45,7 +45,6 @@ class SparkSubmitOptionParser {
   protected final String DRIVER_LIBRARY_PATH = "--driver-library-path";
   protected final String DRIVER_MEMORY = "--driver-memory";
   protected final String EXECUTOR_MEMORY = "--executor-memory";
-  protected final String CALLER_CONTEXT = "--caller-context";
   protected final String FILES = "--files";
   protected final String JARS = "--jars";
   protected final String KILL_SUBMISSION = "--kill";
@@ -97,7 +96,6 @@ class SparkSubmitOptionParser {
     { DRIVER_JAVA_OPTIONS },
     { DRIVER_LIBRARY_PATH },
     { DRIVER_MEMORY },
-    { CALLER_CONTEXT },
     { EXECUTOR_CORES },
     { EXECUTOR_MEMORY },
     { FILES },

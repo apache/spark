@@ -161,7 +161,7 @@ private[spark] class Client(
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString)
 
-      new CallerContext("CLIENT", sparkConf.getOption("spark.hadoop.callerContext"),
+      new CallerContext("CLIENT", sparkConf.get(APP_CALLER_CONTEXT),
         Option(appId.toString)).setCurrentContext()
 
       // Verify whether the cluster has enough resources for our AM
