@@ -184,7 +184,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     // ensure we reset the classloader after the test completes
     val originalClassLoader = Thread.currentThread.getContextClassLoader
     val loader = new MutableURLClassLoader(new Array[URL](0), originalClassLoader)
-    try {
+    Utils.tryWithSafeFinally {
       // load the exception from the jar
       loader.addURL(jarFile.toURI.toURL)
       Thread.currentThread().setContextClassLoader(loader)
@@ -209,7 +209,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
 
       assert(expectedFailure.findFirstMatchIn(exceptionMessage).isDefined)
       assert(unknownFailure.findFirstMatchIn(exceptionMessage).isEmpty)
-    } finally {
+    } {
       loader.close()
       Thread.currentThread.setContextClassLoader(originalClassLoader)
     }

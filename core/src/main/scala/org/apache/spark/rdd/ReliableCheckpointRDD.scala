@@ -239,19 +239,17 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
       val fileInputStream = fs.open(partitionerFilePath, bufferSize)
       val serializer = SparkEnv.get.serializer.newInstance()
-      val deserializeStream = try {
-        serializer.deserializeStream(fileInputStream)
-      } catch {
-        case e : Throwable =>
-          fileInputStream.close()
-          throw e
+      val partitioner = Utils.tryWithSafeFinally {
+        val deserializeStream = serializer.deserializeStream(fileInputStream)
+        Utils.tryWithSafeFinally {
+          deserializeStream.readObject[Partitioner]
+        } {
+          deserializeStream.close()
+        }
+      } {
+        fileInputStream.close()
       }
 
-      val partitioner = Utils.tryWithSafeFinally[Partitioner] {
-        deserializeStream.readObject[Partitioner]
-      } {
-        deserializeStream.close()
-      }
       logDebug(s"Read partitioner from $partitionerFilePath")
       Some(partitioner)
     } catch {

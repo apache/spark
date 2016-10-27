@@ -214,7 +214,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       SparkListenerTaskStart,
       SparkListenerTaskEnd,
       SparkListenerApplicationEnd).map(Utils.getFormattedClassName)
-    try {
+    Utils.tryWithSafeFinally {
       val logStart = SparkListenerLogStart(SPARK_VERSION)
       val lines = readLines(logData)
       lines.foreach { line =>
@@ -230,7 +230,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       }
       assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
       assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
-    } finally {
+    } {
       logData.close()
     }
   }
