@@ -61,7 +61,8 @@ if (in_spark):
 
 try:
     if (in_spark):
-        # Construct the symlink farm
+        # Construct the symlink farm - this is necessary since we can't refer to the path above the
+        # package root and we need to copy the jars and scripts which are up above the python root.
         if getattr(os, "symlink", None) is not None:
             os.symlink(JARS_PATH, JARS_TARGET)
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
@@ -88,7 +89,7 @@ try:
 
     # Scripts directive requires a list of each script path and does not take wild cards.
     script_names = os.listdir(SCRIPTS_TARGET)
-    scripts = map(lambda script: SCRIPTS_TARGET + "/" + script, script_names)
+    scripts = map(lambda script: os.path.join(SCRIPTS_TARGET, script), script_names)
     # We add find_spark_home.py to the bin directory we install so that pip installed PySpark
     # will search for SPARK_HOME with Python.
     scripts.append("pyspark/find_spark_home.py")

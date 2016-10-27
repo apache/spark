@@ -33,9 +33,10 @@ def _find_spark_home():
 
     def is_spark_home(path):
         """Takes a path and returns true if the provided path could be a reasonable SPARK_HOME"""
-        return (os.path.isfile(path + "/bin/spark-submit") and os.path.isdir(path + "/jars"))
+        return (os.path.isfile(os.path.join(path, "bin/spark-submit")) and
+                (os.path.isdir(os.path.join(path, "jars"))))
 
-    paths = ["../", os.path.dirname(sys.argv[0]) + "/../"]
+    paths = ["../", os.path.join(os.path.dirname(sys.argv[0]), "../")]
 
     # Add the path of the PySpark module if it exists
     if sys.version < "3":

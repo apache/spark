@@ -17,7 +17,7 @@
 # limitations under the License.
 
 recursive-include deps/jars *.jar
-recursive-include deps/bin *
+graft deps/bin
 recursive-include deps/examples *.py
 recursive-include lib *.zip
 include README.md
