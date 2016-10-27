@@ -95,19 +95,14 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     assert(metrics1.contains("numOutputRows"))
     assert(metrics1("numOutputRows").value === 3)
 
-    // Due to the iteration processing of WholeStage Codegen,
-    // limit(n) operator will pull n + 1 items from previous operator. So we tune off
-    // WholeStage Codegen here to test the metrics.
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      // A physical GlobalLimitExec and a LocalLimitExec constitute a logical Limit operator.
-      // When we ask 2 items, each partition will be asked 2 items from the LocalLimitExec.
-      val df2 = spark.createDataset(Seq(1, 2, 3)).limit(1)
-      df2.collect()
-      // The number of partitions of the LocalTableScanExec.
-      val parallelism = math.min(sparkContext.defaultParallelism, 3)
-      val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
-      assert(metrics2.contains("numOutputRows"))
-      assert(metrics2("numOutputRows").value === parallelism * 1)
+    Seq("true", "false").map { codeGen =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codeGen) {
+        val df2 = spark.createDataset(Seq(1, 2, 3)).coalesce(1).limit(2)
+        assert(df2.collect().length === 2)
+        val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
+        assert(metrics2.contains("numOutputRows"))
+        assert(metrics2("numOutputRows").value === 2)
+      }
     }
   }
 
