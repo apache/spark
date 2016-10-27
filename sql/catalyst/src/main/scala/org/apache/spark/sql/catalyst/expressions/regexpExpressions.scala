@@ -68,7 +68,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  * Simple RegEx pattern matching function
  */
 @ExpressionDescription(
-  usage = "str _FUNC_ pattern - Returns true if str matches pattern and false otherwise.",
+  usage = "str _FUNC_ pattern - Returns true if `str` matches `pattern` and false otherwise.",
   extended = """
     Arguments:
       str - a string expression.
@@ -126,7 +126,7 @@ case class Like(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "str _FUNC_ regexp - Returns true if str matches regexp and false otherwise.",
+  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp` and false otherwise.",
   extended = """
     Arguments:
       str - a string expression.
@@ -185,7 +185,7 @@ case class RLike(left: Expression, right: Expression)
  * Splits str around pat (pattern is a regular expression).
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, regex) - Splits str around occurrences that match regex.",
+  usage = "_FUNC_(str, regex) - Splits `str` around occurrences that match `regex`.",
   extended = """
     Arguments:
       str - a string expression.
@@ -224,8 +224,9 @@ case class StringSplit(str: Expression, pattern: Expression)
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, regexp, rep) - Replaces all substrings of str that match regexp with rep.",
+  usage = "_FUNC_(str, regexp, rep) - Replaces all substrings of `str` that match `regexp` with `rep`.",
   extended = """
     Arguments:
       str - a string expression.
@@ -236,6 +237,7 @@ case class StringSplit(str: Expression, pattern: Expression)
       > SELECT _FUNC_('100-200', '(\d+)', 'num');
        num-num
   """)
+// scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -336,12 +338,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches regexp.",
+  usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
   extended = """
     Arguments:
       str - a string expression.
       regexp - a string expression that defines a regular expression pattern.
-      idx - a numeric expression that defines the index of a capturing group in regexp.
+      idx - a numeric expression that defines the index of a capturing group in `regexp`.
 
     Examples:
       > SELECT _FUNC_('100-200', '(\d+)-(\d+)', 1);

@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the negated value of expr.",
+  usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
   extended = """
     Arguments:
       expr - a numeric or interval expression.
@@ -69,7 +69,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the value of expr.",
+  usage = "_FUNC_(expr) - Returns the value of `expr`.",
   extended = """
     Arguments:
       expr - a numeric or interval expression.
@@ -149,7 +149,7 @@ object BinaryArithmetic {
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns expr1+expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",
   extended = """
     Arguments:
       expr1 - a numeric or interval expression.
@@ -189,7 +189,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns expr1-expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`-`expr2`.",
   extended = """
     Arguments:
       expr1 - a numeric or interval expression.
@@ -230,7 +230,7 @@ case class Subtract(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns expr1*expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -253,8 +253,9 @@ case class Multiply(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns expr1/expr2. It always performs floating point division.",
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`/`expr2`. It always performs floating point division.",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -266,6 +267,7 @@ case class Multiply(left: Expression, right: Expression)
       > SELECT 2L _FUNC_ 2L;
        1.0
   """)
+// scalastyle:on line.size.limit
 case class Divide(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -341,7 +343,7 @@ case class Divide(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns the remainder after expr1/expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -431,7 +433,7 @@ case class Remainder(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the positive value of expr1 mod expr2.",
+  usage = "_FUNC_(expr1, expr2) - Returns the positive value of `expr1` mod `expr2`.",
   extended = """
     Arguments:
       expr1 - a numeric expression.

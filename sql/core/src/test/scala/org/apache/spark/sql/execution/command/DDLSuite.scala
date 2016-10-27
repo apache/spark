@@ -1455,7 +1455,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("DESCRIBE FUNCTION log"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Logarithm") ::
         Row("Function: log") ::
-        Row("Usage: log(base, expr) - Returns the logarithm of expr with base.") :: Nil
+        Row("Usage: log(base, expr) - Returns the logarithm of `expr` with `base`.") :: Nil
     )
     // predicate operator
     checkAnswer(
@@ -1475,14 +1475,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("DESCRIBE FUNCTION +"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Add") ::
         Row("Function: +") ::
-        Row("Usage: expr1 + expr2 - Returns expr1+expr2.") :: Nil
+        Row("Usage: expr1 + expr2 - Returns `expr1`+`expr2`.") :: Nil
     )
     // comparison operators
     checkAnswer(
       sql("DESCRIBE FUNCTION <"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.LessThan") ::
         Row("Function: <") ::
-        Row("Usage: expr1 < expr2 - Returns TRUE if expr1 is less than expr2.") :: Nil
+        Row("Usage: expr1 < expr2 - Returns true if `expr1` is less than `expr2`.") :: Nil
     )
     // STRING
     checkAnswer(
@@ -1490,7 +1490,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
         Row("Usage: concat(str1, str2, ..., strN) " +
-          "- Returns the concatenation of str1, str2, ..., strN.") :: Nil
+          "- Returns the concatenation of `str1`, `str2`, ..., `strN`.") :: Nil
     )
     // extended mode
     checkAnswer(
@@ -1508,7 +1508,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             |  """.stripMargin) ::
         Row("Function: ^") ::
         Row("Usage: expr1 ^ expr2 - Returns the result of " +
-          "bitwise exclusive OR of expr1 and expr2.") :: Nil
+          "bitwise exclusive OR of `expr1` and `expr2`.") :: Nil
     )
   }
 

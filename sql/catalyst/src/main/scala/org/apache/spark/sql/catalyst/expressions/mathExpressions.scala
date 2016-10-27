@@ -168,7 +168,7 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse cosine (a.k.a. arccosine) of expr if -1<=expr<=1 or NaN otherwise.",
+  usage = "_FUNC_(expr) - Returns the inverse cosine (a.k.a. arccosine) of `expr` if -1<=`expr`<=1 or NaN otherwise.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -184,7 +184,7 @@ case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS"
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse sine (a.k.a. arcsine) the arc sin of expr if -1<=expr<=1 or NaN otherwise.",
+  usage = "_FUNC_(expr) - Returns the inverse sine (a.k.a. arcsine) the arc sin of `expr` if -1<=`expr`<=1 or NaN otherwise.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -213,7 +213,7 @@ case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN"
 case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the cube root of expr.",
+  usage = "_FUNC_(expr) - Returns the cube root of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -225,7 +225,7 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
 case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the smallest integer not smaller than expr.",
+  usage = "_FUNC_(expr) - Returns the smallest integer not smaller than `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -263,7 +263,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the cosine of expr.",
+  usage = "_FUNC_(expr) - Returns the cosine of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -275,7 +275,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic cosine of expr.",
+  usage = "_FUNC_(expr) - Returns the hyperbolic cosine of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -294,7 +294,7 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
  * @param toBaseExpr to which base
  */
 @ExpressionDescription(
-  usage = "_FUNC_(num, from_base, to_base) - Convert num from from_base to to_base.",
+  usage = "_FUNC_(num, from_base, to_base) - Convert `num` from `from_base` to `to_base`.",
   extended = """
     Arguments:
       num - a string expression.
@@ -336,7 +336,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns e to the power of expr.",
+  usage = "_FUNC_(expr) - Returns e to the power of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -348,7 +348,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
 case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns exp(expr) - 1.",
+  usage = "_FUNC_(expr) - Returns exp(`expr`) - 1.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -360,7 +360,7 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the largest integer not greater than expr.",
+  usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -429,7 +429,7 @@ object Factorial {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns expr factorial for expr is [0..20]. Otherwise, NULL.",
+  usage = "_FUNC_(expr) - Returns the factorial of `expr`. `expr` is [0..20]. Otherwise, null.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -471,7 +471,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the natural logarithm (base e) of expr.",
+  usage = "_FUNC_(expr) - Returns the natural logarithm (base e) of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -483,7 +483,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
 case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the logarithm of expr with base 2.",
+  usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 2.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -508,7 +508,7 @@ case class Log2(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the logarithm of expr with base 10.",
+  usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 10.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -520,7 +520,7 @@ case class Log2(child: Expression)
 case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG10")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns log(1 + expr).",
+  usage = "_FUNC_(expr) - Returns log(1 + `expr`).",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -550,7 +550,7 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns -1.0, 0.0 or 1.0 as expr is negative, 0 or positive.",
+  usage = "_FUNC_(expr) - Returns -1.0, 0.0 or 1.0 as `expr` is negative, 0 or positive.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -562,7 +562,7 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
 case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the sine of expr.",
+  usage = "_FUNC_(expr) - Returns the sine of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -574,7 +574,7 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
 case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic sine of expr.",
+  usage = "_FUNC_(expr) - Returns the hyperbolic sine of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -586,7 +586,7 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the square root of expr.",
+  usage = "_FUNC_(expr) - Returns the square root of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -598,7 +598,7 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
 case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the tangent of expr.",
+  usage = "_FUNC_(expr) - Returns the tangent of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -610,7 +610,7 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic tangent of expr.",
+  usage = "_FUNC_(expr) - Returns the hyperbolic tangent of `expr`.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -757,7 +757,7 @@ object Hex {
  * and returns the resulting STRING. Negative numbers would be treated as two's complement.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Converts the expr to hexadecimal.",
+  usage = "_FUNC_(expr) - Converts `expr` to hexadecimal.",
   extended = """
     Arguments:
       expr - a numeric, binary or string expression.
@@ -797,7 +797,7 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
  * Resulting characters are returned as a byte array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Converts hexadecimal expr to binary.",
+  usage = "_FUNC_(expr) - Converts hexadecimal `expr` to binary.",
   extended = """
     Arguments:
       expr - a string expression.
@@ -836,7 +836,7 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns the angle in radians between the positive x-axis of a plane and the point given by the coordinates (expr1, expr2).",
+  usage = "_FUNC_(expr1, expr2) - Returns the angle in radians between the positive x-axis of a plane and the point given by the coordinates (`expr1`, `expr2`).",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -861,7 +861,7 @@ case class Atan2(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Raise expr1 to the power of expr2.",
+  usage = "_FUNC_(expr1, expr2) - Raises `expr1` to the power of `expr2`.",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -889,8 +889,8 @@ case class Pow(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise left shift.",
   extended = """
     Arguments:
-      base - an integral expression that defines the base number to shift.
-      expr - an integral expression.
+      base - a numeric expression that defines the base number to shift.
+      expr - a numeric expression.
 
     Examples:
       > SELECT _FUNC_(2, 1);
@@ -927,8 +927,8 @@ case class ShiftLeft(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise (signed) right shift.",
   extended = """
     Arguments:
-      base - an integral expression that defines the base number to shift.
-      expr - an integral expression.
+      base - a numeric expression that defines the base number to shift.
+      expr - a numeric expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);
@@ -965,8 +965,8 @@ case class ShiftRight(left: Expression, right: Expression)
   usage = "_FUNC_(base, expr) - Bitwise unsigned right shift.",
   extended = """
     Arguments:
-      base - an integral expression that defines the base number to shift.
-      expr - an integral expression.
+      base - a numeric expression that defines the base number to shift.
+      expr - a numeric expression.
 
     Examples:
       > SELECT _FUNC_(4, 1);
@@ -993,7 +993,7 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns sqrt(expr1**2 + expr2**2).",
+  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`**2 + `expr2`**2).",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -1014,7 +1014,7 @@ case class Hypot(left: Expression, right: Expression)
  * @param right the number to compute the logarithm of.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(base, expr) - Returns the logarithm of expr with base.",
+  usage = "_FUNC_(base, expr) - Returns the logarithm of `expr` with `base`.",
   extended = """
     Arguments:
       base - a numeric expression that represents the logarithm base.
@@ -1248,7 +1248,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, d) - Returns expr rounded to d decimal places using HALF_UP rounding mode.",
+  usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using HALF_UP rounding mode.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -1272,7 +1272,7 @@ case class Round(child: Expression, scale: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr, d) - Returns expr rounded to d decimal places using HALF_EVEN rounding mode.",
+  usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using HALF_EVEN rounding mode.",
   extended = """
     Arguments:
       expr - a numeric expression.

@@ -40,8 +40,9 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  * An expression that concatenates multiple input strings into a single string.
  * If any input is null, concat returns null.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of str1, str2, ..., strN.",
+  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of `str1`, `str2`, ..., `strN`.",
   extended = """
     Arguments:
       str - a string expression.
@@ -50,6 +51,7 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
       > SELECT _FUNC_('Spark','SQL');
        SparkSQL
   """)
+// scalastyle:on line.size.limit
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
@@ -87,7 +89,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by sep.",
+  usage = "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
   extended = """
     Arguments:
       sep - a string expression that represents the separator.
@@ -183,17 +185,19 @@ case class ConcatWs(children: Seq[Expression])
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(n, str1, str2, ...) - Returns the n-th string, e.g. returns str2 when n is 2.",
+  usage = "_FUNC_(n, str1, str2, ...) - Returns the `n`-th string, e.g., returns `str2` when `n` is 2.",
   extended = """
     Arguments:
-      n - a numeric expression that defines the index of str for a return value.
+      n - a numeric expression that defines the index of `str` for a return value.
       str - a string expression.
 
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
   """)
+// scalastyle:on line.size.limit
 case class Elt(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
 
@@ -270,7 +274,7 @@ trait String2StringExpression extends ImplicitCastInputTypes {
  * A function that converts the characters of a string to uppercase.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Returns str with all characters changed to uppercase.",
+  usage = "_FUNC_(str) - Returns `str` with all characters changed to uppercase.",
   extended = """
     Arguments:
       str - a string expression.
@@ -293,7 +297,7 @@ case class Upper(child: Expression)
  * A function that converts the characters of a string to lowercase.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Returns str with all characters changed to lowercase.",
+  usage = "_FUNC_(str) - Returns `str` with all characters changed to lowercase.",
   extended = """
     Arguments:
       str - a string expression.
@@ -456,7 +460,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 @ExpressionDescription(
   usage = """
     _FUNC_(str, str_array) - Returns the index (1-based) of the given string (left) in the comma-delimited list (right).
-      Returns 0, if the string wasn't found or if the given string (left) contains a comma.
+      Returns 0, if the string was not found or if the given string (left) contains a comma.
   """,
   extended = """
     Arguments:
@@ -491,7 +495,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
  * A function that trim the spaces from both ends for the specified string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Removes the leading and trailing space characters from str.",
+  usage = "_FUNC_(str) - Removes the leading and trailing space characters from `str`.",
   extended = """
     Arguments:
       str - a string expression.
@@ -516,7 +520,7 @@ case class StringTrim(child: Expression)
  * A function that trim the spaces from left end for given string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Removes the leading and trailing space characters from str.",
+  usage = "_FUNC_(str) - Removes the leading and trailing space characters from `str`.",
   extended = """
     Arguments:
       str - a string expression.
@@ -541,7 +545,7 @@ case class StringTrimLeft(child: Expression)
  * A function that trim the spaces from right end for given string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Removes the trailing space characters from str.",
+  usage = "_FUNC_(str) - Removes the trailing space characters from `str`.",
   extended = """
     Arguments:
       str - a string expression.
@@ -570,7 +574,7 @@ case class StringTrimRight(child: Expression)
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of substr in str.",
+  usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.",
   extended = """
     Arguments:
       str - a string expression.
@@ -609,17 +613,17 @@ case class StringInstr(str: Expression, substr: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, delim, count) - Returns the substring from str before count occurrences of the delimiter delim.
-      If count is positive, everything to the left of the final delimiter (counting from the
-      left) is returned. If count is negative, everything to the right of the final delimiter
+    _FUNC_(str, delim, count) - Returns the substring from `str` before `count` occurrences of the delimiter `delim`.
+      If `count` is positive, everything to the left of the final delimiter (counting from the
+      left) is returned. If `count` is negative, everything to the right of the final delimiter
       (counting from the right) is returned. The function substring_index performs a case-sensitive match
-      when searching for delim.
+      when searching for `delim`.
   """,
   extended = """
     Arguments:
       str - a string expression.
       delim - a string expression that represents the delimiter.
-      count - a numeric expression that defines the number of occurrences of the delimiter delim .
+      count - a numeric expression that defines the number of occurrences of the delimiter `delim`.
 
     Examples:
       > SELECT _FUNC_('www.apache.org', '.', 2);
@@ -652,8 +656,8 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(substr, str[, pos]) - Returns the position of the first occurrence of substr in str after position pos.
-      The given pos and return value are 1-based.
+    _FUNC_(substr, str[, pos]) - Returns the position of the first occurrence of `substr` in `str` after position `pos`.
+      The given `pos` and return value are 1-based.
   """,
   extended = """
     Arguments:
@@ -740,8 +744,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, len, pad) - Returns str, left-padded with pad to a length of len.
-      If str is longer than len, the return value is shortened to len characters.
+    _FUNC_(str, len, pad) - Returns `str`, left-padded with `pad` to a length of `len`.
+      If `str` is longer than `len`, the return value is shortened to `len` characters.
   """,
   extended = """
     Arguments:
@@ -778,8 +782,8 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, len, pad) - Returns str, right-padded with pad to a length of len.
-      If str is longer than len, the return value is shortened to len characters.
+    _FUNC_(str, len, pad) - Returns `str`, right-padded with `pad` to a length of `len`.
+      If `str` is longer than `len`, the return value is shortened to `len` characters.
   """,
   extended = """
     Arguments:
@@ -1070,7 +1074,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str) - Returns str with the first letter of each word in uppercase.
+    _FUNC_(str) - Returns `str` with the first letter of each word in uppercase.
       All other letters are in lowercase. Words are delimited by white space.
   """,
   extended = """
@@ -1098,7 +1102,7 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
  * Returns the string which repeat the given string value n times.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, n) - Returns the string which repeat the given string value n times.",
+  usage = "_FUNC_(str, n) - Returns the string which repeats the given string value n times.",
   extended = """
     Arguments:
       str - a string expression.
@@ -1154,7 +1158,7 @@ case class StringReverse(child: Expression) extends UnaryExpression with String2
  * Returns a string consisting of n spaces.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n) - Returns a string consisting of n spaces.",
+  usage = "_FUNC_(n) - Returns a string consisting of `n` spaces.",
   extended = """
     Arguments:
       n - a numeric expression that defines the number of spaces.
@@ -1190,7 +1194,7 @@ case class StringSpace(child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str, pos[, len]) - Returns the substring of str that starts at pos and is of length len or the slice of byte array that starts at pos and is of length len.",
+  usage = "_FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len` or the slice of byte array that starts at `pos` and is of length `len`.",
   extended = """
     Arguments:
       str - a string expression.
@@ -1244,7 +1248,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
  * A function that return the length of the given string or binary expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the length of str or number of bytes in binary data.",
+  usage = "_FUNC_(expr) - Returns the length of `str` or number of bytes in binary data.",
   extended = """
     Arguments:
       expr - a string or binary expression.
@@ -1329,7 +1333,7 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
  * Returns the numeric value of the first character of str.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Returns the numeric value of the first character of str.",
+  usage = "_FUNC_(str) - Returns the numeric value of the first character of `str`.",
   extended = """
     Arguments:
       str - a string expression.
@@ -1372,7 +1376,7 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
  * Converts the argument from binary to a base 64 string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(bin) - Converts the argument from binary to a base 64 string.",
+  usage = "_FUNC_(bin) - Converts the argument from a binary `bin` to a base 64 string.",
   extended = """
     Arguments:
       bin - a binary expression.
@@ -1404,7 +1408,7 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
  * Converts the argument from a base 64 string to BINARY.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str) - Convert the argument from a base 64 string to binary.",
+  usage = "_FUNC_(str) - Convert the argument from a base 64 string `str` to a binary.",
   extended = """
     Arguments:
       str - a string expression.
@@ -1513,8 +1517,8 @@ case class Encode(value: Expression, charset: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr1, expr2) - Formats the number expr1 like '#,###,###.##', rounded to expr2
-      decimal places. If expr2 is 0, the result has no decimal point or fractional part.
+    _FUNC_(expr1, expr2) - Formats the number `expr1` like '#,###,###.##', rounded to `expr2`
+      decimal places. If `expr2` is 0, the result has no decimal point or fractional part.
       This is supposed to function like MySQL's FORMAT.
   """,
   extended = """
@@ -1647,7 +1651,7 @@ case class FormatNumber(x: Expression, d: Expression)
  * The 'lang' and 'country' arguments are optional, and if omitted, the default locale is used.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str[, lang, country]) - Splits str into an array of array of words.",
+  usage = "_FUNC_(str[, lang, country]) - Splits `str` into an array of array of words.",
   extended = """
     Arguments:
       str - a string expression.

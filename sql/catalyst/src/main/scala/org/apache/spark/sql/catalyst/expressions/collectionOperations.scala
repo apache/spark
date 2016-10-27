@@ -223,11 +223,11 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
  * Checks if the array (left) has the element (right)
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array, value) - Returns TRUE if the array contains the value.",
+  usage = "_FUNC_(array, value) - Returns true if the array contains the value.",
   extended = """
     Arguments:
       array - an array expression.
-      value - an expression of the element type of array.
+      value - an expression of the element type of `array`.
 
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 2);

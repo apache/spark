@@ -31,12 +31,12 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = """
     _FUNC_(expr[, isIgnoreNull]) - Returns the last value of `expr` for a group of rows.
-      If isIgnoreNull is true, returns only non-null values.
+      If `isIgnoreNull` is true, returns only non-null values.
   """,
   extended = """
     Arguments:
       expr - an expression of any type that represents data to collect the last.
-      isIgnoreNull - a boolean literal. If isIgnoreNull is true, returns only non-null
+      isIgnoreNull - a boolean literal. If `isIgnoreNull` is true, returns only non-null
         values. Default is false.
   """)
 case class Last(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {

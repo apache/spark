@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, ...) - Returns the first non-null argument if exists. Otherwise, NULL.",
+  usage = "_FUNC_(expr1, expr2, ...) - Returns the first non-null argument if exists. Otherwise, null.",
   extended = """
     Arguments:
       expr - an expression of any type.
@@ -98,7 +98,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns expr2 if expr1 is null, or expr1 otherwise.",
+  usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
   extended = """
     Arguments:
       expr1 - an expression of any type.
@@ -126,7 +126,7 @@ case class IfNull(left: Expression, right: Expression) extends RuntimeReplaceabl
 
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns null if expr1 equals to expr2, or expr1 otherwise.",
+  usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
   extended = """
    Arguments:
       expr1 - an expression of any type.
@@ -156,7 +156,7 @@ case class NullIf(left: Expression, right: Expression) extends RuntimeReplaceabl
 
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns expr2 if expr1 is null, or expr1 otherwise.",
+  usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
   extended = """
     Arguments:
       expr1 - an expression of any type.
@@ -185,7 +185,7 @@ case class Nvl(left: Expression, right: Expression) extends RuntimeReplaceable {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, expr3) - Returns expr2 if expr1 is not null, or expr3 otherwise.",
+  usage = "_FUNC_(expr1, expr2, expr3) - Returns `expr2` if `expr1` is not null, or `expr3` otherwise.",
   extended = """
     Arguments:
       expr1 - an expression of any type.
@@ -220,7 +220,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression)
  * Evaluates to `true` iff it's NaN.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns true if expr is NaN and false otherwise.",
+  usage = "_FUNC_(expr) - Returns true if `expr` is NaN and false otherwise.",
   extended = """
     Arguments:
       expr - a numeric expression.
@@ -266,7 +266,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
  * This Expression is useful for mapping NaN values to null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns expr1 if it's not NaN, or expr2 otherwise.",
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1` if it's not NaN, or `expr2` otherwise.",
   extended = """
     Arguments:
       expr1 - a numeric expression.
@@ -330,7 +330,7 @@ case class NaNvl(left: Expression, right: Expression)
  * An expression that is evaluated to true if the input is null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns true if expr is NULL and false otherwise.",
+  usage = "_FUNC_(expr) - Returns true if `expr` is null and false otherwise.",
   extended = """
     Arguments:
       expr - an expression of any type.
@@ -359,7 +359,7 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
  * An expression that is evaluated to true if the input is not null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns true if expr is not NULL and false otherwise.",
+  usage = "_FUNC_(expr) - Returns true if `expr` is not null and false otherwise.",
   extended = """
     Arguments:
       expr - an expression of any type.

@@ -114,11 +114,11 @@ object Cast {
 
 /** Cast the child expression to the target data type. */
 @ExpressionDescription(
-  usage = "_FUNC_(expr AS type) - Casts the value expr to the target data type.",
+  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
   extended = """
     Arguments:
       expr - an expression of any type.
-      type - any data type to cast expr into.
+      type - any data type to cast `expr` into.
 
     Examples:
       > SELECT _FUNC_('10' as int);

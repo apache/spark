@@ -118,10 +118,10 @@ case class Not(child: Expression)
  * Evaluates to `true` if `list` contains `value`.
  */
 @ExpressionDescription(
-  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if expr equals to any valN.",
+  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.",
   extended = """
     Arguments:
-      expr - a boolean expression.
+      expr - an expression of any type.
   """)
 case class In(value: Expression, list: Seq[Expression]) extends Predicate
     with ImplicitCastInputTypes {
@@ -427,7 +427,7 @@ object Equality {
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns TRUE if expr1 equals expr2 and false otherwise.",
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2` and false otherwise.",
   extended = """
     Arguments:
       expr1 - an expression of any type.
@@ -460,7 +460,7 @@ case class EqualTo(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = """
     expr1 _FUNC_ expr2 - Returns same result as the EQUAL(=) operator for non-null operands,
-      but returns TRUE if both are NULL, FALSE if one of the them is NULL.
+      but returns true if both are null, false if one of the them is null.
   """,
   extended = """
     Arguments:
@@ -506,7 +506,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns TRUE if expr1 is less than expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.",
   extended = """
     Arguments:
       expr1 - an expression of any type.
@@ -525,7 +525,7 @@ case class LessThan(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns TRUE if expr1 is less than or equal to expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.",
   extended = """
     Arguments:
       expr1 - an expression of any type.
@@ -544,7 +544,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns TRUE if expr1 is greater than expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
   extended = """
     Arguments:
       expr1 - an expression of any type.
@@ -563,7 +563,7 @@ case class GreaterThan(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns TRUE if expr1 is greater than or equal to expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.",
   extended = """
     Arguments:
       expr1 - an expression of any type.

@@ -49,12 +49,12 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = """
     _FUNC_(expr[, relativeSD]) - Returns the estimated cardinality by HyperLogLog++.
-      relativeSD defines the maximum estimation error allowed.
+      `relativeSD` defines the maximum estimation error allowed.
   """,
   extended = """
     Arguments:
       expr - an expression of any type that represents data to count.
-      relativeSD - a numeric literal that defines the maximum estimation error allowed.
+      relativeSD - a double or decimal literal that defines the maximum estimation error allowed.
         Default is 0.05.
   """)
 case class HyperLogLogPlusPlus(

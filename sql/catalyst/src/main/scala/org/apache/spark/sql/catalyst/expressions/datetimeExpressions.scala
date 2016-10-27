@@ -75,7 +75,7 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
  * Adds a number of days to startdate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days after start_date.",
+  usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` after `start_date`.",
   extended = """
     Arguments:
       start_date - a date expression.
@@ -112,7 +112,7 @@ case class DateAdd(startDate: Expression, days: Expression)
  * Subtracts a number of days to startdate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days before start_date.",
+  usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` before `start_date`.",
   extended = """
     Arguments:
       start_date - a date expression.
@@ -145,7 +145,7 @@ case class DateSub(startDate: Expression, days: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp) - Returns the hour component of the string/timestamp/interval.",
+  usage = "_FUNC_(timestamp) - Returns the hour component of the string/timestamp.",
   extended = """
     Arguments:
       timestamp - a timestamp expression.
@@ -171,7 +171,7 @@ case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInpu
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp) - Returns the minute component of the string/timestamp/interval.",
+  usage = "_FUNC_(timestamp) - Returns the minute component of the string/timestamp.",
   extended = """
     Arguments:
       timestamp - a timestamp expression.
@@ -197,7 +197,7 @@ case class Minute(child: Expression) extends UnaryExpression with ImplicitCastIn
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp) - Returns the second component of the string/timestamp/interval.",
+  usage = "_FUNC_(timestamp) - Returns the second component of the string/timestamp.",
   extended = """
     Arguments:
       timestamp - a timestamp expression.
@@ -249,7 +249,7 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the year component of the date/timestamp/interval.",
+  usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
   extended = """
     Arguments:
       date - a date expression.
@@ -301,7 +301,7 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the month component of the date/timestamp/interval.",
+  usage = "_FUNC_(date) - Returns the month component of the date/timestamp.",
   extended = """
     Arguments:
       date - a date expression.
@@ -327,7 +327,7 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the day of month of date/timestamp, or the day of interval.",
+  usage = "_FUNC_(date) - Returns the day of month of date/timestamp.",
   extended = """
     Arguments:
       date - a date expression.
@@ -400,11 +400,11 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp, fmt) - Converts timestamp to a value of string in the format specified by the date format fmt.",
+  usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
   extended = """
     Arguments:
       timestamp - a timestamp expression.
-      fmt - string type expression that represents the date/timestamp format available in java.text.SimpleDateFormat.
+      fmt - a string type expression that represents the date/timestamp format available in java.text.SimpleDateFormat.
 
     Examples:
       > SELECT _FUNC_('2016-04-08', 'y');
@@ -609,7 +609,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(unix_time, format) - Returns unix_time in the specified format.",
+  usage = "_FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.",
   extended = """
     Arguments:
       unix_time - a numeric expression.
@@ -742,7 +742,7 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, day_of_week) - Returns the first date which is later than start_date and named as indicated.",
+  usage = "_FUNC_(start_date, day_of_week) - Returns the first date which is later than `start_date` and named as indicated.",
   extended = """
     Arguments:
       start_date - a date expression.
@@ -931,8 +931,9 @@ case class TimeSub(start: Expression, interval: Expression)
 /**
  * Returns the date that is num_months after start_date.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_months) - Returns the date that is num_months after start_date.",
+  usage = "_FUNC_(start_date, num_months) - Returns the date that is `num_months` after `start_date`.",
   extended = """
     Arguments:
       start_date - a date expression.
@@ -942,6 +943,7 @@ case class TimeSub(start: Expression, interval: Expression)
       > SELECT _FUNC_('2016-08-31', 1);
        2016-09-30
   """)
+// scalastyle:on line.size.limit
 case class AddMonths(startDate: Expression, numMonths: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -971,7 +973,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between dates timestamp1 and timestamp2.",
+  usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between `timestamp1` and `timestamp2`.",
   extended = """
     Arguments:
       timestamp1 - a timestamp expression.
@@ -1103,7 +1105,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date, fmt) - Returns returns date with the time portion of the day truncated to the unit specified by the format model fmt.",
+  usage = "_FUNC_(date, fmt) - Returns returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.",
   extended = """
     Arguments:
       date - a date expression.
@@ -1186,7 +1188,7 @@ case class TruncDate(date: Expression, format: Expression)
  * Returns the number of days from startDate to endDate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(date1, date2) - Returns the number of days between date1 and date2.",
+  usage = "_FUNC_(date1, date2) - Returns the number of days between `date1` and `date2`.",
   extended = """
     Arguments:
       date1 - a date expression.

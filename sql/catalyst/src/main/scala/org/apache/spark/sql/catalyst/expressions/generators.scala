@@ -102,7 +102,7 @@ case class UserDefinedGenerator(
  * }}}
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n, expr1, ..., exprk) - Separate expr1, ..., exprk into n rows.",
+  usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows.",
   extended = """
     Arguments:
       n - an integer literal that represents the number of output rows.

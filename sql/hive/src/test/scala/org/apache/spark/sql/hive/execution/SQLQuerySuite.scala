@@ -252,7 +252,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase",
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase",
       "Extended Usage:",
       "Arguments:",
       "str - a string expression.",
@@ -263,7 +263,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase")
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase")
 
     checkKeywordsNotExist(sql("describe functioN Upper"),
       "Extended Usage")
@@ -274,28 +274,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkKeywordsExist(sql("describe functioN  `~`"),
       "Function: ~",
       "Class: org.apache.spark.sql.catalyst.expressions.BitwiseNot",
-      "Usage: ~ expr - Returns the result of bitwise NOT of expr.")
+      "Usage: ~ expr - Returns the result of bitwise NOT of `expr`.")
 
     // Hard coded describe functions
     checkKeywordsExist(sql("describe function  `<>`"),
       "Function: <>",
-      "Usage: expr1 <> expr2 - Returns TRUE if expr1 is not equal to expr2")
+      "Usage: expr1 <> expr2 - Returns true if `expr1` is not equal to `expr2`")
 
     checkKeywordsExist(sql("describe function  `!=`"),
       "Function: !=",
-      "Usage: expr1 != expr2 - Returns TRUE if expr1 is not equal to expr2")
+      "Usage: expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`")
 
     checkKeywordsExist(sql("describe function  `between`"),
       "Function: between",
       "Usage: expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-        "evaluate if expr1 is [not] in between expr2 and expr3")
+        "evaluate if `expr1` is [not] in between `expr2` and `expr3`")
 
     checkKeywordsExist(sql("describe function  `case`"),
       "Function: case",
       "Usage: CASE expr1 WHEN expr2 THEN expr3 " +
         "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
-        "When expr1 = expr2, returns expr3; " +
-        "when expr1 = expr4, return expr5; else return expr6")
+        "When `expr1` = `expr2`, returns `expr3`; " +
+        "when `expr1` = `expr4`, return `expr5`; else return `expr6`")
   }
 
   test("describe functions - user defined functions") {

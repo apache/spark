@@ -104,21 +104,21 @@ case class DescribeFunctionCommand(
       case "<>" =>
         Row(s"Function: $functionName") ::
           Row("Usage: expr1 <> expr2 - " +
-            "Returns TRUE if expr1 is not equal to expr2") :: Nil
+            "Returns true if `expr1` is not equal to `expr2`.") :: Nil
       case "!=" =>
         Row(s"Function: $functionName") ::
           Row("Usage: expr1 != expr2 - " +
-            "Returns TRUE if expr1 is not equal to expr2") :: Nil
+            "Returns true if `expr1` is not equal to `expr2`.") :: Nil
       case "between" =>
         Row("Function: between") ::
           Row("Usage: expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-            "evaluate if expr1 is [not] in between expr2 and expr3") :: Nil
+            "evaluate if `expr1` is [not] in between `expr2` and `expr3`.") :: Nil
       case "case" =>
         Row("Function: case") ::
           Row("Usage: CASE expr1 WHEN expr2 THEN expr3 " +
             "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
-            "When expr1 = expr2, returns expr3; " +
-            "when expr1 = expr4, return expr5; else return expr6") :: Nil
+            "When `expr1` = `expr2`, returns `expr3`; " +
+            "when `expr1` = `expr4`, return `expr5`; else return `expr6`.") :: Nil
       case _ =>
         try {
           val info = sparkSession.sessionState.catalog.lookupFunctionInfo(functionName)

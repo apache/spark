@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
  * Code generation inherited from BinaryArithmetic.
  */
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise AND of expr1 and expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise AND of `expr1` and `expr2`.",
   extended = """
     Arguments:
       expr1 - an integral expression.
@@ -63,7 +63,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
  * Code generation inherited from BinaryArithmetic.
  */
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise OR of expr1 and expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise OR of `expr1` and `expr2`.",
   extended = """
     Arguments:
       expr1 - an integral expression.
@@ -99,7 +99,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
  * Code generation inherited from BinaryArithmetic.
  */
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise exclusive OR of expr1 and expr2.",
+  usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise exclusive OR of `expr1` and `expr2`.",
   extended = """
     Arguments:
       expr1 - an integral expression.
@@ -133,7 +133,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
  * A function that calculates bitwise not(~) of a number.
  */
 @ExpressionDescription(
-  usage = "_FUNC_ expr - Returns the result of bitwise NOT of expr.",
+  usage = "_FUNC_ expr - Returns the result of bitwise NOT of `expr`.",
   extended = """
     Arguments:
       expr - an integral expression.

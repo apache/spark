@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.Platform
  * For input of type [[BinaryType]]
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns an MD5 128-bit checksum as a hex string of expr.",
+  usage = "_FUNC_(expr) - Returns an MD5 128-bit checksum as a hex string of `expr`.",
   extended = """
     Arguments:
       expr - a binary expression.
@@ -73,7 +73,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, bitLength) - Returns a checksum of SHA-2 family as a hex string of expr.
+    _FUNC_(expr, bitLength) - Returns a checksum of SHA-2 family as a hex string of `expr`.
       SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256.
   """,
   extended = """
@@ -153,7 +153,7 @@ case class Sha2(left: Expression, right: Expression)
  * For input of type [[BinaryType]] or [[StringType]]
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns a sha1 hash value as a hex string of the expr.",
+  usage = "_FUNC_(expr) - Returns a sha1 hash value as a hex string of the `expr`.",
   extended = """
     Arguments:
       expr - a binary expression.
@@ -183,7 +183,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
  * For input of type [[BinaryType]]
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns a cyclic redundancy check value of the expr as a bigint.",
+  usage = "_FUNC_(expr) - Returns a cyclic redundancy check value of the `expr` as a bigint.",
   extended = """
     Arguments:
       expr - a binary expression.
@@ -583,7 +583,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
  * A function throws an exception if 'condition' is not true.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Throw an exception if expr is not true.",
+  usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
   extended = """
     Arguments:
       expr - a boolean expression

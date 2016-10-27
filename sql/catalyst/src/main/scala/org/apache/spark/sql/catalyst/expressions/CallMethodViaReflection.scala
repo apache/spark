@@ -44,12 +44,12 @@ import org.apache.spark.util.Utils
  *                 and the remaining are input arguments to the Java method.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - Calls method with reflection.",
+  usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - Calls a method with reflection.",
   extended = """
     Arguments:
       class - a string literal that represents a fully-qualified class name.
       method - a string literal that represents a method name.
-      arg - a boolean, string or numeric expression except decimal that represents arguments for
+      arg - a boolean, string or numeric expression except decimal that represents an argument for
         the method.
 
     Examples:

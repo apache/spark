@@ -384,11 +384,10 @@ abstract class OffsetWindowFunction
 @ExpressionDescription(
   usage = """
     _FUNC_(input[, offset[, default]]) - Returns the value of `input` at the `offset`th row
-      after the current row in the window.
-      The default value of `offset` is 1 and the default value of `default` is null.
-      If the value of `input` at the `offset`th row is null, null is returned.
-      If there is no such an offset row (e.g. when the offset is 1, the last row of the window
-      does not have any subsequent row), `default` is returned.
+      after the current row in the window. The default value of `offset` is 1 and the default
+      value of `default` is null. If the value of `input` at the `offset`th row is null,
+      null is returned. If there is no such an offset row (e.g., when the offset is 1, the last
+      row of the window does not have any subsequent row), `default` is returned.
   """,
   extended = """
     Arguments:
@@ -421,11 +420,10 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(input[, offset[, default]]) - Returns the value of `input` at the `offset`th row
-      before the current row in the window.
-      The default value of `offset` is 1 and the default value of `default` is null.
-      If the value of `input` at the `offset`th row is null, null is returned.
-      If there is no such offset row (e.g. when the offset is 1, the first row of the window
-      does not have any previous row), `default` is returned.
+      before the current row in the window. The default value of `offset` is 1 and the default
+      value of `default` is null. If the value of `input` at the `offset`th row is null,
+      null is returned. If there is no such offset row (e.g., when the offset is 1, the first
+      row of the window does not have any previous row), `default` is returned.
   """,
   extended = """
     Arguments:
@@ -519,8 +517,8 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
 }
 
 /**
- * The NTile function divides the rows for each window partition into 'n' buckets ranging from 1 to
- * at most 'n'. Bucket values will differ by at most 1. If the number of rows in the partition does
+ * The NTile function divides the rows for each window partition into `n` buckets ranging from 1 to
+ * at most `n`. Bucket values will differ by at most 1. If the number of rows in the partition does
  * not divide evenly into the number of buckets, then the remainder values are distributed one per
  * bucket, starting with the first bucket.
  *
@@ -541,8 +539,8 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(n) - Divides the rows for each window partition into 'n' buckets ranging
-      from 1 to at most 'n'.
+    _FUNC_(n) - Divides the rows for each window partition into `n` buckets ranging
+      from 1 to at most `n`.
   """,
   extended = """
     Arguments:
