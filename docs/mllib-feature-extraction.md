@@ -229,12 +229,12 @@ Chi-Squared feature selection. It operates on labeled data with categorical feat
 [Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
 features to choose. It supports three selection methods: `numTopFeatures`, `percentile`, `fpr`:
 
-* `numTopFeatures` chooses the `k` top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
+* `numTopFeatures` chooses a fixed number of top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
 * `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
 * `fpr` chooses all features whose p-value is below a threshold, thus controlling the false positive rate of selection.
 
-By default, the selection method is `numTopFeatures`, with the default number of top features set to 50. User can use
-`setNumTopFeatures`, `setPercentile`, `fpr` to set different selection methods.
+By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
+The user can choose a selection method using `setSelectorType`.
 
 The number of features to select can be tuned using a held-out validation set.
 

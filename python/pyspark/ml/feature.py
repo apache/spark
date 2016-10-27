@@ -2616,12 +2616,12 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
 
     numTopFeatures = \
         Param(Params._dummy(), "numTopFeatures",
-              "Number of features that selector will select, ordered by statistics value " +
-              "descending. If the number of features is < numTopFeatures, then this will select " +
+              "Number of features that selector will select, ordered by ascending p-value. " +
+              "If the number of features is < numTopFeatures, then this will select " +
               "all features.", typeConverter=TypeConverters.toInt)
 
     percentile = Param(Params._dummy(), "percentile", "Percentile of features that selector " +
-                       "will select, ordered by statistics value descending.",
+                       "will select, ordered by ascending p-value.",
                        typeConverter=TypeConverters.toFloat)
 
     fpr = Param(Params._dummy(), "fpr", "The highest p-value for features to be kept.",

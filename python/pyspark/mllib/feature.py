@@ -275,7 +275,7 @@ class ChiSqSelector(object):
     """
     Creates a ChiSquared feature selector.
     The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`.
-    `numTopFeatures` chooses the `k` top features according to a chi-squared test.
+    `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
     `percentile` is similar but chooses a fraction of all features instead of a fixed number.
     `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
     positive rate of selection.

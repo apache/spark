@@ -42,7 +42,7 @@ private[feature] trait ChiSqSelectorParams extends Params
   with HasFeaturesCol with HasOutputCol with HasLabelCol {
 
   /**
-   * Number of features that selector will select (ordered by statistic value descending). If the
+   * Number of features that selector will select, ordered by ascending p-value. If the
    * number of features is less than numTopFeatures, then this will select all features.
    * Only applicable when selectorType = "numTopFeatures".
    * The default value of numTopFeatures is 50.
@@ -51,7 +51,7 @@ private[feature] trait ChiSqSelectorParams extends Params
    */
   @Since("1.6.0")
   final val numTopFeatures = new IntParam(this, "numTopFeatures",
-    "Number of features that selector will select, ordered by statistics value descending. If the" +
+    "Number of features that selector will select, ordered by ascending p-value. If the" +
       " number of features is < numTopFeatures, then this will select all features.",
     ParamValidators.gtEq(1))
   setDefault(numTopFeatures -> 50)
@@ -68,7 +68,7 @@ private[feature] trait ChiSqSelectorParams extends Params
    */
   @Since("2.1.0")
   final val percentile = new DoubleParam(this, "percentile",
-    "Percentile of features that selector will select, ordered by statistics value descending.",
+    "Percentile of features that selector will select, ordered by ascending p-value.",
     ParamValidators.inRange(0, 1))
   setDefault(percentile -> 0.1)
 
@@ -110,7 +110,7 @@ private[feature] trait ChiSqSelectorParams extends Params
  * Chi-Squared feature selection, which selects categorical features to use for predicting a
  * categorical label.
  * The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`.
- *  - `numTopFeatures` chooses the `k` top features according to a chi-squared test.
+ *  - `numTopFeatures` chooses a fixed number of top features according to a chi-squared test.
  *  - `percentile` is similar but chooses a fraction of all features instead of a fixed number.
  *  - `fpr` chooses all features whose p-value is below a threshold, thus controlling the false
  *    positive rate of selection.

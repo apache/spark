@@ -65,7 +65,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(filteredData === preFilteredData)
   }
 
-  test("ChiSqSelector by percentile transform test (sparse & dense vector)") {
+  test("ChiSqSelector by fpr transform test (sparse & dense vector)") {
     val labeledDiscreteData = sc.parallelize(
       Seq(LabeledPoint(0.0, Vectors.sparse(4, Array((0, 8.0), (1, 7.0)))),
         LabeledPoint(1.0, Vectors.sparse(4, Array((1, 9.0), (2, 6.0), (3, 4.0)))),
