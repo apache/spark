@@ -57,7 +57,7 @@ abstract class RDG extends LeafExpression with Nondeterministic {
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_([seed]) - Returns a random column with i.i.d. uniformly distributed values in [0, 1].",
+  usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.). uniformly distributed values in [0, 1).",
   extended = """
     Arguments:
       seed - a numeric literal.
@@ -92,7 +92,7 @@ case class Rand(seed: Long) extends RDG {
 /** Generate a random column with i.i.d. values drawn from the standard normal distribution. */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_([seed]) - Returns a random column with i.i.d. values drawn from the standard normal distribution.",
+  usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.",
   extended = """
     Arguments:
       seed - a numeric literal.

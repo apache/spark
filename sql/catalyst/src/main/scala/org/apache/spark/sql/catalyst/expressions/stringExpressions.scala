@@ -612,7 +612,7 @@ case class StringInstr(str: Expression, substr: Expression)
     _FUNC_(str, delim, count) - Returns the substring from str before count occurrences of the delimiter delim.
       If count is positive, everything to the left of the final delimiter (counting from the
       left) is returned. If count is negative, everything to the right of the final delimiter
-      (counting from the right) is returned. Substring_index performs a case-sensitive match
+      (counting from the right) is returned. The function substring_index performs a case-sensitive match
       when searching for delim.
   """,
   extended = """
@@ -746,7 +746,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
   extended = """
     Arguments:
       str - a string expression.
-      len - a numeric expression that defines the number of pad.
+      len - a numeric expression that defines the number of pads.
       pad - a string expression that represents the string for padding.
 
     Examples:

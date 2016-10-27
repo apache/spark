@@ -55,8 +55,9 @@ abstract class XPathExtract extends BinaryExpression with ExpectsInputTypes with
   def path: Expression
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Evaluates a boolean an XPath expression.",
+  usage = "_FUNC_(xml, xpath) - Returns true if the XPath expression evaluates to true, or if a matching node is found.",
   extended = """
     Arguments:
       xml - a string expression that represents an XML document.
@@ -66,6 +67,7 @@ abstract class XPathExtract extends BinaryExpression with ExpectsInputTypes with
       > SELECT _FUNC_('<a><b>1</b></a>','a/b');
        true
   """)
+// scalastyle:on line.size.limit
 case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract {
 
   override def prettyName: String = "xpath_boolean"
@@ -124,7 +126,7 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns a long value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
+  usage = "_FUNC_(xml, xpath) - Returns a long integer value, or the value zero if no match is found, or a match is found but the value is non-numeric.",
   extended = """
     Arguments:
       xml - a string expression that represents an XML document.
@@ -193,7 +195,7 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns the text contents of the first xml node that matches the an XPath expression.",
+  usage = "_FUNC_(xml, xpath) - Returns the text contents of the first xml node that matches the XPath expression.",
   extended = """
     Arguments:
       xml - a string expression that represents an XML document.
@@ -216,7 +218,7 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(xml, xpath) - Returns a string array of values within the nodes of xml that match the an XPath expression.",
+  usage = "_FUNC_(xml, xpath) - Returns a string array of values within the nodes of xml that match the XPath expression.",
   extended = """
     Arguments:
       xml - a string expression that represents an XML document.

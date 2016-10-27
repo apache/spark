@@ -95,7 +95,7 @@ trait PredicateHelper {
   usage = "_FUNC_ expr - Logical not.",
   extended = """
     Arguments:
-      expr - an expression of any type.
+      expr - a boolean expression.
   """)
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
@@ -121,7 +121,7 @@ case class Not(child: Expression)
   usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if expr equals to any valN.",
   extended = """
     Arguments:
-      expr - an expression of any type.
+      expr - a boolean expression.
   """)
 case class In(value: Expression, list: Seq[Expression]) extends Predicate
     with ImplicitCastInputTypes {
@@ -262,8 +262,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   usage = "expr1 _FUNC_ expr2 - Logical AND.",
   extended = """
     Arguments:
-      expr1 - an expression of any type.
-      expr2 - an expression of any type.
+      expr1 - a boolean expression.
+      expr2 - a boolean expression.
   """)
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
@@ -330,8 +330,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
   usage = "expr1 _FUNC_ expr2 - Logical OR.",
   extended = """
     Arguments:
-      expr1 - an expression of any type.
-      expr2 - an expression of any type.
+      expr1 - a boolean expression.
+      expr2 - a boolean expression.
   """)
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
@@ -459,7 +459,7 @@ case class EqualTo(left: Expression, right: Expression)
 
 @ExpressionDescription(
   usage = """
-    expr1 _FUNC_ expr2 - Returns same result as the EQUAL(=) operator for non-null operands.
+    expr1 _FUNC_ expr2 - Returns same result as the EQUAL(=) operator for non-null operands,
       but returns TRUE if both are NULL, FALSE if one of the them is NULL.
   """,
   extended = """
