@@ -282,33 +282,26 @@ class ChiSqSelector(object):
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
 
-    >>> data = [
+    >>> data = sc.parallelize([
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
     ...     LabeledPoint(1.0, SparseVector(3, {1: 9.0, 2: 6.0})),
     ...     LabeledPoint(1.0, [0.0, 9.0, 8.0]),
-    ...     LabeledPoint(2.0, [8.0, 9.0, 5.0])
-    ... ]
-    >>> model = ChiSqSelector().setNumTopFeatures(1).fit(sc.parallelize(data))
+    ...     LabeledPoint(2.0, [7.0, 9.0, 5.0]),
+    ...     LabeledPoint(2.0, [8.0, 7.0, 3.0])
+    ... ])
+    >>> model = ChiSqSelector(numTopFeatures=1).fit(data)
     >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
     SparseVector(1, {})
-    >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
-    DenseVector([8.0])
-    >>> model = ChiSqSelector().setSelectorType("fpr").setFpr(0.1).fit(
-    ...     sc.parallelize(data))
+    >>> model.transform(DenseVector([7.0, 9.0, 5.0]))
+    DenseVector([7.0])
+    >>> model = ChiSqSelector(selectorType="fpr", fpr=0.2).fit(data)
     >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
     SparseVector(1, {})
-    >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
-    DenseVector([8.0])
-    >>> data = [
-    ...     LabeledPoint(0.0, SparseVector(4, {0: 8.0, 1: 7.0})),
-    ...     LabeledPoint(1.0, SparseVector(4, {1: 9.0, 2: 6.0, 3: 4.0})),
-    ...     LabeledPoint(1.0, [0.0, 9.0, 8.0, 4.0]),
-    ...     LabeledPoint(2.0, [8.0, 9.0, 5.0, 9.0])
-    ... ]
-    >>> model = ChiSqSelector().setSelectorType("percentile").setPercentile(0.15).fit(
-    ...     sc.parallelize(data))
-    >>> model.transform(DenseVector([1.0,2.0,3.0,4.0]))
-    DenseVector([4.0])
+    >>> model.transform(DenseVector([7.0, 9.0, 5.0]))
+    DenseVector([7.0])
+    >>> model = ChiSqSelector(selectorType="percentile", percentile=0.34).fit(data)
+    >>> model.transform(DenseVector([7.0, 9.0, 5.0]))
+    DenseVector([7.0])
 
     .. versionadded:: 1.4.0
     """
