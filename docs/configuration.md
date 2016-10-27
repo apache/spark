@@ -1598,7 +1598,6 @@ Apart from these, the following properties are also available, and may be useful
         <td>false</td>
         <td>
             <p>Whether to enable SSL connections on all supported protocols.</p>
-
             <p>When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
             is required.</p>
 
@@ -1667,9 +1666,8 @@ Apart from these, the following properties are also available, and may be useful
         <td><code>spark.ssl.<particular protocol>.port</code></td>
         <td>0</td>
         <td>
-            A port number hen connecting with SSL. Default value 0 means to be determined automatically.
-            Attention that the port should be separated for each particular protocol.
-            Not configure as <code>spark.ssl.port<code> but configure <code>spark.ssl.<particular protocol>.port<code>.
+            Port number to listen on for SSL connections. 
+            Default value of 0 means the port will be determined automatically.
         </td>
     </tr>
     <tr>

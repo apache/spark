@@ -322,7 +322,7 @@ private[spark] object JettyUtils extends Logging {
             0
           }
         val scheme = "https"
-        // Create a connector on port securePort to listen for HTTPS requestswork.
+        // Create a connector on port securePort to listen for HTTPS requests.
 
         val connector = new ServerConnector(server, factory)
         connector.setPort(securePort)
