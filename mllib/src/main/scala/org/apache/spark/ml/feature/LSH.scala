@@ -22,9 +22,9 @@ import scala.util.Random
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.{IntParam, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -67,18 +67,16 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
  * Model produced by [[LSH]].
  */
 @Since("2.1.0")
-private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHParams {
+private[ml] abstract class LSHModel[T <: LSHModel[T]]
+  extends Model[T] with LSHParams with MLWritable {
   self: T =>
-
-  @Since("2.1.0")
-  override def copy(extra: ParamMap): T = defaultCopy(extra)
 
   /**
    * The hash function of LSH, mapping a predefined KeyType to a Vector
    * @return The mapping of LSH function.
    */
   @Since("2.1.0")
-  protected[this] val hashFunction: Vector => Vector
+  protected[ml] val hashFunction: Vector => Vector
 
   /**
    * Calculate the distance between two different keys using the distance metric corresponding
@@ -302,7 +300,8 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]] extends Model[T] with LSHP
  * arXiv:1408.2927 (2014).
  */
 @Since("2.1.0")
-private[ml] abstract class LSH[T <: LSHModel[T]] extends Estimator[T] with LSHParams {
+private[ml] abstract class LSH[T <: LSHModel[T]]
+  extends Estimator[T] with LSHParams with DefaultParamsWritable {
   self: Estimator[T] =>
 
   /** @group setParam */
@@ -326,9 +325,6 @@ private[ml] abstract class LSH[T <: LSHModel[T]] extends Estimator[T] with LSHPa
    */
   @Since("2.1.0")
   protected[this] def createRawLSHModel(inputDim: Int): T
-
-  @Since("2.1.0")
-  override def copy(extra: ParamMap): Estimator[T] = defaultCopy(extra)
 
   @Since("2.1.0")
   override def fit(dataset: Dataset[_]): T = {

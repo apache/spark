@@ -19,32 +19,75 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.Dataset
 
-class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
-  test("MinHash") {
+class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  @transient var dataset: Dataset[_] = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
     val data = {
       for (i <- 0 to 95) yield Vectors.sparse(100, (i until i + 5).map((_, 1.0)))
     }
-    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
+    dataset = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
+  }
 
+  test("params") {
+    ParamsSuite.checkParams(new MinHash)
+    val model = new MinHashModel("mh", numEntries = 2, randCoefficients = Array(1))
+    ParamsSuite.checkParams(model)
+  }
+
+  test("MinHash: default params") {
+    val rp = new MinHash
+    assert(rp.getOutputDim === 1.0)
+    assert(rp.getOutputCol === "lshFeatures")
+  }
+
+  test("read/write") {
+    def checkModelData(model: MinHashModel, model2: MinHashModel): Unit = {
+      assert(model.numEntries === model2.numEntries)
+      assertResult(model.randCoefficients)(model2.randCoefficients)
+    }
+    val mh = new MinHash()
+    val settings = Map("inputCol" -> "keys", "outputCol" -> "values")
+    testEstimatorAndModelReadWrite(mh, dataset, settings, checkModelData)
+  }
+
+  test("hashFunction") {
+    val model = new MinHashModel("mh", numEntries = 20, randCoefficients = Array(0, 1, 3))
+    val res = model.hashFunction(Vectors.sparse(10, Seq((2, 1.0), (3, 1.0), (5, 1.0), (7, 1.0))))
+    assert(res.equals(Vectors.dense(0.0, 3.0, 4.0)))
+  }
+
+  test("keyDistance and hashDistance") {
+    val model = new MinHashModel("mh", numEntries = 20, randCoefficients = Array(1))
+    val v1 = Vectors.sparse(10, Seq((2, 1.0), (3, 1.0), (5, 1.0), (7, 1.0)))
+    val v2 = Vectors.sparse(10, Seq((1, 1.0), (3, 1.0), (5, 1.0), (7, 1.0), (9, 1.0)))
+    val keyDist = model.keyDistance(v1, v2)
+    val hashDist = model.hashDistance(Vectors.dense(-5, 5), Vectors.dense(1, 2))
+    assert(keyDist === 0.5)
+    assert(hashDist === 3)
+  }
+
+  test("MinHash: test of LSH property") {
     val mh = new MinHash()
       .setOutputDim(1)
       .setInputCol("keys")
       .setOutputCol("values")
       .setSeed(12344)
 
-    val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, mh, 0.75, 0.5)
-    assert(falsePositive < 0.06)
-    assert(falseNegative < 0.01)
+    val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(dataset, mh, 0.75, 0.5)
+    assert(falsePositive < 0.3)
+    assert(falseNegative < 0.3)
   }
 
   test("approxNearestNeighbors for min hash") {
-    val data = {
-      for (i <- 0 to 95) yield Vectors.sparse(100, (i until i + 5).map((_, 1.0)))
-    }
-    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
-
     val mh = new MinHash()
       .setOutputDim(20)
       .setInputCol("keys")
@@ -54,22 +97,22 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
     val key: Vector = Vectors.sparse(100,
       (0 until 100).filter(_.toString.contains("1")).map((_, 1.0)))
 
-    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(mh, df, key, 20,
+    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(mh, dataset, key, 20,
       singleProbing = true)
-    assert(precision >= 0.95)
-    assert(recall >= 0.95)
+    assert(precision >= 0.7)
+    assert(recall >= 0.7)
   }
 
   test("approxSimilarityJoin for minhash on different dataset") {
-    val dataA = {
+    val data1 = {
       for (i <- 0 until 20) yield Vectors.sparse(100, (5 * i until 5 * i + 5).map((_, 1.0)))
     }
-    val dfA = spark.createDataFrame(dataA.map(Tuple1.apply)).toDF("keys")
+    val df1 = spark.createDataFrame(data1.map(Tuple1.apply)).toDF("keys")
 
-    val dataB = {
+    val data2 = {
       for (i <- 0 until 30) yield Vectors.sparse(100, (3 * i until 3 * i + 3).map((_, 1.0)))
     }
-    val dfB = spark.createDataFrame(dataB.map(Tuple1.apply)).toDF("keys")
+    val df2 = spark.createDataFrame(data2.map(Tuple1.apply)).toDF("keys")
 
     val mh = new MinHash()
       .setOutputDim(20)
@@ -77,8 +120,8 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("values")
       .setSeed(12345)
 
-    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(mh, dfA, dfB, 0.5)
+    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(mh, df1, df2, 0.5)
     assert(precision == 1.0)
-    assert(recall == 1.0)
+    assert(recall >= 0.7)
   }
 }

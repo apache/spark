@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DataTypes
@@ -56,6 +57,8 @@ private[ml] object LSHTest {
     val inputCol = model.getInputCol
     val outputCol = model.getOutputCol
     val transformedData = model.transform(dataset)
+
+    SchemaUtils.checkColumnType(transformedData.schema, model.getOutputCol, new VectorUDT)
 
     // Perform a cross join and label each pair of same_bucket and distance
     val pairs = transformedData.as("a").crossJoin(transformedData.as("b"))
@@ -98,6 +101,15 @@ private[ml] object LSHTest {
     // Compute actual
     val actual = model.approxNearestNeighbors(dataset, key, k, singleProbing, "distCol")
 
+    assert(actual.schema.sameType(model
+      .transformSchema(dataset.schema)
+      .add("distCol", DataTypes.DoubleType))
+    )
+
+    if (!singleProbing) {
+      assert(actual.count() == k)
+    }
+
     // Compute precision and recall
     val correctCount = expected.join(actual, model.getInputCol).count().toDouble
     (correctCount / actual.count(), correctCount / expected.count())
@@ -127,6 +139,12 @@ private[ml] object LSHTest {
 
     // Compute actual
     val actual = model.approxSimilarityJoin(datasetA, datasetB, threshold)
+
+    SchemaUtils.checkColumnType(actual.schema, "distCol", DataTypes.DoubleType)
+    assert(actual.schema.apply("datasetA").dataType
+      .sameType(model.transformSchema(datasetA.schema)))
+    assert(actual.schema.apply("datasetB").dataType
+      .sameType(model.transformSchema(datasetB.schema)))
 
     // Compute precision and recall
     val correctCount = actual.filter(col("distCol") < threshold).count().toDouble
