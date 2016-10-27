@@ -30,7 +30,14 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
- * Model produced by [[MinHash]]
+ * Model produced by [[MinHash]], where multiple hash functions are stored. Each hash function is
+ * a perfect hash function:
+ *    g_i(x) = (x * k_i mod prime) mod numEntries
+ * where c_i is the i-th coefficient
+ *
+ * Reference:
+ * https://en.wikipedia.org/wiki/Perfect_hash_function
+ *
  * @param numEntries The number of entries of the hash functions.
  * @param randCoefficients An array of random coefficients, each used by one hash function.
  */
@@ -117,7 +124,7 @@ class MinHash(override val uid: String) extends LSH[MinHashModel] with HasSeed {
   @Since("2.1.0")
   override protected[ml] def createRawLSHModel(inputDim: Int): MinHashModel = {
     require(inputDim <= MinHash.prime / 2,
-      "The input vector dimension is too large for MinHash to handle.")
+      s"The input vector dimension $inputDim exceeds the threshold ${MinHash.prime / 2}.")
     val rand = new Random($(seed))
     val numEntry = inputDim * 2
     val randCoofs: Array[Int] = Array.fill($(outputDim))(1 + rand.nextInt(MinHash.prime - 1))
@@ -158,7 +165,6 @@ object MinHashModel extends MLReadable[MinHashModel] {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: pi, theta
       val data = Data(instance.numEntries, instance.randCoefficients)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)

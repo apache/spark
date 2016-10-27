@@ -44,13 +44,11 @@ private[ml] trait RandomProjectionParams extends Params {
    * reasonable value
    * @group param
    */
-  @Since("2.1.0")
   val bucketLength: DoubleParam = new DoubleParam(this, "bucketLength",
     "the length of each hash bucket, a larger bucket lowers the false negative rate.",
     ParamValidators.gt(0))
 
   /** @group getParam */
-  @Since("2.1.0")
   final def getBucketLength: Double = $(bucketLength)
 }
 
@@ -180,7 +178,6 @@ object RandomProjectionModel extends MLReadable[RandomProjectionModel] {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: pi, theta
       val numRows = instance.randUnitVectors.length
       require(numRows > 0)
       val numCols = instance.randUnitVectors.head.size
