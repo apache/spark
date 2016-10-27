@@ -35,7 +35,6 @@ import org.apache.spark.sql.types.StructType
  * :: Experimental ::
  * Params for [[RandomProjection]].
  */
-@Since("2.1.0")
 private[ml] trait RandomProjectionParams extends Params {
 
   /**
@@ -64,7 +63,7 @@ private[ml] trait RandomProjectionParams extends Params {
 @Since("2.1.0")
 class RandomProjectionModel private[ml] (
     override val uid: String,
-    val randUnitVectors: Array[Vector])
+    @Since("2.1.0") val randUnitVectors: Array[Vector])
   extends LSHModel[RandomProjectionModel] with RandomProjectionParams {
 
   @Since("2.1.0")
