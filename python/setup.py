@@ -21,7 +21,7 @@ import glob
 import os
 import sys
 from setuptools import setup, find_packages
-from shutil import copyfile
+from shutil import copyfile, copytree, rmtree
 
 exec(open('pyspark/version.py').read())
 VERSION = __version__
@@ -29,6 +29,10 @@ VERSION = __version__
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
 JARS_PATH = "%s/assembly/target/scala-2.11/jars/" % SPARK_HOME
+
+if (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1):
+        JARS_PATH= "%s/jars/" % SPARK_HOME
+
 EXAMPLES_PATH = "%s/examples/src/main/python" % SPARK_HOME
 SCRIPTS_PATH = "%s/bin" % SPARK_HOME
 SCRIPTS_TARGET = "%s/bin" % TEMP_PATH
@@ -57,16 +61,16 @@ if (in_spark):
 try:
     if (in_spark):
         # Construct the symlink farm
-        os.symlink(JARS_PATH, JARS_TARGET)
-        os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
-        os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
+        if getattr(os, "symlink", None) != None:
+            os.symlink(JARS_PATH, JARS_TARGET)
+            os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
+            os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
+        else:
+            # For windows fall back to the slower copytree
+            copytree(JARS_PATH, JARS_TARGET)
+            copytree(SCRIPTS_PATH, SCRIPTS_TARGET)
+            copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
     else:
-        # We add find_spark_home.py to the bin directory we install so that pip installed PySpark
-        # will search for SPARK_HOME with Python.
-        # We only do this copy when we aren't inside of Spark (e.g. the packaging tool has copied
-        # all the files into a temp directory) since otherwise the copy would go into the symlinked
-        # directory.
-        copyfile("pyspark/find_spark_home.py", SCRIPTS_TARGET + "/find_spark_home.py")
         # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
         # find it where expected. The rest of the files aren't copied because they are accessed
         # using Python imports instead which will be resolved correctly.
@@ -84,6 +88,9 @@ try:
     # Scripts directive requires a list of each script path and does not take wild cards.
     script_names = os.listdir(SCRIPTS_TARGET)
     scripts = map(lambda script: SCRIPTS_TARGET + "/" + script, script_names)
+    # We add find_spark_home.py to the bin directory we install so that pip installed PySpark
+    # will search for SPARK_HOME with Python.
+    scripts.append("pyspark/find_spark_home.py")
 
     # Parse the README markdown file into rst for PyPI
     long_description = "!!!!! missing pandoc do not upload to PyPI !!!!"
@@ -149,7 +156,13 @@ finally:
     # We only cleanup the symlink farm if we were in Spark, otherwise we are installing rather than
     # packaging.
     if (in_spark):
-        os.remove("%s/jars" % TEMP_PATH)
-        os.remove("%s/bin" % TEMP_PATH)
-        os.remove("%s/examples" % TEMP_PATH)
+        # Depending on cleaning up the symlink farm or copied version
+        if getattr(os, "symlink", None) != None:
+            os.remove("%s/jars" % TEMP_PATH)
+            os.remove("%s/bin" % TEMP_PATH)
+            os.remove("%s/examples" % TEMP_PATH)
+        else:
+            rmtree("%s/jars" % TEMP_PATH)
+            rmtree("%s/bin" % TEMP_PATH)
+            rmtree("%s/examples" % TEMP_PATH)
         os.rmdir(TEMP_PATH)
