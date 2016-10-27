@@ -261,7 +261,7 @@ setMethod("persistRDD",
 #' cache(rdd) # rdd@@env$isCached == TRUE
 #' unpersistRDD(rdd) # rdd@@env$isCached == FALSE
 #'}
-#' @rdname unpersist-methods
+#' @rdname unpersist
 #' @aliases unpersist,RDD-method
 #' @noRd
 setMethod("unpersistRDD",

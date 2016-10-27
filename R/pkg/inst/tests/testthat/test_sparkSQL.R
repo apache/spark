@@ -796,7 +796,7 @@ test_that("multiple pipeline transformations result in an RDD with the correct v
   expect_false(collectRDD(second)[[3]]$testCol)
 })
 
-test_that("cache(), persist(), and unpersist() on a DataFrame", {
+test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", {
   df <- read.json(jsonPath)
   expect_false(df@env$isCached)
   cache(df)
@@ -807,6 +807,9 @@ test_that("cache(), persist(), and unpersist() on a DataFrame", {
 
   persist(df, "MEMORY_AND_DISK")
   expect_true(df@env$isCached)
+
+  expect_equal(storageLevel(df),
+    "MEMORY_AND_DISK - StorageLevel(disk, memory, deserialized, 1 replicas)")
 
   unpersist(df)
   expect_false(df@env$isCached)
@@ -845,7 +848,7 @@ test_that("names() colnames() set the column names", {
   expect_equal(names(df)[1], "col3")
 
   expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
-               "Colum names cannot contain the '.' symbol.")
+               "Column names cannot contain the '.' symbol.")
   expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
   expect_error(colnames(df) <- c("a"),
                "Column names must have the same length as the number of columns in the dataset.")

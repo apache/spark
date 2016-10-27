@@ -1765,6 +1765,7 @@ private[spark] object Utils extends Logging {
    */
   def getIteratorZipWithIndex[T](iterator: Iterator[T], startIndex: Long): Iterator[(T, Long)] = {
     new Iterator[(T, Long)] {
+      require(startIndex >= 0, "startIndex should be >= 0.")
       var index: Long = startIndex - 1L
       def hasNext: Boolean = iterator.hasNext
       def next(): (T, Long) = {
@@ -2508,6 +2509,26 @@ private[spark] object Utils extends Logging {
   }
 }
 
+private[util] object CallerContext extends Logging {
+  val callerContextSupported: Boolean = {
+    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
+      try {
+        // scalastyle:off classforname
+        Class.forName("org.apache.hadoop.ipc.CallerContext")
+        Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
+        // scalastyle:on classforname
+        true
+      } catch {
+        case _: ClassNotFoundException =>
+          false
+        case NonFatal(e) =>
+          logWarning("Fail to load the CallerContext class", e)
+          false
+      }
+    }
+  }
+}
+
 /**
  * An utility class used to set up Spark caller contexts to HDFS and Yarn. The `context` will be
  * constructed by parameters passed in.
@@ -2554,21 +2575,21 @@ private[spark] class CallerContext(
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
    * [[org.apache.hadoop.ipc.CallerContext]], which was added in hadoop 2.8.
    */
-  def setCurrentContext(): Boolean = {
-    var succeed = false
-    try {
-      // scalastyle:off classforname
-      val callerContext = Class.forName("org.apache.hadoop.ipc.CallerContext")
-      val Builder = Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
-      // scalastyle:on classforname
-      val builderInst = Builder.getConstructor(classOf[String]).newInstance(context)
-      val hdfsContext = Builder.getMethod("build").invoke(builderInst)
-      callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
-      succeed = true
-    } catch {
-      case NonFatal(e) => logInfo("Fail to set Spark caller context", e)
+  def setCurrentContext(): Unit = {
+    if (CallerContext.callerContextSupported) {
+      try {
+        // scalastyle:off classforname
+        val callerContext = Class.forName("org.apache.hadoop.ipc.CallerContext")
+        val builder = Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
+        // scalastyle:on classforname
+        val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
+        val hdfsContext = builder.getMethod("build").invoke(builderInst)
+        callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Fail to set Spark caller context", e)
+      }
     }
-    succeed
   }
 }
 

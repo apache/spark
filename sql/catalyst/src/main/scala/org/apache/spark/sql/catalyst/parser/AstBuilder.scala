@@ -192,11 +192,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
-      val name = pVal.identifier.getText.toLowerCase
+      val name = pVal.identifier.getText
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
     }
-    // Check for duplicate partition columns in one spec.
+    // Before calling `toMap`, we check duplicated keys to avoid silently ignore partition values
+    // in partition spec like PARTITION(a='1', b='2', a='3'). The real semantical check for
+    // partition columns will be done in analyzer.
     checkDuplicateKeys(parts, ctx)
     parts.toMap
   }
