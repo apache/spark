@@ -716,8 +716,7 @@ object ParquetFileFormat extends Logging {
 
   /**
    * The `ParquetFileFormat` constructor calls this method to ensure that Parquet library log
-   * output is redirected through the SLF4J JUL bridge handler. This method is a no-op because we
-   * only require that `redirectParquetLogsViaSLF4J` is initialized. This accomplishes that task.
+   * output is redirected through the SLF4J JUL bridge handler.
    */
-  private def ensureParquetLogRedirection(): Unit = {}
+  private def ensureParquetLogRedirection(): Unit = redirectParquetLogsViaSLF4J
 }
