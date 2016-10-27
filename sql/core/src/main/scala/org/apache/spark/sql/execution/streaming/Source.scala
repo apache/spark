@@ -30,15 +30,29 @@ trait Source  {
   /** Returns the schema of the data from this source */
   def schema: StructType
 
-  /** Returns the maximum available offset for this source. */
+  /**
+   * Returns the maximum available offset for this source.
+   * Returns `None` if this source has never received any data.
+   */
   def getOffset: Option[Offset]
 
   /**
-   * Returns the data that is between the offsets (`start`, `end`]. When `start` is `None` then
-   * the batch should begin with the first available record. This method must always return the
-   * same data for a particular `start` and `end` pair.
+   * Returns the data that is between the offsets (`start`, `end`]. When `start` is `None`,
+   * then the batch should begin with the first record. This method must always return the
+   * same data for a particular `start` and `end` pair; even after the Source has been restarted
+   * on a different node.
+   *
+   * Higher layers will always call this method with a value of `start` greater than or equal
+   * to the last value passed to `commit` and a value of `end` less than or equal to the
+   * last value returned by `getOffset`
    */
   def getBatch(start: Option[Offset], end: Offset): DataFrame
+
+  /**
+   * Informs the source that Spark has completed processing all data for offsets less than or
+   * equal to `end` and will only request offsets greater than `end` in the future.
+   */
+  def commit(end: Offset) : Unit = {}
 
   /** Stop this source and free any resources it has allocated. */
   def stop(): Unit
