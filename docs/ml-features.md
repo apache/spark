@@ -737,13 +737,20 @@ for more details on the API.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Normalizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Interaction)
+Refer to the [Interaction Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Interaction)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/InteractionExample.scala %}
 </div>
 
+<div data-lang="java" markdown="1">
 
+Refer to the [Interaction Java docs](api/java/org/apache/spark/ml/feature/Interaction.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaInteractionExample.java %}
+</div>
+</div>
 
 ## Normalizer
 
