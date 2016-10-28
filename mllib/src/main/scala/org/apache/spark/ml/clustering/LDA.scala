@@ -909,10 +909,10 @@ class LDA @Since("1.6.0") (
       case m: OldDistributedLDAModel =>
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sparkSession, None)
     }
-    val m = copyValues(newModel).setParent(this)
 
-    instr.logSuccess(m)
-    m
+    val model = copyValues(newModel).setParent(this)
+    instr.logSuccess(newModel)
+    model
   }
 
   @Since("1.6.0")

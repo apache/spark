@@ -132,6 +132,7 @@ class RandomForestClassifier @Since("1.4.0") (
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
+    instr.logNumClasses(numClasses)
 
     val trees = RandomForest
       .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
@@ -139,6 +140,7 @@ class RandomForestClassifier @Since("1.4.0") (
 
     val numFeatures = oldDataset.first().features.size
     val m = new RandomForestClassificationModel(trees, numFeatures, numClasses)
+    instr.logNumFeatures(m.numFeatures)
     instr.logSuccess(m)
     m
   }

@@ -238,6 +238,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     val myLayers = $(layers)
     val labels = myLayers.last
     instr.logNumClasses(labels)
+    instr.logNumFeatures(myLayers.head)
 
     val lpData = extractLabeledPoints(dataset)
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
@@ -265,7 +266,6 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     val mlpModel = trainer.train(data)
     val model = new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
 
-    instr.logNumFeatures(model.numFeatures)
     instr.logSuccess(model)
     model
   }
