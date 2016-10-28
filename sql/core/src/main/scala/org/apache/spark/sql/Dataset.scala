@@ -49,6 +49,7 @@ import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -475,7 +476,7 @@ class Dataset[T] private[sql](
    * `collect()`, will throw an [[AnalysisException]] when there is a streaming
    * source present.
    *
-   * @group basic
+   * @group streaming
    * @since 2.0.0
    */
   @Experimental
@@ -483,16 +484,34 @@ class Dataset[T] private[sql](
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
-   * TODO:
+   * Defines an event time watermark for this [[Dataset]]. This watermark tracks a point in time
+   * before which we assume no more late data is going to arrive.
    *
-   * @group basic
-   * @since 2.0.0
+   * Spark can use this watermark for several purposes:
+   *  - To know when a given time window aggregation can be finalized and thus can be emitted when
+   *    using output modes that do not allow updates.
+   *  - To minimize the amount of state that we need to keep for on going aggregations.
+   *
+   *  The current event time is computed by looking at the `MAX(eventTime)` seen this epoch across
+   *  all of the partitions in the query.  Note that since we must coordinate this value across
+   *  partitions occasionally, the actual watermark used is only guranteed to be at least `delay`
+   *  behind the actual event time.  In some cases we may still process records that arrive more
+   *  than delay late.
+   *
+   * @param eventTime the name of the column that contains the event time of the row.
+   * @param delay the minimum delay to wait to data to arrive late, relative to the latest record
+   *              that has been processed.
+   *
+   * @group streaming
+   * @since 2.1.0
    */
   @Experimental
   @InterfaceStability.Evolving
   def withWatermark(eventTime: String, delay: String): Dataset[T] = withTypedPlan {
-    val delayMilli = TimeWindow.getIntervalInMicroSeconds(delay) / 1000
-    EventTimeWatermark(UnresolvedAttribute(eventTime), delayMilli, logicalPlan)
+    val parsedDelay =
+      Option(CalendarInterval.fromString("interval " + delay))
+        .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delay'"))
+    EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
   }
 
   /**

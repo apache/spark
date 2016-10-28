@@ -31,6 +31,7 @@ class AnalysisException protected[sql] (
     val message: String,
     val line: Option[Int] = None,
     val startPosition: Option[Int] = None,
+    // Some plans fail to serialize due to bugs in scala collections.
     @transient val plan: Option[LogicalPlan] = None,
     val cause: Option[Throwable] = None)
   extends Exception(message, cause.orNull) with Serializable {

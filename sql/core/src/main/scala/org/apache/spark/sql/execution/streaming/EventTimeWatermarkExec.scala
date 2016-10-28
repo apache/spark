@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.AccumulatorV2
 
 class MaxLong(protected var currentValue: Long = 0)
@@ -48,12 +49,19 @@ class MaxLong(protected var currentValue: Long = 0)
   }
 }
 
+/**
+ * Used to mark a column as the containing the event time for a given record. In addition to
+ * adding appropriate metadata to this column, this operator also tracks the maximum observed event
+ * time. Based on the maximum observed time and a user specified delay, we can calculate the
+ * `watermark` after which we assume we will no longer see late records for a particular time
+ * period.
+ */
 case class EventTimeWatermarkExec(
     eventTime: Attribute,
-    delayMs: Long,
+    delay: CalendarInterval,
     child: SparkPlan) extends SparkPlan {
 
-  // TODO: Hide internal metrics?
+  // TODO: Use Spark SQL Metrics?
   val maxEventTime = new MaxLong
   sparkContext.register(maxEventTime)
 
@@ -68,12 +76,11 @@ case class EventTimeWatermarkExec(
   }
 
   // Update the metadata on the eventTime column to include the desired delay.
-  // TODO: Duplicated?
   override val output: Seq[Attribute] = child.output.map { a =>
     if (a semanticEquals eventTime) {
       val updatedMetadata = new MetadataBuilder()
           .withMetadata(a.metadata)
-          .putLong(EventTimeWatermark.delayKey, delayMs)
+          .putLong(EventTimeWatermark.delayKey, delay.milliseconds)
           .build()
 
       a.withMetadata(updatedMetadata)

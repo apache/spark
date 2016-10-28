@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
-import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 
@@ -32,15 +32,39 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
     sqlContext.streams.active.foreach(_.stop())
   }
 
-  test("error on bad column") {}
-  test("case resolution") {}
-  test("back-in-time batch") {}
-  test("watermark UDF") {}
-  test("complete mode") {}
-  test("dropping old data") {}
-  test("multiple event times") {}
-  test("watermark metric") {}
-  test("group by start/end") {}
+  test("error on bad column") {
+    val inputData = MemoryStream[Int].toDF()
+    val e = intercept[AnalysisException] {
+      inputData.withWatermark("badColumn", "1 minute")
+    }
+    assert(e.getMessage contains "badColumn")
+  }
+
+  test("watermark metric") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 15),
+      AssertOnLastQueryStatus { status =>
+        status.triggerDetails.get(StreamMetrics.EVENT_TIME_WATERMARK) === "5000"
+      },
+      AddData(inputData, 15),
+      AssertOnLastQueryStatus { status =>
+        status.triggerDetails.get(StreamMetrics.EVENT_TIME_WATERMARK) === "5000"
+      },
+      AddData(inputData, 25),
+      AssertOnLastQueryStatus { status =>
+        status.triggerDetails.get(StreamMetrics.EVENT_TIME_WATERMARK) === "15000"
+      }
+    )
+  }
 
   test("append-mode watermark aggregation") {
     val inputData = MemoryStream[Int]
@@ -55,10 +79,83 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
     testStream(windowedAggregation)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
       CheckAnswer(),
-      AddData(inputData, 25),
+      AddData(inputData, 25), // Advance watermark to 15 seconds
       CheckAnswer(),
-      AddData(inputData, 25),
+      AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 5))
+    )
+  }
+
+  ignore("recovery") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11, 12, 13, 14, 15),
+      CheckAnswer(),
+      AddData(inputData, 25), // Advance watermark to 15 seconds
+      StopStream,
+      StartStream(),
+      CheckAnswer(),
+      AddData(inputData, 25), // Evict items less than previous watermark.
+      StopStream,
+      StartStream(),
+      CheckAnswer((10, 5))
+    )
+  }
+
+  test("dropping old data") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10, 11, 12),
+      CheckAnswer(),
+      AddData(inputData, 25),     // Advance watermark to 15 seconds
+      CheckAnswer(),
+      AddData(inputData, 25),     // Evict items less than previous watermark.
+      CheckAnswer((10, 3)),
+      AddData(inputData, 10),     // 10 is later than 15 second watermark
+      CheckAnswer((10, 3)),
+      AddData(inputData, 25),     // 10 is later than 15 second watermark
+      CheckAnswer((10, 3))        // Should not emit an incorrect partial result.
+    )
+  }
+
+  test("complete mode") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as 'window)
+        .agg(count("*") as 'count)
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    // No eviction when asked to compute complete results.
+    testStream(windowedAggregation, OutputMode.Complete)(
+      AddData(inputData, 10, 11, 12),
+      CheckAnswer((10, 3)),
+      AddData(inputData, 25),
+      CheckAnswer((10, 3), (25, 1)),
+      AddData(inputData, 25),
+      CheckAnswer((10, 3), (25, 2)),
+      AddData(inputData, 10),
+      CheckAnswer((10, 4), (25, 2)),
+      AddData(inputData, 25),
+      CheckAnswer((10, 4), (25, 3))
     )
   }
 }

@@ -105,8 +105,7 @@ object TimeWindow {
    * @return The interval duration in microseconds. SparkSQL casts TimestampType has microsecond
    *         precision.
    */
-  // TODO: Move me.
-  def getIntervalInMicroSeconds(interval: String): Long = {
+  private def getIntervalInMicroSeconds(interval: String): Long = {
     if (StringUtils.isBlank(interval)) {
       throw new IllegalArgumentException(
         "The window duration, slide duration and start time cannot be null or blank.")

@@ -19,15 +19,19 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.unsafe.types.CalendarInterval
 
 object EventTimeWatermark {
   /** The [[org.apache.spark.sql.types.Metadata]] key used to hold the eventTime watermark delay. */
   val delayKey = "spark.watermarkDelay"
 }
 
+/**
+ * Used to mark a user specified column as holding the event time for a row.
+ */
 case class EventTimeWatermark(
     eventTime: Attribute,
-    delayMs: Long,
+    delay: CalendarInterval,
     child: LogicalPlan) extends LogicalPlan {
 
   // Update the metadata on the eventTime column to include the desired delay.
@@ -35,7 +39,7 @@ case class EventTimeWatermark(
     if (a semanticEquals eventTime) {
       val updatedMetadata = new MetadataBuilder()
         .withMetadata(a.metadata)
-        .putLong(EventTimeWatermark.delayKey, delayMs)
+        .putLong(EventTimeWatermark.delayKey, delay.milliseconds)
         .build()
       a.withMetadata(updatedMetadata)
     } else {

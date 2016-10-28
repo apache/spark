@@ -39,7 +39,6 @@ class IncrementalExecution(
   // TODO: make this always part of planning.
   val stateStrategy =
     sparkSession.sessionState.planner.StatefulAggregationStrategy +:
-    sparkSession.sessionState.planner.EventTimeWatermarkStrategy +:
     sparkSession.sessionState.planner.StreamingRelationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies
 

@@ -2180,23 +2180,12 @@ object TimeWindowing extends Rule[LogicalPlan] {
           windowExpressions.head.checkInputDataTypes().isSuccess) {
         val window = windowExpressions.head
 
-        println(p)
-
-        // If there is a watermark associated with this event time, propagate that information to
-        // the window.
-        val watermarkDelay = window.timeColumn match {
-          case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) =>
-            println(s"FOUND DELAY: $a")
-            Some(a.metadata.getLong(EventTimeWatermark.delayKey))
-          case other =>
-            logWarning(s"No eventime watermark for window on $other")
-            None
+        val metadata = window.timeColumn match {
+          case a: Attribute => a.metadata
+          case _ => Metadata.empty
         }
-        val windowMetadata = new MetadataBuilder()
-        watermarkDelay.foreach(windowMetadata.putLong(EventTimeWatermark.delayKey, _))
-
         val windowAttr =
-          AttributeReference("window", window.dataType, metadata = windowMetadata.build())()
+          AttributeReference("window", window.dataType, metadata = metadata)()
 
         val maxNumOverlapping = math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
         val windows = Seq.tabulate(maxNumOverlapping + 1) { i =>

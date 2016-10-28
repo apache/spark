@@ -302,8 +302,8 @@ case class AttributeReference(
     exprId :: qualifier :: isGenerated :: Nil
   }
 
-  /** Denotes that this column is used to calculate an eventTime watermark. */
-  private val delaySuffix = if (metadata.contains(EventTimeWatermark.delayKey)) {
+  /** Used to signal the column used to calculate an eventTime watermark (e.g. a#1-T{delayMs}) */
+  private def delaySuffix = if (metadata.contains(EventTimeWatermark.delayKey)) {
     s"-T${metadata.getLong(EventTimeWatermark.delayKey)}"
   } else {
     ""
@@ -319,7 +319,6 @@ case class AttributeReference(
     val qualifierPrefix = qualifier.map(_ + ".").getOrElse("")
     s"$qualifierPrefix${quoteIdentifier(name)}"
   }
-
 }
 
 /**
@@ -351,7 +350,6 @@ case class PrettyAttribute(
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = true
-
 }
 
 /**

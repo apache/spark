@@ -441,17 +441,19 @@ class StreamExecution(
     sink.addBatch(currentBatchId, nextBatch)
     reportNumRows(executedPlan, triggerLogicalPlan, newData)
 
-    // Update the eventTime watermark
+    // Update the eventTime watermark if we find one in the plan.
+    // TODO: Does this need to be an AttributeMap?
     lastExecution.executedPlan.collect {
       case e: EventTimeWatermarkExec =>
-        logWarning(s"Max observed eventTime: ${e.maxEventTime.value}")
-        (e.maxEventTime.value / 1000) - e.delayMs
+        logTrace(s"Maximum observed eventTime: ${e.maxEventTime.value}")
+        (e.maxEventTime.value / 1000) - e.delay.milliseconds()
     }.headOption.foreach { newWatermark =>
       if (newWatermark > currentEventTimeWatermark) {
-        logWarning(s"Updating eventTime watermark to: $newWatermark ms")
+        logInfo(s"Updating eventTime watermark to: $newWatermark ms")
+        streamMetrics.reportTriggerDetail(EVENT_TIME_WATERMARK, newWatermark)
         currentEventTimeWatermark = newWatermark
       } else {
-        logWarning(s"Event time didn't move: $newWatermark < $currentEventTimeWatermark")
+        logTrace(s"Event time didn't move: $newWatermark < $currentEventTimeWatermark")
       }
     }
 

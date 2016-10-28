@@ -156,9 +156,11 @@ case class StateStoreSaveExec(
               LessThanOrEqual(
                 GetStructField(watermarkAttribute, 1),
                 Literal(eventTimeWatermark.get * 1000))
-            logWarning(s"Filtering state store on: $evictionExpression")
+
+            logInfo(s"Filtering state store on: $evictionExpression")
             val predicate = newPredicate(evictionExpression, keyExpressions)
             store.remove(predicate)
+
             store.commit()
 
             numTotalStateRows += store.numKeys()
@@ -168,7 +170,7 @@ case class StateStoreSaveExec(
             }
 
           // Update and output modified rows from the StateStore.
-          // TODO: Does not evict yet.
+          // TODO: Does not evict yet...
           case Some(Update) =>
             new Iterator[InternalRow] {
               private[this] val baseIterator = iter
