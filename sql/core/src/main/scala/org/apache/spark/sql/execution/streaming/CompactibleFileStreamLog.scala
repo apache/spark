@@ -49,7 +49,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   private implicit val formats = Serialization.formats(NoTypeHints)
 
-  /** Needed to serialize type T into JSON */
+  /** Needed to serialize type T into JSON when using Jackson */
   private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
   /**
