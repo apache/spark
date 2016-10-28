@@ -61,11 +61,9 @@ import itertools
 
 if sys.version < '3':
     import cPickle as pickle
-    protocol = 2
     from itertools import izip as zip, imap as map
 else:
     import pickle
-    protocol = 3
     xrange = range
 
 from pyspark import cloudpickle
@@ -606,7 +604,7 @@ class PickleSerializer(FramedSerializer):
     """
 
     def dumps(self, obj):
-        return pickle.dumps(obj, protocol)
+        return pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
 
     if sys.version >= '3':
         def loads(self, obj, encoding="bytes"):
@@ -620,7 +618,7 @@ class CloudPickleSerializer(PickleSerializer):
 
     def dumps(self, obj):
         try:
-            return cloudpickle.dumps(obj, 2)
+            return cloudpickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
         except pickle.PickleError:
             raise
         except Exception as e:
