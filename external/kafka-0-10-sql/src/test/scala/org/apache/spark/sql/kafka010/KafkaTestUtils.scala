@@ -244,7 +244,7 @@ class KafkaTestUtils extends Logging {
     offsets
   }
 
-  private def brokerConfiguration: Properties = {
+  protected def brokerConfiguration: Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
     props.put("host.name", "localhost")

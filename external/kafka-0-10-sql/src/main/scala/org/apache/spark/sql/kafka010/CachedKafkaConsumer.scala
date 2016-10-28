@@ -19,7 +19,10 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer}
+import scala.annotation.tailrec
+import scala.collection.JavaConverters._
+
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
@@ -83,6 +86,113 @@ private[kafka010] case class CachedKafkaConsumer private(
     record
   }
 
+  @tailrec
+  final def getAndIgnoreLostData(
+      offset: Long,
+      untilOffset: Long,
+      pollTimeoutMs: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
+    // scalastyle:off
+    // When `failOnDataLoss` is `false`, we need to handle the following cases (note: untilOffset and latestOffset are exclusive):
+    // 1. Some data are aged out, and `offset < beginningOffset <= untilOffset - 1 <= latestOffset - 1`
+    //      Seek to the beginningOffset and fetch the data.
+    // 2. Some data are aged out, and `offset <= untilOffset - 1 < beginningOffset`.
+    //      There is nothing to fetch, return null.
+    // 3. The topic is deleted.
+    //      There is nothing to fetch, return null.
+    // 4. The topic is deleted and recreated, and `beginningOffset <= offset <= untilOffset - 1 <= latestOffset - 1`.
+    //      We cannot detect this case. We can still fetch data like nothing happens.
+    // 5. The topic is deleted and recreated, and `beginningOffset <= offset < latestOffset - 1 < untilOffset - 1`.
+    //      Same as 4.
+    // 6. The topic is deleted and recreated, and `beginningOffset <= latestOffset - 1 < offset <= untilOffset - 1`.
+    //      There is nothing to fetch, return null.
+    // 7. The topic is deleted and recreated, and `offset < beginningOffset <= untilOffset - 1`.
+    //      Same as 1.
+    // 8. The topic is deleted and recreated, and `offset <= untilOffset - 1 < beginningOffset`.
+    //      There is nothing to fetch, return null.
+    // scalastyle:on
+    if (offset >= untilOffset) {
+      // Case 2 or 8
+      // We seek to beginningOffset but beginningOffset >= untilOffset
+      reset()
+      return null
+    }
+
+    logDebug(s"Get $groupId $topicPartition nextOffset $nextOffsetInFetchedData requested $offset")
+    var outOfOffset = false
+    if (offset != nextOffsetInFetchedData) {
+      logInfo(s"Initial fetch for $topicPartition $offset")
+      seek(offset)
+      try {
+        poll(pollTimeoutMs)
+      } catch {
+        case e: OffsetOutOfRangeException =>
+          logWarning(s"Cannot fetch offset $offset, try to recover from the beginning offset", e)
+          outOfOffset = true
+      }
+    } else if (!fetchedData.hasNext()) {
+      // The last pre-fetched data has been drained.
+      seek(offset)
+      try {
+        poll(pollTimeoutMs)
+      } catch {
+        case e: OffsetOutOfRangeException =>
+          logWarning(s"Cannot fetch offset $offset, try to recover from the beginning offset", e)
+          outOfOffset = true
+      }
+    }
+    if (outOfOffset) {
+      val beginningOffset = getBeginningOffset()
+      if (beginningOffset <= offset) {
+        val latestOffset = getLatestOffset()
+        if (latestOffset <= offset) {
+          // Case 3 or 6
+          logWarning(s"Offset ${offset} is later than the latest offset $latestOffset. " +
+            s"Skipped [$offset, $untilOffset)")
+          reset()
+          return null
+        } else {
+          // Case 4 or 5
+          getAndIgnoreLostData(offset, untilOffset, pollTimeoutMs)
+        }
+      } else {
+        // Case 1 or 7
+        logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $beginningOffset})")
+        return getAndIgnoreLostData(beginningOffset, untilOffset, pollTimeoutMs)
+      }
+    } else {
+      if (!fetchedData.hasNext()) {
+        // We cannot fetch anything after `polling`. Two possible cases:
+        // - `beginningOffset` is `offset` but there is nothing for `beginningOffset` right now.
+        // - Cannot fetch any date before timeout.
+        // Because there is no way to distinguish, just skip the rest offsets in the current
+        // partition.
+        logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $untilOffset)")
+        reset()
+        return null
+      }
+
+      val record = fetchedData.next()
+      if (record.offset >= untilOffset) {
+        // Case 2
+        logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $untilOffset)")
+        reset()
+        return null
+      } else {
+        if (record.offset != offset) {
+          // Case 1
+          logWarning(s"Buffer miss for $groupId $topicPartition [$offset, ${record.offset})")
+        }
+        nextOffsetInFetchedData = record.offset + 1
+        return record
+      }
+    }
+  }
+
+  private def reset(): Unit = {
+    nextOffsetInFetchedData = -2
+    fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
+  }
+
   private def close(): Unit = consumer.close()
 
   private def seek(offset: Long): Unit = {
@@ -95,6 +205,16 @@ private[kafka010] case class CachedKafkaConsumer private(
     val r = p.records(topicPartition)
     logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
     fetchedData = r.iterator
+  }
+
+  private def getBeginningOffset(): Long = {
+    consumer.seekToBeginning(Set(topicPartition).asJava)
+    consumer.position(topicPartition)
+  }
+
+  private def getLatestOffset(): Long = {
+    consumer.seekToEnd(Set(topicPartition).asJava)
+    consumer.position(topicPartition)
   }
 }
 
