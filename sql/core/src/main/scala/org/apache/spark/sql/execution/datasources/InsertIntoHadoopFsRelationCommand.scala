@@ -43,8 +43,13 @@ case class InsertIntoHadoopFsRelationCommand(
     refreshFunction: () => Unit,
     options: Map[String, String],
     @transient query: LogicalPlan,
-    mode: SaveMode)
+    mode: SaveMode,
+    overwritePartitionPath: Option[Path])
   extends RunnableCommand {
+
+  if (overwritePartitionPath.isDefined) {
+    assert(mode == SaveMode.Overwrite)
+  }
 
   override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -66,13 +71,19 @@ case class InsertIntoHadoopFsRelationCommand(
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
-      case (SaveMode.Overwrite, true) =>
-        if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
+      case (SaveMode.Overwrite, _) =>
+        val pathToDelete = if (overwritePartitionPath.isDefined) {
+          overwritePartitionPath.get.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        } else {
+          qualifiedOutputPath
+        }
+        println("Delete: " + pathToDelete)
+        if (fs.exists(pathToDelete) && !fs.delete(pathToDelete, true /* recursively */)) {
           throw new IOException(s"Unable to clear output " +
-            s"directory $qualifiedOutputPath prior to writing to it")
+            s"directory $pathToDelete prior to writing to it")
         }
         true
-      case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
+      case (SaveMode.Append, _) | (SaveMode.ErrorIfExists, false) =>
         true
       case (SaveMode.Ignore, exists) =>
         !exists

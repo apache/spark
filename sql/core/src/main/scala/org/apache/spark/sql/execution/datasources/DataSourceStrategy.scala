@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -180,6 +182,14 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
           "Cannot overwrite a path that is also being read from.")
       }
 
+      val overwritePartitionPath = if (overwrite.specificPartition.isDefined) {
+        val partition = t.sparkSession.sessionState.catalog.getPartition(
+          l.catalogTable.get.identifier, overwrite.specificPartition.get)
+        Some(new Path(partition.storage.locationUri.get))
+      } else {
+        None
+      }
+
       val insertCmd = InsertIntoHadoopFsRelationCommand(
         outputPath,
         query.resolve(t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver),
@@ -188,7 +198,8 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         () => t.location.refresh(),
         t.options,
         query,
-        mode)
+        mode,
+        overwritePartitionPath)
 
       if (l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
           l.catalogTable.get.partitionProviderIsHive) {
