@@ -485,14 +485,6 @@ case class AlterTableRecoverPartitionsCommand(
     }
   }
 
-  private def getBasePath(table: CatalogTable): Option[String] = {
-    if (table.provider == Some("hive")) {
-      table.storage.locationUri
-    } else {
-      new CaseInsensitiveMap(table.storage.properties).get("path")
-    }
-  }
-
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
@@ -503,13 +495,12 @@ case class AlterTableRecoverPartitionsCommand(
         s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
     }
 
-    val tablePath = getBasePath(table)
-    if (tablePath.isEmpty) {
+    if (table.storage.locationUri.isEmpty) {
       throw new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
         s"location provided: $tableIdentWithDB")
     }
 
-    val root = new Path(tablePath.get)
+    val root = new Path(table.storage.locationUri.get)
     logInfo(s"Recover all the partitions in $root")
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
 
@@ -688,15 +679,7 @@ case class AlterTableSetLocationCommand(
         catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>
         // No partition spec is specified, so we set the location for the table itself
-        val newTable =
-          if (DDLUtils.isDatasourceTable(table)) {
-            table.withNewStorage(
-              locationUri = Some(location),
-              properties = table.storage.properties ++ Map("path" -> location))
-          } else {
-            table.withNewStorage(locationUri = Some(location))
-          }
-        catalog.alterTable(newTable)
+        catalog.alterTable(table.withNewStorage(locationUri = Some(location)))
     }
     Seq.empty[Row]
   }
