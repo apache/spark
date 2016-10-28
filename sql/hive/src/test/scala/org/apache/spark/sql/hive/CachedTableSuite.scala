@@ -325,13 +325,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTable("test") {
       sql("CREATE TABLE test(i int) PARTITIONED BY (p int) STORED AS parquet")
       val tableMeta = spark.sharedState.externalCatalog.getTable("default", "test")
-      val tableFileIndex = new CatalogFileIndex(spark, tableMeta, 0)
+      val catalogFileIndex = new CatalogFileIndex(spark, tableMeta, 0)
 
       val dataSchema = StructType(tableMeta.schema.filterNot { f =>
         tableMeta.partitionColumnNames.contains(f.name)
       })
       val relation = HadoopFsRelation(
-        location = tableFileIndex,
+        location = catalogFileIndex,
         partitionSchema = tableMeta.partitionSchema,
         dataSchema = dataSchema,
         bucketSpec = None,

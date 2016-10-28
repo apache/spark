@@ -28,7 +28,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         logicalRelation @
           LogicalRelation(fsRelation @
             HadoopFsRelation(
-              tableFileIndex: CatalogFileIndex,
+              catalogFileIndex: CatalogFileIndex,
               partitionSchema,
               _,
               _,
@@ -56,7 +56,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
 
       if (partitionKeyFilters.nonEmpty) {
-        val prunedFileIndex = tableFileIndex.filterPartitions(partitionKeyFilters.toSeq)
+        val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =
           fsRelation.copy(location = prunedFileIndex)(sparkSession)
         val prunedLogicalRelation = logicalRelation.copy(
