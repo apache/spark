@@ -19,13 +19,14 @@ package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
+import scala.collection.JavaConverters._
+
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
-import org.apache.spark.api.java.function.{ Function0 => JFunction0 }
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.StreamingContext
@@ -56,23 +57,11 @@ object KafkaUtils extends Logging {
   @Experimental
   def createRDD[K, V](
       sc: SparkContext,
-      kafkaParams: ju.Map[String, Object],
+      kafkaParams: collection.Map[String, Object],
       offsetRanges: Array[OffsetRange],
       locationStrategy: LocationStrategy
     ): RDD[ConsumerRecord[K, V]] = {
-    val preferredHosts = locationStrategy match {
-      case PreferBrokers =>
-        throw new AssertionError(
-          "If you want to prefer brokers, you must provide a mapping using PreferFixed " +
-          "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you.")
-      case PreferConsistent => ju.Collections.emptyMap[TopicPartition, String]()
-      case PreferFixed(hostMap) => hostMap
-    }
-    val kp = new ju.HashMap[String, Object](kafkaParams)
-    fixKafkaParams(kp)
-    val osr = offsetRanges.clone()
-
-    new KafkaRDD[K, V](sc, kp, osr, preferredHosts, true)
+    createRDDInternal[K, V](sc, kafkaParams.asJava, offsetRanges, locationStrategy)
   }
 
   /**
@@ -80,8 +69,6 @@ object KafkaUtils extends Logging {
    * Java constructor for a batch-oriented interface for consuming from Kafka.
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
-   * @param keyClass Class of the keys in the Kafka records
-   * @param valueClass Class of the values in the Kafka records
    * @param kafkaParams Kafka
    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
@@ -100,7 +87,28 @@ object KafkaUtils extends Logging {
       locationStrategy: LocationStrategy
     ): JavaRDD[ConsumerRecord[K, V]] = {
 
-    new JavaRDD(createRDD[K, V](jsc.sc, kafkaParams, offsetRanges, locationStrategy))
+    new JavaRDD(createRDDInternal[K, V](jsc.sc, kafkaParams, offsetRanges, locationStrategy))
+  }
+
+  private def createRDDInternal[K, V](
+      sc: SparkContext,
+      kafkaParams: ju.Map[String, Object],
+      offsetRanges: Array[OffsetRange],
+      locationStrategy: LocationStrategy
+  ): RDD[ConsumerRecord[K, V]] = {
+    val preferredHosts = locationStrategy match {
+      case PreferBrokers =>
+        throw new AssertionError(
+          "If you want to prefer brokers, you must provide a mapping using PreferFixed " +
+            "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you.")
+      case PreferConsistent => ju.Collections.emptyMap[TopicPartition, String]()
+      case PreferFixed(hostMap) => hostMap
+    }
+    val kp = new ju.HashMap[String, Object](kafkaParams)
+    fixKafkaParams(kp)
+    val osr = offsetRanges.clone()
+
+    new KafkaRDD[K, V](sc, kp, osr, preferredHosts, true)
   }
 
   /**
@@ -130,8 +138,6 @@ object KafkaUtils extends Logging {
    * :: Experimental ::
    * Java constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
-   * @param keyClass Class of the keys in the Kafka records
-   * @param valueClass Class of the values in the Kafka records
    * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
    *   see [[LocationStrategies]] for more details.
    * @param consumerStrategy In most cases, pass in ConsumerStrategies.subscribe,
