@@ -604,9 +604,8 @@ private[spark] class Client(
           }
         } else {
           if (localizedPath != null) {
-            throw new IllegalArgumentException(s"Attempt to add ($file) multiple times. " +
-              "Please check the values of 'spark.yarn.dist.files' and/or " +
-              "'spark.yarn.dist.archives'.")
+            throw new IllegalArgumentException(s"Attempt to add ($file) multiple times" +
+              " to the distributed cache.")
           }
         }
       }
