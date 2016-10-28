@@ -19,15 +19,10 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SharedSQLContext
 
 class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
-
-  private implicit val formats = Serialization.formats(NoTypeHints)
 
   testWithUninterruptibleThread("OffsetSeqLogSuite: basic") {
     withTempDir { temp =>
