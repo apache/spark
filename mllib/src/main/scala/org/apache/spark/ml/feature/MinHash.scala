@@ -33,8 +33,8 @@ import org.apache.spark.sql.types.StructType
  *
  * Model produced by [[MinHash]], where multiple hash functions are stored. Each hash function is
  * a perfect hash function:
- *    `g_i(x) = (x * k_i mod prime) mod numEntries`
- * where `k_i` is the i-th coefficient
+ *    `h_i(x) = (x * k_i mod prime) mod numEntries`
+ * where `k_i` is the i-th coefficient, and both `x` and `k_i` are from `Z_prime^*`
  *
  * Reference:
  * [[https://en.wikipedia.org/wiki/Perfect_hash_function Wikipedia on Perfect Hash Function]]

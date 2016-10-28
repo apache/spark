@@ -39,7 +39,8 @@ import org.apache.spark.sql.types.StructType
 private[ml] trait RandomProjectionParams extends Params {
 
   /**
-   * The length of each hash bucket, a larger bucket lowers the false negative rate.
+   * The length of each hash bucket, a larger bucket lowers the false negative rate. The number of
+   * buckets will be `(max L2 norm of input vectors) / bucketLength`.
    *
    *
    * If input vectors are normalized, 1-10 times of pow(numRecords, -1/inputDim) would be a
@@ -57,7 +58,12 @@ private[ml] trait RandomProjectionParams extends Params {
 /**
  * :: Experimental ::
  *
- * Model produced by [[RandomProjection]]
+ * Model produced by [[RandomProjection]], where multiple random vectors are stored. The vectors
+ * are normalized to be unit vectors and each vector is used in a hash function:
+ *    `h_i(x) = floor(r_i.dot(x) / bucketLength)`
+ * where `r_i` is the i-th random unit vector. The number of buckets will be `(max L2 norm of input
+ * vectors) / bucketLength`.
+ *
  * @param randUnitVectors An array of random unit vectors. Each vector represents a hash function.
  */
 @Experimental
