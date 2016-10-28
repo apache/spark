@@ -388,7 +388,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           partitionColumnNames = partitioningColumns.getOrElse(Nil),
           bucketSpec = getBucketSpec
         )
-        val result = df.sparkSession.sessionState.executePlan(
+        df.sparkSession.sessionState.executePlan(
           CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
         if (tableDesc.partitionColumnNames.nonEmpty &&
             df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
@@ -396,7 +396,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           df.sparkSession.sessionState.executePlan(
             AlterTableRecoverPartitionsCommand(tableDesc.identifier)).toRdd
         }
-        result
     }
   }
 
