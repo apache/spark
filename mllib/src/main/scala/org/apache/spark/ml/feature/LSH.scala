@@ -46,7 +46,7 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   /** @group getParam */
   final def getOutputDim: Int = $(outputDim)
 
-  setDefault(outputDim -> 1, outputCol -> "lshFeatures")
+  setDefault(outputDim -> 1)
 
   /**
    * Transform the Schema for LSH
