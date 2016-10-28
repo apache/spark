@@ -51,7 +51,6 @@ class RandomProjectionSuite
   test("RandomProjection: default params") {
     val rp = new RandomProjection
     assert(rp.getOutputDim === 1.0)
-    assert(rp.getOutputCol === "lshFeatures")
   }
 
   test("read/write") {

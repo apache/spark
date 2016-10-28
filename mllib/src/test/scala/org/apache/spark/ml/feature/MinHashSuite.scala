@@ -46,7 +46,6 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext with Default
   test("MinHash: default params") {
     val rp = new MinHash
     assert(rp.getOutputDim === 1.0)
-    assert(rp.getOutputCol === "lshFeatures")
   }
 
   test("read/write") {
