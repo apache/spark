@@ -110,7 +110,7 @@ class Broadcast(object):
 
     def dump(self, value, f):
         try:
-            pickle.dump(value, f, 2)
+            pickle.dump(value, f, pickle.HIGHEST_PROTOCOL)
         except pickle.PickleError:
             raise
         except Exception as e:
