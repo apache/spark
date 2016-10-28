@@ -24,18 +24,21 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
 
-  testWithUninterruptibleThread("OffsetSeqLogSuite: basic") {
+  /** test string offset type */
+  case class StringOffset(override val json: String) extends Offset
+
+  testWithUninterruptibleThread("serialization - deserialization") {
     withTempDir { temp =>
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
-      val metadataLog = new OffsetSeqLog("v1", spark, dir.getAbsolutePath)
-      val batch0 = OffsetSeq.fill(LongOffset(0))
-      val batch1 = OffsetSeq.fill(LongOffset(1), LongOffset(2))
+    val metadataLog = new OffsetSeqLog(spark, dir.getAbsolutePath)
+      val batch0 = OffsetSeq.fill(LongOffset(0), LongOffset(1), LongOffset(2))
+      val batch1 = OffsetSeq.fill(StringOffset("one"), StringOffset("two"), StringOffset("three"))
 
-      val batch0Serialized = OffsetSeq.fill(batch0.offsets.map(_.map(o =>
-        SerializedOffset(o.json))).flatten: _*)
+      val batch0Serialized = OffsetSeq.fill(batch0.offsets.flatMap(_.map(o =>
+        SerializedOffset(o.json))): _*)
 
-      val batch1Serialized = OffsetSeq.fill(batch1.offsets.map(_.map(o =>
-        SerializedOffset(o.json))).flatten: _*)
+      val batch1Serialized = OffsetSeq.fill(batch1.offsets.flatMap(_.map(o =>
+        SerializedOffset(o.json))): _*)
 
       assert(metadataLog.add(0, batch0))
       assert(metadataLog.getLatest() === Some(0 -> batch0Serialized))
@@ -46,7 +49,7 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
       assert(metadataLog.get(1) === Some(batch1Serialized))
       assert(metadataLog.getLatest() === Some(1 -> batch1Serialized))
       assert(metadataLog.get(None, Some(1)) ===
-             Array(0 -> batch0Serialized, 1 -> batch1Serialized))
+        Array(0 -> batch0Serialized, 1 -> batch1Serialized))
 
       // Adding the same batch does nothing
       metadataLog.add(1, OffsetSeq.fill(LongOffset(3)))
@@ -54,7 +57,7 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
       assert(metadataLog.get(1) === Some(batch1Serialized))
       assert(metadataLog.getLatest() === Some(1 -> batch1Serialized))
       assert(metadataLog.get(None, Some(1)) ===
-             Array(0 -> batch0Serialized, 1 -> batch1Serialized))
+        Array(0 -> batch0Serialized, 1 -> batch1Serialized))
     }
   }
 }

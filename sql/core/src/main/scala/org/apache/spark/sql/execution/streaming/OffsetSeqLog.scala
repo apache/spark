@@ -23,23 +23,19 @@ import java.nio.charset.StandardCharsets._
 
 import scala.io.{Source => IOSource}
 
-import org.json4s.NoTypeHints
-import org.json4s.jackson.Serialization
-
 import org.apache.spark.sql.SparkSession
 
-class OffsetSeqLog(offsetLogVersion: String, sparkSession: SparkSession, path: String)
+class OffsetSeqLog(sparkSession: SparkSession, path: String)
   extends HDFSMetadataLog[OffsetSeq](sparkSession, path) {
 
   override protected def deserialize(in: InputStream): OffsetSeq = {
     // called inside a try-finally where the underlying stream is closed in the caller
-
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
     val version = lines.next()
-    if (version != offsetLogVersion) {
+    if (version != OffsetSeqLog.VERSION) {
       throw new IllegalStateException(s"Unknown log version: ${version}")
     }
     OffsetSeq.fill(lines.map(offset => SerializedOffset(offset)).toArray: _*)
@@ -47,8 +43,7 @@ class OffsetSeqLog(offsetLogVersion: String, sparkSession: SparkSession, path: S
 
   override protected def serialize(metadata: OffsetSeq, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-
-    out.write(offsetLogVersion.getBytes(UTF_8))
+    out.write(OffsetSeqLog.VERSION.getBytes(UTF_8))
     metadata.offsets.map(_.map(_.json)).flatten.foreach { offset =>
       out.write('\n')
       out.write(offset.getBytes(UTF_8))
@@ -56,7 +51,6 @@ class OffsetSeqLog(offsetLogVersion: String, sparkSession: SparkSession, path: S
   }
 }
 
-
 object OffsetSeqLog {
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private val VERSION = "v1"
 }

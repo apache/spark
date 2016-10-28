@@ -49,20 +49,25 @@ class KafkaSourceOffsetSuite extends OffsetSuite with SharedSQLContext {
   compare(KafkaSourceOffset(SerializedOffset(kso1.json)),
     KafkaSourceOffset(SerializedOffset(kso2.json)))
 
+  test("basic serialization - deserialization") {
+    assert(KafkaSourceOffset.getPartitionOffsets(kso1) ==
+      KafkaSourceOffset.getPartitionOffsets(SerializedOffset(kso1.json)))
+  }
 
-  testWithUninterruptibleThread("OffsetSeqLog: KafkaSourceOffset Serialization") {
+
+  testWithUninterruptibleThread("OffsetSeqLog serialization - deserialization") {
     withTempDir { temp =>
       // use non-existent directory to test whether log make the dir
       val dir = new File(temp, "dir")
-      val metadataLog = new OffsetSeqLog("v1", spark, dir.getAbsolutePath)
+      val metadataLog = new OffsetSeqLog(spark, dir.getAbsolutePath)
       val batch0 = OffsetSeq.fill(kso1)
       val batch1 = OffsetSeq.fill(kso2, kso3)
 
-      val batch0Serialized = OffsetSeq.fill(batch0.offsets.map(_.map(o =>
-        SerializedOffset(o.json))).flatten: _*)
+      val batch0Serialized = OffsetSeq.fill(batch0.offsets.flatMap(_.map(o =>
+        SerializedOffset(o.json))): _*)
 
-      val batch1Serialized = OffsetSeq.fill(batch1.offsets.map(_.map(o =>
-        SerializedOffset(o.json))).flatten: _*)
+      val batch1Serialized = OffsetSeq.fill(batch1.offsets.flatMap(_.map(o =>
+        SerializedOffset(o.json))): _*)
 
       assert(metadataLog.add(0, batch0))
       assert(metadataLog.getLatest() === Some(0 -> batch0Serialized))
