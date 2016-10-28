@@ -31,6 +31,6 @@ if __name__ == "__main__":
     if (value != 4950):
         print("Value %d did not match expected value." % value, file=sys.stderr)
         sys.exit(-1)
-    print("Successfuly ran pip sanity check")
+    print("Successfully ran pip sanity check")
 
     spark.stop()
