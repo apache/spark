@@ -222,7 +222,7 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(
                   s"grouping expressions sequence is empty, " +
                     s"and '${e.sql}' is not an aggregate function. " +
-                    s"Wrap '${aggExprs.mkString("(", ",", ")")}' in windowing function(s) " +
+                    s"Wrap '${aggExprs.mkString("(", ", ", ")")}' in windowing function(s) " +
                     s"or wrap '${e.sql}' in first() (or first_value) " +
                     s"if you don't care which value you get."
                 )
