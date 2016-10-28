@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.{Date, UUID}
 
+import scala.collection.mutable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -129,7 +131,7 @@ object WriteOutput extends Logging {
               sparkPartitionId = taskContext.partitionId(),
               sparkAttemptNumber = taskContext.attemptNumber(),
               iterator = iter)
-          }).distinct.flatten
+          }).flatten.distinct
 
         committer.commitJob(job)
         logInfo(s"Job ${job.getJobID} committed.")
@@ -148,7 +150,7 @@ object WriteOutput extends Logging {
       sparkStageId: Int,
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
-      iterator: Iterator[InternalRow]): Seq[String] = {
+      iterator: Iterator[InternalRow]): Set[String] = {
 
     val jobId = SparkHadoopWriter.createJobID(new Date, sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
@@ -215,7 +217,7 @@ object WriteOutput extends Logging {
    * automatically trigger task aborts.
    */
   private trait ExecuteWriteTask {
-    def execute(iterator: Iterator[InternalRow]): Seq[String]
+    def execute(iterator: Iterator[InternalRow]): Set[String]
     def releaseResources(): Unit
 
     final def filePrefix(split: Int, uuid: String, bucketId: Option[Int]): String = {
@@ -242,12 +244,12 @@ object WriteOutput extends Logging {
       outputWriter
     }
 
-    override def execute(iter: Iterator[InternalRow]): Seq[String] = {
+    override def execute(iter: Iterator[InternalRow]): Set[String] = {
       while (iter.hasNext) {
         val internalRow = iter.next()
         outputWriter.writeInternal(internalRow)
       }
-      Nil
+      Set.empty
     }
 
     override def releaseResources(): Unit = {
@@ -330,7 +332,7 @@ object WriteOutput extends Logging {
       newWriter
     }
 
-    override def execute(iter: Iterator[InternalRow]): Seq[String] = {
+    override def execute(iter: Iterator[InternalRow]): Set[String] = {
       // We should first sort by partition columns, then bucket id, and finally sorting columns.
       val sortingExpressions: Seq[Expression] =
         description.partitionColumns ++ bucketIdExpression ++ sortColumns
@@ -378,7 +380,7 @@ object WriteOutput extends Logging {
 
       // If anything below fails, we should abort the task.
       var currentKey: UnsafeRow = null
-      var updatedPartitions: List[String] = Nil
+      val updatedPartitions = mutable.Set[String]()
       while (sortedIterator.next()) {
         val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
         if (currentKey != nextKey) {
@@ -392,7 +394,7 @@ object WriteOutput extends Logging {
           currentWriter = newOutputWriter(currentKey, getPartitionString)
           val partitionStr = getPartitionString(currentKey).getString(0)
           if (partitionStr.nonEmpty) {
-            updatedPartitions ::= partitionStr
+            updatedPartitions.add(partitionStr)
           }
         }
         currentWriter.writeInternal(sortedIterator.getValue)
@@ -401,7 +403,7 @@ object WriteOutput extends Logging {
         currentWriter.close()
         currentWriter = null
       }
-      updatedPartitions
+      updatedPartitions.toSet
     }
 
     override def releaseResources(): Unit = {
