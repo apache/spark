@@ -28,7 +28,7 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
 
-class OffsetStreamSourceLog(offsetLogVersion: String, sparkSession: SparkSession, path: String)
+class OffsetSeqLog(offsetLogVersion: String, sparkSession: SparkSession, path: String)
   extends HDFSMetadataLog[OffsetSeq](sparkSession, path) {
 
   override protected def deserialize(in: InputStream): OffsetSeq = {
@@ -57,6 +57,6 @@ class OffsetStreamSourceLog(offsetLogVersion: String, sparkSession: SparkSession
 }
 
 
-object OffsetStreamSourceLog {
+object OffsetSeqLog {
   private implicit val formats = Serialization.formats(NoTypeHints)
 }

@@ -148,7 +148,7 @@ class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  val offsetLog = new OffsetStreamSourceLog(StreamExecution.OFFSET_LOG_VERSION,
+  val offsetLog = new OffsetSeqLog(StreamExecution.OFFSET_LOG_VERSION,
     sparkSession, checkpointFile("offsets"))
 
   /** Whether the query is currently active or not */
