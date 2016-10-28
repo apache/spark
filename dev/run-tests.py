@@ -434,7 +434,7 @@ def run_python_tests(test_modules, parallelism):
 
 def run_python_packaging_tests():
     set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
-    command = [os.path.join(SPARK_HOME, "dev", "./dev/run-pip-tests")]
+    command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
     run_cmd(command)
 
 
