@@ -190,6 +190,8 @@ is handled automatically, and with Spark standalone, automatic cleanup can be co
 Users may also include any other dependencies by supplying a comma-delimited list of maven coordinates
 with `--packages`. All transitive dependencies will be handled when using this command. Additional
 repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`.
+(Note that credentials for password-protected repositories can be supplied in some cases in the repository URI,
+such as in `https://user:password@host/...`. Be careful when supplying credentials this way.)
 These commands can be used with `pyspark`, `spark-shell`, and `spark-submit` to include Spark Packages.
 
 For Python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries

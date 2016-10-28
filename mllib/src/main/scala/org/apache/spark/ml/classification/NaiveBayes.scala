@@ -110,16 +110,28 @@ class NaiveBayes @Since("1.5.0") (
   @Since("2.1.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /**
+   * ml assumes input labels in range [0, numClasses). But this implementation
+   * is also called by mllib NaiveBayes which allows other kinds of input labels
+   * such as {-1, +1}. Here we use this parameter to switch between different processing logic.
+   * It should be removed when we remove mllib NaiveBayes.
+   */
+  private[spark] var isML: Boolean = true
+
+  private[spark] def setIsML(isML: Boolean): this.type = {
+    this.isML = isML
+    this
+  }
+
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
-    val numClasses = getNumClasses(dataset)
-
-    if (isDefined(thresholds)) {
-      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-        ".train() called with non-matching numClasses and thresholds.length." +
-        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+    if (isML) {
+      val numClasses = getNumClasses(dataset)
+      if (isDefined(thresholds)) {
+        require($(thresholds).length == numClasses, this.getClass.getSimpleName +
+          ".train() called with non-matching numClasses and thresholds.length." +
+          s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+      }
     }
-
-    val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
 
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
       val values = v match {
@@ -153,6 +165,7 @@ class NaiveBayes @Since("1.5.0") (
       }
     }
 
+    val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     // Aggregates term frequencies per label.
@@ -176,6 +189,7 @@ class NaiveBayes @Since("1.5.0") (
     val numLabels = aggregated.length
     val numDocuments = aggregated.map(_._2._1).sum
 
+    val labelArray = new Array[Double](numLabels)
     val piArray = new Array[Double](numLabels)
     val thetaArray = new Array[Double](numLabels * numFeatures)
 
@@ -183,6 +197,7 @@ class NaiveBayes @Since("1.5.0") (
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
     var i = 0
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
+      labelArray(i) = label
       piArray(i) = math.log(n + lambda) - piLogDenom
       val thetaLogDenom = $(modelType) match {
         case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
@@ -201,7 +216,7 @@ class NaiveBayes @Since("1.5.0") (
 
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
-    new NaiveBayesModel(uid, pi, theta)
+    new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
   }
 
   @Since("1.5.0")
@@ -238,6 +253,19 @@ class NaiveBayesModel private[ml] (
   with NaiveBayesParams with MLWritable {
 
   import NaiveBayes.{Bernoulli, Multinomial}
+
+  /**
+   * mllib NaiveBayes is a wrapper of ml implementation currently.
+   * Input labels of mllib could be {-1, +1} and mllib NaiveBayesModel exposes labels,
+   * both of which are different from ml, so we should store the labels sequentially
+   * to be called by mllib. This should be removed when we remove mllib NaiveBayes.
+   */
+  private[spark] var oldLabels: Array[Double] = null
+
+  private[spark] def setOldLabels(labels: Array[Double]): this.type = {
+    this.oldLabels = labels
+    this
+  }
 
   /**
    * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.

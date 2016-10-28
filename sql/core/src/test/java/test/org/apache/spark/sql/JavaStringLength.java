@@ -15,23 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package test.org.apache.spark.sql;
 
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.api.java.UDF1;
 
-class HiveDataFrameSuite extends QueryTest with TestHiveSingleton {
-  test("table name with schema") {
-    // regression test for SPARK-11778
-    spark.sql("create schema usrdb")
-    spark.sql("create table usrdb.test(c int)")
-    spark.read.table("usrdb.test")
-    spark.sql("drop table usrdb.test")
-    spark.sql("drop schema usrdb")
-  }
-
-  test("SPARK-15887: hive-site.xml should be loaded") {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-    assert(hiveClient.getConf("hive.in.test", "") == "true")
+/**
+ * It is used for register Java UDF from PySpark
+ */
+public class JavaStringLength implements UDF1<String, Integer> {
+  @Override
+  public Integer call(String str) throws Exception {
+    return new Integer(str.length());
   }
 }

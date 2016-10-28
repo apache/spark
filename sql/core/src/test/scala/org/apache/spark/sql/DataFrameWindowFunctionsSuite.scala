@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{DataType, LongType, StructType}
 /**
  * Window function testing for DataFrame API.
  */
-class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
+class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("reuse window partitionBy") {
@@ -54,7 +54,8 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
     val df = Seq(("one", 1), ("two", 2)).toDF("key", "value")
     // Running (cumulative) sum
     checkAnswer(
-      df.select('key, sum("value").over(Window.rowsBetween(Long.MinValue, 0))),
+      df.select('key, sum("value").over(
+        Window.rowsBetween(Window.unboundedPreceding, Window.currentRow))),
       Row("one", 1) :: Row("two", 3) :: Nil
     )
   }
@@ -156,9 +157,11 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
       df.select(
         $"key",
         last("key").over(
-          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
+          Window.partitionBy($"value").orderBy($"key")
+            .rowsBetween(Window.currentRow, Window.unboundedFollowing)),
         last("key").over(
-          Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
+          Window.partitionBy($"value").orderBy($"key")
+            .rowsBetween(Window.unboundedPreceding, Window.currentRow)),
         last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1))),
       Seq(Row(1, 1, 1, 1), Row(2, 3, 2, 3), Row(3, 3, 3, 3), Row(1, 4, 1, 2), Row(2, 4, 2, 4),
         Row(4, 4, 4, 4)))

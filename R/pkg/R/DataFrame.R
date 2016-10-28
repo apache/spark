@@ -365,7 +365,7 @@ setMethod("colnames<-",
 
             # Check if the column names have . in it
             if (any(regexec(".", value, fixed = TRUE)[[1]][1] != -1)) {
-              stop("Colum names cannot contain the '.' symbol.")
+              stop("Column names cannot contain the '.' symbol.")
             }
 
             sdf <- callJMethod(x@sdf, "toDF", as.list(value))
@@ -633,7 +633,7 @@ setMethod("persist",
 #' @param ... further arguments to be passed to or from other methods.
 #'
 #' @family SparkDataFrame functions
-#' @rdname unpersist-methods
+#' @rdname unpersist
 #' @aliases unpersist,SparkDataFrame-method
 #' @name unpersist
 #' @export
@@ -652,6 +652,32 @@ setMethod("unpersist",
             callJMethod(x@sdf, "unpersist", blocking)
             x@env$isCached <- FALSE
             x
+          })
+
+#' StorageLevel
+#'
+#' Get storagelevel of this SparkDataFrame.
+#'
+#' @param x the SparkDataFrame to get the storageLevel.
+#'
+#' @family SparkDataFrame functions
+#' @rdname storageLevel
+#' @aliases storageLevel,SparkDataFrame-method
+#' @name storageLevel
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' persist(df, "MEMORY_AND_DISK")
+#' storageLevel(df)
+#'}
+#' @note storageLevel since 2.1.0
+setMethod("storageLevel",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            storageLevelToString(callJMethod(x@sdf, "storageLevel"))
           })
 
 #' Repartition
@@ -735,7 +761,8 @@ setMethod("toJSON",
 
 #' Save the contents of SparkDataFrame as a JSON file
 #'
-#' Save the contents of a SparkDataFrame as a JSON file (one object per line). Files written out
+#' Save the contents of a SparkDataFrame as a JSON file (\href{http://jsonlines.org/}{
+#' JSON Lines text format or newline-delimited JSON}). Files written out
 #' with this method can be read back in as a SparkDataFrame using read.json().
 #'
 #' @param x A SparkDataFrame
@@ -2271,12 +2298,13 @@ setMethod("dropDuplicates",
 
 #' Join
 #'
-#' Join two SparkDataFrames based on the given join expression.
+#' Joins two SparkDataFrames based on the given join expression.
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
 #' @param joinExpr (Optional) The expression used to perform the join. joinExpr must be a
-#' Column expression. If joinExpr is omitted, join() will perform a Cartesian join
+#' Column expression. If joinExpr is omitted, the default, inner join is attempted and an error is
+#' thrown if it would be a Cartesian Product. For Cartesian join, use crossJoin instead.
 #' @param joinType The type of join to perform. The following join types are available:
 #' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
 #' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
@@ -2285,23 +2313,24 @@ setMethod("dropDuplicates",
 #' @aliases join,SparkDataFrame,SparkDataFrame-method
 #' @rdname join
 #' @name join
-#' @seealso \link{merge}
+#' @seealso \link{merge} \link{crossJoin}
 #' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
-#' join(df1, df2) # Performs a Cartesian
 #' join(df1, df2, df1$col1 == df2$col2) # Performs an inner join based on expression
 #' join(df1, df2, df1$col1 == df2$col2, "right_outer")
+#' join(df1, df2) # Attempts an inner join
 #' }
 #' @note join since 1.4.0
 setMethod("join",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, joinExpr = NULL, joinType = NULL) {
             if (is.null(joinExpr)) {
-              sdf <- callJMethod(x@sdf, "crossJoin", y@sdf)
+              # this may not fail until the planner checks for Cartesian join later on.
+              sdf <- callJMethod(x@sdf, "join", y@sdf)
             } else {
               if (class(joinExpr) != "Column") stop("joinExpr must be a Column")
               if (is.null(joinType)) {
@@ -2322,22 +2351,52 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#' CrossJoin
+#'
+#' Returns Cartesian Product on two SparkDataFrames.
+#'
+#' @param x A SparkDataFrame
+#' @param y A SparkDataFrame
+#' @return A SparkDataFrame containing the result of the join operation.
+#' @family SparkDataFrame functions
+#' @aliases crossJoin,SparkDataFrame,SparkDataFrame-method
+#' @rdname crossJoin
+#' @name crossJoin
+#' @seealso \link{merge} \link{join}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- read.json(path)
+#' df2 <- read.json(path2)
+#' crossJoin(df1, df2) # Performs a Cartesian
+#' }
+#' @note crossJoin since 2.1.0
+setMethod("crossJoin",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            sdf <- callJMethod(x@sdf, "crossJoin", y@sdf)
+            dataFrame(sdf)
+          })
+
 #' Merges two data frames
 #'
 #' @name merge
-#' @param x the first data frame to be joined
-#' @param y the second data frame to be joined
+#' @param x the first data frame to be joined.
+#' @param y the second data frame to be joined.
 #' @param by a character vector specifying the join columns. If by is not
 #'   specified, the common column names in \code{x} and \code{y} will be used.
+#'   If by or both by.x and by.y are explicitly set to NULL or of length 0, the Cartesian
+#'   Product of x and y will be returned.
 #' @param by.x a character vector specifying the joining columns for x.
 #' @param by.y a character vector specifying the joining columns for y.
 #' @param all a boolean value setting \code{all.x} and \code{all.y}
 #'            if any of them are unset.
 #' @param all.x a boolean value indicating whether all the rows in x should
-#'              be including in the join
+#'              be including in the join.
 #' @param all.y a boolean value indicating whether all the rows in y should
-#'              be including in the join
-#' @param sort a logical argument indicating whether the resulting columns should be sorted
+#'              be including in the join.
+#' @param sort a logical argument indicating whether the resulting columns should be sorted.
 #' @param suffixes a string vector of length 2 used to make colnames of
 #'                 \code{x} and \code{y} unique.
 #'                 The first element is appended to each colname of \code{x}.
@@ -2351,20 +2410,21 @@ setMethod("join",
 #' @family SparkDataFrame functions
 #' @aliases merge,SparkDataFrame,SparkDataFrame-method
 #' @rdname merge
-#' @seealso \link{join}
+#' @seealso \link{join} \link{crossJoin}
 #' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
-#' merge(df1, df2) # Performs a Cartesian
+#' merge(df1, df2) # Performs an inner join by common columns
 #' merge(df1, df2, by = "col1") # Performs an inner join based on expression
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.y = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE, all.y = TRUE)
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all = TRUE, sort = FALSE)
 #' merge(df1, df2, by = "col1", all = TRUE, suffixes = c("-X", "-Y"))
+#' merge(df1, df2, by = NULL) # Performs a Cartesian join
 #' }
 #' @note merge since 1.5.0
 setMethod("merge",
@@ -2401,7 +2461,7 @@ setMethod("merge",
               joinY <- by
             } else {
               # if by or both by.x and by.y have length 0, use Cartesian Product
-              joinRes <- join(x, y)
+              joinRes <- crossJoin(x, y)
               return (joinRes)
             }
 

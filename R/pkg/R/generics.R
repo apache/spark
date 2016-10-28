@@ -468,6 +468,10 @@ setGeneric("createOrReplaceTempView",
              standardGeneric("createOrReplaceTempView")
            })
 
+# @rdname crossJoin
+# @export
+setGeneric("crossJoin", function(x, y) { standardGeneric("crossJoin") })
+
 #' @rdname dapply
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
@@ -687,6 +691,10 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 #' @export
 setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
 
+# @rdname storageLevel
+# @export
+setGeneric("storageLevel", function(x) { standardGeneric("storageLevel") })
+
 #' @rdname subset
 #' @export
 setGeneric("subset", function(x, ...) { standardGeneric("subset") })
@@ -711,7 +719,7 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
-#' @rdname unpersist-methods
+#' @rdname unpersist
 #' @export
 setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
 
@@ -1366,6 +1374,10 @@ setGeneric("spark.gaussianMixture",
            function(data, formula, ...) {
              standardGeneric("spark.gaussianMixture")
            })
+
+#' @rdname spark.logit
+#' @export
+setGeneric("spark.logit", function(data, formula, ...) { standardGeneric("spark.logit") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.

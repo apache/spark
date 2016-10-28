@@ -176,7 +176,7 @@ class SparkSession(object):
                         sc._conf.set(key, value)
                     session = SparkSession(sc)
                 for key, value in self._options.items():
-                    session.conf.set(key, value)
+                    session._jsparkSession.sessionState().conf().setConfString(key, value)
                 for key, value in self._options.items():
                     session.sparkContext._conf.set(key, value)
                 return session

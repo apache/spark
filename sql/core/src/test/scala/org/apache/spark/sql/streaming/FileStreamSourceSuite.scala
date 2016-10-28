@@ -664,7 +664,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     def createFile(content: String, src: File, tmp: File): Unit = {
       val tempFile = Utils.tempFileWith(new File(tmp, "text"))
       val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
+      require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
+      require(src.mkdirs(), s"Cannot create $src")
+      require(src.isDirectory(), s"$src is not a directory")
       require(stringToFile(tempFile, content).renameTo(finalFile))
     }
 
@@ -996,6 +998,20 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           }
         )
       }
+    }
+  }
+
+  test("input row metrics") {
+    withTempDirs { case (src, tmp) =>
+      val input = spark.readStream.format("text").load(src.getCanonicalPath)
+      testStream(input)(
+        AddTextFileData("100", src, tmp),
+        CheckAnswer("100"),
+        AssertOnLastQueryStatus { status =>
+          assert(status.triggerDetails.get("numRows.input.total") === "1")
+          assert(status.sourceStatuses(0).processingRate > 0.0)
+        }
+      )
     }
   }
 }
