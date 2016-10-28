@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType, NoSuchObjectException, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
@@ -587,16 +587,16 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
         try {
+          // Hive may throw an exception when calling this method in some circumstances, such as
+          // when filtering on a non-string partition column when the hive config key
+          // hive.metastore.try.direct.sql is false
           getPartitionsByFilterMethod.invoke(hive, table, filter)
             .asInstanceOf[JArrayList[Partition]]
         } catch {
-          case e: InvocationTargetException =>
-            // SPARK-18167 retry to investigate the flaky test. This should be reverted before
-            // the release is cut.
-            val retry = Try(getPartitionsByFilterMethod.invoke(hive, table, filter))
-            logError("getPartitionsByFilter failed, retry success = " + retry.isSuccess)
-            logError("all partitions: " + getAllPartitions(hive, table))
-            throw e
+          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
+            logWarning("Caught MetaException attempting to get partitions by filter from Hive", ex)
+            // Return all partitions. HiveShim clients are expected to handle this possibility
+            getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
         }
       }
 
