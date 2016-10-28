@@ -21,6 +21,7 @@ import gc
 from tempfile import NamedTemporaryFile
 
 from pyspark.cloudpickle import print_exec
+from pyspark.broadcast import protocol
 
 if sys.version < '3':
     import cPickle as pickle
@@ -78,7 +79,7 @@ class Broadcast(object):
 
     def dump(self, value, f):
         try:
-            pickle.dump(value, f, 2)
+            pickle.dump(value, f, protocol)
         except pickle.PickleError:
             raise
         except Exception as e:
