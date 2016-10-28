@@ -60,7 +60,8 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
             deserialized,
             data.queryExecution.asInstanceOf[IncrementalExecution].outputMode,
             data.queryExecution.asInstanceOf[IncrementalExecution].checkpointLocation,
-            data.queryExecution.asInstanceOf[IncrementalExecution].currentBatchId)
+            data.queryExecution.asInstanceOf[IncrementalExecution].currentBatchId,
+            data.queryExecution.asInstanceOf[IncrementalExecution].currentEventTimeWatermark)
           incrementalExecution.toRdd.mapPartitions { rows =>
             rows.map(_.get(0, objectType))
           }.asInstanceOf[RDD[T]]

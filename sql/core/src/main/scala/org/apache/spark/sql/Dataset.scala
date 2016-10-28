@@ -483,6 +483,19 @@ class Dataset[T] private[sql](
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
+   * TODO:
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def withWatermark(eventTime: String, delay: String): Dataset[T] = withTypedPlan {
+    val delayMilli = TimeWindow.getIntervalInMicroSeconds(delay) / 1000
+    EventTimeWatermark(UnresolvedAttribute(eventTime), delayMilli, logicalPlan)
+  }
+
+  /**
    * Displays the Dataset in a tabular form. Strings more than 20 characters will be truncated,
    * and all cells will be aligned right. For example:
    * {{{

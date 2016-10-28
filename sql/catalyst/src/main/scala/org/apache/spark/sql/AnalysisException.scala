@@ -31,7 +31,7 @@ class AnalysisException protected[sql] (
     val message: String,
     val line: Option[Int] = None,
     val startPosition: Option[Int] = None,
-    val plan: Option[LogicalPlan] = None,
+    @transient val plan: Option[LogicalPlan] = None,
     val cause: Option[Throwable] = None)
   extends Exception(message, cause.orNull) with Serializable {
 
