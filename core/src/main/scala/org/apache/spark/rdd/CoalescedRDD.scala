@@ -80,6 +80,10 @@ private[spark] class CoalescedRDD[T: ClassTag](
 
   require(maxPartitions > 0 || maxPartitions == prev.partitions.length,
     s"Number of partitions ($maxPartitions) must be positive.")
+  if (partitionCoalescer.isDefined) {
+    require(partitionCoalescer.get.isInstanceOf[Serializable],
+      "The partition coalescer passed in must be serializable.")
+  }
 
   override def getPartitions: Array[Partition] = {
     val pc = partitionCoalescer.getOrElse(new DefaultPartitionCoalescer())
@@ -169,6 +173,11 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
 
   var noLocality = true  // if true if no preferredLocations exists for parent RDD
 
+  // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
+  def currPrefLocs(part: Partition, prev: RDD[_]): Seq[String] = {
+    prev.context.getPreferredLocs(prev, part.index).map(tl => tl.host)
+  }
+
   class PartitionLocations(prev: RDD[_]) {
 
     // contains all the partitions from the previous RDD that don't have preferred locations
@@ -178,14 +187,14 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
 
     getAllPrefLocs(prev)
 
-    // gets all the preffered locations of the previous RDD and splits them into partitions
+    // gets all the preferred locations of the previous RDD and splits them into partitions
     // with preferred locations and ones without
-    def getAllPrefLocs(prev: RDD[_]) {
+    def getAllPrefLocs(prev: RDD[_]): Unit = {
       val tmpPartsWithLocs = mutable.LinkedHashMap[Partition, Seq[String]]()
       // first get the locations for each partition, only do this once since it can be expensive
       prev.partitions.foreach(p => {
-          val locs = prev.context.getPreferredLocs(prev, p.index).map(tl => tl.host)
-          if (locs.size > 0) {
+          val locs = currPrefLocs(p, prev)
+          if (locs.nonEmpty) {
             tmpPartsWithLocs.put(p, locs)
           } else {
             partsWithoutLocs += p
@@ -193,13 +202,13 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
         }
       )
       // convert it into an array of host to partition
-      (0 to 2).map(x =>
-        tmpPartsWithLocs.foreach(parts => {
+      for (x <- 0 to 2) {
+        tmpPartsWithLocs.foreach { parts =>
           val p = parts._1
           val locs = parts._2
           if (locs.size > x) partsWithLocs += ((locs(x), p))
-        } )
-      )
+        }
+      }
     }
   }
 
@@ -287,9 +296,8 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
       balanceSlack: Double,
       partitionLocs: PartitionLocations): PartitionGroup = {
     val slack = (balanceSlack * prev.partitions.length).toInt
-    val preflocs = partitionLocs.partsWithLocs.filter(_._2 == p).map(_._1).toSeq
     // least loaded pref locs
-    val pref = preflocs.map(getLeastGroupHash(_)).sortWith(compare) // least loaded pref locs
+    val pref = currPrefLocs(p, prev).map(getLeastGroupHash(_)).sortWith(compare)
     val prefPart = if (pref == Nil) None else pref.head
 
     val r1 = rnd.nextInt(groupArr.size)

@@ -110,7 +110,7 @@ private[stat] object ChiSqTest extends Logging {
           }
           i += 1
           distinctLabels += label
-          val brzFeatures = features.toBreeze
+          val brzFeatures = features.asBreeze
           (startCol until endCol).map { col =>
             val feature = brzFeatures(col)
             allDistinctFeatures(col) += feature
@@ -146,7 +146,7 @@ private[stat] object ChiSqTest extends Logging {
    * Uniform distribution is assumed when `expected` is not passed in.
    */
   def chiSquared(observed: Vector,
-      expected: Vector = Vectors.dense(Array[Double]()),
+      expected: Vector = Vectors.dense(Array.empty[Double]),
       methodName: String = PEARSON.name): ChiSqTestResult = {
 
     // Validate input arguments

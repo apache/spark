@@ -155,27 +155,6 @@ package object util {
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
-  /**
-   * Returns the string representation of this expression that is safe to be put in
-   * code comments of generated code. The length is capped at 128 characters.
-   */
-  def toCommentSafeString(str: String): String = {
-    val len = math.min(str.length, 128)
-    val suffix = if (str.length > len) "..." else ""
-
-    // Unicode literals, like \u0022, should be escaped before
-    // they are put in code comment to avoid codegen breaking.
-    // To escape them, single "\" should be prepended to a series of "\" just before "u"
-    // only when the number of "\" is odd.
-    // For example, \u0022 should become to \\u0022
-    // but \\u0022 should not become to \\\u0022 because the first backslash escapes the second one,
-    // and \u0022 will remain, means not escaped.
-    // Otherwise, the runtime Java compiler will fail to compile or code injection can be allowed.
-    // For details, see SPARK-15165.
-    str.substring(0, len).replace("*/", "*\\/")
-      .replaceAll("(^|[^\\\\])(\\\\(\\\\\\\\)*u)", "$1\\\\$2") + suffix
-  }
-
   /* FIX ME
   implicit class debugLogging(a: Any) {
     def debugLogging() {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.ScalaUDF
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions
@@ -25,6 +25,9 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * A user-defined function. To create one, use the `udf` functions in [[functions]].
+ * Note that the user-defined functions must be deterministic. Due to optimization,
+ * duplicate invocations may be eliminated or the function may even be invoked more times than
+ * it is present in the query.
  * As an example:
  * {{{
  *   // Defined a UDF that returns true or false based on some numeric score.
@@ -36,12 +39,17 @@ import org.apache.spark.sql.types.DataType
  *
  * @since 1.3.0
  */
-@Experimental
+@InterfaceStability.Stable
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
     inputTypes: Option[Seq[DataType]]) {
 
+  /**
+   * Returns an expression that invokes the UDF, using the given arguments.
+   *
+   * @since 1.3.0
+   */
   def apply(exprs: Column*): Column = {
     Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil)))
   }

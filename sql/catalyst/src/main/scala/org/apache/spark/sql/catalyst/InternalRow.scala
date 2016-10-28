@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
@@ -30,6 +30,27 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
 
   // This is only use for test and will throw a null pointer exception if the position is null.
   def getString(ordinal: Int): String = getUTF8String(ordinal).toString
+
+  def setNullAt(i: Int): Unit
+
+  def update(i: Int, value: Any): Unit
+
+  // default implementation (slow)
+  def setBoolean(i: Int, value: Boolean): Unit = update(i, value)
+  def setByte(i: Int, value: Byte): Unit = update(i, value)
+  def setShort(i: Int, value: Short): Unit = update(i, value)
+  def setInt(i: Int, value: Int): Unit = update(i, value)
+  def setLong(i: Int, value: Long): Unit = update(i, value)
+  def setFloat(i: Int, value: Float): Unit = update(i, value)
+  def setDouble(i: Int, value: Double): Unit = update(i, value)
+
+  /**
+   * Update the decimal column at `i`.
+   *
+   * Note: In order to support update decimal with precision > 18 in UnsafeRow,
+   * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
+   */
+  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
 
   /**
    * Make a copy of the current [[InternalRow]] object.

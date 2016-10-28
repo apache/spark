@@ -18,7 +18,8 @@
 context("include R packages")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Partitioned data
 nums <- 1:2
@@ -36,7 +37,7 @@ test_that("include inside function", {
     }
 
     data <- lapplyPartition(rdd, generateData)
-    actual <- collect(data)
+    actual <- collectRDD(data)
   }
 })
 
@@ -52,6 +53,8 @@ test_that("use include package", {
 
     includePackage(sc, plyr)
     data <- lapplyPartition(rdd, generateData)
-    actual <- collect(data)
+    actual <- collectRDD(data)
   }
 })
+
+sparkR.session.stop()

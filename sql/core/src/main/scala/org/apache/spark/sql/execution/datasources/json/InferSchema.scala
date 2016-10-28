@@ -23,7 +23,8 @@ import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
-import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
+import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
+import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -37,7 +38,7 @@ private[sql] object InferSchema {
    */
   def infer(
       json: RDD[String],
-      columnNameOfCorruptRecords: String,
+      columnNameOfCorruptRecord: String,
       configOptions: JSONOptions): StructType = {
     require(configOptions.samplingRatio > 0,
       s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
@@ -60,13 +61,13 @@ private[sql] object InferSchema {
           }
         } catch {
           case _: JsonParseException if shouldHandleCorruptRecord =>
-            Some(StructType(Seq(StructField(columnNameOfCorruptRecords, StringType))))
+            Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
           case _: JsonParseException =>
             None
         }
       }
     }.fold(StructType(Seq()))(
-      compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord))
+      compatibleRootType(columnNameOfCorruptRecord, shouldHandleCorruptRecord))
 
     canonicalizeType(rootType) match {
       case Some(st: StructType) => st

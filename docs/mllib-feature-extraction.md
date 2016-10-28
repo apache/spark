@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction and Transformation - spark.mllib
-displayTitle: Feature Extraction and Transformation - spark.mllib
+title: Feature Extraction and Transformation - RDD-based API
+displayTitle: Feature Extraction and Transformation - RDD-based API
 ---
 
 * Table of contents
@@ -148,7 +148,7 @@ against features with very large variances exerting an overly large influence du
 following parameters in the constructor:
 
 * `withMean` False by default. Centers the data with mean before scaling. It will build a dense
-output, so this does not work on sparse input and will raise an exception.
+output, so take care when applying to sparse input.
 * `withStd` True by default. Scales the data to unit standard deviation.
 
 We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) method in
@@ -225,10 +225,16 @@ features for use in model construction. It reduces the size of the feature space
 both speed and statistical learning behavior.
 
 [`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) implements
-Chi-Squared feature selection. It operates on labeled data with categorical features.
-`ChiSqSelector` orders features based on a Chi-Squared test of independence from the class,
-and then filters (selects) the top features which the class label depends on the most.
-This is akin to yielding the features with the most predictive power.
+Chi-Squared feature selection. It operates on labeled data with categorical features. ChiSqSelector uses the
+[Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
+features to choose. It supports three selection methods: `KBest`, `Percentile` and `FPR`:
+
+* `KBest` chooses the `k` top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
+* `Percentile` is similar to `KBest` but chooses a fraction of all features instead of a fixed number.
+* `FPR` chooses all features whose false positive rate meets some threshold.
+
+By default, the selection method is `KBest`, the default number of top features is 50. User can use
+`setNumTopFeatures`, `setPercentile` and `setAlpha` to set different selection methods.
 
 The number of features to select can be tuned using a held-out validation set.
 
@@ -333,7 +339,7 @@ Details you can read at [dimensionality reduction](mllib-dimensionality-reductio
 
 The following code demonstrates how to compute principal components on a `Vector`
 and use them to project the vectors into a low-dimensional space while keeping associated labels
-for calculation a [Linear Regression]((mllib-linear-methods.html))
+for calculation a [Linear Regression](mllib-linear-methods.html)
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

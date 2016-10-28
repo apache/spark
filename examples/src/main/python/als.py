@@ -28,7 +28,7 @@ import sys
 import numpy as np
 from numpy.random import rand
 from numpy import matrix
-from pyspark import SparkContext
+from pyspark.sql import SparkSession
 
 LAMBDA = 0.01   # regularization
 np.random.seed(42)
@@ -39,7 +39,7 @@ def rmse(R, ms, us):
     return np.sqrt(np.sum(np.power(diff, 2)) / (M * U))
 
 
-def update(i, vec, mat, ratings):
+def update(i, mat, ratings):
     uu = mat.shape[0]
     ff = mat.shape[1]
 
@@ -62,7 +62,13 @@ if __name__ == "__main__":
       example. Please use pyspark.ml.recommendation.ALS for more
       conventional use.""", file=sys.stderr)
 
-    sc = SparkContext(appName="PythonALS")
+    spark = SparkSession\
+        .builder\
+        .appName("PythonALS")\
+        .getOrCreate()
+
+    sc = spark.sparkContext
+
     M = int(sys.argv[1]) if len(sys.argv) > 1 else 100
     U = int(sys.argv[2]) if len(sys.argv) > 2 else 500
     F = int(sys.argv[3]) if len(sys.argv) > 3 else 10
@@ -82,7 +88,7 @@ if __name__ == "__main__":
 
     for i in range(ITERATIONS):
         ms = sc.parallelize(range(M), partitions) \
-               .map(lambda x: update(x, msb.value[x, :], usb.value, Rb.value)) \
+               .map(lambda x: update(x, usb.value, Rb.value)) \
                .collect()
         # collect() returns a list, so array ends up being
         # a 3-d array, we take the first 2 dims for the matrix
@@ -90,7 +96,7 @@ if __name__ == "__main__":
         msb = sc.broadcast(ms)
 
         us = sc.parallelize(range(U), partitions) \
-               .map(lambda x: update(x, usb.value[x, :], msb.value, Rb.value.T)) \
+               .map(lambda x: update(x, msb.value, Rb.value.T)) \
                .collect()
         us = matrix(np.array(us)[:, :, 0])
         usb = sc.broadcast(us)
@@ -99,4 +105,4 @@ if __name__ == "__main__":
         print("Iteration %d:" % i)
         print("\nRMSE: %5.4f\n" % error)
 
-    sc.stop()
+    spark.stop()

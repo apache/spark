@@ -69,7 +69,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 
   /**
    * Param for the number of steps for the k-means|| initialization mode. This is an advanced
-   * setting -- the default of 5 is almost always enough. Must be > 0. Default: 5.
+   * setting -- the default of 2 is almost always enough. Must be > 0. Default: 2.
    * @group expertParam
    */
   @Since("1.5.0")
@@ -120,6 +120,7 @@ class KMeansModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
@@ -131,7 +132,7 @@ class KMeansModel private[ml] (
 
   private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
-  @Since("1.5.0")
+  @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
 
   /**
@@ -211,7 +212,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
         Data(idx, center)
       }
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(data).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(data).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -222,8 +223,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
 
     override def load(path: String): KMeansModel = {
       // Import implicits for Dataset Encoder
-      val sqlContext = super.sqlContext
-      import sqlContext.implicits._
+      val sparkSession = super.sparkSession
+      import sparkSession.implicits._
 
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
@@ -232,11 +233,11 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val versionRegex(major, _) = metadata.sparkVersion
 
       val clusterCenters = if (major.toInt >= 2) {
-        val data: Dataset[Data] = sqlContext.read.parquet(dataPath).as[Data]
+        val data: Dataset[Data] = sparkSession.read.parquet(dataPath).as[Data]
         data.collect().sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
       } else {
         // Loads KMeansModel stored with the old format used by Spark 1.6 and earlier.
-        sqlContext.read.parquet(dataPath).as[OldData].head().clusterCenters
+        sparkSession.read.parquet(dataPath).as[OldData].head().clusterCenters
       }
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
       DefaultParamsReader.getAndSetParams(model, metadata)
@@ -261,7 +262,7 @@ class KMeans @Since("1.5.0") (
     k -> 2,
     maxIter -> 20,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
-    initSteps -> 5,
+    initSteps -> 2,
     tol -> 1e-4)
 
   @Since("1.5.0")
@@ -304,6 +305,7 @@ class KMeans @Since("1.5.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
+    transformSchema(dataset.schema, logging = true)
     val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
@@ -322,9 +324,9 @@ class KMeans @Since("1.5.0") (
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    val m = model.setSummary(summary)
-    instr.logSuccess(m)
-    m
+    model.setSummary(summary)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("1.5.0")
@@ -344,35 +346,15 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  * :: Experimental ::
  * Summary of KMeans.
  *
- * @param predictions  [[DataFrame]] produced by [[KMeansModel.transform()]]
- * @param predictionCol  Name for column of predicted clusters in `predictions`
- * @param featuresCol  Name for column of features in `predictions`
- * @param k  Number of clusters
+ * @param predictions  [[DataFrame]] produced by [[KMeansModel.transform()]].
+ * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param featuresCol  Name for column of features in `predictions`.
+ * @param k  Number of clusters.
  */
 @Since("2.0.0")
 @Experimental
 class KMeansSummary private[clustering] (
-    @Since("2.0.0") @transient val predictions: DataFrame,
-    @Since("2.0.0") val predictionCol: String,
-    @Since("2.0.0") val featuresCol: String,
-    @Since("2.0.0") val k: Int) extends Serializable {
-
-  /**
-   * Cluster centers of the transformed data.
-   */
-  @Since("2.0.0")
-  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
-
-  /**
-   * Size of (number of data points in) each cluster.
-   */
-  @Since("2.0.0")
-  lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
-      case Row(cluster: Int, count: Long) => sizes(cluster) = count
-    }
-    sizes
-  }
-
-}
+    predictions: DataFrame,
+    predictionCol: String,
+    featuresCol: String,
+    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)

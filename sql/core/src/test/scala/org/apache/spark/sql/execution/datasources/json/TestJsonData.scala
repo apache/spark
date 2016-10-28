@@ -222,6 +222,12 @@ private[json] trait TestJsonData {
     spark.sparkContext.parallelize(
       s"""{"a": 1${"0" * 38}, "b": 92233720368547758070}""" :: Nil)
 
+  def datesRecords: RDD[String] =
+    spark.sparkContext.parallelize(
+      """{"date": "26/08/2015 18:00"}""" ::
+      """{"date": "27/10/2014 18:30"}""" ::
+      """{"date": "28/01/2016 20:00"}""" :: Nil)
+
   lazy val singleRow: RDD[String] = spark.sparkContext.parallelize("""{"a":123}""" :: Nil)
 
   def empty: RDD[String] = spark.sparkContext.parallelize(Seq[String]())

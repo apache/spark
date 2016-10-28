@@ -196,9 +196,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the regularization parameter for L2 regularization.
    * The regularization term is
-   * {{{
-   *   0.5 * regParam * L2norm(coefficients)^2
-   * }}}
+   * <p><blockquote>
+   *    $$
+   *    0.5 * regParam * L2norm(coefficients)^2
+   *    $$
+   * </blockquote></p>
    * Default is 0.0.
    *
    * @group setParam
@@ -260,7 +262,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
     if (familyObj == Gaussian && linkObj == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
-      val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
+      val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
       val wlsModel = optimizer.fit(instances)
       val model = copyValues(
@@ -335,7 +337,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         Instance(eta, instance.weight, instance.features)
       }
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
-      val initialModel = new WeightedLeastSquares(fitIntercept, regParam,
+      val initialModel = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
         .fit(newInstances)
       initialModel
@@ -376,7 +378,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     def deviance(y: Double, mu: Double, weight: Double): Double
 
     /**
-     * Akaike's 'An Information Criterion'(AIC) value of the family for a given dataset.
+     * Akaike Information Criterion (AIC) value of the family for a given dataset.
      *
      * @param predictions an RDD of (y, mu, weight) of instances in evaluation dataset
      * @param deviance the deviance for the fitted model in evaluation dataset
@@ -702,13 +704,13 @@ class GeneralizedLinearRegressionModel private[ml] (
 
   import GeneralizedLinearRegression._
 
-  lazy val familyObj = Family.fromName($(family))
-  lazy val linkObj = if (isDefined(link)) {
+  private lazy val familyObj = Family.fromName($(family))
+  private lazy val linkObj = if (isDefined(link)) {
     Link.fromName($(link))
   } else {
     familyObj.defaultLink
   }
-  lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
+  private lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
   override protected def predict(features: Vector): Double = {
     val eta = predictLink(features)
@@ -788,6 +790,8 @@ class GeneralizedLinearRegressionModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter =
     new GeneralizedLinearRegressionModel.GeneralizedLinearRegressionModelWriter(this)
+
+  override val numFeatures: Int = coefficients.size
 }
 
 @Since("2.0.0")
@@ -813,7 +817,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
       // Save model data: intercept, coefficients
       val data = Data(instance.intercept, instance.coefficients)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -827,7 +831,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
+      val data = sparkSession.read.parquet(dataPath)
         .select("intercept", "coefficients").head()
       val intercept = data.getDouble(0)
       val coefficients = data.getAs[Vector](1)
@@ -988,7 +992,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
     } else {
       link.unlink(0.0)
     }
-    predictions.select(col(model.getLabelCol), w).rdd.map {
+    predictions.select(col(model.getLabelCol).cast(DoubleType), w).rdd.map {
       case Row(y: Double, weight: Double) =>
         family.deviance(y, wtdmu, weight)
     }.sum()
@@ -1000,7 +1004,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   @Since("2.0.0")
   lazy val deviance: Double = {
     val w = weightCol
-    predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
+    predictions.select(col(model.getLabelCol).cast(DoubleType), col(predictionCol), w).rdd.map {
       case Row(label: Double, pred: Double, weight: Double) =>
         family.deviance(label, pred, weight)
     }.sum()
@@ -1021,14 +1025,15 @@ class GeneralizedLinearRegressionSummary private[regression] (
     rss / degreesOfFreedom
   }
 
-  /** Akaike's "An Information Criterion"(AIC) for the fitted model. */
+  /** Akaike Information Criterion (AIC) for the fitted model. */
   @Since("2.0.0")
   lazy val aic: Double = {
     val w = weightCol
     val weightSum = predictions.select(w).agg(sum(w)).first().getDouble(0)
-    val t = predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
-      case Row(label: Double, pred: Double, weight: Double) =>
-        (label, pred, weight)
+    val t = predictions.select(
+      col(model.getLabelCol).cast(DoubleType), col(predictionCol), w).rdd.map {
+        case Row(label: Double, pred: Double, weight: Double) =>
+          (label, pred, weight)
     }
     family.aic(t, deviance, numInstances, weightSum) + 2 * rank
   }

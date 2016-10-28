@@ -44,11 +44,12 @@ try:
         .enableHiveSupport()\
         .getOrCreate()
 except py4j.protocol.Py4JError:
-    spark = SparkSession(sc)
+    spark = SparkSession.builder.getOrCreate()
 except TypeError:
-    spark = SparkSession(sc)
+    spark = SparkSession.builder.getOrCreate()
 
 sc = spark.sparkContext
+sql = spark.sql
 atexit.register(lambda: sc.stop())
 
 # for compatibility

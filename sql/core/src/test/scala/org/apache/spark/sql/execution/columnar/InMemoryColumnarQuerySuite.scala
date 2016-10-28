@@ -33,7 +33,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   setupTestData()
 
   test("simple columnar query") {
-    val plan = spark.executePlan(testData.logicalPlan).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -50,7 +50,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("projection") {
-    val plan = spark.executePlan(testData.select('value, 'key).logicalPlan).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.select('value, 'key).logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().map {
@@ -59,7 +59,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
-    val plan = spark.executePlan(testData.logicalPlan).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -202,7 +202,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     cached.count()
 
     // Make sure, the DataFrame is indeed cached.
-    assert(spark.cacheManager.lookupCachedData(cached).nonEmpty)
+    assert(spark.sharedState.cacheManager.lookupCachedData(cached).nonEmpty)
 
     // Check result.
     checkAnswer(
@@ -227,8 +227,23 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val columnTypes1 = List.fill(length1)(IntegerType)
     val columnarIterator1 = GenerateColumnAccessor.generate(columnTypes1)
 
-    val length2 = 10000
+    // SPARK-16664: the limit of janino is 8117
+    val length2 = 8117
     val columnTypes2 = List.fill(length2)(IntegerType)
     val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
   }
+
+  test("SPARK-17549: cached table size should be correctly calculated") {
+    val data = spark.sparkContext.parallelize(1 to 10, 5).toDF()
+    val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
+    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None)
+
+    // Materialize the data.
+    val expectedAnswer = data.collect()
+    checkAnswer(cached, expectedAnswer)
+
+    // Check that the right size was calculated.
+    assert(cached.batchStats.value === expectedAnswer.size * INT.defaultSize)
+  }
+
 }

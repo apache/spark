@@ -18,12 +18,11 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, LinkedHashMap}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ShuffleReadMetrics, ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
-import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -33,6 +32,7 @@ private[spark] object UIData {
     var taskTime : Long = 0
     var failedTasks : Int = 0
     var succeededTasks : Int = 0
+    var killedTasks : Int = 0
     var inputBytes : Long = 0
     var inputRecords : Long = 0
     var outputBytes : Long = 0
@@ -64,6 +64,7 @@ private[spark] object UIData {
     var numCompletedTasks: Int = 0,
     var numSkippedTasks: Int = 0,
     var numFailedTasks: Int = 0,
+    var numKilledTasks: Int = 0,
     /* Stages */
     var numActiveStages: Int = 0,
     // This needs to be a set instead of a simple count to prevent double-counting of rerun stages:
@@ -77,8 +78,10 @@ private[spark] object UIData {
     var numCompleteTasks: Int = _
     var completedIndices = new OpenHashSet[Int]()
     var numFailedTasks: Int = _
+    var numKilledTasks: Int = _
 
     var executorRunTime: Long = _
+    var executorCpuTime: Long = _
 
     var inputBytes: Long = _
     var inputRecords: Long = _
@@ -95,7 +98,7 @@ private[spark] object UIData {
     var description: Option[String] = None
 
     var accumulables = new HashMap[Long, AccumulableInfo]
-    var taskData = new HashMap[Long, TaskUIData]
+    var taskData = new LinkedHashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]
 
     def hasInput: Boolean = inputBytes > 0
@@ -136,14 +139,15 @@ private[spark] object UIData {
       metrics.map { m =>
         TaskMetricsUIData(
           executorDeserializeTime = m.executorDeserializeTime,
+          executorDeserializeCpuTime = m.executorDeserializeCpuTime,
           executorRunTime = m.executorRunTime,
+          executorCpuTime = m.executorCpuTime,
           resultSize = m.resultSize,
           jvmGCTime = m.jvmGCTime,
           resultSerializationTime = m.resultSerializationTime,
           memoryBytesSpilled = m.memoryBytesSpilled,
           diskBytesSpilled = m.diskBytesSpilled,
           peakExecutionMemory = m.peakExecutionMemory,
-          updatedBlockStatuses = m.updatedBlockStatuses.toList,
           inputMetrics = InputMetricsUIData(m.inputMetrics.bytesRead, m.inputMetrics.recordsRead),
           outputMetrics =
             OutputMetricsUIData(m.outputMetrics.bytesWritten, m.outputMetrics.recordsWritten),
@@ -177,21 +181,17 @@ private[spark] object UIData {
     }
   }
 
-  class ExecutorUIData(
-      val startTime: Long,
-      var finishTime: Option[Long] = None,
-      var finishReason: Option[String] = None)
-
   case class TaskMetricsUIData(
       executorDeserializeTime: Long,
+      executorDeserializeCpuTime: Long,
       executorRunTime: Long,
+      executorCpuTime: Long,
       resultSize: Long,
       jvmGCTime: Long,
       resultSerializationTime: Long,
       memoryBytesSpilled: Long,
       diskBytesSpilled: Long,
       peakExecutionMemory: Long,
-      updatedBlockStatuses: Seq[(BlockId, BlockStatus)],
       inputMetrics: InputMetricsUIData,
       outputMetrics: OutputMetricsUIData,
       shuffleReadMetrics: ShuffleReadMetricsUIData,

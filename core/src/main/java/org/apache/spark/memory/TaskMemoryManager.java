@@ -53,7 +53,7 @@ import org.apache.spark.util.Utils;
  */
 public class TaskMemoryManager {
 
-  private final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
 
   /** The number of bits used to address the page table. */
   private static final int PAGE_NUMBER_BITS = 13;
@@ -182,7 +182,7 @@ public class TaskMemoryManager {
       }
 
       consumers.add(consumer);
-      logger.debug("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
+      logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
       return got;
     }
   }

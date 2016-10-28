@@ -22,6 +22,7 @@ individual modules.
 """
 import os
 import sys
+import subprocess
 import pydoc
 import shutil
 import tempfile
@@ -48,7 +49,7 @@ else:
 from pyspark.sql import SparkSession, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
-from pyspark.tests import ReusedPySparkTestCase
+from pyspark.tests import ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
@@ -176,6 +177,15 @@ class DataTypeTests(unittest.TestCase):
     def test_datetype_equal_zero(self):
         dt = DateType()
         self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
+
+    # regression test for SPARK-17035
+    def test_timestamp_microsecond(self):
+        tst = TimestampType()
+        self.assertEqual(tst.toInternal(datetime.datetime.max) % 1000000, 999999)
+
+    def test_empty_row(self):
+        row = Row()
+        self.assertEqual(len(row), 0)
 
 
 class SQLTests(ReusedPySparkTestCase):
@@ -318,6 +328,19 @@ class SQLTests(ReusedPySparkTestCase):
         [row] = self.spark.sql("SELECT double(add(1, 2)), add(double(2), 1)").collect()
         self.assertEqual(tuple(row), (6, 5))
 
+    def test_udf_in_filter_on_top_of_outer_join(self):
+        from pyspark.sql.functions import udf
+        left = self.spark.createDataFrame([Row(a=1)])
+        right = self.spark.createDataFrame([Row(a=1)])
+        df = left.join(right, on='a', how='left_outer')
+        df = df.withColumn('b', udf(lambda x: 'x')(df.a))
+        self.assertEqual(df.filter('b = "x"').collect(), [Row(a=1, b='x')])
+
+    def test_udf_without_arguments(self):
+        self.spark.catalog.registerFunction("foo", lambda: "bar")
+        [row] = self.spark.sql("SELECT foo()").collect()
+        self.assertEqual(row[0], "bar")
+
     def test_udf_with_array_type(self):
         d = [Row(l=list(range(3)), d={"key": list(range(5))})]
         rdd = self.sc.parallelize(d)
@@ -339,12 +362,35 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
-        from pyspark.sql.functions import udf, col
+        from pyspark.sql.functions import udf, col, sum
         from pyspark.sql.types import BooleanType
 
         my_filter = udf(lambda a: a == 1, BooleanType())
         sel = df.select(col("key")).distinct().filter(my_filter(col("key")))
         self.assertEqual(sel.collect(), [Row(key=1)])
+
+        my_copy = udf(lambda x: x, IntegerType())
+        my_add = udf(lambda a, b: int(a + b), IntegerType())
+        my_strlen = udf(lambda x: len(x), IntegerType())
+        sel = df.groupBy(my_copy(col("key")).alias("k"))\
+            .agg(sum(my_strlen(col("value"))).alias("s"))\
+            .select(my_add(col("k"), col("s")).alias("t"))
+        self.assertEqual(sel.collect(), [Row(t=4), Row(t=3)])
+
+    def test_udf_in_generate(self):
+        from pyspark.sql.functions import udf, explode
+        df = self.spark.range(5)
+        f = udf(lambda x: list(range(x)), ArrayType(LongType()))
+        row = df.select(explode(f(*df))).groupBy().sum().first()
+        self.assertEqual(row[0], 10)
+
+    def test_udf_with_order_by_and_limit(self):
+        from pyspark.sql.functions import udf
+        my_copy = udf(lambda x: x, IntegerType())
+        df = self.spark.range(10).orderBy("id")
+        res = df.select(df.id, my_copy(df.id).alias("copy")).limit(1)
+        res.explain(True)
+        self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -385,6 +431,22 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x, b=None))
         df3 = self.spark.createDataFrame(rdd, df.schema)
         self.assertEqual(10, df3.count())
+
+    def test_apply_schema_to_dict_and_rows(self):
+        schema = StructType().add("b", StringType()).add("a", IntegerType())
+        input = [{"a": 1}, {"b": "coffee"}]
+        rdd = self.sc.parallelize(input)
+        for verify in [False, True]:
+            df = self.spark.createDataFrame(input, schema, verifySchema=verify)
+            df2 = self.spark.createDataFrame(rdd, schema, verifySchema=verify)
+            self.assertEqual(df.schema, df2.schema)
+
+            rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x, b=None))
+            df3 = self.spark.createDataFrame(rdd, schema, verifySchema=verify)
+            self.assertEqual(10, df3.count())
+            input = [Row(a=x, b=str(x)) for x in range(10)]
+            df4 = self.spark.createDataFrame(input, schema, verifySchema=verify)
+            self.assertEqual(10, df4.count())
 
     def test_create_dataframe_schema_mismatch(self):
         input = [Row(a=1)]
@@ -528,7 +590,7 @@ class SQLTests(ReusedPySparkTestCase):
         def check_datatype(datatype):
             pickled = pickle.loads(pickle.dumps(datatype))
             assert datatype == pickled
-            scala_datatype = self.spark._wrapped._ssql_ctx.parseDataType(datatype.json())
+            scala_datatype = self.spark._jsparkSession.parseDataType(datatype.json())
             python_datatype = _parse_datatype_json_string(scala_datatype.json())
             assert datatype == python_datatype
 
@@ -549,6 +611,52 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(_infer_type(p), PythonOnlyUDT())
         _verify_type(PythonOnlyPoint(1.0, 2.0), PythonOnlyUDT())
         self.assertRaises(ValueError, lambda: _verify_type([1.0, 2.0], PythonOnlyUDT()))
+
+    def test_simple_udt_in_df(self):
+        schema = StructType().add("key", LongType()).add("val", PythonOnlyUDT())
+        df = self.spark.createDataFrame(
+            [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
+            schema=schema)
+        df.show()
+
+    def test_nested_udt_in_df(self):
+        schema = StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT()))
+        df = self.spark.createDataFrame(
+            [(i % 3, [PythonOnlyPoint(float(i), float(i))]) for i in range(10)],
+            schema=schema)
+        df.collect()
+
+        schema = StructType().add("key", LongType()).add("val",
+                                                         MapType(LongType(), PythonOnlyUDT()))
+        df = self.spark.createDataFrame(
+            [(i % 3, {i % 3: PythonOnlyPoint(float(i + 1), float(i + 1))}) for i in range(10)],
+            schema=schema)
+        df.collect()
+
+    def test_complex_nested_udt_in_df(self):
+        from pyspark.sql.functions import udf
+
+        schema = StructType().add("key", LongType()).add("val", PythonOnlyUDT())
+        df = self.spark.createDataFrame(
+            [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
+            schema=schema)
+        df.collect()
+
+        gd = df.groupby("key").agg({"val": "collect_list"})
+        gd.collect()
+        udf = udf(lambda k, v: [(k, v[0])], ArrayType(df.schema))
+        gd.select(udf(*gd)).collect()
+
+    def test_udt_with_none(self):
+        df = self.spark.range(0, 10, 1, 1)
+
+        def myudf(x):
+            if x > 0:
+                return PythonOnlyPoint(float(x), float(x))
+
+        self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
+        rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
+        self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
 
     def test_infer_schema_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
@@ -892,9 +1000,9 @@ class SQLTests(ReusedPySparkTestCase):
         shutil.rmtree(tmpPath)
 
     def test_stream_trigger_takes_keyword_args(self):
-        df = self.spark.read.format('text').stream('python/test_support/sql/streaming')
+        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
         try:
-            df.write.trigger('5 seconds')
+            df.writeStream.trigger('5 seconds')
             self.fail("Should have thrown an exception")
         except TypeError:
             # should throw error
@@ -902,48 +1010,51 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_stream_read_options(self):
         schema = StructType([StructField("data", StringType(), False)])
-        df = self.spark.read.format('text').option('path', 'python/test_support/sql/streaming')\
-            .schema(schema).stream()
+        df = self.spark.readStream\
+            .format('text')\
+            .option('path', 'python/test_support/sql/streaming')\
+            .schema(schema)\
+            .load()
         self.assertTrue(df.isStreaming)
         self.assertEqual(df.schema.simpleString(), "struct<data:string>")
 
     def test_stream_read_options_overwrite(self):
         bad_schema = StructType([StructField("test", IntegerType(), False)])
         schema = StructType([StructField("data", StringType(), False)])
-        df = self.spark.read.format('csv').option('path', 'python/test_support/sql/fake') \
-            .schema(bad_schema).stream(path='python/test_support/sql/streaming',
-                                       schema=schema, format='text')
+        df = self.spark.readStream.format('csv').option('path', 'python/test_support/sql/fake') \
+            .schema(bad_schema)\
+            .load(path='python/test_support/sql/streaming', schema=schema, format='text')
         self.assertTrue(df.isStreaming)
         self.assertEqual(df.schema.simpleString(), "struct<data:string>")
 
     def test_stream_save_options(self):
-        df = self.spark.read.format('text').stream('python/test_support/sql/streaming')
-        for cq in self.spark._wrapped.streams.active:
-            cq.stop()
+        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+        for q in self.spark._wrapped.streams.active:
+            q.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         self.assertTrue(df.isStreaming)
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
-        cq = df.write.option('checkpointLocation', chk).queryName('this_query') \
-            .format('parquet').option('path', out).startStream()
+        q = df.writeStream.option('checkpointLocation', chk).queryName('this_query') \
+            .format('parquet').outputMode('append').option('path', out).start()
         try:
-            self.assertEqual(cq.name, 'this_query')
-            self.assertTrue(cq.isActive)
-            cq.processAllAvailable()
+            self.assertEqual(q.name, 'this_query')
+            self.assertTrue(q.isActive)
+            q.processAllAvailable()
             output_files = []
             for _, _, files in os.walk(out):
                 output_files.extend([f for f in files if not f.startswith('.')])
             self.assertTrue(len(output_files) > 0)
             self.assertTrue(len(os.listdir(chk)) > 0)
         finally:
-            cq.stop()
+            q.stop()
             shutil.rmtree(tmpPath)
 
     def test_stream_save_options_overwrite(self):
-        df = self.spark.read.format('text').stream('python/test_support/sql/streaming')
-        for cq in self.spark._wrapped.streams.active:
-            cq.stop()
+        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+        for q in self.spark._wrapped.streams.active:
+            q.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         self.assertTrue(df.isStreaming)
@@ -951,13 +1062,15 @@ class SQLTests(ReusedPySparkTestCase):
         chk = os.path.join(tmpPath, 'chk')
         fake1 = os.path.join(tmpPath, 'fake1')
         fake2 = os.path.join(tmpPath, 'fake2')
-        cq = df.write.option('checkpointLocation', fake1).format('memory').option('path', fake2) \
-            .queryName('fake_query').startStream(path=out, format='parquet', queryName='this_query',
-                                                 checkpointLocation=chk)
+        q = df.writeStream.option('checkpointLocation', fake1)\
+            .format('memory').option('path', fake2) \
+            .queryName('fake_query').outputMode('append') \
+            .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
+
         try:
-            self.assertEqual(cq.name, 'this_query')
-            self.assertTrue(cq.isActive)
-            cq.processAllAvailable()
+            self.assertEqual(q.name, 'this_query')
+            self.assertTrue(q.isActive)
+            q.processAllAvailable()
             output_files = []
             for _, _, files in os.walk(out):
                 output_files.extend([f for f in files if not f.startswith('.')])
@@ -966,50 +1079,50 @@ class SQLTests(ReusedPySparkTestCase):
             self.assertFalse(os.path.isdir(fake1))  # should not have been created
             self.assertFalse(os.path.isdir(fake2))  # should not have been created
         finally:
-            cq.stop()
+            q.stop()
             shutil.rmtree(tmpPath)
 
     def test_stream_await_termination(self):
-        df = self.spark.read.format('text').stream('python/test_support/sql/streaming')
-        for cq in self.spark._wrapped.streams.active:
-            cq.stop()
+        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+        for q in self.spark._wrapped.streams.active:
+            q.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         self.assertTrue(df.isStreaming)
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
-        cq = df.write.startStream(path=out, format='parquet', queryName='this_query',
-                                  checkpointLocation=chk)
+        q = df.writeStream\
+            .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
-            self.assertTrue(cq.isActive)
+            self.assertTrue(q.isActive)
             try:
-                cq.awaitTermination("hello")
+                q.awaitTermination("hello")
                 self.fail("Expected a value exception")
             except ValueError:
                 pass
             now = time.time()
             # test should take at least 2 seconds
-            res = cq.awaitTermination(2.6)
+            res = q.awaitTermination(2.6)
             duration = time.time() - now
             self.assertTrue(duration >= 2)
             self.assertFalse(res)
         finally:
-            cq.stop()
+            q.stop()
             shutil.rmtree(tmpPath)
 
     def test_query_manager_await_termination(self):
-        df = self.spark.read.format('text').stream('python/test_support/sql/streaming')
-        for cq in self.spark._wrapped.streams.active:
-            cq.stop()
+        df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+        for q in self.spark._wrapped.streams.active:
+            q.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         self.assertTrue(df.isStreaming)
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
-        cq = df.write.startStream(path=out, format='parquet', queryName='this_query',
-                                  checkpointLocation=chk)
+        q = df.writeStream\
+            .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
-            self.assertTrue(cq.isActive)
+            self.assertTrue(q.isActive)
             try:
                 self.spark._wrapped.streams.awaitAnyTermination("hello")
                 self.fail("Expected a value exception")
@@ -1022,7 +1135,7 @@ class SQLTests(ReusedPySparkTestCase):
             self.assertTrue(duration >= 2)
             self.assertFalse(res)
         finally:
-            cq.stop()
+            q.stop()
             shutil.rmtree(tmpPath)
 
     def test_help_command(self):
@@ -1353,7 +1466,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1, plan1.toString().count("BroadcastHashJoin"))
 
         # no join key -- should not be a broadcast join
-        plan2 = df1.join(broadcast(df2))._jdf.queryExecution().executedPlan()
+        plan2 = df1.crossJoin(broadcast(df2))._jdf.queryExecution().executedPlan()
         self.assertEqual(0, plan2.toString().count("BroadcastHashJoin"))
 
         # planner should not crash without a join
@@ -1394,6 +1507,25 @@ class SQLTests(ReusedPySparkTestCase):
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+    # Regression test for invalid join methods when on is None, Spark-14761
+    def test_invalid_join_method(self):
+        df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
+        df2 = self.spark.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
+        self.assertRaises(IllegalArgumentException, lambda: df1.join(df2, how="invalid-join-type"))
+
+    # Cartesian products require cross join syntax
+    def test_require_cross(self):
+        from pyspark.sql.functions import broadcast
+
+        df1 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
+        df2 = self.spark.createDataFrame([(1, "1")], ("key", "value"))
+
+        # joins without conditions require cross join syntax
+        self.assertRaises(AnalysisException, lambda: df1.join(df2).collect())
+
+        # works with crossJoin
+        self.assertEqual(1, df1.crossJoin(df2).count())
 
     def test_conf(self):
         spark = self.spark
@@ -1589,6 +1721,60 @@ class SQLTests(ReusedPySparkTestCase):
             "does_not_exist",
             lambda: spark.catalog.uncacheTable("does_not_exist"))
 
+    def test_read_text_file_list(self):
+        df = self.spark.read.text(['python/test_support/sql/text-test.txt',
+                                   'python/test_support/sql/text-test.txt'])
+        count = df.count()
+        self.assertEquals(count, 4)
+
+    def test_BinaryType_serialization(self):
+        # Pyrolite version <= 4.9 could not serialize BinaryType with Python3 SPARK-17808
+        schema = StructType([StructField('mybytes', BinaryType())])
+        data = [[bytearray(b'here is my data')],
+                [bytearray(b'and here is some more')]]
+        df = self.spark.createDataFrame(data, schema=schema)
+        df.collect()
+
+
+class HiveSparkSubmitTests(SparkSubmitTests):
+
+    def test_hivecontext(self):
+        # This test checks that HiveContext is using Hive metastore (SPARK-16224).
+        # It sets a metastore url and checks if there is a derby dir created by
+        # Hive metastore. If this derby dir exists, HiveContext is using
+        # Hive metastore.
+        metastore_path = os.path.join(tempfile.mkdtemp(), "spark16224_metastore_db")
+        metastore_URL = "jdbc:derby:;databaseName=" + metastore_path + ";create=true"
+        hive_site_dir = os.path.join(self.programDir, "conf")
+        hive_site_file = self.createTempFile("hive-site.xml", ("""
+            |<configuration>
+            |  <property>
+            |  <name>javax.jdo.option.ConnectionURL</name>
+            |  <value>%s</value>
+            |  </property>
+            |</configuration>
+            """ % metastore_URL).lstrip(), "conf")
+        script = self.createTempFile("test.py", """
+            |import os
+            |
+            |from pyspark.conf import SparkConf
+            |from pyspark.context import SparkContext
+            |from pyspark.sql import HiveContext
+            |
+            |conf = SparkConf()
+            |sc = SparkContext(conf=conf)
+            |hive_context = HiveContext(sc)
+            |print(hive_context.sql("show databases").collect())
+            """)
+        proc = subprocess.Popen(
+            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]",
+             "--driver-class-path", hive_site_dir, script],
+            stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("default", out.decode('utf-8'))
+        self.assertTrue(os.path.exists(metastore_path))
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
@@ -1700,6 +1886,38 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
 
+    def test_window_functions_cumulative_sum(self):
+        df = self.spark.createDataFrame([("one", 1), ("two", 2)], ["key", "value"])
+        from pyspark.sql import functions as F
+
+        # Test cumulative sum
+        sel = df.select(
+            df.key,
+            F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding, 0)))
+        rs = sorted(sel.collect())
+        expected = [("one", 1), ("two", 3)]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+        # Test boundary values less than JVM's Long.MinValue and make sure we don't overflow
+        sel = df.select(
+            df.key,
+            F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding - 1, 0)))
+        rs = sorted(sel.collect())
+        expected = [("one", 1), ("two", 3)]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
+        # Test boundary values greater than JVM's Long.MaxValue and make sure we don't overflow
+        frame_end = Window.unboundedFollowing + 1
+        sel = df.select(
+            df.key,
+            F.sum(df.value).over(Window.rowsBetween(Window.currentRow, frame_end)))
+        rs = sorted(sel.collect())
+        expected = [("one", 3), ("two", 2)]
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
+
     def test_collect_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         from pyspark.sql import functions
@@ -1716,6 +1934,24 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         self.assertEqual(
             sorted(df.select(functions.collect_list(df.value).alias('r')).collect()[0].r),
             ["1", "2", "2", "2"])
+
+    def test_limit_and_take(self):
+        df = self.spark.range(1, 1000, numPartitions=10)
+
+        def assert_runs_only_one_job_stage_and_task(job_group_name, f):
+            tracker = self.sc.statusTracker()
+            self.sc.setJobGroup(job_group_name, description="")
+            f()
+            jobs = tracker.getJobIdsForGroup(job_group_name)
+            self.assertEqual(1, len(jobs))
+            stages = tracker.getJobInfo(jobs[0]).stageIds
+            self.assertEqual(1, len(stages))
+            self.assertEqual(1, tracker.getStageInfo(stages[0]).numTasks)
+
+        # Regression test for SPARK-10731: take should delegate to Scala implementation
+        assert_runs_only_one_job_stage_and_task("take", lambda: df.take(1))
+        # Regression test for SPARK-17514: limit(n).collect() should the perform same as take(n)
+        assert_runs_only_one_job_stage_and_task("collect_limit", lambda: df.limit(1).collect())
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ import scala.math.exp
 
 import breeze.linalg.{DenseVector, Vector}
 
-import org.apache.spark._
+import org.apache.spark.sql.SparkSession
 
 /**
  * Logistic regression based classification.
@@ -63,10 +63,13 @@ object SparkLR {
 
     showWarning()
 
-    val sparkConf = new SparkConf().setAppName("SparkLR")
-    val sc = new SparkContext(sparkConf)
+    val spark = SparkSession
+      .builder
+      .appName("SparkLR")
+      .getOrCreate()
+
     val numSlices = if (args.length > 0) args(0).toInt else 2
-    val points = sc.parallelize(generateData, numSlices).cache()
+    val points = spark.sparkContext.parallelize(generateData, numSlices).cache()
 
     // Initialize w to a random value
     var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
@@ -82,7 +85,7 @@ object SparkLR {
 
     println("Final w: " + w)
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

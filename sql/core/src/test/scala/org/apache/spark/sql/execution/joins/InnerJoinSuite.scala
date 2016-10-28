@@ -109,8 +109,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan,
         side: BuildSide) = {
-      val shuffledHashJoin =
-        joins.ShuffledHashJoinExec(leftKeys, rightKeys, Inner, side, None, leftPlan, rightPlan)
+      val shuffledHashJoin = joins.ShuffledHashJoinExec(leftKeys, rightKeys, Inner,
+        side, None, leftPlan, rightPlan)
       val filteredJoin =
         boundCondition.map(FilterExec(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
       EnsureRequirements(spark.sessionState.conf).apply(filteredJoin)
@@ -122,8 +122,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         boundCondition: Option[Expression],
         leftPlan: SparkPlan,
         rightPlan: SparkPlan) = {
-      val sortMergeJoin =
-        joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, boundCondition, leftPlan, rightPlan)
+      val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, boundCondition,
+        leftPlan, rightPlan)
       EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
 
@@ -187,7 +187,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     }
 
     test(s"$testName using CartesianProduct") {
-      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+        SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           CartesianProductExec(left, right, Some(condition())),
           expectedAnswer.map(Row.fromTuple),
@@ -269,5 +270,20 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         (2, null, 2, null)
       )
     )
+  }
+
+  {
+    def df: DataFrame = spark.range(3).selectExpr("struct(id, id) as key", "id as value")
+    lazy val left = df.selectExpr("key", "concat('L', value) as value").alias("left")
+    lazy val right = df.selectExpr("key", "concat('R', value) as value").alias("right")
+    testInnerJoin(
+      "SPARK-15822 - test structs as keys",
+      left,
+      right,
+      () => (left.col("key") === right.col("key")).expr,
+      Seq(
+        (Row(0, 0), "L0", Row(0, 0), "R0"),
+        (Row(1, 1), "L1", Row(1, 1), "R1"),
+        (Row(2, 2), "L2", Row(2, 2), "R2")))
   }
 }

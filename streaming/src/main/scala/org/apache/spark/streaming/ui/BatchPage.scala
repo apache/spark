@@ -86,7 +86,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
 
   /**
    * Generate a row for a Spark Job. Because duplicated output op infos needs to be collapsed into
-   * one cell, we use "rowspan" for the first row of a output op.
+   * one cell, we use "rowspan" for the first row of an output op.
    */
   private def generateNormalJobRow(
       outputOpData: OutputOperationUIData,
@@ -146,6 +146,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             completed = sparkJob.numCompletedTasks,
             failed = sparkJob.numFailedTasks,
             skipped = sparkJob.numSkippedTasks,
+            killed = sparkJob.numKilledTasks,
             total = sparkJob.numTasks - sparkJob.numSkippedTasks)
         }
       </td>

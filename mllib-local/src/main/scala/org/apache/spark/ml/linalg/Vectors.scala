@@ -66,7 +66,7 @@ sealed trait Vector extends Serializable {
 
   /**
    * Returns a hash code value for the vector. The hash code is based on its size and its first 128
-   * nonzero entries, using a hash algorithm similar to [[java.util.Arrays.hashCode]].
+   * nonzero entries, using a hash algorithm similar to `java.util.Arrays.hashCode`.
    */
   override def hashCode(): Int = {
     // This is a reference implementation. It calls return in foreachActive, which is slow.
@@ -92,14 +92,14 @@ sealed trait Vector extends Serializable {
   /**
    * Converts the instance to a breeze vector.
    */
-  private[spark] def toBreeze: BV[Double]
+  private[spark] def asBreeze: BV[Double]
 
   /**
    * Gets the value of the ith element.
    * @param i index
    */
   @Since("2.0.0")
-  def apply(i: Int): Double = toBreeze(i)
+  def apply(i: Int): Double = asBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
@@ -208,17 +208,7 @@ object Vectors {
    */
   @Since("2.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
-    require(size > 0, "The size of the requested sparse vector must be greater than 0.")
-
     val (indices, values) = elements.sortBy(_._1).unzip
-    var prev = -1
-    indices.foreach { i =>
-      require(prev < i, s"Found duplicate indices: $i.")
-      prev = i
-    }
-    require(prev < size, s"You may not write an element to index $prev because the declared " +
-      s"size of your vector is $size")
-
     new SparseVector(size, indices.toArray, values.toArray)
   }
 
@@ -453,7 +443,7 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
 
   override def toArray: Array[Double] = values
 
-  private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
+  private[spark] override def asBreeze: BV[Double] = new BDV[Double](values)
 
   override def apply(i: Int): Double = values(i)
 
@@ -548,7 +538,7 @@ object DenseVector {
 }
 
 /**
- * A sparse vector represented by an index array and an value array.
+ * A sparse vector represented by an index array and a value array.
  *
  * @param size size of the vector.
  * @param indices index array, assume to be strictly increasing.
@@ -560,11 +550,25 @@ class SparseVector @Since("2.0.0") (
     @Since("2.0.0") val indices: Array[Int],
     @Since("2.0.0") val values: Array[Double]) extends Vector {
 
-  require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
-    s" indices match the dimension of the values. You provided ${indices.length} indices and " +
-    s" ${values.length} values.")
-  require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
-    s"which exceeds the specified vector size ${size}.")
+  // validate the data
+  {
+    require(size >= 0, "The size of the requested sparse vector must be greater than 0.")
+    require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
+      s" indices match the dimension of the values. You provided ${indices.length} indices and " +
+      s" ${values.length} values.")
+    require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
+      s"which exceeds the specified vector size ${size}.")
+
+    if (indices.nonEmpty) {
+      require(indices(0) >= 0, s"Found negative index: ${indices(0)}.")
+    }
+    var prev = -1
+    indices.foreach { i =>
+      require(prev < i, s"Index $i follows $prev and is not strictly increasing")
+      prev = i
+    }
+    require(prev < size, s"Index $prev out of bounds for vector of size $size")
+  }
 
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
@@ -584,7 +588,7 @@ class SparseVector @Since("2.0.0") (
     new SparseVector(size, indices.clone(), values.clone())
   }
 
-  private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
   override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0

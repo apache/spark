@@ -18,10 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
-import scala.util.Try
 
-import org.apache.hadoop.fs.{FileStatus, LocatedFileStatus, Path}
-import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
+import org.apache.hadoop.fs._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.StructType
@@ -31,23 +29,25 @@ import org.apache.spark.sql.types.StructType
  * A [[FileCatalog]] that generates the list of files to process by recursively listing all the
  * files present in `paths`.
  *
+ * @param rootPaths the list of root table paths to scan
  * @param parameters as set of options to control discovery
- * @param paths a list of paths to scan
  * @param partitionSchema an optional partition schema that will be use to provide types for the
  *                        discovered partitions
  */
 class ListingFileCatalog(
     sparkSession: SparkSession,
-    override val paths: Seq[Path],
+    override val rootPaths: Seq[Path],
     parameters: Map[String, String],
-    partitionSchema: Option[StructType])
-  extends PartitioningAwareFileCatalog(sparkSession, parameters, partitionSchema) {
+    partitionSchema: Option[StructType],
+    fileStatusCache: FileStatusCache = NoopCache)
+  extends PartitioningAwareFileCatalog(
+    sparkSession, parameters, partitionSchema, fileStatusCache) {
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
-  refresh()
+  refresh0()
 
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
@@ -66,64 +66,22 @@ class ListingFileCatalog(
   }
 
   override def refresh(): Unit = {
-    val files = listLeafFiles(paths)
+    refresh0()
+    fileStatusCache.invalidateAll()
+  }
+
+  private def refresh0(): Unit = {
+    val files = listLeafFiles(rootPaths)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
     cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
     cachedPartitionSpec = null
   }
 
-  protected def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
-    } else {
-      // Dummy jobconf to get to the pathFilter defined in configuration
-      val jobConf = new JobConf(hadoopConf, this.getClass)
-      val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-      val statuses: Seq[FileStatus] = paths.flatMap { path =>
-        val fs = path.getFileSystem(hadoopConf)
-        logInfo(s"Listing $path on driver")
-
-        val statuses = {
-          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
-          if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
-        }
-
-        statuses.map {
-          case f: LocatedFileStatus => f
-
-          // NOTE:
-          //
-          // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
-          //   operations, calling `getFileBlockLocations` does no harm here since these file system
-          //   implementations don't actually issue RPC for this method.
-          //
-          // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should a
-          //   a big deal since we always use to `listLeafFilesInParallel` when the number of paths
-          //   exceeds threshold.
-          case f =>
-            HadoopFsRelation.createLocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
-        }
-      }.filterNot { status =>
-        val name = status.getPath.getName
-        HadoopFsRelation.shouldFilterOut(name)
-      }
-
-      val (dirs, files) = statuses.partition(_.isDirectory)
-
-      // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
-      if (dirs.isEmpty) {
-        mutable.LinkedHashSet(files: _*)
-      } else {
-        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath))
-      }
-    }
-  }
-
   override def equals(other: Any): Boolean = other match {
-    case hdfs: ListingFileCatalog => paths.toSet == hdfs.paths.toSet
+    case hdfs: ListingFileCatalog => rootPaths.toSet == hdfs.rootPaths.toSet
     case _ => false
   }
 
-  override def hashCode(): Int = paths.toSet.hashCode()
+  override def hashCode(): Int = rootPaths.toSet.hashCode()
 }

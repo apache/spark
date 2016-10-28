@@ -116,3 +116,17 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
   override def run(sparkSession: SparkSession): Seq[Row] = runFunc(sparkSession)
 
 }
+
+/**
+ * This command is for resetting SQLConf to the default values. Command that runs
+ * {{{
+ *   reset;
+ * }}}
+ */
+case object ResetCommand extends RunnableCommand with Logging {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.conf.clear()
+    Seq.empty[Row]
+  }
+}

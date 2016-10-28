@@ -40,7 +40,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
+import org.apache.spark.executor.OutputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
@@ -83,7 +83,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         throw new SparkException("Cannot use map-side combining with array keys.")
       }
       if (partitioner.isInstanceOf[HashPartitioner]) {
-        throw new SparkException("Default partitioner cannot partition array keys.")
+        throw new SparkException("HashPartitioner cannot partition array keys.")
       }
     }
     val aggregator = new Aggregator[K, V, C](
@@ -530,7 +530,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
     if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
-      throw new SparkException("Default partitioner cannot partition array keys.")
+      throw new SparkException("HashPartitioner cannot partition array keys.")
     }
     if (self.partitioner == Some(partitioner)) {
       self
@@ -784,7 +784,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = self.withScope {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
-      throw new SparkException("Default partitioner cannot partition array keys.")
+      throw new SparkException("HashPartitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
     cg.mapValues { case Array(vs, w1s, w2s, w3s) =>
@@ -802,7 +802,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W]))] = self.withScope {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
-      throw new SparkException("Default partitioner cannot partition array keys.")
+      throw new SparkException("HashPartitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
     cg.mapValues { case Array(vs, w1s) =>
@@ -817,7 +817,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = self.withScope {
     if (partitioner.isInstanceOf[HashPartitioner] && keyClass.isArray) {
-      throw new SparkException("Default partitioner cannot partition array keys.")
+      throw new SparkException("HashPartitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
     cg.mapValues { case Array(vs, w1s, w2s) =>
@@ -1054,7 +1054,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val warningMessage =
         s"$outputCommitterClass may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
           "committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }
@@ -1079,7 +1079,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
     val job = NewAPIHadoopJob.getInstance(hadoopConf)
-    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
+    val formatter = new SimpleDateFormat("yyyyMMddHHmmss")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
     val jobConfiguration = job.getConfiguration
@@ -1142,7 +1142,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val warningMessage =
         s"$outputCommitterClass may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
           "committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }

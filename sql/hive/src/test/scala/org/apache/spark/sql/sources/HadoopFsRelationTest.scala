@@ -29,7 +29,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.datasources.{FileScanRDD, LocalityTestFileSystem}
+import org.apache.spark.sql.execution.datasources.{FileScanRDD, HadoopFsRelation, LocalityTestFileSystem, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -92,7 +92,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
     // Self-join
     df.createOrReplaceTempView("t")
-    withTempTable("t") {
+    withTempView("t") {
       checkAnswer(
         sql(
           """SELECT l.a, r.b, l.p1, r.p2
@@ -337,9 +337,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
-
-    withTempTable("t") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
       intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
       }
@@ -347,9 +346,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
-
-    withTempTable("t") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
       assert(spark.table("t").collect().isEmpty)
     }
@@ -461,7 +459,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
     Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
-    withTempTable("t") {
+    withTempView("t") {
       intercept[AnalysisException] {
         partitionedTestDF.write
           .format(dataSourceName)
@@ -476,7 +474,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   test("saveAsTable()/load() - partitioned table - Ignore") {
     Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
-    withTempTable("t") {
+    withTempView("t") {
       partitionedTestDF.write
         .format(dataSourceName)
         .mode(SaveMode.Ignore)
@@ -722,7 +720,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         'p3.cast(FloatType).as('pf1),
         'f)
 
-      withTempTable("t") {
+      withTempView("t") {
         input
           .write
           .format(dataSourceName)
@@ -862,8 +860,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           .load(path)
 
         val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
-          case scan: DataSourceScanExec if scan.rdd.isInstanceOf[FileScanRDD] =>
-            scan.rdd.asInstanceOf[FileScanRDD]
+          case scan: DataSourceScanExec if scan.inputRDDs().head.isInstanceOf[FileScanRDD] =>
+            scan.inputRDDs().head.asInstanceOf[FileScanRDD]
         }
 
         val partitions = fileScanRDD.partitions
@@ -876,26 +874,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
         checkLocality()
-      }
-    }
-  }
-
-  test("SPARK-10216: Avoid empty files during overwriting with group by query") {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
-      withTempPath { path =>
-        val df = spark.range(0, 5)
-        val groupedDF = df.groupBy("id").count()
-        groupedDF.write
-          .format(dataSourceName)
-          .mode(SaveMode.Overwrite)
-          .save(path.getCanonicalPath)
-
-        val overwrittenFiles = path.listFiles()
-          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
-          .sortBy(_.getName)
-        val overwrittenFilesWithoutEmpty = overwrittenFiles.filter(_.length > 0)
-
-        assert(overwrittenFiles === overwrittenFilesWithoutEmpty)
       }
     }
   }

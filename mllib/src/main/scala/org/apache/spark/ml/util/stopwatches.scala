@@ -20,7 +20,7 @@ package org.apache.spark.ml.util
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
-import org.apache.spark.util.LongAccumulator;
+import org.apache.spark.util.LongAccumulator
 
 /**
  * Abstract class for stopwatches.
