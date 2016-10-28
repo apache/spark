@@ -77,6 +77,7 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
           case e: Throwable =>
             isFailed = true
             writer.close(e)
+            throw e
         }
         if (!isFailed) {
           writer.close(null)
