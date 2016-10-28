@@ -534,8 +534,8 @@ private[ui] class JobPagedTable(
     val jobHeadersAndCssClasses: Seq[(String, String, Boolean)] =
       Seq(
         (jobIdTitle, "", true),
-        ("Description", "", true), ("Submitted", "", true), ("Duration", "", true),
-        ("Stages: Succeeded/Total", "", false),
+        ("User", "", true), ("Description", "", true), ("Submitted", "", true),
+        ("Duration", "", true), ("Stages: Succeeded/Total", "", false),
         ("Tasks (for all stages): Succeeded/Total", "", false)
       )
 
@@ -609,6 +609,9 @@ private[ui] class JobPagedTable(
     <tr id={"job-" + job.jobId}>
       <td>
         {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
+      </td>
+      <td>
+        {jobTableRow.jobData.user}
       </td>
       <td>
         {jobTableRow.jobDescription} {killLink}

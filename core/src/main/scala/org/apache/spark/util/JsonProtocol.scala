@@ -153,7 +153,7 @@ private[spark] object JsonProtocol {
     ("Submission Time" -> jobStart.time) ~
     ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~  // Added in Spark 1.2.0
     ("Stage IDs" -> jobStart.stageIds) ~
-    ("User" -> jobStart.user) ~ // Added in Spark 2.0.0
+    ("User" -> jobStart.user) ~ // Added in Spark 2.1.0
     ("Properties" -> properties)
   }
 
