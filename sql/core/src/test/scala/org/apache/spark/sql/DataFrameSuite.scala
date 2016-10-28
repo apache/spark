@@ -1601,7 +1601,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.createDataFrame(rdd, StructType(schemas), false)
     assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
-  
+
   test("""SPARK-17154: df("column_name") should return correct result when we do self-join""") {
     val df = Seq(
       (1, "a", "A"),
