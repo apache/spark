@@ -143,7 +143,8 @@ class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  val offsetLog = new HDFSMetadataLog[OffsetSeq](sparkSession, checkpointFile("offsets"))
+  val offsetLog = new OffsetStreamSourceLog(StreamExecution.OFFSET_LOG_VERSION,
+    sparkSession, checkpointFile("offsets"))
 
   /** Whether the query is currently active or not */
   override def isActive: Boolean = state == ACTIVE
@@ -697,6 +698,8 @@ class StreamExecution(
 }
 
 object StreamExecution {
+  val OFFSET_LOG_VERSION = "v1"
+
   private val _nextId = new AtomicLong(0)
 
   def nextId: Long = _nextId.getAndIncrement()

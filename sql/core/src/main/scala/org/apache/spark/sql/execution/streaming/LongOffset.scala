@@ -33,5 +33,4 @@ case class LongOffset(offset: Long) extends Offset {
 object LongOffset {
 
   def apply(serialized: SerializedOffset) : LongOffset = new LongOffset(serialized.json.toLong)
-
 }

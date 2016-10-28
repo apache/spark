@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming
 
+
 /**
  * An ordered collection of offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
  */
 case class OffsetSeq(offsets: Seq[Option[Offset]]) {
-
-  val json = offsets.map(_.map(_.json)).flatten.mkString("\n")
 
   /**
    * Unpacks an offset into [[StreamProgress]] by associating each offset with the order list of
@@ -43,6 +42,7 @@ case class OffsetSeq(offsets: Seq[Option[Offset]]) {
 }
 
 object OffsetSeq {
+
   /**
    * Returns a [[OffsetSeq]] with a variable sequence of offsets.
    * `nulls` in the sequence are converted to `None`s.
