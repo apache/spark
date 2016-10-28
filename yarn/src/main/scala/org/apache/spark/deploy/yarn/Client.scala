@@ -600,10 +600,14 @@ private[spark] class Client(
         val (_, localizedPath) = distribute(file, resType = resType)
         if (addToClasspath) {
           if (localizedPath != null) {
-             cachedSecondaryJarLinks += localizedPath
+            cachedSecondaryJarLinks += localizedPath
           }
         } else {
-          require(localizedPath !=null)
+          if (localizedPath != null) {
+            throw new IllegalArgumentException(s"Attempt to add ($file) multiple times. " +
+              "Please check the values of 'spark.yarn.dist.files' and/or " +
+              "'spark.yarn.dist.archives'.")
+          }
         }
       }
     }
