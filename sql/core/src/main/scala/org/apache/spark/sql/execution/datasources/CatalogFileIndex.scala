@@ -70,7 +70,7 @@ class CatalogFileIndex(
         PartitionPath(p.toRow(partitionSchema), p.storage.locationUri.get)
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
-      new PrunedCatalogFileIndex(
+      new PrunedInMemoryFileIndex(
         sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
     } else {
       new InMemoryFileIndex(sparkSession, rootPaths, table.storage.properties, None)
@@ -97,7 +97,7 @@ class CatalogFileIndex(
  * @param tableBasePath The default base path of the Hive metastore table
  * @param partitionSpec The partition specifications from Hive metastore
  */
-private class PrunedCatalogFileIndex(
+private class PrunedInMemoryFileIndex(
     sparkSession: SparkSession,
     tableBasePath: Path,
     fileStatusCache: FileStatusCache,
