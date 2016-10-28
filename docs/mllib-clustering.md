@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Clustering - spark.mllib
-displayTitle: Clustering - spark.mllib
+title: Clustering - RDD-based API
+displayTitle: Clustering - RDD-based API
 ---
 
 [Clustering](https://en.wikipedia.org/wiki/Cluster_analysis) is an unsupervised learning problem whereby we aim to group subsets
@@ -170,10 +170,6 @@ which contains the computed clustering assignments.
 Refer to the [`PowerIterationClustering` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/PowerIterationClusteringExample.scala %}
-
-A full example that produces the experiment described in the PIC paper can be found under
-[`examples/`](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/mllib/PowerIterationClusteringExample.scala).
-
 </div>
 
 <div data-lang="java" markdown="1">
@@ -398,6 +394,12 @@ Refer to the [`BisectingKMeans` Scala docs](api/scala/index.html#org.apache.spar
 Refer to the [`BisectingKMeans` Java docs](api/java/org/apache/spark/mllib/clustering/BisectingKMeans.html) and [`BisectingKMeansModel` Java docs](api/java/org/apache/spark/mllib/clustering/BisectingKMeansModel.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaBisectingKMeansExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+Refer to the [`BisectingKMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.BisectingKMeans) and [`BisectingKMeansModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.BisectingKMeansModel) for more details on the API.
+
+{% include_example python/mllib/bisecting_k_means_example.py %}
 </div>
 </div>
 

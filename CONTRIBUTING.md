@@ -6,7 +6,7 @@ It lists steps that are required before creating a PR. In particular, consider:
 
 - Is the change important and ready enough to ask the community to spend time reviewing?
 - Have you searched for existing, related JIRAs and pull requests?
-- Is this a new feature that can stand alone as a package on http://spark-packages.org ?
+- Is this a new feature that can stand alone as a [third party project](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects) ?
 - Is the change being proposed clearly explained and motivated?
 
 When you contribute code, you affirm that the contribution is your original work and that you 

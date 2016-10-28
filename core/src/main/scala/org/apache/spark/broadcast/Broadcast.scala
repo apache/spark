@@ -21,8 +21,8 @@ import java.io.Serializable
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

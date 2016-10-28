@@ -197,6 +197,22 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       runSlowJob(sc)
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        goToUi(sc, "/jobs")
+        assert(hasKillLink)
+      }
+    }
+
+    withSpark(newSparkContext(killEnabled = false)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        goToUi(sc, "/jobs")
+        assert(!hasKillLink)
+      }
+    }
+
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/stages")
         assert(hasKillLink)
       }
@@ -218,7 +234,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
-        tableHeaders should not contain "Job Id (Job Group)"
+        tableHeaders(0) should not startWith "Job Id (Job Group)"
       }
       // Once at least one job has been run in a job group, then we should display the group name:
       sc.setJobGroup("my-job-group", "my-job-group-description")
@@ -226,7 +242,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
-        tableHeaders should contain ("Job Id (Job Group)")
+        // Can suffix up/down arrow in the header
+        tableHeaders(0) should startWith ("Job Id (Job Group)")
       }
 
       val jobJson = getJson(sc.ui.get, "jobs")
@@ -452,20 +469,24 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   test("kill stage POST/GET response is correct") {
-    def getResponseCode(url: URL, method: String): Int = {
-      val connection = url.openConnection().asInstanceOf[HttpURLConnection]
-      connection.setRequestMethod(method)
-      connection.connect()
-      val code = connection.getResponseCode()
-      connection.disconnect()
-      code
-    }
-
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         val url = new URL(
-          sc.ui.get.appUIAddress.stripSuffix("/") + "/stages/stage/kill/?id=0&terminate=true")
+          sc.ui.get.appUIAddress.stripSuffix("/") + "/stages/stage/kill/?id=0")
+        // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
+        getResponseCode(url, "GET") should be (200)
+        getResponseCode(url, "POST") should be (200)
+      }
+    }
+  }
+
+  test("kill job POST/GET response is correct") {
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        val url = new URL(
+          sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs/job/kill/?id=0")
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
         getResponseCode(url, "GET") should be (200)
         getResponseCode(url, "POST") should be (200)
@@ -647,6 +668,17 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         "label=&quot;Stage 2&quot;;\n    subgraph "))
       assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
         "6 [label=&quot;ShuffledRDD [6]"))
+    }
+  }
+
+  def getResponseCode(url: URL, method: String): Int = {
+    val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+    connection.setRequestMethod(method)
+    try {
+      connection.connect()
+      connection.getResponseCode()
+    } finally {
+      connection.disconnect()
     }
   }
 

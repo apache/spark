@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
 import org.apache.spark.util.SerializableJobConf
@@ -66,7 +67,7 @@ class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
 
   def setup(jobid: Int, splitid: Int, attemptid: Int) {
     setIDs(jobid, splitid, attemptid)
-    HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(now),
+    HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmmss").format(now),
       jobid, splitID, attemptID, conf.value)
   }
 
@@ -161,7 +162,7 @@ class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
 private[spark]
 object SparkHadoopWriter {
   def createJobID(time: Date, id: Int): JobID = {
-    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
+    val formatter = new SimpleDateFormat("yyyyMMddHHmmss")
     val jobtrackerID = formatter.format(time)
     new JobID(jobtrackerID, id)
   }

@@ -1,0 +1,51 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Spark provides this Travis CI configuration file to help contributors
+# check Scala/Java style conformance and JDK7/8 compilation easily
+# during their preparing pull requests.
+#   - Scalastyle is executed during `maven install` implicitly.
+#   - Java Checkstyle is executed by `lint-java`.
+# See the related discussion here.
+# https://github.com/apache/spark/pull/12980
+
+# 1. Choose OS (Ubuntu 14.04.3 LTS Server Edition 64bit, ~2 CORE, 7.5GB RAM)
+sudo: required
+dist: trusty
+
+# 2. Choose language and target JDKs for parallel builds.
+language: java
+jdk:
+  - oraclejdk7
+  - oraclejdk8
+
+# 3. Setup cache directory for SBT and Maven.
+cache:
+  directories:
+  - $HOME/.sbt
+  - $HOME/.m2
+
+# 4. Turn off notifications.
+notifications:
+  email: false
+
+# 5. Run maven install before running lint-java.
+install:
+  - export MAVEN_SKIP_RC=1
+  - build/mvn -T 4 -q -DskipTests -Pmesos -Pyarn -Phadoop-2.3 -Pkinesis-asl -Phive -Phive-thriftserver install
+
+# 6. Run lint-java.
+script:
+  - dev/lint-java

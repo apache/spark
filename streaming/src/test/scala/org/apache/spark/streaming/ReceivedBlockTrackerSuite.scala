@@ -29,7 +29,8 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{Logging, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._

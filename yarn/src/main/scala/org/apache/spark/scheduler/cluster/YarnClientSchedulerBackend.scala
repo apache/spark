@@ -21,8 +21,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.yarn.api.records.YarnApplicationState
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
@@ -47,11 +48,10 @@ private[spark] class YarnClientSchedulerBackend(
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += ("--arg", hostport)
-    argsArrayBuf ++= getExtraClientArguments
 
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
-    val args = new ClientArguments(argsArrayBuf.toArray, conf)
-    totalExpectedExecutors = args.numExecutors
+    val args = new ClientArguments(argsArrayBuf.toArray)
+    totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(conf)
     client = new Client(args, conf)
     bindToYarn(client.submitApplication(), None)
 
@@ -65,47 +65,10 @@ private[spark] class YarnClientSchedulerBackend(
     // reads the credentials from HDFS, just like the executors and updates its own credentials
     // cache.
     if (conf.contains("spark.yarn.credentials.file")) {
-      YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
+      YarnSparkHadoopUtil.get.startCredentialUpdater(conf)
     }
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
-  }
-
-  /**
-   * Return any extra command line arguments to be passed to Client provided in the form of
-   * environment variables or Spark properties.
-   */
-  private def getExtraClientArguments: Seq[String] = {
-    val extraArgs = new ArrayBuffer[String]
-    // List of (target Client argument, environment variable, Spark property)
-    val optionTuples =
-      List(
-        ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),
-        ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
-        ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
-        ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
-        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-        ("--py-files", null, "spark.submit.pyFiles")
-      )
-    // Warn against the following deprecated environment variables: env var -> suggestion
-    val deprecatedEnvVars = Map(
-      "SPARK_WORKER_MEMORY" -> "SPARK_EXECUTOR_MEMORY or --executor-memory through spark-submit",
-      "SPARK_WORKER_CORES" -> "SPARK_EXECUTOR_CORES or --executor-cores through spark-submit")
-    optionTuples.foreach { case (optionName, envVar, sparkProp) =>
-      if (sc.getConf.contains(sparkProp)) {
-        extraArgs += (optionName, sc.getConf.get(sparkProp))
-      } else if (envVar != null && System.getenv(envVar) != null) {
-        extraArgs += (optionName, System.getenv(envVar))
-        if (deprecatedEnvVars.contains(envVar)) {
-          logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
-        }
-      }
-    }
-    // The app name is a special case because "spark.app.name" is required of all applications.
-    // As a result, the corresponding "SPARK_YARN_APP_NAME" is already handled preemptively in
-    // SparkSubmitArguments if "spark.app.name" is not explicitly set by the user. (SPARK-5222)
-    sc.getConf.getOption("spark.app.name").foreach(v => extraArgs += ("--name", v))
-    extraArgs
   }
 
   /**
@@ -186,7 +149,7 @@ private[spark] class YarnClientSchedulerBackend(
     client.reportLauncherState(SparkAppHandle.State.FINISHED)
 
     super.stop()
-    YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
+    YarnSparkHadoopUtil.get.stopCredentialUpdater()
     client.stop()
     logInfo("Stopped")
   }

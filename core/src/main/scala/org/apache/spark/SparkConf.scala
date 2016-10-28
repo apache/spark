@@ -24,6 +24,8 @@ import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -45,7 +47,7 @@ import org.apache.spark.util.Utils
  *
  * @param loadDefaults whether to also load values from Java system properties
  */
-class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
+class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Serializable {
 
   import SparkConf._
 
@@ -54,23 +56,52 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   private val settings = new ConcurrentHashMap[String, String]()
 
+  @transient private lazy val reader: ConfigReader = {
+    val _reader = new ConfigReader(new SparkConfigProvider(settings))
+    _reader.bindEnv(new ConfigProvider {
+      override def get(key: String): Option[String] = Option(getenv(key))
+    })
+    _reader
+  }
+
   if (loadDefaults) {
+    loadFromSystemProperties(false)
+  }
+
+  private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
     // Load any spark.* system properties
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
-      set(key, value)
+      set(key, value, silent)
     }
+    this
   }
 
   /** Set a configuration variable. */
   def set(key: String, value: String): SparkConf = {
+    set(key, value, false)
+  }
+
+  private[spark] def set(key: String, value: String, silent: Boolean): SparkConf = {
     if (key == null) {
       throw new NullPointerException("null key")
     }
     if (value == null) {
       throw new NullPointerException("null value for " + key)
     }
-    logDeprecationWarning(key)
+    if (!silent) {
+      logDeprecationWarning(key)
+    }
     settings.put(key, value)
+    this
+  }
+
+  private[spark] def set[T](entry: ConfigEntry[T], value: T): SparkConf = {
+    set(entry.key, entry.stringConverter(value))
+    this
+  }
+
+  private[spark] def set[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
+    set(entry.key, entry.rawStringConverter(value))
     this
   }
 
@@ -148,13 +179,28 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     this
   }
 
+  private[spark] def setIfMissing[T](entry: ConfigEntry[T], value: T): SparkConf = {
+    if (settings.putIfAbsent(entry.key, entry.stringConverter(value)) == null) {
+      logDeprecationWarning(entry.key)
+    }
+    this
+  }
+
+  private[spark] def setIfMissing[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
+    if (settings.putIfAbsent(entry.key, entry.rawStringConverter(value)) == null) {
+      logDeprecationWarning(entry.key)
+    }
+    this
+  }
+
   /**
    * Use Kryo serialization and register the given set of classes with Kryo.
    * If called multiple times, this will append the classes from all calls together.
    */
   def registerKryoClasses(classes: Array[Class[_]]): SparkConf = {
     val allClassNames = new LinkedHashSet[String]()
-    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').filter(!_.isEmpty)
+    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').map(_.trim)
+      .filter(!_.isEmpty)
     allClassNames ++= classes.map(_.getName)
 
     set("spark.kryo.classesToRegister", allClassNames.mkString(","))
@@ -188,6 +234,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     this
   }
 
+  private[spark] def remove(entry: ConfigEntry[_]): SparkConf = {
+    remove(entry.key)
+  }
+
   /** Get a parameter; throws a NoSuchElementException if it's not set */
   def get(key: String): String = {
     getOption(key).getOrElse(throw new NoSuchElementException(key))
@@ -196,6 +246,17 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Get a parameter, falling back to a default if not set */
   def get(key: String, defaultValue: String): String = {
     getOption(key).getOrElse(defaultValue)
+  }
+
+  /**
+   * Retrieves the value of a pre-defined configuration entry.
+   *
+   * - This is an internal Spark API.
+   * - The return type if defined by the configuration entry.
+   * - This will throw an exception is the config is not optional and the value is not set.
+   */
+  private[spark] def get[T](entry: ConfigEntry[T]): T = {
+    entry.readFrom(reader)
   }
 
   /**
@@ -317,6 +378,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
   }
 
+  /** Get all parameters that start with `prefix` */
+  def getAllWithPrefix(prefix: String): Array[(String, String)] = {
+    getAll.filter { case (k, v) => k.startsWith(prefix) }
+      .map { case (k, v) => (k.substring(prefix.length), v) }
+  }
+
+
   /** Get a parameter as an integer, falling back to a default if not set */
   def getInt(key: String, defaultValue: Int): Int = {
     getOption(key).map(_.toInt).getOrElse(defaultValue)
@@ -339,9 +407,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
-    val prefix = "spark.executorEnv."
-    getAll.filter{case (k, v) => k.startsWith(prefix)}
-          .map{case (k, v) => (k.substring(prefix.length), v)}
+    getAllWithPrefix("spark.executorEnv.")
   }
 
   /**
@@ -351,11 +417,20 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getAppId: String = get("spark.app.id")
 
   /** Does the configuration contain a given parameter? */
-  def contains(key: String): Boolean = settings.containsKey(key)
+  def contains(key: String): Boolean = {
+    settings.containsKey(key) ||
+      configsWithAlternatives.get(key).toSeq.flatten.exists { alt => contains(alt.key) }
+  }
+
+  private[spark] def contains(entry: ConfigEntry[_]): Boolean = contains(entry.key)
 
   /** Copy this object */
   override def clone: SparkConf = {
-    new SparkConf(false).setAll(getAll)
+    val cloned = new SparkConf(false)
+    settings.entrySet().asScala.foreach { e =>
+      cloned.set(e.getKey(), e.getValue(), true)
+    }
+    cloned
   }
 
   /**
@@ -364,8 +439,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   private[spark] def getenv(name: String): String = System.getenv(name)
 
-  /** Checks for illegal or deprecated config settings. Throws an exception for the former. Not
-    * idempotent - may mutate this conf object to convert deprecated settings to supported ones. */
+  /**
+   * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
+   * idempotent - may mutate this conf object to convert deprecated settings to supported ones.
+   */
   private[spark] def validateSettings() {
     if (contains("spark.local.dir")) {
       val msg = "In Spark 1.0 and later spark.local.dir will be overridden by the value set by " +
@@ -393,15 +470,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
 
     // Validate spark.executor.extraJavaOptions
-    getOption(executorOptsKey).map { javaOpts =>
+    getOption(executorOptsKey).foreach { javaOpts =>
       if (javaOpts.contains("-Dspark")) {
         val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts'). " +
           "Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
         throw new Exception(msg)
       }
-      if (javaOpts.contains("-Xmx") || javaOpts.contains("-Xms")) {
-        val msg = s"$executorOptsKey is not allowed to alter memory settings (was '$javaOpts'). " +
-          "Use spark.executor.memory instead."
+      if (javaOpts.contains("-Xmx")) {
+        val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
+          s"(was '$javaOpts'). Use spark.executor.memory instead."
         throw new Exception(msg)
       }
     }
@@ -559,7 +636,9 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
-      DeprecatedConfig("spark.rpc", "2.0", "Not used any more.")
+      DeprecatedConfig("spark.rpc", "2.0", "Not used any more."),
+      DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
+        "Please use the new blacklisting options, spark.blacklist.*")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -616,7 +695,9 @@ private[spark] object SparkConf extends Logging {
     "spark.memory.offHeap.enabled" -> Seq(
       AlternateConfig("spark.unsafe.offHeap", "1.6")),
     "spark.rpc.message.maxSize" -> Seq(
-      AlternateConfig("spark.akka.frameSize", "1.6"))
+      AlternateConfig("spark.akka.frameSize", "1.6")),
+    "spark.yarn.jars" -> Seq(
+      AlternateConfig("spark.yarn.jar", "2.0"))
     )
 
   /**
@@ -678,7 +759,7 @@ private[spark] object SparkConf extends Logging {
     allAlternatives.get(key).foreach { case (newKey, cfg) =>
       logWarning(
         s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-        s"and may be removed in the future. Please use the new key '$newKey' instead.")
+        s"may be removed in the future. Please use the new key '$newKey' instead.")
       return
     }
     if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.streaming.util
 
+import java.io.FileNotFoundException
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 import java.util.concurrent.RejectedExecutionException
@@ -29,7 +30,8 @@ import scala.language.postfixOps
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{CompletionIterator, ThreadUtils}
 
 /**
@@ -230,13 +232,25 @@ private[streaming] class FileBasedWriteAheadLog(
     val logDirectoryPath = new Path(logDirectory)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
-    if (fileSystem.exists(logDirectoryPath) &&
-        fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
-      val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })
-      pastLogs.clear()
-      pastLogs ++= logFileInfo
-      logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")
-      logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
+    try {
+      // If you call listStatus(file) it returns a stat of the file in the array,
+      // rather than an array listing all the children.
+      // This makes it hard to differentiate listStatus(file) and
+      // listStatus(dir-with-one-child) except by examining the name of the returned status,
+      // and once you've got symlinks in the mix that differentiation isn't easy.
+      // Checking for the path being a directory is one more call to the filesystem, but
+      // leads to much clearer code.
+      if (fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
+        val logFileInfo = logFilesTologInfo(
+          fileSystem.listStatus(logDirectoryPath).map { _.getPath })
+        pastLogs.clear()
+        pastLogs ++= logFileInfo
+        logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")
+        logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
+      }
+    } catch {
+      case _: FileNotFoundException =>
+        // there is no log directory, hence nothing to recover
     }
   }
 

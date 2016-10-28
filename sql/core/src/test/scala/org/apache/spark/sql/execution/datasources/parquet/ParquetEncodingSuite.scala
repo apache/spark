@@ -16,6 +16,10 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import scala.collection.JavaConverters._
+
+import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.sql.test.SharedSQLContext
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
@@ -36,7 +40,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
         List.fill(n)(ROW).toDF.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
 
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -61,21 +65,47 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
         data.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
 
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
         assert(batch.numRows() == n)
         var i = 0
         while (i < n) {
-          assert(batch.column(0).getIsNull(i))
-          assert(batch.column(1).getIsNull(i))
-          assert(batch.column(2).getIsNull(i))
-          assert(batch.column(3).getIsNull(i))
+          assert(batch.column(0).isNullAt(i))
+          assert(batch.column(1).isNullAt(i))
+          assert(batch.column(2).isNullAt(i))
+          assert(batch.column(3).isNullAt(i))
           i += 1
         }
         reader.close()
       }}
+    }
+  }
+
+  test("Read row group containing both dictionary and plain encoded pages") {
+    withSQLConf(ParquetOutputFormat.DICTIONARY_PAGE_SIZE -> "2048",
+      ParquetOutputFormat.PAGE_SIZE -> "4096") {
+      withTempPath { dir =>
+        // In order to explicitly test for SPARK-14217, we set the parquet dictionary and page size
+        // such that the following data spans across 3 pages (within a single row group) where the
+        // first page is dictionary encoded and the remaining two are plain encoded.
+        val data = (0 until 512).flatMap(i => Seq.fill(3)(i.toString))
+        data.toDF("f").coalesce(1).write.parquet(dir.getCanonicalPath)
+        val file = SpecificParquetRecordReaderBase.listDirectory(dir).asScala.head
+
+        val reader = new VectorizedParquetRecordReader
+        reader.initialize(file, null /* set columns to null to project all columns */)
+        val column = reader.resultBatch().column(0)
+        assert(reader.nextBatch())
+
+        (0 until 512).foreach { i =>
+          assert(column.getUTF8String(3 * i).toString == i.toString)
+          assert(column.getUTF8String(3 * i + 1).toString == i.toString)
+          assert(column.getUTF8String(3 * i + 2).toString == i.toString)
+        }
+        reader.close()
+      }
     }
   }
 }

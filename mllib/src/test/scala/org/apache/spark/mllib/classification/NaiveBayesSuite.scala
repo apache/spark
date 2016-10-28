@@ -21,6 +21,7 @@ import scala.util.Random
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial}
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -103,17 +104,24 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
       piData: Array[Double],
       thetaData: Array[Array[Double]],
       model: NaiveBayesModel): Unit = {
-    def closeFit(d1: Double, d2: Double, precision: Double): Boolean = {
-      (d1 - d2).abs <= precision
-    }
-    val modelIndex = (0 until piData.length).zip(model.labels.map(_.toInt))
-    for (i <- modelIndex) {
-      assert(closeFit(math.exp(piData(i._2)), math.exp(model.pi(i._1)), 0.05))
-    }
-    for (i <- modelIndex) {
-      for (j <- 0 until thetaData(i._2).length) {
-        assert(closeFit(math.exp(thetaData(i._2)(j)), math.exp(model.theta(i._1)(j)), 0.05))
+    val modelIndex = piData.indices.zip(model.labels.map(_.toInt))
+    try {
+      for (i <- modelIndex) {
+        assert(math.exp(piData(i._2)) ~== math.exp(model.pi(i._1)) absTol 0.05)
+        for (j <- thetaData(i._2).indices) {
+          assert(math.exp(thetaData(i._2)(j)) ~== math.exp(model.theta(i._1)(j)) absTol 0.05)
+        }
       }
+    } catch {
+      case e: TestFailedException =>
+        def arr2str(a: Array[Double]): String = a.mkString("[", ", ", "]")
+        def msg(orig: String): String = orig + "\nvalidateModelFit:\n" +
+          " piData: " + arr2str(piData) + "\n" +
+          " thetaData: " + thetaData.map(arr2str).mkString("\n") + "\n" +
+          " model.labels: " + arr2str(model.labels) + "\n" +
+          " model.pi: " + arr2str(model.pi) + "\n" +
+          " model.theta: " + model.theta.map(arr2str).mkString("\n")
+        throw e.modifyMessage(_.map(msg))
     }
   }
 
@@ -174,7 +182,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val piVector = new BDV(model.pi)
     // model.theta is row-major; treat it as col-major representation of transpose, and transpose:
     val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
-    val logClassProbs: BV[Double] = piVector + (thetaMatrix * testData.toBreeze)
+    val logClassProbs: BV[Double] = piVector + (thetaMatrix * testData.asBreeze)
     val classProbs = logClassProbs.toArray.map(math.exp)
     val classProbsSum = classProbs.sum
     classProbs.map(_ / classProbsSum)
@@ -226,7 +234,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
     val negThetaMatrix = new BDM(model.theta(0).length, model.theta.length,
       model.theta.flatten.map(v => math.log(1.0 - math.exp(v)))).t
-    val testBreeze = testData.toBreeze
+    val testBreeze = testData.asBreeze
     val negTestBreeze = new BDV(Array.fill(testBreeze.size)(1.0)) - testBreeze
     val piTheta: BV[Double] = piVector + (thetaMatrix * testBreeze)
     val logClassProbs: BV[Double] = piTheta + (negThetaMatrix * negTestBreeze)
@@ -299,7 +307,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
-    Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).map {
+    Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).foreach {
       model =>
         // Save model, load it back, and compare.
         try {

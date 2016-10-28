@@ -20,23 +20,23 @@ Decision Tree Regression Example.
 """
 from __future__ import print_function
 
-import sys
-
-from pyspark import SparkContext, SQLContext
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.regression import DecisionTreeRegressor
 from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.evaluation import RegressionEvaluator
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="decision_tree_classification_example")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("DecisionTreeRegressionExample")\
+        .getOrCreate()
 
     # $example on$
     # Load the data stored in LIBSVM format as a DataFrame.
-    data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Automatically identify categorical features, and index them.
     # We specify maxCategories so features with > 4 distinct values are treated as continuous.
@@ -71,3 +71,5 @@ if __name__ == "__main__":
     # summary only
     print(treeModel)
     # $example off$
+
+    spark.stop()

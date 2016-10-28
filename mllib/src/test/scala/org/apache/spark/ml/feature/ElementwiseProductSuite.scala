@@ -18,8 +18,8 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class ElementwiseProductSuite

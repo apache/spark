@@ -24,13 +24,13 @@ import scala.xml.Node
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState, SessionInfo}
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
 
 
-/** Page for Spark Web UI that shows statistics of a thrift server */
+/** Page for Spark Web UI that shows statistics of the thrift server */
 private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage("") with Logging {
 
   private val listener = parent.listener

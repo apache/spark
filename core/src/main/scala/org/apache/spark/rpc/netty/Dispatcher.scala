@@ -17,14 +17,15 @@
 
 package org.apache.spark.rpc.netty
 
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Promise
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc._
 import org.apache.spark.util.ThreadUtils
@@ -41,8 +42,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val inbox = new Inbox(ref, endpoint)
   }
 
-  private val endpoints = new ConcurrentHashMap[String, EndpointData]
-  private val endpointRefs = new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
+  private val endpoints: ConcurrentMap[String, EndpointData] =
+    new ConcurrentHashMap[String, EndpointData]
+  private val endpointRefs: ConcurrentMap[RpcEndpoint, RpcEndpointRef] =
+    new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
 
   // Track the receivers whose inboxes may contain messages.
   private val receivers = new LinkedBlockingQueue[EndpointData]
@@ -136,32 +139,27 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
    * Posts a message to a specific endpoint.
    *
    * @param endpointName name of the endpoint.
-   * @param createMessageFn function to create the message.
+   * @param message the message to post
    * @param callbackIfStopped callback function if the endpoint is stopped.
    */
   private def postMessage(
       endpointName: String,
       message: InboxMessage,
       callbackIfStopped: (Exception) => Unit): Unit = {
-    val shouldCallOnStop = synchronized {
+    val error = synchronized {
       val data = endpoints.get(endpointName)
-      if (stopped || data == null) {
-        true
+      if (stopped) {
+        Some(new RpcEnvStoppedException())
+      } else if (data == null) {
+        Some(new SparkException(s"Could not find $endpointName."))
       } else {
         data.inbox.post(message)
         receivers.offer(data)
-        false
+        None
       }
     }
-    if (shouldCallOnStop) {
-      // We don't need to call `onStop` in the `synchronized` block
-      val error = if (stopped) {
-          new RpcEnvStoppedException()
-        } else {
-          new SparkException(s"Could not find $endpointName or it has been stopped.")
-        }
-      callbackIfStopped(error)
-    }
+    // We don't need to call `onStop` in the `synchronized` block
+    error.foreach(callbackIfStopped)
   }
 
   def stop(): Unit = {
@@ -192,7 +190,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
   /** Thread pool used for dispatching messages. */
   private val threadpool: ThreadPoolExecutor = {
     val numThreads = nettyEnv.conf.getInt("spark.rpc.netty.dispatcher.numThreads",
-      Runtime.getRuntime.availableProcessors())
+      math.max(2, Runtime.getRuntime.availableProcessors()))
     val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop")
     for (i <- 0 until numThreads) {
       pool.execute(new MessageLoop)

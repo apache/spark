@@ -20,6 +20,8 @@ package org.apache.spark
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
+import org.apache.spark.internal.Logging
+
 /**
  * Holds state shared across task threads in some ThreadingSuite tests.
  */

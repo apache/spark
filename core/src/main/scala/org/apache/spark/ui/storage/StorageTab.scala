@@ -57,20 +57,9 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Bloc
     StorageUtils.updateRddInfo(rddInfosToUpdate, activeStorageStatusList)
   }
 
-  /**
-   * Assumes the storage status list is fully up-to-date. This implies the corresponding
-   * StorageStatusSparkListener must process the SparkListenerTaskEnd event before this listener.
-   */
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
-    val metrics = taskEnd.taskMetrics
-    if (metrics != null && metrics.updatedBlockStatuses.nonEmpty) {
-      updateRDDInfo(metrics.updatedBlockStatuses)
-    }
-  }
-
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
     val rddInfos = stageSubmitted.stageInfo.rddInfos
-    rddInfos.foreach { info => _rddInfoMap.getOrElseUpdate(info.id, info) }
+    rddInfos.foreach { info => _rddInfoMap.getOrElseUpdate(info.id, info).name = info.name }
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
@@ -83,5 +72,15 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Bloc
 
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD): Unit = synchronized {
     _rddInfoMap.remove(unpersistRDD.rddId)
+  }
+
+  override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
+    super.onBlockUpdated(blockUpdated)
+    val blockId = blockUpdated.blockUpdatedInfo.blockId
+    val storageLevel = blockUpdated.blockUpdatedInfo.storageLevel
+    val memSize = blockUpdated.blockUpdatedInfo.memSize
+    val diskSize = blockUpdated.blockUpdatedInfo.diskSize
+    val blockStatus = BlockStatus(storageLevel, memSize, diskSize)
+    updateRDDInfo(Seq((blockId, blockStatus)))
   }
 }

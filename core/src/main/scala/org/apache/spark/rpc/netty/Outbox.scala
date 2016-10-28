@@ -23,7 +23,8 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.rpc.{RpcAddress, RpcEnvStoppedException}
 
@@ -240,10 +241,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
   }
 
   private def closeClient(): Unit = synchronized {
-    // Not sure if `client.close` is idempotent. Just for safety.
-    if (client != null) {
-      client.close()
-    }
+    // Just set client to null. Don't close it in order to reuse the connection.
     client = null
   }
 

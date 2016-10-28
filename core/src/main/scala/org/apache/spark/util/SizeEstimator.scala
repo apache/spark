@@ -26,8 +26,8 @@ import scala.runtime.ScalaRunTime
 
 import com.google.common.collect.MapMaker
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -151,13 +151,12 @@ object SizeEstimator extends Logging {
       // TODO: We could use reflection on the VMOption returned ?
       getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
         val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
         val guessInWords = if (guess) "yes" else "not"
         logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
         return guess
-      }
     }
   }
 
@@ -208,6 +207,9 @@ object SizeEstimator extends Logging {
     val cls = obj.getClass
     if (cls.isArray) {
       visitArray(obj, cls, state)
+    } else if (cls.getName.startsWith("scala.reflect")) {
+      // Many objects in the scala.reflect package reference global reflection objects which, in
+      // turn, reference many other large global objects. Do nothing in this case.
     } else if (obj.isInstanceOf[ClassLoader] || obj.isInstanceOf[Class[_]]) {
       // Hadoop JobConfs created in the interpreter have a ClassLoader, which greatly confuses
       // the size estimator since it references the whole REPL. Do nothing in this case. In
@@ -253,7 +255,7 @@ object SizeEstimator extends Logging {
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
         // To exclude the shared objects that the array elements may link, sample twice
-        // and use the min one to caculate array size.
+        // and use the min one to calculate array size.
         val rand = new Random(42)
         val drawn = new OpenHashSet[Int](2 * ARRAY_SAMPLE_SIZE)
         val s1 = sampleArray(array, state, rand, drawn, length)

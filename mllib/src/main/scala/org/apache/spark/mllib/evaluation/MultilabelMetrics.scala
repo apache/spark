@@ -152,7 +152,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   lazy val microPrecision: Double = {
-    val sumFp = fpPerClass.foldLeft(0L){ case(cum, (_, fp)) => cum + fp}
+    val sumFp = fpPerClass.foldLeft(0L) { case(cum, (_, fp)) => cum + fp}
     sumTp.toDouble / (sumTp + sumFp)
   }
 
@@ -162,7 +162,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   lazy val microRecall: Double = {
-    val sumFn = fnPerClass.foldLeft(0.0){ case(cum, (_, fn)) => cum + fn}
+    val sumFn = fnPerClass.foldLeft(0.0) { case(cum, (_, fn)) => cum + fn}
     sumTp.toDouble / (sumTp + sumFn)
   }
 

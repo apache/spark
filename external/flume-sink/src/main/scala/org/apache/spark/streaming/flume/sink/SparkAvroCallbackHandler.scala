@@ -129,9 +129,9 @@ private[flume] class SparkAvroCallbackHandler(val threads: Int, val channel: Cha
    * @param success Whether the batch was successful or not.
    */
   private def completeTransaction(sequenceNumber: CharSequence, success: Boolean) {
-    removeAndGetProcessor(sequenceNumber).foreach(processor => {
+    removeAndGetProcessor(sequenceNumber).foreach { processor =>
       processor.batchProcessed(success)
-    })
+    }
   }
 
   /**

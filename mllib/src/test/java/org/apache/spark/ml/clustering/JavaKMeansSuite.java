@@ -17,40 +17,28 @@
 
 package org.apache.spark.ml.clustering;
 
-import java.io.Serializable;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.SharedSparkSession;
+import org.apache.spark.ml.linalg.Vector;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 
-public class JavaKMeansSuite implements Serializable {
+public class JavaKMeansSuite extends SharedSparkSession {
 
   private transient int k = 5;
-  private transient JavaSparkContext sc;
-  private transient DataFrame dataset;
-  private transient SQLContext sql;
+  private transient Dataset<Row> dataset;
 
-  @Before
-  public void setUp() {
-    sc = new JavaSparkContext("local", "JavaKMeansSuite");
-    sql = new SQLContext(sc);
-
-    dataset = KMeansSuite.generateKMeansData(sql, 50, 3, k);
-  }
-
-  @After
-  public void tearDown() {
-    sc.stop();
-    sc = null;
+  @Override
+  public void setUp() throws IOException {
+    super.setUp();
+    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k);
   }
 
   @Test
@@ -61,10 +49,10 @@ public class JavaKMeansSuite implements Serializable {
     Vector[] centers = model.clusterCenters();
     assertEquals(k, centers.length);
 
-    DataFrame transformed = model.transform(dataset);
+    Dataset<Row> transformed = model.transform(dataset);
     List<String> columns = Arrays.asList(transformed.columns());
     List<String> expectedColumns = Arrays.asList("features", "prediction");
-    for (String column: expectedColumns) {
+    for (String column : expectedColumns) {
       assertTrue(columns.contains(column));
     }
   }

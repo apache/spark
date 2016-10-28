@@ -19,19 +19,20 @@ package org.apache.spark.scheduler
 
 import java.io._
 import java.net.URI
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.base.Charsets
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SPARK_VERSION, SparkConf}
+import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -90,7 +91,7 @@ private[spark] class EventLoggingListener(
    */
   def start() {
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
-      throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.")
+      throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
 
     val workingPath = logPath + IN_PROGRESS
@@ -99,11 +100,8 @@ private[spark] class EventLoggingListener(
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
-    if (shouldOverwrite && fileSystem.exists(path)) {
+    if (shouldOverwrite && fileSystem.delete(path, true)) {
       logWarning(s"Event log $path already exists. Overwriting...")
-      if (!fileSystem.delete(path, true)) {
-        logWarning(s"Error deleting $path")
-      }
     }
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
@@ -254,7 +252,7 @@ private[spark] object EventLoggingListener extends Logging {
   def initEventLog(logStream: OutputStream): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
     val metadataJson = compact(JsonProtocol.logStartToJson(metadata)) + "\n"
-    logStream.write(metadataJson.getBytes(Charsets.UTF_8))
+    logStream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
   }
 
   /**
@@ -300,12 +298,6 @@ private[spark] object EventLoggingListener extends Logging {
    * @return input stream that holds one JSON record per line.
    */
   def openEventLog(log: Path, fs: FileSystem): InputStream = {
-    // It's not clear whether FileSystem.open() throws FileNotFoundException or just plain
-    // IOException when a file does not exist, so try our best to throw a proper exception.
-    if (!fs.exists(log)) {
-      throw new FileNotFoundException(s"File $log does not exist.")
-    }
-
     val in = new BufferedInputStream(fs.open(log))
 
     // Compression codec is encoded as an extension, e.g. app_123.lzf

@@ -17,10 +17,15 @@
 
 package org.apache.spark.storage
 
+import java.nio.{ByteBuffer, MappedByteBuffer}
+
 import scala.collection.Map
 import scala.collection.mutable
 
+import sun.nio.ch.DirectBuffer
+
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 
 /**
  * :: DeveloperApi ::
@@ -170,7 +175,10 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   def memRemaining: Long = maxMem - memUsed
 
   /** Return the memory used by this block manager. */
-  def memUsed: Long = _nonRddStorageInfo._1 + _rddBlocks.keys.toSeq.map(memUsedByRdd).sum
+  def memUsed: Long = _nonRddStorageInfo._1 + cacheSize
+
+  /** Return the memory used by caching RDDs */
+  def cacheSize: Long = _rddBlocks.keys.toSeq.map(memUsedByRdd).sum
 
   /** Return the disk space used by this block manager. */
   def diskUsed: Long = _nonRddStorageInfo._2 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum
@@ -222,7 +230,22 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 }
 
 /** Helper methods for storage-related objects. */
-private[spark] object StorageUtils {
+private[spark] object StorageUtils extends Logging {
+
+  /**
+   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
+   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
+   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
+   * unfortunately no standard API to do this.
+   */
+  def dispose(buffer: ByteBuffer): Unit = {
+    if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
+      logTrace(s"Unmapping $buffer")
+      if (buffer.asInstanceOf[DirectBuffer].cleaner() != null) {
+        buffer.asInstanceOf[DirectBuffer].cleaner().clean()
+      }
+    }
+  }
 
   /**
    * Update the given list of RDDInfo with the given list of storage statuses.

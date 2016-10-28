@@ -36,6 +36,7 @@ import org.apache.spark.util.Utils
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
+  conf.set("spark.kryo.unsafe", "false")
 
   test("SPARK-7392 configuration limits") {
     val kryoBufferProperty = "spark.kryoserializer.buffer"
@@ -100,7 +101,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     check(Array("aaa", "bbb", null))
     check(Array(true, false, true))
     check(Array('a', 'b', 'c'))
-    check(Array[Int]())
+    check(Array.empty[Int])
     check(Array(Array("1", "2"), Array("1", "2", "3", "4")))
   }
 
@@ -476,6 +477,9 @@ object KryoTest {
 
   class ClassWithNoArgConstructor {
     var x: Int = 0
+
+    override def hashCode(): Int = x
+
     override def equals(other: Any): Boolean = other match {
       case c: ClassWithNoArgConstructor => x == c.x
       case _ => false
@@ -483,6 +487,8 @@ object KryoTest {
   }
 
   class ClassWithoutNoArgConstructor(val x: Int) {
+    override def hashCode(): Int = x
+
     override def equals(other: Any): Boolean = other match {
       case c: ClassWithoutNoArgConstructor => x == c.x
       case _ => false

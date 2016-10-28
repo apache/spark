@@ -62,7 +62,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       assert( graph.edges.count() === rawEdges.size )
       // Vertices not explicitly provided but referenced by edges should be created automatically
       assert( graph.vertices.count() === 100)
-      graph.triplets.collect().map { et =>
+      graph.triplets.collect().foreach { et =>
         assert((et.srcId < 10 && et.srcAttr) || (et.srcId >= 10 && !et.srcAttr))
         assert((et.dstId < 10 && et.dstAttr) || (et.dstId >= 10 && !et.dstAttr))
       }
@@ -229,7 +229,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
 
   test("subgraph") {
     withSpark { sc =>
-      // Create a star graph of 10 veritces.
+      // Create a star graph of 10 vertices.
       val n = 10
       val star = starGraph(sc, n)
       // Take only vertices whose vids are even
@@ -402,6 +402,15 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       vert.unpersist()
       edges.unpersist()
       assert(sc.getPersistentRDDs.isEmpty)
+    }
+  }
+
+  test("SPARK-14219: pickRandomVertex") {
+    withSpark { sc =>
+      val vert = sc.parallelize(List((1L, "a")), 1)
+      val edges = sc.parallelize(List(Edge[Long](1L, 1L)), 1)
+      val g0 = Graph(vert, edges)
+      assert(g0.pickRandomVertex() === 1L)
     }
   }
 }

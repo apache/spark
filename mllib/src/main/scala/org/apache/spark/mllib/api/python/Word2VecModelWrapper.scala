@@ -27,8 +27,8 @@ import org.apache.spark.mllib.feature.Word2VecModel
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
-  * Wrapper around Word2VecModel to provide helper methods in Python
-  */
+ * Wrapper around Word2VecModel to provide helper methods in Python
+ */
 private[python] class Word2VecModelWrapper(model: Word2VecModel) {
   def transform(word: String): Vector = {
     model.transform(word)
@@ -43,20 +43,38 @@ private[python] class Word2VecModelWrapper(model: Word2VecModel) {
     rdd.rdd.map(model.transform)
   }
 
+  /**
+   * Finds synonyms of a word; do not include the word itself in results.
+   * @param word a word
+   * @param num number of synonyms to find
+   * @return a list consisting of a list of words and a vector of cosine similarities
+   */
   def findSynonyms(word: String, num: Int): JList[Object] = {
-    val vec = transform(word)
-    findSynonyms(vec, num)
+    prepareResult(model.findSynonyms(word, num))
   }
 
+  /**
+   * Finds words similar to the the vector representation of a word without
+   * filtering results.
+   * @param vector a vector
+   * @param num number of synonyms to find
+   * @return a list consisting of a list of words and a vector of cosine similarities
+   */
   def findSynonyms(vector: Vector, num: Int): JList[Object] = {
-    val result = model.findSynonyms(vector, num)
+    prepareResult(model.findSynonyms(vector, num))
+  }
+
+  private def prepareResult(result: Array[(String, Double)]) = {
     val similarity = Vectors.dense(result.map(_._2))
     val words = result.map(_._1)
     List(words, similarity).map(_.asInstanceOf[Object]).asJava
   }
 
+
   def getVectors: JMap[String, JList[Float]] = {
-    model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
+    model.getVectors.map { case (k, v) =>
+      (k, v.toList.asJava)
+    }.asJava
   }
 
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)

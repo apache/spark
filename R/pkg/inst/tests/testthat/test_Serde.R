@@ -17,7 +17,7 @@
 
 context("SerDe functionality")
 
-sc <- sparkR.init()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
 test_that("SerDe of primitive types", {
   x <- callJStatic("SparkRHandler", "echo", 1L)
@@ -75,3 +75,5 @@ test_that("SerDe of list of lists", {
   y <- callJStatic("SparkRHandler", "echo", x)
   expect_equal(x, y)
 })
+
+sparkR.session.stop()

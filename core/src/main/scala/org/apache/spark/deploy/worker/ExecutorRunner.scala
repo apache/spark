@@ -18,15 +18,16 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
@@ -155,7 +156,11 @@ private[deploy] class ExecutorRunner(
 
       // Add webUI log urls
       val baseUrl =
-        s"http://$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
+        if (conf.getBoolean("spark.ui.reverseProxy", false)) {
+          s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
+        } else {
+          s"http://$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
+        }
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
 
@@ -168,7 +173,7 @@ private[deploy] class ExecutorRunner(
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
 
       val stderr = new File(executorDir, "stderr")
-      Files.write(header, stderr, UTF_8)
+      Files.write(header, stderr, StandardCharsets.UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
@@ -178,16 +183,14 @@ private[deploy] class ExecutorRunner(
       val message = "Command exited with code " + exitCode
       worker.send(ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode)))
     } catch {
-      case interrupted: InterruptedException => {
+      case interrupted: InterruptedException =>
         logInfo("Runner thread for executor " + fullId + " interrupted")
         state = ExecutorState.KILLED
         killProcess(None)
-      }
-      case e: Exception => {
+      case e: Exception =>
         logError("Error running executor", e)
         state = ExecutorState.FAILED
         killProcess(Some(e.toString))
-      }
     }
   }
 }

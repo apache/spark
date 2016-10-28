@@ -36,11 +36,11 @@ class SaslMessage extends AbstractMessage {
 
   public final String appId;
 
-  public SaslMessage(String appId, byte[] message) {
+  SaslMessage(String appId, byte[] message) {
     this(appId, Unpooled.wrappedBuffer(message));
   }
 
-  public SaslMessage(String appId, ByteBuf message) {
+  SaslMessage(String appId, ByteBuf message) {
     super(new NettyManagedBuffer(message), true);
     this.appId = appId;
   }

@@ -93,7 +93,8 @@ public class ExternalShuffleSecuritySuite {
     client.init(appId);
     // Registration either succeeds or throws an exception.
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(), "exec0",
-      new ExecutorShuffleInfo(new String[0], 0, ""));
+      new ExecutorShuffleInfo(new String[0], 0,
+        "org.apache.spark.shuffle.sort.SortShuffleManager"));
     client.close();
   }
 

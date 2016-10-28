@@ -22,6 +22,7 @@ import java.lang.{Double => JDouble}
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.Partitioner
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
@@ -66,7 +67,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
    */
   def unpersist(blocking: Boolean): JavaDoubleRDD = fromRDD(srdd.unpersist(blocking))
 
-  // first() has to be overriden here in order for its return type to be Double instead of Object.
+  // first() has to be overridden here in order for its return type to be Double instead of Object.
   override def first(): JDouble = srdd.first()
 
   // Transformations (return a new RDD)
@@ -184,10 +185,10 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
   /** Compute the mean of this RDD's elements. */
   def mean(): JDouble = srdd.mean()
 
-  /** Compute the variance of this RDD's elements. */
+  /** Compute the population variance of this RDD's elements. */
   def variance(): JDouble = srdd.variance()
 
-  /** Compute the standard deviation of this RDD's elements. */
+  /** Compute the population standard deviation of this RDD's elements. */
   def stdev(): JDouble = srdd.stdev()
 
   /**
@@ -201,6 +202,18 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
    * estimating the standard variance by dividing by N-1 instead of N).
    */
   def sampleVariance(): JDouble = srdd.sampleVariance()
+
+  /**
+   * Compute the population standard deviation of this RDD's elements.
+   */
+  @Since("2.1.0")
+  def popStdev(): JDouble = srdd.popStdev()
+
+  /**
+   * Compute the population variance of this RDD's elements.
+   */
+  @Since("2.1.0")
+  def popVariance(): JDouble = srdd.popVariance()
 
   /** Return the approximate mean of the elements in this RDD. */
   def meanApprox(timeout: Long, confidence: JDouble): PartialResult[BoundedDouble] =

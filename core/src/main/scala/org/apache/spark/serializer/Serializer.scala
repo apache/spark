@@ -100,18 +100,6 @@ abstract class Serializer {
 }
 
 
-@DeveloperApi
-object Serializer {
-  def getSerializer(serializer: Serializer): Serializer = {
-    if (serializer == null) SparkEnv.get.serializer else serializer
-  }
-
-  def getSerializer(serializer: Option[Serializer]): Serializer = {
-    serializer.getOrElse(SparkEnv.get.serializer)
-  }
-}
-
-
 /**
  * :: DeveloperApi ::
  * An instance of a serializer, for use by one thread at a time.
@@ -200,10 +188,9 @@ abstract class DeserializationStream {
       try {
         (readKey[Any](), readValue[Any]())
       } catch {
-        case eof: EOFException => {
+        case eof: EOFException =>
           finished = true
           null
-        }
       }
     }
 

@@ -20,11 +20,9 @@ package org.apache.spark.graphx.impl
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.HashPartitioner
-import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.GraphImpl._
 import org.apache.spark.graphx.util.BytecodeUtils
-import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**

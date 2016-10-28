@@ -24,8 +24,6 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.io.{Input, Output}
 import com.google.common.base.Objects
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
@@ -37,8 +35,10 @@ import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
+import org.apache.hive.com.esotericsoftware.kryo.Kryo
+import org.apache.hive.com.esotericsoftware.kryo.io.{Input, Output}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
 

@@ -23,8 +23,9 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorV2, Utils}
 
 // Task result. Also contains updates to accumulator variables.
 private[spark] sealed trait TaskResult[T]
@@ -36,7 +37,7 @@ private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
 /** A TaskResult that contains the task's return value and accumulator updates. */
 private[spark] class DirectTaskResult[T](
     var valueBytes: ByteBuffer,
-    var accumUpdates: Seq[AccumulableInfo])
+    var accumUpdates: Seq[AccumulatorV2[_, _]])
   extends TaskResult[T] with Externalizable {
 
   private var valueObjectDeserialized = false
@@ -59,11 +60,11 @@ private[spark] class DirectTaskResult[T](
 
     val numUpdates = in.readInt
     if (numUpdates == 0) {
-      accumUpdates = null
+      accumUpdates = Seq()
     } else {
-      val _accumUpdates = new ArrayBuffer[AccumulableInfo]
+      val _accumUpdates = new ArrayBuffer[AccumulatorV2[_, _]]
       for (i <- 0 until numUpdates) {
-        _accumUpdates += in.readObject.asInstanceOf[AccumulableInfo]
+        _accumUpdates += in.readObject.asInstanceOf[AccumulatorV2[_, _]]
       }
       accumUpdates = _accumUpdates
     }
@@ -77,14 +78,14 @@ private[spark] class DirectTaskResult[T](
    *
    * After the first time, `value()` is trivial and just returns the deserialized `valueObject`.
    */
-  def value(): T = {
+  def value(resultSer: SerializerInstance = null): T = {
     if (valueObjectDeserialized) {
       valueObject
     } else {
       // This should not run when holding a lock because it may cost dozens of seconds for a large
-      // value.
-      val resultSer = SparkEnv.get.serializer.newInstance()
-      valueObject = resultSer.deserialize(valueBytes)
+      // value
+      val ser = if (resultSer == null) SparkEnv.get.serializer.newInstance() else resultSer
+      valueObject = ser.deserialize(valueBytes)
       valueObjectDeserialized = true
       valueObject
     }

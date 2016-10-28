@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
+import java.nio.charset.StandardCharsets
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
@@ -25,7 +26,6 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -34,6 +34,8 @@ import org.scalatest.{BeforeAndAfterAll, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
@@ -51,7 +53,7 @@ abstract class BaseYarnClusterSuite
     |log4j.logger.org.apache.hadoop=WARN
     |log4j.logger.org.eclipse.jetty=WARN
     |log4j.logger.org.mortbay=WARN
-    |log4j.logger.org.spark-project.jetty=WARN
+    |log4j.logger.org.spark_project.jetty=WARN
     """.stripMargin
 
   private var yarnCluster: MiniYARNCluster = _
@@ -74,7 +76,7 @@ abstract class BaseYarnClusterSuite
     System.setProperty("SPARK_YARN_MODE", "true")
 
     val logConfFile = new File(logConfDir, "log4j.properties")
-    Files.write(LOG4J_CONF, logConfFile, UTF_8)
+    Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
 
     // Disable the disk utilization check to avoid the test hanging when people's disks are
     // getting full.
@@ -190,7 +192,7 @@ abstract class BaseYarnClusterSuite
       result: File,
       expected: String): Unit = {
     finalState should be (SparkAppHandle.State.FINISHED)
-    val resultString = Files.toString(result, UTF_8)
+    val resultString = Files.toString(result, StandardCharsets.UTF_8)
     resultString should be (expected)
   }
 
@@ -202,7 +204,7 @@ abstract class BaseYarnClusterSuite
       extraClassPath: Seq[String] = Nil,
       extraConf: Map[String, String] = Map()): String = {
     val props = new Properties()
-    props.put("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
+    props.put(SPARK_JARS.key, "local:" + fakeSparkJar.getAbsolutePath())
 
     val testClasspath = new TestClasspathBuilder()
       .buildClassPath(
@@ -230,7 +232,7 @@ abstract class BaseYarnClusterSuite
     extraConf.foreach { case (k, v) => props.setProperty(k, v) }
 
     val propsFile = File.createTempFile("spark", ".properties", tempDir)
-    val writer = new OutputStreamWriter(new FileOutputStream(propsFile), UTF_8)
+    val writer = new OutputStreamWriter(new FileOutputStream(propsFile), StandardCharsets.UTF_8)
     props.store(writer, "Spark properties.")
     writer.close()
     propsFile.getAbsolutePath()

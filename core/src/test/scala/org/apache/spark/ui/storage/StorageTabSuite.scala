@@ -19,15 +19,14 @@ package org.apache.spark.ui.storage
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkFunSuite, Success}
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
 /**
  * Test various functionality in the StorageListener that supports the StorageTab.
  */
-class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
+class StorageTabSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter {
   private var bus: LiveListenerBus = _
   private var storageStatusListener: StorageStatusListener = _
   private var storageListener: StorageListener = _
@@ -43,8 +42,10 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
   private val bm1 = BlockManagerId("big", "dog", 1)
 
   before {
-    bus = new LiveListenerBus
-    storageStatusListener = new StorageStatusListener(new SparkConf())
+    val conf = new SparkConf()
+    sc = new SparkContext("local", "test", conf)
+    bus = new LiveListenerBus(sc)
+    storageStatusListener = new StorageStatusListener(conf)
     storageListener = new StorageListener(storageStatusListener)
     bus.addListener(storageStatusListener)
     bus.addListener(storageListener)
@@ -106,7 +107,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     assert(storageListener.rddInfoList.size === 0)
   }
 
-  test("task end") {
+  test("block update") {
     val myRddInfo0 = rddInfo0
     val myRddInfo1 = rddInfo1
     val myRddInfo2 = rddInfo2
@@ -120,19 +121,13 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!storageListener._rddInfoMap(1).isCached)
     assert(!storageListener._rddInfoMap(2).isCached)
 
-    // Task end with no updated blocks. This should not change anything.
-    bus.postToAll(SparkListenerTaskEnd(0, 0, "obliteration", Success, taskInfo, new TaskMetrics))
-    assert(storageListener._rddInfoMap.size === 3)
-    assert(storageListener.rddInfoList.size === 0)
-
-    // Task end with a few new persisted blocks, some from the same RDD
-    val metrics1 = new TaskMetrics
-    metrics1.setUpdatedBlockStatuses(Seq(
-      (RDDBlockId(0, 100), BlockStatus(memAndDisk, 400L, 0L)),
-      (RDDBlockId(0, 101), BlockStatus(memAndDisk, 0L, 400L)),
-      (RDDBlockId(1, 20), BlockStatus(memAndDisk, 0L, 240L))
-    ))
-    bus.postToAll(SparkListenerTaskEnd(1, 0, "obliteration", Success, taskInfo, metrics1))
+    // Some blocks updated
+    val blockUpdateInfos = Seq(
+      BlockUpdatedInfo(bm1, RDDBlockId(0, 100), memAndDisk, 400L, 0L),
+      BlockUpdatedInfo(bm1, RDDBlockId(0, 101), memAndDisk, 0L, 400L),
+      BlockUpdatedInfo(bm1, RDDBlockId(1, 20), memAndDisk, 0L, 240L)
+    )
+    postUpdateBlocks(bus, blockUpdateInfos)
     assert(storageListener._rddInfoMap(0).memSize === 400L)
     assert(storageListener._rddInfoMap(0).diskSize === 400L)
     assert(storageListener._rddInfoMap(0).numCachedPartitions === 2)
@@ -144,15 +139,14 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!storageListener._rddInfoMap(2).isCached)
     assert(storageListener._rddInfoMap(2).numCachedPartitions === 0)
 
-    // Task end with a few dropped blocks
-    val metrics2 = new TaskMetrics
-    metrics2.setUpdatedBlockStatuses(Seq(
-      (RDDBlockId(0, 100), BlockStatus(none, 0L, 0L)),
-      (RDDBlockId(1, 20), BlockStatus(none, 0L, 0L)),
-      (RDDBlockId(2, 40), BlockStatus(none, 0L, 0L)), // doesn't actually exist
-      (RDDBlockId(4, 80), BlockStatus(none, 0L, 0L)) // doesn't actually exist
-    ))
-    bus.postToAll(SparkListenerTaskEnd(2, 0, "obliteration", Success, taskInfo, metrics2))
+    // Drop some blocks
+    val blockUpdateInfos2 = Seq(
+      BlockUpdatedInfo(bm1, RDDBlockId(0, 100), none, 0L, 0L),
+      BlockUpdatedInfo(bm1, RDDBlockId(1, 20), none, 0L, 0L),
+      BlockUpdatedInfo(bm1, RDDBlockId(2, 40), none, 0L, 0L), // doesn't actually exist
+      BlockUpdatedInfo(bm1, RDDBlockId(4, 80), none, 0L, 0L) // doesn't actually exist
+    )
+    postUpdateBlocks(bus, blockUpdateInfos2)
     assert(storageListener._rddInfoMap(0).memSize === 0L)
     assert(storageListener._rddInfoMap(0).diskSize === 400L)
     assert(storageListener._rddInfoMap(0).numCachedPartitions === 1)
@@ -169,24 +163,44 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
     val rddInfo1 = new RDDInfo(1, "rdd1", 1, memOnly, Seq(4))
     val stageInfo0 = new StageInfo(0, 0, "stage0", 1, Seq(rddInfo0), Seq.empty, "details")
     val stageInfo1 = new StageInfo(1, 0, "stage1", 1, Seq(rddInfo1), Seq.empty, "details")
-    val taskMetrics0 = new TaskMetrics
-    val taskMetrics1 = new TaskMetrics
-    val block0 = (RDDBlockId(0, 1), BlockStatus(memOnly, 100L, 0L))
-    val block1 = (RDDBlockId(1, 1), BlockStatus(memOnly, 200L, 0L))
-    taskMetrics0.setUpdatedBlockStatuses(Seq(block0))
-    taskMetrics1.setUpdatedBlockStatuses(Seq(block1))
+    val blockUpdateInfos1 = Seq(BlockUpdatedInfo(bm1, RDDBlockId(0, 1), memOnly, 100L, 0L))
+    val blockUpdateInfos2 = Seq(BlockUpdatedInfo(bm1, RDDBlockId(1, 1), memOnly, 200L, 0L))
     bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
     assert(storageListener.rddInfoList.size === 0)
-    bus.postToAll(SparkListenerTaskEnd(0, 0, "big", Success, taskInfo, taskMetrics0))
+    postUpdateBlocks(bus, blockUpdateInfos1)
     assert(storageListener.rddInfoList.size === 1)
     bus.postToAll(SparkListenerStageSubmitted(stageInfo1))
     assert(storageListener.rddInfoList.size === 1)
     bus.postToAll(SparkListenerStageCompleted(stageInfo0))
     assert(storageListener.rddInfoList.size === 1)
-    bus.postToAll(SparkListenerTaskEnd(1, 0, "small", Success, taskInfo1, taskMetrics1))
+    postUpdateBlocks(bus, blockUpdateInfos2)
     assert(storageListener.rddInfoList.size === 2)
     bus.postToAll(SparkListenerStageCompleted(stageInfo1))
     assert(storageListener.rddInfoList.size === 2)
+  }
+
+  test("verify StorageTab still contains a renamed RDD") {
+    val rddInfo = new RDDInfo(0, "original_name", 1, memOnly, Seq(4))
+    val stageInfo0 = new StageInfo(0, 0, "stage0", 1, Seq(rddInfo), Seq.empty, "details")
+    bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
+    bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
+    val blockUpdateInfos1 = Seq(BlockUpdatedInfo(bm1, RDDBlockId(0, 1), memOnly, 100L, 0L))
+    postUpdateBlocks(bus, blockUpdateInfos1)
+    assert(storageListener.rddInfoList.size == 1)
+
+    val newName = "new_name"
+    val rddInfoRenamed = new RDDInfo(0, newName, 1, memOnly, Seq(4))
+    val stageInfo1 = new StageInfo(1, 0, "stage1", 1, Seq(rddInfoRenamed), Seq.empty, "details")
+    bus.postToAll(SparkListenerStageSubmitted(stageInfo1))
+    assert(storageListener.rddInfoList.size == 1)
+    assert(storageListener.rddInfoList.head.name == newName)
+  }
+
+  private def postUpdateBlocks(
+      bus: SparkListenerBus, blockUpdateInfos: Seq[BlockUpdatedInfo]): Unit = {
+    blockUpdateInfos.foreach { blockUpdateInfo =>
+      bus.postToAll(SparkListenerBlockUpdated(blockUpdateInfo))
+    }
   }
 }

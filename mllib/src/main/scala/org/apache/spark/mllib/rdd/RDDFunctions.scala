@@ -24,6 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 
 /**
+ * :: DeveloperApi ::
  * Machine learning specific RDD functions.
  */
 @DeveloperApi
@@ -51,32 +52,11 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) extends Serializable {
    */
   def sliding(windowSize: Int): RDD[Array[T]] = sliding(windowSize, 1)
 
-  /**
-   * Reduces the elements of this RDD in a multi-level tree pattern.
-   *
-   * @param depth suggested depth of the tree (default: 2)
-   * @see [[org.apache.spark.rdd.RDD#treeReduce]]
-   * @deprecated Use [[org.apache.spark.rdd.RDD#treeReduce]] instead.
-   */
-  @deprecated("Use RDD.treeReduce instead.", "1.3.0")
-  def treeReduce(f: (T, T) => T, depth: Int = 2): T = self.treeReduce(f, depth)
-
-  /**
-   * Aggregates the elements of this RDD in a multi-level tree pattern.
-   *
-   * @param depth suggested depth of the tree (default: 2)
-   * @see [[org.apache.spark.rdd.RDD#treeAggregate]]
-   * @deprecated Use [[org.apache.spark.rdd.RDD#treeAggregate]] instead.
-   */
-  @deprecated("Use RDD.treeAggregate instead.", "1.3.0")
-  def treeAggregate[U: ClassTag](zeroValue: U)(
-      seqOp: (U, T) => U,
-      combOp: (U, U) => U,
-      depth: Int = 2): U = {
-    self.treeAggregate(zeroValue)(seqOp, combOp, depth)
-  }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 object RDDFunctions {
 

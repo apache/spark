@@ -57,7 +57,7 @@ public class JavaGradientBoostingRegressionExample {
     boostingStrategy.setNumIterations(3); // Note: Use more iterations in practice.
     boostingStrategy.getTreeStrategy().setMaxDepth(5);
     // Empty categoricalFeaturesInfo indicates all features are continuous.
-    Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     boostingStrategy.treeStrategy().setCategoricalFeaturesInfo(categoricalFeaturesInfo);
 
     final GradientBoostedTreesModel model =
@@ -68,7 +68,7 @@ public class JavaGradientBoostingRegressionExample {
       testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
         @Override
         public Tuple2<Double, Double> call(LabeledPoint p) {
-          return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+          return new Tuple2<>(model.predict(p.features()), p.label());
         }
       });
     Double testMSE =
@@ -92,5 +92,7 @@ public class JavaGradientBoostingRegressionExample {
     GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(jsc.sc(),
       "target/tmp/myGradientBoostingRegressionModel");
     // $example off$
+
+    jsc.stop();
   }
 }

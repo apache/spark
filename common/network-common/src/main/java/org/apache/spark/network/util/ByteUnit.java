@@ -24,7 +24,7 @@ public enum ByteUnit {
   TiB ((long) Math.pow(1024L, 4L)),
   PiB ((long) Math.pow(1024L, 5L));
 
-  private ByteUnit(long multiplier) {
+  ByteUnit(long multiplier) {
     this.multiplier = multiplier;
   }
 

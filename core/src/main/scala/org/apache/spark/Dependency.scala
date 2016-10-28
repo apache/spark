@@ -59,9 +59,9 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  *
  * @param _rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
- * @param serializer [[org.apache.spark.serializer.Serializer Serializer]] to use. If set to None,
- *                   the default serializer, as specified by `spark.serializer` config option, will
- *                   be used.
+ * @param serializer [[org.apache.spark.serializer.Serializer Serializer]] to use. If not set
+ *                   explicitly then the default serializer, as specified by `spark.serializer`
+ *                   config option, will be used.
  * @param keyOrdering key ordering for RDD's shuffles
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
@@ -70,7 +70,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient private val _rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
-    val serializer: Option[Serializer] = None,
+    val serializer: Serializer = SparkEnv.get.serializer,
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false)

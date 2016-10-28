@@ -31,29 +31,34 @@ import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Typ
  */
 public class RegisterDriver extends BlockTransferMessage {
   private final String appId;
+  private final long heartbeatTimeoutMs;
 
-  public RegisterDriver(String appId) {
+  public RegisterDriver(String appId, long heartbeatTimeoutMs) {
     this.appId = appId;
+    this.heartbeatTimeoutMs = heartbeatTimeoutMs;
   }
 
   public String getAppId() { return appId; }
+
+  public long getHeartbeatTimeoutMs() { return heartbeatTimeoutMs; }
 
   @Override
   protected Type type() { return Type.REGISTER_DRIVER; }
 
   @Override
   public int encodedLength() {
-    return Encoders.Strings.encodedLength(appId);
+    return Encoders.Strings.encodedLength(appId) + Long.SIZE / Byte.SIZE;
   }
 
   @Override
   public void encode(ByteBuf buf) {
     Encoders.Strings.encode(buf, appId);
+    buf.writeLong(heartbeatTimeoutMs);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId);
+    return Objects.hashCode(appId, heartbeatTimeoutMs);
   }
 
   @Override
@@ -66,6 +71,7 @@ public class RegisterDriver extends BlockTransferMessage {
 
   public static RegisterDriver decode(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
-    return new RegisterDriver(appId);
+    long heartbeatTimeout = buf.readLong();
+    return new RegisterDriver(appId, heartbeatTimeout);
   }
 }

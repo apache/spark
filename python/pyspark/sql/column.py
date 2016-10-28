@@ -22,7 +22,7 @@ if sys.version >= '3':
     basestring = str
     long = int
 
-from pyspark import since
+from pyspark import copy_func, since
 from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.types import *
@@ -138,8 +138,6 @@ class Column(object):
         # 2. Create from an expression
         df.colName + 1
         1 / df.colName
-
-    .. note:: Experimental
 
     .. versionadded:: 1.3
     """
@@ -315,6 +313,8 @@ class Column(object):
             sc = SparkContext._active_spark_context
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
+    name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
+
     @ignore_unicode_prefix
     @since(1.3)
     def cast(self, dataType):
@@ -328,16 +328,15 @@ class Column(object):
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
         elif isinstance(dataType, DataType):
-            from pyspark.sql import SQLContext
-            sc = SparkContext.getOrCreate()
-            ctx = SQLContext.getOrCreate(sc)
-            jdt = ctx._ssql_ctx.parseDataType(dataType.json())
+            from pyspark.sql import SparkSession
+            spark = SparkSession.builder.getOrCreate()
+            jdt = spark._jsparkSession.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
         else:
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
-    astype = cast
+    astype = copy_func(cast, sinceversion=1.4, doc=":func:`astype` is an alias for :func:`cast`.")
 
     @since(1.3)
     def between(self, lowerBound, upperBound):
@@ -416,8 +415,6 @@ class Column(object):
         >>> window = Window.partitionBy("name").orderBy("age").rowsBetween(-1, 1)
         >>> from pyspark.sql.functions import rank, min
         >>> # df.select(rank().over(window), min('age').over(window))
-
-        .. note:: Window functions is only supported with HiveContext in 1.4
         """
         from pyspark.sql.window import WindowSpec
         if not isinstance(window, WindowSpec):
@@ -436,13 +433,15 @@ class Column(object):
 
 def _test():
     import doctest
-    from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     import pyspark.sql.column
     globs = pyspark.sql.column.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.column tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
@@ -450,7 +449,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.column, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

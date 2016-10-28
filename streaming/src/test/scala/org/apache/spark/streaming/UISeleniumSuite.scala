@@ -169,9 +169,9 @@ class UISeleniumSuite
           List("4/4", "4/4", "4/4", "0/4 (1 failed)"))
 
         // Check stacktrace
-        val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.text).toSeq
+        val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.underlying).toSeq
         errorCells should have size 1
-        errorCells(0) should include("java.lang.RuntimeException: Oops")
+        // Can't get the inner (invisible) text without running JS
 
         // Check the job link in the batch page is right
         go to (jobLinks(0))

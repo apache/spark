@@ -38,7 +38,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
 
     val content = maybeThreadDump.map { threadDump =>
       val dumpRows = threadDump.sortWith {
-        case (threadTrace1, threadTrace2) => {
+        case (threadTrace1, threadTrace2) =>
           val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
           val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
           if (v1 == v2) {
@@ -46,7 +46,6 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           } else {
             v1 > v2
           }
-        }
       }.map { thread =>
         val threadId = thread.threadId
         <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
