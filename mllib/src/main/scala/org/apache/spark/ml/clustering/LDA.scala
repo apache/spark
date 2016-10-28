@@ -888,6 +888,10 @@ class LDA @Since("1.6.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): LDAModel = {
     transformSchema(dataset.schema, logging = true)
+
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(params : _*)
+
     val oldLDA = new OldLDA()
       .setK($(k))
       .setDocConcentration(getOldDocConcentration)
@@ -905,7 +909,10 @@ class LDA @Since("1.6.0") (
       case m: OldDistributedLDAModel =>
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sparkSession, None)
     }
-    copyValues(newModel).setParent(this)
+    val m = copyValues(newModel).setParent(this)
+
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.6.0")

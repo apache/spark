@@ -232,8 +232,13 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    * @return Fitted model
    */
   override protected def train(dataset: Dataset[_]): MultilayerPerceptronClassificationModel = {
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(params : _*)
+
     val myLayers = $(layers)
     val labels = myLayers.last
+    instr.logNumClasses(labels)
+
     val lpData = extractLabeledPoints(dataset)
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
     val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, softmaxOnTop = true)
@@ -258,7 +263,11 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     }
     trainer.setStackSize($(blockSize))
     val mlpModel = trainer.train(data)
-    new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
+    val model = new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
+
+    instr.logNumFeatures(model.numFeatures)
+    instr.logSuccess(model)
+    model
   }
 }
 
