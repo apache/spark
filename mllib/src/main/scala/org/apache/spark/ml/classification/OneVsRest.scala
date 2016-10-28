@@ -317,10 +317,6 @@ final class OneVsRest @Since("1.4.0") (
     }
     val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
 
-    val instr = Instrumentation.create(this, dataset)
-    instr.logParams(params : _*)
-    instr.logNumClasses(numClasses)
-
     val multiclassLabeled = dataset.select($(labelCol), $(featuresCol))
 
     // persist if underlying dataset is not persistent.
@@ -356,9 +352,6 @@ final class OneVsRest @Since("1.4.0") (
       case attr: Attribute => attr
     }
     val model = new OneVsRestModel(uid, labelAttribute.toMetadata(), models).setParent(this)
-
-    instr.logNumFeatures(models.head.numFeatures)
-    instr.logSuccess(model)
     copyValues(model)
   }
 
