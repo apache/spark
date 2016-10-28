@@ -392,9 +392,9 @@ object WriteOutput extends Logging {
           logDebug(s"Writing partition: $currentKey")
 
           currentWriter = newOutputWriter(currentKey, getPartitionString)
-          val partitionStr = getPartitionString(currentKey).getString(0)
-          if (partitionStr.nonEmpty) {
-            updatedPartitions.add(partitionStr)
+          val partitionPath = getPartitionString(currentKey).getString(0)
+          if (partitionPath.nonEmpty) {
+            updatedPartitions.add(partitionPath)
           }
         }
         currentWriter.writeInternal(sortedIterator.getValue)
