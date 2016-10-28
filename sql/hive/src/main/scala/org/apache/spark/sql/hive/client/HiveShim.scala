@@ -593,7 +593,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           case e: InvocationTargetException =>
             // SPARK-18167 retry to investigate the flaky test
             val retry = Try(getPartitionsByFilterMethod.invoke(hive, table, filter))
+            val full = Try(getAllPartitionsMethod.invoke(hive, table))
             logError("getPartitionsByFilter failed, retry success = " + retry.isSuccess, e)
+            logError("getPartitionsByFilter failed, full fetch success = " + full.isSuccess, e)
             throw e
         }
       }
