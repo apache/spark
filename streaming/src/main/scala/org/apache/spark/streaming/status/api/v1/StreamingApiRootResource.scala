@@ -1,15 +1,16 @@
 package org.apache.spark.streaming.status.api.v1
 
-import javax.ws.rs.Path
-import javax.servlet.ServletContext
 import org.apache.spark.status.api.v1.UIRoot
 import org.eclipse.jetty.server.handler.ContextHandler
-import javax.ws.rs.core.Context
-import org.eclipse.jetty.servlet.ServletHolder
 import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.servlet.ServletHolder
+
 import com.sun.jersey.spi.container.servlet.ServletContainer
-import com.sun.jersey.api.core.ResourceConfig
-import org.apache.spark.status.api.v1.SecurityFilter
+
+import javax.servlet.ServletContext
+import javax.ws.rs.Path
+import javax.ws.rs.Produces
+import javax.ws.rs.core.Context
 
 @Path("/v1")
 private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
