@@ -21,6 +21,7 @@ import java.util.logging.Logger;
 
 public class ChildThreadAppHandle extends AbstractSparkAppHandle {
   private static final Logger LOG = Logger.getLogger(ChildThreadAppHandle.class.getName());
+
   private Thread childThread;
 
   public ChildThreadAppHandle(String secret, LauncherServer server) {

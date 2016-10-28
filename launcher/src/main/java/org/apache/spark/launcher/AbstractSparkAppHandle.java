@@ -18,15 +18,14 @@
 package org.apache.spark.launcher;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
 public abstract class AbstractSparkAppHandle implements SparkAppHandle {
   private static final Logger LOG = Logger.getLogger(AbstractSparkAppHandle.class.getName());
+
   protected final String secret;
   protected final LauncherServer server;
   protected boolean disposed;

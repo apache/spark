@@ -54,15 +54,15 @@
  * org.apache.spark.launcher.SparkAppHandle.Listener...)}, there are two options available
  * for YARN manager in cluster deploy mode:
  *  - to launch Spark Application as a Thread inside current JVM using
- *    the {@link org.apache.spark.launcher.SparkLauncher#launchSparkSubmitAsThread(boolean)}
+ *    the {@link org.apache.spark.launcher.SparkLauncher#launchAsThread(boolean)}
  *  - to request application be killed if launcher process exits using
- *    the {@link org.apache.spark.launcher.SparkLauncher#stopIfInterrupted()}.
+ *    the {@link org.apache.spark.launcher.SparkLauncher#stopIfLauncherShutdown()}.
  * </p>
  *
  * <pre>
  * {@code
  *   import org.apache.spark.launcher.SparkAppHandle;
- *   import org.apache.spark.launcher.SparkLauncher;
+ *   import org.apache.spark.launcher.SparkLauncher;`
  *
  *   public class MyLauncher {
  *     public static void main(String[] args) throws Exception {
@@ -70,8 +70,8 @@
  *         .setAppResource("/my/app.jar")
  *         .setMainClass("my.spark.app.Main")
  *         .setMaster("yarn")
- *         .stopIfInterrupted()
- *         .launchSparkSubmitAsThread(true)
+ *         .stopIfLauncherShutdown()
+ *         .launchAsThread(true)
  *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
  *         .startApplication();
  *       // Use handle API to monitor / control application.

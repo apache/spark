@@ -44,6 +44,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBibl
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION, SparkException, SparkUserAppException}
 import org.apache.spark.{SPARK_BRANCH, SPARK_BUILD_DATE, SPARK_BUILD_USER, SPARK_REPO_URL}
+import org.apache.spark.SparkApp
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.launcher.SparkLauncher
@@ -678,20 +679,8 @@ object SparkSubmit {
       addJarToClasspath(jar, loader)
     }
 
-    val threadEnabled = sysProps.getOrElse("spark.launcher.internal.launcher.thread.enabled",
-       "false").toBoolean
-    if (!threadEnabled) {
-      for ((key, value) <- sysProps) {
-        System.setProperty(key, value)
-      }
-    } else {
-      for ( (key, value) <- sys.env) {
-        if (!sysProps.contains(key)) {
-          sysProps.put(key, value)
-        }
-      }
-
-    }
+    val threadEnabled = sysProps.getOrElse(SparkLauncher.LAUNCHER_INTERNAL_THREAD_ENABLED,
+      "false").toBoolean
 
     var mainClass: Class[_] = null
 
@@ -723,8 +712,24 @@ object SparkSubmit {
       printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
 
-    val mainMethod = if (threadEnabled ) {
-      mainClass.getMethods().filter(i => i.getName() == "sparkMain")(0)
+    val isSparkApp = mainClass.getMethods().filter(_.getName() == "sparkMain").length > 0
+
+    val childSparkConf = sysProps.filter( p => p._1.startsWith("spark.")).toMap
+    val childSysProps = sys.env
+    if (isSparkApp && threadEnabled) {
+      sys.env.foreach { case (key, value) =>
+        if (!sysProps.contains(key)) {
+          sysProps.put(key, value)
+        }
+      }
+    } else {
+      sysProps.foreach { case (key, value) =>
+        System.setProperty(key, value)
+      }
+    }
+
+    val mainMethod = if (isSparkApp) {
+      mainClass.getMethods().filter(_.getName() == "sparkMain")(0)
     } else {
       mainClass.getMethod("main", new Array[String](0).getClass)
     }
@@ -743,8 +748,8 @@ object SparkSubmit {
     }
 
     try {
-      if (threadEnabled) {
-        mainMethod.invoke(null, childArgs.toArray, sysProps)
+      if (isSparkApp) {
+        mainMethod.invoke(null, childArgs.toArray, childSparkConf, childSysProps)
       } else {
         mainMethod.invoke(null, childArgs.toArray)
       }

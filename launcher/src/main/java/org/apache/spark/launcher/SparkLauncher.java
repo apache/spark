@@ -74,13 +74,13 @@ public class SparkLauncher {
   /** Logger name to use when launching a child process. */
   public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";
 
-  private static final String LAUNCHER_INTERNAL_PORT = "spark.launcher.internal.port";
+  public static final String LAUNCHER_INTERNAL_PORT = "spark.launcher.internal.port";
 
-  private static final String CHILD_PROCESS_LAUNCHER_INTERNAL_SECRET = "spark.launcher.internal.secret";
+  public static final String LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET = "spark.launcher.internal.secret";
 
-  private static final String CHILD_PROCESS_LAUNCHER_STOP_FLAG = "spark.launcher.internal.stop.flag";
+  public static final String LAUNCHER_INTERNAL_STOP_IF_SHUTDOWN = "spark.launcher.internal.stop.if.shutdown";
 
-  private static final String CHILD_THREAD_LAUNCHER_ENABLED = "spark.launcher.internal.thread.enabled";
+  public static final String LAUNCHER_INTERNAL_THREAD_ENABLED = "spark.launcher.internal.thread.enabled";
 
   /**
    * A special value for the resource that tells Spark to not try to process the app resource as a
@@ -104,10 +104,10 @@ public class SparkLauncher {
   static final Map<String, String> launcherConfig = new HashMap<>();
 
 
-  private boolean stopIfInterrupted = false;
+  private boolean stopIfLauncherShutdown = false;
 
   /** Flag to decide on launching spark-submit as a child process or a thread **/
-  private boolean launchSparkSubmitAsThread = false;
+  private boolean launchAsThread = false;
 
 
   /**
@@ -128,19 +128,19 @@ public class SparkLauncher {
    * It tries stop/kill Spark Application if {@link LauncherServer} goes away.
    * @return This launcher.
    */
-  public SparkLauncher stopIfInterrupted() {
-    this.stopIfInterrupted = true;
+  public SparkLauncher stopIfLauncherShutdown() {
+    this.stopIfLauncherShutdown = true;
     return this;
   }
 
   /**
    * Specifies that Spark Submit be launched as a daemon thread using reflection.
-   * Please note this feature is currently supported only for cluster deployment mode.
+   * Please note this feature is currently supported only for YARN cluster deployment mode.
    *
    * @return This launcher.
    */
-  public SparkLauncher launchSparkSubmitAsThread(boolean launchSparkSubmitAsThread) {
-    this.launchSparkSubmitAsThread = launchSparkSubmitAsThread;
+  public SparkLauncher launchAsThread(boolean launchAsThread) {
+    this.launchAsThread = launchAsThread;
     return this;
   }
 
@@ -555,7 +555,7 @@ public class SparkLauncher {
    * @return A handle for the launched application.
    */
   public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
-    if (launchSparkSubmitAsThread) {
+    if (launchAsThread) {
       return startApplicationAsThread(listeners);
     }
     return startApplicationAsChildProc(listeners);
@@ -581,7 +581,7 @@ public class SparkLauncher {
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
       String.valueOf(LauncherServer.getServerInstance().getPort()));
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
-    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_STOP_FLAG, String.valueOf(stopIfInterrupted));
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_STOP_FLAG, String.valueOf(stopIfLauncherShutdown));
     try {
       handle.setChildProc(pb.start(), loggerName);
     } catch (IOException ioe) {
@@ -598,10 +598,10 @@ public class SparkLauncher {
     }
 
     String appName = getAppName();
-    setConf(LAUNCHER_INTERNAL_PORT,String.valueOf(LauncherServer.getServerInstance().getPort()));
-    setConf(CHILD_PROCESS_LAUNCHER_INTERNAL_SECRET, handle.getSecret());
-    setConf(CHILD_PROCESS_LAUNCHER_STOP_FLAG, String.valueOf(stopIfInterrupted));
-    setConf(CHILD_THREAD_LAUNCHER_ENABLED,"true");
+    setConf(LAUNCHER_INTERNAL_PORT, String.valueOf(LauncherServer.getServerInstance().getPort()));
+    setConf(LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, handle.getSecret());
+    setConf(LAUNCHER_INTERNAL_STOP_IF_SHUTDOWN, String.valueOf(stopIfLauncherShutdown));
+    setConf(LAUNCHER_INTERNAL_THREAD_ENABLED, "true");
     try {
       // It is important that spark-submit class is available in the classpath.
       // Trying to see if method is available in the classpath else throws Exception.
@@ -612,9 +612,9 @@ public class SparkLauncher {
       handle.setChildThread(submitJobThread);
       submitJobThread.start();
     } catch (ClassNotFoundException cnfe) {
-      throw new IOException(cnfe);
+      throw new IOException("Please make sure spark-core is in the classpath.", cnfe);
     } catch (NoSuchMethodException nsme) {
-      throw new IOException(nsme);
+      throw new IOException("Please make sure spark-core version is correct.", nsme);
     }
     return handle;
   }

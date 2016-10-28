@@ -53,7 +53,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, SparkLauncher, YarnCommandBuilderUtils}
 import org.apache.spark.util.Utils
 
 
@@ -61,33 +61,35 @@ private[spark] class Client(
     val args: ClientArguments,
     val hadoopConf: Configuration,
     val sparkConf: SparkConf,
-    val sysEnvironmentInput: Map[String, String])
+    val sysEnvironment: scala.collection.immutable.Map[String, String])
   extends Logging {
 
   import Client._
   import YarnSparkHadoopUtil._
 
-  def this(clientArgs: ClientArguments, spConf: SparkConf, sysEnv: Map[String, String]) =
+  def this(
+    clientArgs: ClientArguments,
+    spConf: SparkConf,
+    sysEnv: scala.collection.immutable.Map[String, String]) =
     this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf, sysEnv)
 
   def this(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: SparkConf) =
-    this(clientArgs, hadoopConf, spConf, Map() ++ sys.env)
+    this(clientArgs, hadoopConf, spConf, sys.env.toMap)
 
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
-    this(clientArgs, spConf, Map() ++ sys.env)
-
-  private val sysEnvironment: scala.collection.immutable.Map[scala.Predef.String,
-   scala.Predef.String] = collection.immutable.Map() ++ sysEnvironmentInput
+    this(clientArgs, spConf, sys.env.toMap)
 
   private val yarnClient = YarnClient.createYarnClient
   private val yarnConf = new YarnConfiguration(hadoopConf)
 
   private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
 
-  private val launcherServerPort : Int = sparkConf.get("spark.launcher.internal.port", "0").toInt
-  private val launcherServerSecret : String = sparkConf.get("spark.launcher.internal.secret", "")
-  private val launcherServerStopFlag : Boolean = sparkConf.get("spark.launcher.internal.stop.flag",
-    "false").toBoolean
+  private val launcherServerPort : Int =
+    sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_PORT, "0").toInt
+  private val launcherServerSecret : String =
+    sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, "")
+  private val launcherServerStopIfShutdown : Boolean =
+    sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_STOP_IF_SHUTDOWN, "false").toBoolean
   // AM related configurations
   private val amMemory = if (isClusterMode) {
     sparkConf.get(DRIVER_MEMORY).toInt
@@ -160,7 +162,10 @@ private[spark] class Client(
     var appId: ApplicationId = null
     try {
       if (launcherServerSecret != null && launcherServerSecret != "" && launcherServerPort != 0) {
-        launcherBackend.connect(launcherServerPort, launcherServerSecret, launcherServerStopFlag)
+        launcherBackend.connect(
+          launcherServerPort,
+          launcherServerSecret,
+          launcherServerStopIfShutdown)
       } else {
         launcherBackend.connect()
       }
@@ -668,9 +673,8 @@ private[spark] class Client(
     // polluting the UI's environment page. This works for client mode; for cluster mode, this
     // is handled by the AM.
     CACHE_CONFIGS.foreach(sparkConf.remove)
-    Seq("spark.launcher.internal.secret", "spark.launcher.internal.port").foreach { e =>
-      sparkConf.remove(e)
-    }
+    LAUNCHER_CONFIGs.foreach(sparkConf.remove)
+
     localResources
   }
 
@@ -1211,11 +1215,10 @@ private[spark] class Client(
 
 private object Client extends SparkApp with Logging {
 
-  def main(argStrings: Array[String]) {
-    sparkMain(argStrings, Map() ++ sys.env)
-  }
-
-  override def sparkMain(args: Array[String], conf: Map[String, String]): Unit = {
+  override def sparkMain(
+    args: Array[String],
+    conf: scala.collection.immutable.Map[String, String],
+    sysConf: scala.collection.immutable.Map[String, String]): Unit = {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
@@ -1225,7 +1228,7 @@ private object Client extends SparkApp with Logging {
     // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
     System.setProperty("SPARK_YARN_MODE", "true")
 
-    val threadEnabled: Boolean = conf.get("spark.launcher.internal.thread.enabled").
+    val threadEnabled: Boolean = conf.get(SparkLauncher.LAUNCHER_INTERNAL_THREAD_ENABLED).
       getOrElse("false").toBoolean
 
     val sparkConf = new SparkConf
@@ -1236,7 +1239,7 @@ private object Client extends SparkApp with Logging {
     }
 
     val argsForClient = new ClientArguments(args)
-    new Client(argsForClient, sparkConf, conf).run()
+    new Client(argsForClient, sparkConf, sysConf).run()
   }
 
   // Alias for the user jar

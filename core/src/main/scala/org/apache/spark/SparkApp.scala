@@ -21,9 +21,12 @@ package org.apache.spark
  * A client that SparkSubmit uses to launch spark Application.
  * This is currently supported only in YARN mode.
  */
-trait SparkApp {
+private[spark] trait SparkApp {
   this: Singleton =>
 
-  def sparkMain(args: Array[String], conf: scala.collection.mutable.Map[String, String]): Unit
+  def sparkMain(
+    args: Array[String],
+    conf: scala.collection.immutable.Map[String, String],
+    sysConf: scala.collection.immutable.Map[String, String]): Unit
 
 }
