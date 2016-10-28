@@ -112,6 +112,7 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
+    instr.logNumFeatures(m.numFeatures)
     instr.logSuccess(m)
     m
   }
