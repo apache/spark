@@ -39,7 +39,7 @@ if __name__ == "__main__":
         .rdd.map(lambda row: LabeledPoint(row[0], row[1]))
 
     # Split data into training (60%) and test (40%)
-    training, test = data.randomSplit([0.6, 0.4], seed=11L)
+    training, test = data.randomSplit([0.6, 0.4], seed=11)
     training.cache()
 
     # Run training algorithm to build the model
