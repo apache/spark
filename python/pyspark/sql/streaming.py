@@ -640,7 +640,8 @@ class DataStreamReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None,
              timestampFormat=None):
         """
-        Loads a JSON file stream (one object per line) and returns a :class`DataFrame`.
+        Loads a JSON file stream (`JSON Lines text format or newline-delimited JSON
+        <[http://jsonlines.org/>`_) and returns a :class`DataFrame`.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.

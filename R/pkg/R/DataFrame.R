@@ -633,7 +633,7 @@ setMethod("persist",
 #' @param ... further arguments to be passed to or from other methods.
 #'
 #' @family SparkDataFrame functions
-#' @rdname unpersist-methods
+#' @rdname unpersist
 #' @aliases unpersist,SparkDataFrame-method
 #' @name unpersist
 #' @export
@@ -652,6 +652,32 @@ setMethod("unpersist",
             callJMethod(x@sdf, "unpersist", blocking)
             x@env$isCached <- FALSE
             x
+          })
+
+#' StorageLevel
+#'
+#' Get storagelevel of this SparkDataFrame.
+#'
+#' @param x the SparkDataFrame to get the storageLevel.
+#'
+#' @family SparkDataFrame functions
+#' @rdname storageLevel
+#' @aliases storageLevel,SparkDataFrame-method
+#' @name storageLevel
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' persist(df, "MEMORY_AND_DISK")
+#' storageLevel(df)
+#'}
+#' @note storageLevel since 2.1.0
+setMethod("storageLevel",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            storageLevelToString(callJMethod(x@sdf, "storageLevel"))
           })
 
 #' Repartition
@@ -735,7 +761,8 @@ setMethod("toJSON",
 
 #' Save the contents of SparkDataFrame as a JSON file
 #'
-#' Save the contents of a SparkDataFrame as a JSON file (one object per line). Files written out
+#' Save the contents of a SparkDataFrame as a JSON file (\href{http://jsonlines.org/}{
+#' JSON Lines text format or newline-delimited JSON}). Files written out
 #' with this method can be read back in as a SparkDataFrame using read.json().
 #'
 #' @param x A SparkDataFrame

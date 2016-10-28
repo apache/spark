@@ -68,6 +68,22 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
 
+  test("query global temp view") {
+    val df = Seq(1).toDF("i1")
+    df.createGlobalTempView("tbl1")
+    val global_temp_db = spark.conf.get("spark.sql.globalTempDatabase")
+    checkAnswer(spark.sql(s"select * from ${global_temp_db}.tbl1"), Row(1))
+    spark.sql(s"drop view ${global_temp_db}.tbl1")
+  }
+
+  test("non-existent global temp view") {
+    val global_temp_db = spark.conf.get("spark.sql.globalTempDatabase")
+    val message = intercept[AnalysisException] {
+      spark.sql(s"select * from ${global_temp_db}.nonexistentview")
+    }.getMessage
+    assert(message.contains("Table or view not found"))
+  }
+
   test("script") {
     val scriptFilePath = getTestResourcePath("test_script.sh")
     if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
@@ -358,7 +374,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         "# Partition Information",
         "# col_name",
         "Detailed Partition Information CatalogPartition(",
-        "Partition Values: [Us, 1]",
+        "Partition Values: [c=Us, d=1]",
         "Storage(Location:",
         "Partition Parameters")
 
@@ -399,10 +415,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
         .partitionBy("d")
         .saveAsTable("datasource_table")
-      val m4 = intercept[AnalysisException] {
-        sql("DESC datasource_table PARTITION (d=2)")
-      }.getMessage()
-      assert(m4.contains("DESC PARTITION is not allowed on a datasource table"))
+
+      sql("DESC datasource_table PARTITION (d=0)")
 
       val m5 = intercept[AnalysisException] {
         spark.range(10).select('id as 'a, 'id as 'b).createTempView("view1")

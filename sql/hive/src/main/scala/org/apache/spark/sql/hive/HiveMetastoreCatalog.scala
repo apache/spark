@@ -76,11 +76,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             partitionColumns = table.partitionColumnNames,
             bucketSpec = table.bucketSpec,
             className = table.provider.get,
-            options = table.storage.properties)
+            options = table.storage.properties,
+            catalogTable = Some(table))
 
-        LogicalRelation(
-          dataSource.resolveRelation(),
-          catalogTable = Some(table))
+        LogicalRelation(dataSource.resolveRelation(), catalogTable = Some(table))
       }
     }
 
@@ -194,7 +193,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
     val bucketSpec = None  // We don't support hive bucketed tables, only ones we write out.
 
-    val lazyPruningEnabled = sparkSession.sqlContext.conf.filesourcePartitionPruning
+    val lazyPruningEnabled = sparkSession.sqlContext.conf.manageFilesourcePartitions
     val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
 
