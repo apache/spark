@@ -64,7 +64,7 @@ if sys.version < '3':
     from itertools import izip as zip
 else:
     import pickle
-    protocol = 3
+    protocol = min(pickle.HIGHEST_PROTOCOL, 4)
     xrange = range
 
 from pyspark import cloudpickle
