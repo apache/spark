@@ -254,7 +254,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       )
     }
 
-    df.sparkSession.sessionState.executePlan(
+    df.sparkSession.sessionState.
+    (
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
@@ -393,8 +394,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         if (tableDesc.partitionColumnNames.nonEmpty &&
             df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
           // Need to recover partitions into the metastore so our saved data is visible.
-          df.sparkSession.sessionState.executePlan(
-            AlterTableRecoverPartitionsCommand(tableDesc.identifier))
+          //df.sparkSession.sessionState.executePlan(
+          //  AlterTableRecoverPartitionsCommand(tableDesc.identifier))
         }
         result.toRdd
     }
