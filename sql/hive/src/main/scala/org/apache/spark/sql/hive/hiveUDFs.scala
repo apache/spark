@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.hive
 
+import java.nio.ByteBuffer
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.ql.exec._
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
-import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector,
-  ObjectInspectorFactory}
+import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 
 import org.apache.spark.internal.Logging
@@ -35,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.hive.HiveUDAFFunction.AggregationBufferSerDe
 import org.apache.spark.sql.types._
 
 
@@ -58,7 +61,7 @@ private[hive] case class HiveSimpleUDF(
 
   @transient
   private lazy val isUDFDeterministic = {
-    val udfType = function.getClass().getAnnotation(classOf[HiveUDFType])
+    val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
     udfType != null && udfType.deterministic()
   }
 
@@ -75,7 +78,7 @@ private[hive] case class HiveSimpleUDF(
 
   @transient
   lazy val unwrapper = unwrapperFor(ObjectInspectorFactory.getReflectionObjectInspector(
-    method.getGenericReturnType(), ObjectInspectorOptions.JAVA))
+    method.getGenericReturnType, ObjectInspectorOptions.JAVA))
 
   @transient
   private lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
@@ -273,7 +276,7 @@ private[hive] case class HiveUDAFFunction(
     isUDAFBridgeRequired: Boolean = false,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate with HiveInspectors {
+  extends TypedImperativeAggregate[GenericUDAFEvaluator.AggregationBuffer] with HiveInspectors {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -293,61 +296,43 @@ private[hive] case class HiveUDAFFunction(
   private lazy val inspectors = children.map(toInspector).toArray
 
   @transient
-  private lazy val functionAndInspector = {
+  private lazy val function = {
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors, false, false)
-    val f = resolver.getEvaluator(parameterInfo)
-    f -> f.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
+    resolver.getEvaluator(parameterInfo)
   }
-
-  @transient
-  private lazy val function = functionAndInspector._1
 
   @transient
   private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
 
   @transient
-  private lazy val returnInspector = functionAndInspector._2
+  private lazy val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
 
   @transient
-  private lazy val unwrapper = unwrapperFor(returnInspector)
+  private lazy val partialResultInspector =
+    function.init(GenericUDAFEvaluator.Mode.PARTIAL1, inspectors)
 
   @transient
-  private[this] var buffer: GenericUDAFEvaluator.AggregationBuffer = _
-
-  override def eval(input: InternalRow): Any = unwrapper(function.evaluate(buffer))
+  private lazy val partialResultDataType = inspectorToDataType(partialResultInspector)
 
   @transient
-  private lazy val inputProjection = new InterpretedProjection(children)
+  private lazy val partialResultUnwrapper = unwrapperFor(partialResultInspector)
 
   @transient
-  private lazy val cached = new Array[AnyRef](children.length)
+  private lazy val partialResultWrapper = wrapperFor(partialResultInspector, partialResultDataType)
+
+  @transient
+  private lazy val resultUnwrapper = unwrapperFor(returnInspector)
+
+  @transient
+  private lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
 
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
 
-  // Hive UDAF has its own buffer, so we don't need to occupy a slot in the aggregation
-  // buffer for it.
-  override def aggBufferSchema: StructType = StructType(Nil)
-
-  override def update(_buffer: InternalRow, input: InternalRow): Unit = {
-    val inputs = inputProjection(input)
-    function.iterate(buffer, wrap(inputs, wrappers, cached, inputDataTypes))
-  }
-
-  override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
-    throw new UnsupportedOperationException(
-      "Hive UDAF doesn't support partial aggregate")
-  }
-
-  override def initialize(_buffer: InternalRow): Unit = {
-    buffer = function.getNewAggregationBuffer
-  }
-
-  override val aggBufferAttributes: Seq[AttributeReference] = Nil
-
-  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
-  // in the superclass because that will lead to initialization ordering issues.
-  override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
+  @transient
+  private lazy val bufferSerDe: AggregationBufferSerDe =
+    new AggregationBufferSerDe(
+      function, partialResultDataType, partialResultUnwrapper, partialResultWrapper)
 
   // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
   // catalyst type checking framework.
@@ -364,5 +349,66 @@ private[hive] case class HiveUDAFFunction(
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else " "
     s"$name($distinct${children.map(_.sql).mkString(", ")})"
+  }
+
+  override def createAggregationBuffer(): AggregationBuffer = function.getNewAggregationBuffer
+
+  @transient
+  private lazy val inputProjection = new InterpretedProjection(children)
+
+  override def update(buffer: AggregationBuffer, input: InternalRow): Unit = {
+    function.iterate(buffer, wrap(inputProjection(input), wrappers, cached, inputDataTypes))
+  }
+
+  override def merge(buffer: AggregationBuffer, input: AggregationBuffer): Unit = {
+    function.merge(buffer, partialResultUnwrapper(input))
+  }
+
+  override def eval(buffer: AggregationBuffer): Any = resultUnwrapper(function.evaluate(buffer))
+
+  override def serialize(buffer: AggregationBuffer): Array[Byte] = {
+    bufferSerDe.serialize(buffer)
+  }
+
+  override def deserialize(bytes: Array[Byte]): AggregationBuffer = {
+    bufferSerDe.deserialize(bytes)
+  }
+}
+
+private[hive] object HiveUDAFFunction {
+  class AggregationBufferSerDe(
+      function: GenericUDAFEvaluator,
+      partialResultDataType: DataType,
+      partialResultUnwrapper: Any => Any,
+      partialResultWrapper: Any => Any)
+    extends HiveInspectors {
+
+    private val projection = UnsafeProjection.create(Array(partialResultDataType))
+
+    private val mutableRow = new GenericInternalRow(1)
+
+    def serialize(buffer: AggregationBuffer): Array[Byte] = {
+      // `GenericUDAFEvaluator.terminatePartial()` converts an `AggregationBuffer` into an object
+      // that can be inspected by the `ObjectInspector` returned by `GenericUDAFEvaluator.init()`.
+      // Then we can unwrap it to a Spark SQL value.
+      mutableRow.update(0, partialResultUnwrapper(function.terminatePartial(buffer)))
+      val unsafeRow = projection(mutableRow)
+      val bytes = ByteBuffer.allocate(unsafeRow.getSizeInBytes)
+      unsafeRow.writeTo(bytes)
+      bytes.array()
+    }
+
+    def deserialize(bytes: Array[Byte]): AggregationBuffer = {
+      // `GenericUDAFEvaluator` doesn't provide any method that is capable to convert an object
+      // returned by `GenericUDAFEvaluator.terminatePartial()` back to an `AggregationBuffer`. The
+      // workaround here is creating an initial `AggregationBuffer` first and then merge the
+      // deserialized object into the buffer.
+      val buffer = function.getNewAggregationBuffer
+      val unsafeRow = new UnsafeRow
+      unsafeRow.pointTo(bytes, bytes.length)
+      val partialResult = unsafeRow.get(0, partialResultDataType)
+      function.merge(buffer, partialResultWrapper(partialResult))
+      buffer
+    }
   }
 }
