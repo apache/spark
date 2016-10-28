@@ -319,7 +319,6 @@ final class OneVsRest @Since("1.4.0") (
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(params : _*)
-    instr.logParams($(classifier).params : _*)
     instr.logNumClasses(numClasses)
 
     val multiclassLabeled = dataset.select($(labelCol), $(featuresCol))
