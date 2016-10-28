@@ -340,6 +340,7 @@ class GaussianMixture @Since("2.0.0") (
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
     model.setSummary(summary)
+    instr.logNumFeatures(model.gaussians.head.mean.size)
     instr.logSuccess(model)
     model
   }
