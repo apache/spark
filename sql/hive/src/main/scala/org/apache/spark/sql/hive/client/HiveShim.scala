@@ -591,7 +591,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
             .asInstanceOf[JArrayList[Partition]]
         } catch {
           case e: InvocationTargetException =>
-            // SPARK-???? retry to investigate the flaky test
+            // SPARK-18167 retry to investigate the flaky test
             val retry = Try(getPartitionsByFilterMethod.invoke(hive, table, filter))
             logError("getPartitionsByFilter failed, retry success = " + retry.isSuccess, e)
             throw e
