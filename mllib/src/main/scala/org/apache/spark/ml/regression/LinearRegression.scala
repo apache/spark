@@ -204,7 +204,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         Instance(label, weight, features)
     }
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(params : _*)
     instr.logNumFeatures(numFeatures)
 
@@ -230,7 +230,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         model.diagInvAtWA.toArray,
         model.objectiveHistory)
       instr.logSuccess(lrModel)
-
       return lrModel.setSummary(Some(trainingSummary))
     }
 

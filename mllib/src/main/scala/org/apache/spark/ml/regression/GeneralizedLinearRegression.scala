@@ -251,6 +251,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(params : _*)
+    instr.logNumFeatures(numFeatures)
+
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {
       val msg = "Currently, GeneralizedLinearRegression only supports number of features" +
         s" <= ${WeightedLeastSquares.MAX_NUM_FEATURES}. Found $numFeatures in the input dataset."
@@ -288,6 +292,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         .setParent(this))
     val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
       irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
+    instr.logSuccess(model)
     model.setSummary(Some(trainingSummary))
   }
 
