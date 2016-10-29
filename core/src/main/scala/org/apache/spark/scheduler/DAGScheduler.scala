@@ -882,8 +882,9 @@ class DAGScheduler(
     finalStage.setActiveJob(job)
     val stageIds = jobIdToStageIds(jobId).toArray
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-    listenerBus.post(
-      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, user, properties))
+    val jobStart = SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties)
+    jobStart.user = user
+    listenerBus.post(jobStart)
     submitStage(finalStage)
   }
 
@@ -921,8 +922,9 @@ class DAGScheduler(
     finalStage.addActiveJob(job)
     val stageIds = jobIdToStageIds(jobId).toArray
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-    listenerBus.post(
-      SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, user, properties))
+    val jobStart = SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties)
+    jobStart.user = user
+    listenerBus.post(jobStart)
     submitStage(finalStage)
 
     // If the whole stage has already finished, tell the listener and remove it

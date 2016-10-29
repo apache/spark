@@ -575,7 +575,9 @@ private[spark] object JsonProtocol {
           new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown")
         }
       }
-    SparkListenerJobStart(jobId, submissionTime, stageInfos, user, properties)
+    val jobStart = SparkListenerJobStart(jobId, submissionTime, stageInfos, properties)
+    jobStart.user = user
+    jobStart
   }
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {

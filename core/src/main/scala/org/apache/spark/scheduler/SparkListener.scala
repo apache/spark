@@ -68,12 +68,18 @@ case class SparkListenerJobStart(
     jobId: Int,
     time: Long,
     stageInfos: Seq[StageInfo],
-    user: String = "Unknown",
     properties: Properties = null)
   extends SparkListenerEvent {
   // Note: this is here for backwards-compatibility with older versions of this event which
   // only stored stageIds and not StageInfos:
   val stageIds: Seq[Int] = stageInfos.map(_.stageId)
+  var _user: String = _
+
+  def user_=(user: String) {
+    _user = user
+  }
+
+  def user: String = _user
 }
 
 @DeveloperApi

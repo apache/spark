@@ -59,7 +59,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       val stageIds = Seq[Int](1, 2, 3, 4)
       val stageInfos = stageIds.map(x =>
         makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
-      SparkListenerJobStart(10, jobSubmissionTime, stageInfos, "testUser", properties)
+      SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
     }
     val jobEnd = SparkListenerJobEnd(20, jobCompletionTime, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
@@ -306,10 +306,10 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400, x * 500))
     val dummyStageInfos =
       stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown"))
-    val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, "testUser", properties)
+    val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
     val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
     val expectedJobStart =
-      SparkListenerJobStart(10, jobSubmissionTime, dummyStageInfos, "testUser", properties)
+      SparkListenerJobStart(10, jobSubmissionTime, dummyStageInfos, properties)
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldEvent))
   }
 
@@ -318,10 +318,10 @@ class JsonProtocolSuite extends SparkFunSuite {
     // Also, SparkListenerJobEnd did not have a "Completion Time" property.
     val stageIds = Seq[Int](1, 2, 3, 4)
     val stageInfos = stageIds.map(x => makeStageInfo(x * 10, x * 20, x * 30, x * 40, x * 50))
-    val jobStart = SparkListenerJobStart(11, jobSubmissionTime, stageInfos, "testUser", properties)
+    val jobStart = SparkListenerJobStart(11, jobSubmissionTime, stageInfos, properties)
     val oldStartEvent = JsonProtocol.jobStartToJson(jobStart)
       .removeField({ _._1 == "Submission Time"})
-    val expectedJobStart = SparkListenerJobStart(11, -1, stageInfos, "testUser", properties)
+    val expectedJobStart = SparkListenerJobStart(11, -1, stageInfos, properties)
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldStartEvent))
 
     val jobEnd = SparkListenerJobEnd(11, jobCompletionTime, JobSucceeded)
@@ -1637,7 +1637,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    3,
       |    4
       |  ],
-      |  "User": "testUser",
       |  "Properties": {
       |    "France": "Paris",
       |    "Germany": "Berlin",
