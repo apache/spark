@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -45,6 +46,8 @@ class TableFileCatalog(
 
   private val baseLocation = table.storage.locationUri
 
+  override def partitionSchema: StructType = table.partitionSchema
+
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
   override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
@@ -63,7 +66,6 @@ class TableFileCatalog(
     if (table.partitionColumnNames.nonEmpty) {
       val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
         table.identifier, filters)
-      val partitionSchema = table.partitionSchema
       val partitions = selectedPartitions.map { p =>
         PartitionPath(p.toRow(partitionSchema), p.storage.locationUri.get)
       }
