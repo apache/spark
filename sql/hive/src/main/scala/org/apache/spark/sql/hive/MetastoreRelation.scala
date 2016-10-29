@@ -36,16 +36,14 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.sql.types.StructField
 
 private[hive] case class MetastoreRelation(
     databaseName: String,
     tableName: String,
-    partitionPruningPred: Seq[Expression] = Seq.empty)
+    var partitionPruningPred: Seq[Expression] = Seq.empty)
     (val catalogTable: CatalogTable,
-     @transient val client: HiveClient,
      @transient val sparkSession: SparkSession)
   extends LeafNode with MultiInstanceRelation with FileRelation with CatalogRelation {
 
@@ -295,7 +293,6 @@ private[hive] case class MetastoreRelation(
   }
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, partitionPruningPred)(
-      catalogTable, client, sparkSession)
+    MetastoreRelation(databaseName, tableName, partitionPruningPred)(catalogTable, sparkSession)
   }
 }
