@@ -594,7 +594,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
             .asInstanceOf[JArrayList[Partition]]
         } catch {
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
-            logWarning("Caught MetaException attempting to get partitions by filter from Hive", ex)
+            logWarning("Caught MetaException attempting to get partition metadata by filter " +
+              "from Hive. Falling back to fetching all partition metadata.", ex)
             // Return all partitions. HiveShim clients are expected to handle this possibility
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
         }
