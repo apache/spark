@@ -112,13 +112,11 @@ class DecisionTreeClassifier @Since("1.4.0") (
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
-    instr.logNumClasses(numClasses)
 
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
-    instr.logNumFeatures(m.numFeatures)
     instr.logSuccess(m)
     m
   }
