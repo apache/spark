@@ -40,7 +40,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val center = Vectors.dense(1.0, 3.0, 4.0)
 
-    // No matter how many runs or iterations we use, we should get one cluster,
+    // No matter how many iterations we use, we should get one cluster,
     // centered at the mean of the points
 
     var model = KMeans.train(data, k = 1, maxIterations = 1)
@@ -149,7 +149,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val data = sc.parallelize((1 to 100).flatMap(_ => smallData), 4)
 
-    // No matter how many runs or iterations we use, we should get one cluster,
+    // No matter how many iterations we use, we should get one cluster,
     // centered at the mean of the points
 
     val center = Vectors.dense(1.0, 3.0, 4.0)
@@ -188,7 +188,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     data.persist()
 
-    // No matter how many runs or iterations we use, we should get one cluster,
+    // No matter how many iterations we use, we should get one cluster,
     // centered at the mean of the points
 
     val center = Vectors.sparse(n, Seq((0, 1.0), (1, 3.0), (2, 4.0)))
