@@ -202,6 +202,7 @@ case class DropTableCommand(
       sparkSession.sharedState.cacheManager.uncacheQuery(
         sparkSession.table(tableName.quotedString))
     } catch {
+      case ae: AnalysisException if ae.getMessage.contains("Table or view not found") =>
       case NonFatal(e) => log.warn(e.toString, e)
     }
     catalog.refreshTable(tableName)
