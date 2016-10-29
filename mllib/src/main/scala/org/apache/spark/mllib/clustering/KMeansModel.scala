@@ -77,6 +77,34 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
   /**
+   * Returns the distances to all clusters for a given point.
+   */
+  @Since("1.5.0")
+  def distanceToCenters(point: Vector): Iterable[(Int, Double)] = {
+    val pointWithNorm = new VectorWithNorm(point)
+    clusterCentersWithNorm.zipWithIndex.map {
+      case (c, i) =>
+        (i, KMeans.fastSquaredDistance(c, pointWithNorm))
+    }.toList
+  }
+
+  /**
+   * Maps given points to their distances to all clusters.
+   */
+  @Since("1.5.0")
+  def distanceToCenters(points: RDD[Vector]): RDD[(Vector, Iterable[(Int, Double)])] = {
+    val centersWithNorm = clusterCentersWithNorm
+    val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
+    points.map(p => {
+      val pointWithNorm = new VectorWithNorm(p)
+      (p, bcCentersWithNorm.value.zipWithIndex.map {
+        case (c, i) =>
+          (i, KMeans.fastSquaredDistance(c, pointWithNorm))
+      }.toList)
+    })
+  }
+
+  /**
    * Return the K-means cost (sum of squared distances of points to their nearest center) for this
    * model on the given data.
    */
