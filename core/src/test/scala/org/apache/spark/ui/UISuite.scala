@@ -176,7 +176,7 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("verify appUIAddress contains the scheme") {
+  test("verify webUrl contains the scheme") {
     withSpark(newSparkContext()) { sc =>
       val ui = sc.ui.get
       val uiAddress = ui.webUrl
@@ -184,12 +184,12 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("verify appUIAddress contains the port") {
+  test("verify webUrl contains the port") {
     withSpark(newSparkContext()) { sc =>
       val ui = sc.ui.get
       val splitUIAddress = ui.webUrl.split(':')
       val boundPort = ui.boundPort
-      assert(splitUIAddress(2).toInt == boundPort)
+      assert(splitUIAddress(3).toInt == boundPort)
     }
   }
 
