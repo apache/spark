@@ -222,8 +222,8 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(
                   s"grouping expressions sequence is empty, " +
                     s"and '${e.sql}' is not an aggregate function. " +
-                    s"Wrap '${aggExprs.mkString("(", ", ", ")")}' in windowing function(s) " +
-                    s"or wrap '${e.sql}' in first() (or first_value) " +
+                    s"Wrap '${aggExprs.map(_.sql).mkString("(", ", ", ")")}' in windowing " +
+                    s"function(s) or wrap '${e.sql}' in first() (or first_value) " +
                     s"if you don't care which value you get."
                 )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
