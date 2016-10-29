@@ -1748,9 +1748,8 @@ def from_json(col, schema, options={}):
 @since(2.1)
 def to_json(col, options={}):
     """
-    Converts a column containing a [[StructType]] into a JSON string (`JSON Lines text format or
-    newline-delimited JSON <http://jsonlines.org/>`_). Throws an exception, in the case of an
-    unsupported type.
+    Converts a column containing a [[StructType]] into a JSON string. Throws an exception,
+    in the case of an unsupported type.
 
     :param col: name of column containing the struct
     :param options: options to control converting. accepts the same options as the json datasource

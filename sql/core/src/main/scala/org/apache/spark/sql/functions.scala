@@ -2938,8 +2938,7 @@ object functions {
 
 
   /**
-   * (Scala-specific) Converts a column containing a [[StructType]] into a JSON string
-   * ([[http://jsonlines.org/ JSON Lines text format or newline-delimited JSON]]) with the
+   * (Scala-specific) Converts a column containing a [[StructType]] into a JSON string with the
    * specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a struct column.
@@ -2954,8 +2953,7 @@ object functions {
   }
 
   /**
-   * (Java-specific) Converts a column containing a [[StructType]] into a JSON string
-   * ([[http://jsonlines.org/ JSON Lines text format or newline-delimited JSON]]) with the
+   * (Java-specific) Converts a column containing a [[StructType]] into a JSON string with the
    * specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a struct column.
@@ -2969,8 +2967,7 @@ object functions {
     to_json(e, options.asScala.toMap)
 
   /**
-   * Converts a column containing a [[StructType]] into a JSON string
-   * ([[http://jsonlines.org/ JSON Lines text format or newline-delimited JSON]]) with the
+   * Converts a column containing a [[StructType]] into a JSON string with the
    * specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a struct column.
