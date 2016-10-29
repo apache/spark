@@ -39,7 +39,14 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
    * be dispatched to all StreamingQueryListener in the thread of the Spark listener bus.
    */
   def post(event: StreamingQueryListener.Event) {
-    sparkListenerBus.post(event)
+    event match {
+      case s: QueryStartedEvent =>
+        sparkListenerBus.postToAll(s)
+        // post to local listeners to trigger callbacks
+        postToAll(event)
+      case _ =>
+        sparkListenerBus.post(event)
+    }
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
