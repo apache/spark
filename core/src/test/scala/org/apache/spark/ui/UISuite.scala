@@ -189,7 +189,7 @@ class UISuite extends SparkFunSuite {
       val ui = sc.ui.get
       val splitUIAddress = ui.webUrl.split(':')
       val boundPort = ui.boundPort
-      assert(splitUIAddress(3).toInt == boundPort)
+      assert(splitUIAddress(2).toInt == boundPort)
     }
   }
 
