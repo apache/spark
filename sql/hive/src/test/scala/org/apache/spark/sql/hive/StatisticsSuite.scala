@@ -119,7 +119,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
   }
 
   test("MetastoreRelations fallback to hdfs of scanned partitions for size estimation") {
-    withTempTable("tempTbl", "largeTbl", "partTbl") {
+    withTempView("tempTbl", "largeTbl", "partTbl") {
       spark.range(0, 1000, 1, 2).selectExpr("id as col1", "id as col2")
         .createOrReplaceTempView("tempTbl")
       spark.range(0, 100000, 1, 2).selectExpr("id as col1", "id as col2").
