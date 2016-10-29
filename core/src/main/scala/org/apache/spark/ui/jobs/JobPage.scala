@@ -264,12 +264,12 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         <div>
           <ul class="unstyled">
             <li>
-              <strong>User:</strong>
-              {jobData.user}
-            </li>
-            <li>
               <strong>Status:</strong>
               {jobData.status}
+            </li>
+            <li>
+              <strong>User:</strong>
+              {jobData.user}
             </li>
             {
               if (jobData.jobGroup.isDefined) {

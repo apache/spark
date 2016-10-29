@@ -77,8 +77,8 @@ private[ui] abstract class ExecutionTable(
 
   protected def baseHeader: Seq[String] = Seq(
     "ID",
-    "User",
     "Description",
+    "User",
     "Submitted",
     "Duration")
 
@@ -102,10 +102,10 @@ private[ui] abstract class ExecutionTable(
         {executionUIData.executionId.toString}
       </td>
       <td>
-        {executionUIData.user}
+        {descriptionCell(executionUIData)}
       </td>
       <td>
-        {descriptionCell(executionUIData)}
+        {executionUIData.user}
       </td>
       <td sorttable_customkey={submissionTime.toString}>
         {UIUtils.formatDate(submissionTime)}
