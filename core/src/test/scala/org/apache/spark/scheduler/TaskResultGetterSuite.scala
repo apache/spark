@@ -210,8 +210,8 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
       assert(expectedFailure.findFirstMatchIn(exceptionMessage).isDefined)
       assert(unknownFailure.findFirstMatchIn(exceptionMessage).isEmpty)
     } {
-      loader.close()
       Thread.currentThread.setContextClassLoader(originalClassLoader)
+      loader.close()
     }
   }
 
