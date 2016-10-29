@@ -216,8 +216,6 @@ For data stores that support transactions, saving offsets in the same transactio
 	val fromOffsets = selectOffsetsFromYourDatabase.map { resultSet =>
 	  new TopicPartition(resultSet.string("topic"), resultSet.int("partition")) -> resultSet.long("offset")
 	}.toMap
-
-	import org.apache.spark.streaming.kafka010.ConsumerStrategies.Assign
 	
 	val stream = KafkaUtils.createDirectStream[String, String](
 	  streamingContext,
@@ -230,13 +228,13 @@ For data stores that support transactions, saving offsets in the same transactio
 
 	  val results = yourCalculation(rdd)
 
-	  yourTransactionBlock {
-	    // update results
+	  // begin your transaction
 
-	    // update offsets where the end of existing offsets matches the beginning of this batch of offsets
+	  // update results
+	  // update offsets where the end of existing offsets matches the beginning of this batch of offsets
+	  // assert that offsets were updated correctly
 
-	    // assert that offsets were updated correctly
-	  }
+	  // end your transaction
 	}
 </div>
 <div data-lang="java" markdown="1">
@@ -261,13 +259,13 @@ For data stores that support transactions, saving offsets in the same transactio
 	    
 	    Object results = yourCalculation(rdd);
 
-	    yourTransactionBlock {
-	      // update results
+	    // begin your transaction
 
-	      // update offsets where the end of existing offsets matches the beginning of this batch of offsets
+	    // update results
+	    // update offsets where the end of existing offsets matches the beginning of this batch of offsets
+	    // assert that offsets were updated correctly
 
-	      // assert that offsets were updated correctly
-	    }
+	    // end your transaction
 	  }
 	});
 </div>
