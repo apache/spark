@@ -56,7 +56,7 @@ Each item in the stream is a [ConsumerRecord](http://kafka.apache.org/0100/javad
 	import org.apache.kafka.common.serialization.StringDeserializer;
 	import scala.Tuple2;
 	
-	Map<String, Object> kafkaParams = new HashMap<String, Object>();
+	Map<String, Object> kafkaParams = new HashMap<>();
 	kafkaParams.put("bootstrap.servers", "localhost:9092,anotherhost:9092");
 	kafkaParams.put("key.deserializer", StringDeserializer.class);
 	kafkaParams.put("value.deserializer", StringDeserializer.class);
@@ -123,13 +123,13 @@ If you have a use case that is better suited to batch processing, you can create
 <div data-lang="java" markdown="1">
 	// Import dependencies and create kafka params as in Create Direct Stream above
 
-	OffsetRange[] offsetRanges = new OffsetRange[]{
+	OffsetRange[] offsetRanges = {
 	  // topic, partition, inclusive starting offset, exclusive ending offset
 	  OffsetRange.create("test", 0, 0, 100),
 	  OffsetRange.create("test", 1, 0, 100)
 	};
 
-	JavaRDD<ConsumerRecord<String, String>> rdd = KafkaUtils.<String, String>createRDD(
+	JavaRDD<ConsumerRecord<String, String>> rdd = KafkaUtils.createRDD(
 	  sparkContext,
 	  kafkaParams,
 	  offsetRanges,
@@ -159,7 +159,7 @@ Note that you cannot use `PreferBrokers`, because without the stream there is no
 	    final OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
 	    rdd.foreachPartition(new VoidFunction<Iterator<ConsumerRecord<String, String>>>() {
 	      @Override
-	      public void call(Iterator<ConsumerRecord<String, String>> consumerRecords) throws Exception {
+	      public void call(Iterator<ConsumerRecord<String, String>> consumerRecords) {
 	        OffsetRange o = offsetRanges[TaskContext.get().partitionId()];
 	        System.out.println(
 	          o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset());
@@ -244,11 +244,11 @@ For data stores that support transactions, saving offsets in the same transactio
 
 	// begin from the the offsets committed to the database
 	Map<TopicPartition, Long> fromOffsets = new HashMap<>();
-	for (resultSet: selectOffsetsFromYourDatabase)
+	for (resultSet : selectOffsetsFromYourDatabase)
 	  fromOffsets.put(new TopicPartition(resultSet.string("topic"), resultSet.int("partition")), resultSet.long("offset"));
 	}
 
-	JavaInputDStream<ConsumerRecord<String, String>> stream = KafkaUtils.<String, String>createDirectStream(
+	JavaInputDStream<ConsumerRecord<String, String>> stream = KafkaUtils.createDirectStream(
 	  streamingContext,
 	  LocationStrategies.PreferConsistent(),
 	  ConsumerStrategies.<String, String>Assign(fromOffsets.keySet(), kafkaParams, fromOffsets)
