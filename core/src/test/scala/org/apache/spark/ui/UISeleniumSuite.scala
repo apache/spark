@@ -532,7 +532,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
           (row, idx) <- rows.zipWithIndex
           columns = row.findElements(By.tagName("td"))
           id = columns.get(0).getText()
-          description = columns.get(2).getText()
+          description = columns.get(1).getText()
         } {
           id should be (expJobInfo(idx)._1)
           description should include (expJobInfo(idx)._2)
