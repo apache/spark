@@ -56,7 +56,8 @@ class FileStreamSink(
 
   private val basePath = new Path(path)
   private val logPath = new Path(basePath, FileStreamSink.metadataDir)
-  private val fileLog = new FileStreamSinkLog(sparkSession, logPath.toUri.toString)
+  private val fileLog =
+    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toUri.toString)
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
   private val fs = basePath.getFileSystem(hadoopConf)
 
@@ -102,11 +103,7 @@ class FileStreamSinkWriter(
   // Get the actual partition columns as attributes after matching them by name with
   // the given columns names.
   private val partitionColumns = partitionColumnNames.map { col =>
-    val nameEquality = if (data.sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-    } else {
-      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-    }
+    val nameEquality = data.sparkSession.sessionState.conf.resolver
     data.logicalPlan.output.find(f => nameEquality(f.name, col)).getOrElse {
       throw new RuntimeException(s"Partition column $col not found in schema $dataSchema")
     }

@@ -29,19 +29,15 @@ if sys.version >= '3':
     xrange = range
 
 from py4j.java_gateway import java_import, JavaGateway, GatewayClient
-from py4j.java_collections import ListConverter
-
 from pyspark.serializers import read_int
 
 
-# patching ListConverter, or it will convert bytearray into Java ArrayList
-def can_convert_list(self, obj):
-    return isinstance(obj, (list, tuple, xrange))
-
-ListConverter.can_convert = can_convert_list
-
-
-def launch_gateway():
+def launch_gateway(conf=None):
+    """
+    launch jvm gateway
+    :param conf: spark configuration passed to spark-submit
+    :return:
+    """
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
     else:
@@ -50,13 +46,17 @@ def launch_gateway():
         # proper classpath and settings from spark-env.sh
         on_windows = platform.system() == "Windows"
         script = "./bin/spark-submit.cmd" if on_windows else "./bin/spark-submit"
+        command = [os.path.join(SPARK_HOME, script)]
+        if conf:
+            for k, v in conf.getAll():
+                command += ['--conf', '%s=%s' % (k, v)]
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         if os.environ.get("SPARK_TESTING"):
             submit_args = ' '.join([
                 "--conf spark.ui.enabled=false",
                 submit_args
             ])
-        command = [os.path.join(SPARK_HOME, script)] + shlex.split(submit_args)
+        command = command + shlex.split(submit_args)
 
         # Start a socket that will be used by PythonGatewayServer to communicate its port to us
         callback_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

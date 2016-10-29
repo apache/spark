@@ -54,11 +54,6 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[AnalysisException](df.write.bucketBy(2, "i").sortBy("j").saveAsTable("tt"))
   }
 
-  test("write bucketed data to unsupported data source") {
-    val df = Seq(Tuple1("a"), Tuple1("b")).toDF("i")
-    intercept[SparkException](df.write.bucketBy(3, "i").format("text").saveAsTable("tt"))
-  }
-
   test("write bucketed data using save()") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
 

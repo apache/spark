@@ -39,7 +39,8 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-                       HasStandardization, HasSolver, HasWeightCol, JavaMLWritable, JavaMLReadable):
+                       HasStandardization, HasSolver, HasWeightCol, HasAggregationDepth,
+                       JavaMLWritable, JavaMLReadable):
     """
     Linear regression.
 
@@ -88,6 +89,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     True
     >>> model.intercept == model2.intercept
     True
+    >>> model.numFeatures
+    1
 
     .. versionadded:: 1.4.0
     """
@@ -95,11 +98,11 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 standardization=True, solver="auto", weightCol=None):
+                 standardization=True, solver="auto", weightCol=None, aggregationDepth=2):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 standardization=True, solver="auto", weightCol=None)
+                 standardization=True, solver="auto", weightCol=None, aggregationDepth=2)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -112,11 +115,11 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     @since("1.4.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  standardization=True, solver="auto", weightCol=None):
+                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  standardization=True, solver="auto", weightCol=None)
+                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2)
         Sets params for linear regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -126,7 +129,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return LinearRegressionModel(java_model)
 
 
-class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`LinearRegression`.
 
@@ -654,6 +657,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     3
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
+    >>> model.numFeatures
+    1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -719,7 +724,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 
 @inherit_doc
-class DecisionTreeModel(JavaModel):
+class DecisionTreeModel(JavaModel, JavaPredictionModel):
     """
     Abstraction for Decision Tree models.
 
@@ -749,7 +754,7 @@ class DecisionTreeModel(JavaModel):
 
 
 @inherit_doc
-class TreeEnsembleModels(JavaModel):
+class TreeEnsembleModel(JavaModel):
     """
     (private abstraction)
 
@@ -843,6 +848,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
+    >>> model.numFeatures
+    1
     >>> model.trees
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
     >>> model.getNumTrees
@@ -909,7 +916,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
+                                  JavaMLReadable):
     """
     Model fitted by :class:`RandomForestRegressor`.
 
@@ -958,6 +966,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> model = gbt.fit(df)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
+    >>> model.numFeatures
+    1
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
@@ -1047,7 +1057,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`GBTRegressor`.
 
@@ -1078,7 +1088,8 @@ class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
 
 @inherit_doc
 class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            HasFitIntercept, HasMaxIter, HasTol, JavaMLWritable, JavaMLReadable):
+                            HasFitIntercept, HasMaxIter, HasTol, HasAggregationDepth,
+                            JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -1143,12 +1154,12 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-                 quantilesCol=None):
+                 quantilesCol=None, aggregationDepth=2):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                 quantilesCol=None)
+                 quantilesCol=None, aggregationDepth=2)
         """
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1164,12 +1175,12 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                   quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-                  quantilesCol=None):
+                  quantilesCol=None, aggregationDepth=2):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                   quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                  quantilesCol=None):
+                  quantilesCol=None, aggregationDepth=2):
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
@@ -1307,6 +1318,8 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     True
     >>> model.coefficients
     DenseVector([1.5..., -1.0...])
+    >>> model.numFeatures
+    2
     >>> abs(model.intercept - 1.5) < 0.001
     True
     >>> glr_path = temp_path + "/glr"
@@ -1412,7 +1425,8 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self.getOrDefault(self.link)
 
 
-class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
+                                       JavaMLReadable):
     """
     .. note:: Experimental
 

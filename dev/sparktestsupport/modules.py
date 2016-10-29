@@ -158,6 +158,18 @@ hive_thriftserver = Module(
 )
 
 
+sql_kafka = Module(
+    name="sql-kafka-0-10",
+    dependencies=[sql],
+    source_file_regexes=[
+        "external/kafka-0-10-sql",
+    ],
+    sbt_test_goals=[
+        "sql-kafka-0-10/test",
+    ]
+)
+
+
 sketch = Module(
     name="sketch",
     dependencies=[tags],
@@ -229,6 +241,17 @@ streaming_kafka = Module(
     ]
 )
 
+streaming_kafka_0_10 = Module(
+    name="streaming-kafka-0-10",
+    dependencies=[streaming],
+    source_file_regexes=[
+        "external/kafka-0-10",
+        "external/kafka-0-10-assembly",
+    ],
+    sbt_test_goals=[
+        "streaming-kafka-0-10/test",
+    ]
+)
 
 streaming_flume_sink = Module(
     name="streaming-flume-sink",
@@ -449,6 +472,7 @@ yarn = Module(
         "yarn/",
         "common/network-yarn/",
     ],
+    build_profile_flags=["-Pyarn"],
     sbt_test_goals=[
         "yarn/test",
         "network-yarn/test",
@@ -456,6 +480,14 @@ yarn = Module(
     test_tags=[
         "org.apache.spark.tags.ExtendedYarnTest"
     ]
+)
+
+mesos = Module(
+    name="mesos",
+    dependencies=[],
+    source_file_regexes=["mesos/"],
+    build_profile_flags=["-Pmesos"],
+    sbt_test_goals=["mesos/test"]
 )
 
 # The root module is a dummy module which is used to run all of the tests.

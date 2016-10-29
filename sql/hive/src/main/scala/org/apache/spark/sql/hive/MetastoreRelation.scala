@@ -32,18 +32,17 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.types.StructField
 import org.apache.spark.sql.types.BooleanType
+
 
 private[hive] case class MetastoreRelation(
     databaseName: String,
-    tableName: String,
-    partitionPruningPred: Seq[Expression] = Seq.empty)
+    tableName: String)
     (val catalogTable: CatalogTable,
      @transient val client: HiveClient,
      @transient val sparkSession: SparkSession)
@@ -65,8 +64,8 @@ private[hive] case class MetastoreRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
-  private def toHiveColumn(c: CatalogColumn): FieldSchema = {
-    new FieldSchema(c.name, c.dataType, c.comment.orNull)
+  private def toHiveColumn(c: StructField): FieldSchema = {
+    new FieldSchema(c.name, c.dataType.catalogString, c.getComment.orNull)
   }
 
   // TODO: merge this with HiveClientImpl#toHiveTable
@@ -84,7 +83,6 @@ private[hive] case class MetastoreRelation(
     tTable.setTableType(catalogTable.tableType match {
       case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE.toString
       case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE.toString
-      case CatalogTableType.INDEX => HiveTableType.INDEX_TABLE.toString
       case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW.toString
     })
 
@@ -107,7 +105,7 @@ private[hive] case class MetastoreRelation(
     sd.setSerdeInfo(serdeInfo)
 
     val serdeParameters = new java.util.HashMap[String, String]()
-    catalogTable.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+    catalogTable.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
     serdeInfo.setParameters(serdeParameters)
 
     new HiveTable(tTable)
@@ -158,11 +156,18 @@ private[hive] case class MetastoreRelation(
 
   // When metastore partition pruning is turned off, we cache the list of all partitions to
   // mimic the behavior of Spark < 1.5
-  private lazy val allPartitions: Seq[CatalogTablePartition] = client.getPartitions(catalogTable)
+  private lazy val allPartitions: Seq[CatalogTablePartition] = {
+    sparkSession.sharedState.externalCatalog.listPartitions(
+      catalogTable.database,
+      catalogTable.identifier.table)
+  }
 
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
     val rawPartitions = if (sparkSession.sessionState.conf.metastorePartitionPruning) {
-      client.getPartitionsByFilter(catalogTable, predicates)
+      sparkSession.sharedState.externalCatalog.listPartitionsByFilter(
+        catalogTable.database,
+        catalogTable.identifier.table,
+        predicates)
     } else {
       allPartitions
     }
@@ -175,7 +180,13 @@ private[hive] case class MetastoreRelation(
 
       val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
       tPartition.setSd(sd)
-      sd.setCols(catalogTable.schema.map(toHiveColumn).asJava)
+
+      // Note: In Hive the schema and partition columns must be disjoint sets
+      val schema = catalogTable.schema.map(toHiveColumn).filter { c =>
+        !catalogTable.partitionColumnNames.contains(c.getName)
+      }
+      sd.setCols(schema.asJava)
+
       p.storage.locationUri.foreach(sd.setLocation)
       p.storage.inputFormat.foreach(sd.setInputFormat)
       p.storage.outputFormat.foreach(sd.setOutputFormat)
@@ -186,8 +197,8 @@ private[hive] case class MetastoreRelation(
       p.storage.serde.foreach(serdeInfo.setSerializationLib)
 
       val serdeParameters = new java.util.HashMap[String, String]()
-      catalogTable.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
-      p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+      catalogTable.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
+      p.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
       serdeInfo.setParameters(serdeParameters)
 
       new Partition(hiveQlTable, tPartition)
@@ -243,17 +254,17 @@ private[hive] case class MetastoreRelation(
     hiveQlTable.getMetadata
   )
 
-  implicit class SchemaAttribute(f: CatalogColumn) {
+  implicit class SchemaAttribute(f: StructField) {
     def toAttribute: AttributeReference = AttributeReference(
       f.name,
-      CatalystSqlParser.parseDataType(f.dataType),
+      f.dataType,
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifier = Some(tableName))
   }
 
   /** PartitionKey attributes */
-  val partitionKeys = catalogTable.partitionColumns.map(_.toAttribute)
+  val partitionKeys = catalogTable.partitionSchema.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
   // TODO: just make this hold the schema itself, not just non-partition columns
@@ -270,8 +281,7 @@ private[hive] case class MetastoreRelation(
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
 
   override def inputFiles: Array[String] = {
-    val partLocations = client
-      .getPartitionsByFilter(catalogTable, Nil)
+    val partLocations = allPartitions
       .flatMap(_.storage.locationUri)
       .toArray
     if (partLocations.nonEmpty) {

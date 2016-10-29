@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.lang.{Double => JDouble, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
+import java.sql.{Date => JDate, Timestamp => JTimestamp}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -28,12 +29,14 @@ import org.apache.hadoop.util.Shell
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
+// TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
-object PartitionDirectory {
-  def apply(values: InternalRow, path: String): PartitionDirectory =
+object PartitionPath {
+  def apply(values: InternalRow, path: String): PartitionPath =
     apply(values, new Path(path))
 }
 
@@ -41,22 +44,23 @@ object PartitionDirectory {
  * Holds a directory in a partitioned collection of files as well as as the partition values
  * in the form of a Row.  Before scanning, the files at `path` need to be enumerated.
  */
-private[sql] case class PartitionDirectory(values: InternalRow, path: Path)
+case class PartitionPath(values: InternalRow, path: Path)
 
-private[sql] case class PartitionSpec(
+case class PartitionSpec(
     partitionColumns: StructType,
-    partitions: Seq[PartitionDirectory])
+    partitions: Seq[PartitionPath])
 
-private[sql] object PartitionSpec {
-  val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[PartitionDirectory])
+object PartitionSpec {
+  val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[PartitionPath])
 }
 
-private[sql] object PartitioningUtils {
+object PartitioningUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since sql/core doesn't
   // depend on Hive.
-  private[sql] val DEFAULT_PARTITION_NAME = "__HIVE_DEFAULT_PARTITION__"
+  val DEFAULT_PARTITION_NAME = "__HIVE_DEFAULT_PARTITION__"
 
-  private[sql] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal]) {
+  private[datasources] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal])
+  {
     require(columnNames.size == literals.size)
   }
 
@@ -83,7 +87,7 @@ private[sql] object PartitioningUtils {
    *         path = "hdfs://<host>:<port>/path/to/partition/a=2/b=world/c=6.28")))
    * }}}
    */
-  private[sql] def parsePartitions(
+  private[datasources] def parsePartitions(
       paths: Seq[Path],
       defaultPartitionName: String,
       typeInference: Boolean,
@@ -139,7 +143,7 @@ private[sql] object PartitioningUtils {
       // Finally, we create `Partition`s based on paths and resolved partition values.
       val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
         case (PartitionValues(_, literals), (path, _)) =>
-          PartitionDirectory(InternalRow.fromSeq(literals.map(_.value)), path)
+          PartitionPath(InternalRow.fromSeq(literals.map(_.value)), path)
       }
 
       PartitionSpec(StructType(fields), partitions)
@@ -166,7 +170,7 @@ private[sql] object PartitioningUtils {
    *   hdfs://<host>:<port>/path/to/partition
    * }}}
    */
-  private[sql] def parsePartition(
+  private[datasources] def parsePartition(
       path: Path,
       defaultPartitionName: String,
       typeInference: Boolean,
@@ -241,6 +245,35 @@ private[sql] object PartitioningUtils {
   }
 
   /**
+   * Normalize the column names in partition specification, w.r.t. the real partition column names
+   * and case sensitivity. e.g., if the partition spec has a column named `monTh`, and there is a
+   * partition column named `month`, and it's case insensitive, we will normalize `monTh` to
+   * `month`.
+   */
+  def normalizePartitionSpec[T](
+      partitionSpec: Map[String, T],
+      partColNames: Seq[String],
+      tblName: String,
+      resolver: Resolver): Map[String, T] = {
+    val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
+      val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
+        throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
+      }
+      normalizedKey -> value
+    }
+
+    if (normalizedPartSpec.map(_._1).distinct.length != normalizedPartSpec.length) {
+      val duplicateColumns = normalizedPartSpec.map(_._1).groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => x
+      }
+      throw new AnalysisException(s"Found duplicated columns in partition specification: " +
+        duplicateColumns.mkString(", "))
+    }
+
+    normalizedPartSpec.toMap
+  }
+
+  /**
    * Resolves possible type conflicts between partitions by up-casting "lower" types.  The up-
    * casting order is:
    * {{{
@@ -249,7 +282,7 @@ private[sql] object PartitioningUtils {
    *   DoubleType -> StringType
    * }}}
    */
-  private[sql] def resolvePartitions(
+  def resolvePartitions(
       pathsWithPartitionValues: Seq[(Path, PartitionValues)]): Seq[PartitionValues] = {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
@@ -275,7 +308,7 @@ private[sql] object PartitioningUtils {
     }
   }
 
-  private[sql] def listConflictingPartitionColumns(
+  private[datasources] def listConflictingPartitionColumns(
       pathWithPartitionValues: Seq[(Path, PartitionValues)]): String = {
     val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
 
@@ -305,20 +338,34 @@ private[sql] object PartitioningUtils {
 
   /**
    * Converts a string to a [[Literal]] with automatic type inference.  Currently only supports
-   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType.SYSTEM_DEFAULT]], and
-   * [[StringType]].
+   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType]], [[DateType]]
+   * [[TimestampType]], and [[StringType]].
    */
-  private[sql] def inferPartitionColumnValue(
+  private[datasources] def inferPartitionColumnValue(
       raw: String,
       defaultPartitionName: String,
       typeInference: Boolean): Literal = {
+    val decimalTry = Try {
+      // `BigDecimal` conversion can fail when the `field` is not a form of number.
+      val bigDecimal = new JBigDecimal(raw)
+      // It reduces the cases for decimals by disallowing values having scale (eg. `1.1`).
+      require(bigDecimal.scale <= 0)
+      // `DecimalType` conversion can fail when
+      //   1. The precision is bigger than 38.
+      //   2. scale is bigger than precision.
+      Literal(bigDecimal)
+    }
+
     if (typeInference) {
       // First tries integral types
       Try(Literal.create(Integer.parseInt(raw), IntegerType))
         .orElse(Try(Literal.create(JLong.parseLong(raw), LongType)))
+        .orElse(decimalTry)
         // Then falls back to fractional types
         .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
-        .orElse(Try(Literal(new JBigDecimal(raw))))
+        // Then falls back to date/timestamp types
+        .orElse(Try(Literal(JDate.valueOf(raw))))
+        .orElse(Try(Literal(JTimestamp.valueOf(unescapePathName(raw)))))
         // Then falls back to string
         .getOrElse {
           if (raw == defaultPartitionName) {

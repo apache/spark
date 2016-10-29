@@ -88,15 +88,8 @@ object MimaBuild {
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
     val organization = "org.apache.spark"
-    val previousSparkVersion = "1.6.0"
-    // This check can be removed post-2.0
-    val project = if (previousSparkVersion == "1.6.0" &&
-      projectRef.project == "streaming-kafka-0-8"
-    ) {
-      "streaming-kafka"
-    } else {
-      projectRef.project
-    }
+    val previousSparkVersion = "2.0.0"
+    val project = projectRef.project
     val fullId = "spark-" + project + "_2.11"
     mimaDefaultSettings ++
     Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),

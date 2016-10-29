@@ -24,6 +24,7 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Set => JS
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -267,6 +268,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     val table = hive.getTable(database, tableName)
     parts.foreach { s =>
       val location = s.storage.locationUri.map(new Path(table.getPath, _)).orNull
+      val params = if (s.parameters.nonEmpty) s.parameters.asJava else null
       val spec = s.spec.asJava
       if (hive.getPartition(table, spec, false) != null && ignoreIfExists) {
         // Ignore this partition since it already exists and ignoreIfExists == true
@@ -280,7 +282,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
           table,
           spec,
           location,
-          null, // partParams
+          params, // partParams
           null, // inputFormat
           null, // outputFormat
           -1: JInteger, // numBuckets
@@ -459,8 +461,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
     val addPartitionDesc = new AddPartitionDesc(db, table, ignoreIfExists)
-    parts.foreach { s =>
+    parts.zipWithIndex.foreach { case (s, i) =>
       addPartitionDesc.addPartition(s.spec.asJava, s.storage.locationUri.orNull)
+      if (s.parameters.nonEmpty) {
+        addPartitionDesc.getPartition(i).setPartParams(s.parameters.asJava)
+      }
     }
     hive.createPartitions(addPartitionDesc)
   }
@@ -581,7 +586,19 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
-        getPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[JArrayList[Partition]]
+        try {
+          getPartitionsByFilterMethod.invoke(hive, table, filter)
+            .asInstanceOf[JArrayList[Partition]]
+        } catch {
+          case e: InvocationTargetException =>
+            // SPARK-18167 retry to investigate the flaky test. This should be reverted before
+            // the release is cut.
+            val retry = Try(getPartitionsByFilterMethod.invoke(hive, table, filter))
+            val full = Try(getAllPartitionsMethod.invoke(hive, table))
+            logError("getPartitionsByFilter failed, retry success = " + retry.isSuccess)
+            logError("getPartitionsByFilter failed, full fetch success = " + full.isSuccess)
+            throw e
+        }
       }
 
     partitions.asScala.toSeq

@@ -196,9 +196,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the regularization parameter for L2 regularization.
    * The regularization term is
-   * {{{
-   *   0.5 * regParam * L2norm(coefficients)^2
-   * }}}
+   * <p><blockquote>
+   *    $$
+   *    0.5 * regParam * L2norm(coefficients)^2
+   *    $$
+   * </blockquote></p>
    * Default is 0.0.
    *
    * @group setParam
@@ -260,7 +262,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
     if (familyObj == Gaussian && linkObj == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
-      val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
+      val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
       val wlsModel = optimizer.fit(instances)
       val model = copyValues(
@@ -335,7 +337,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         Instance(eta, instance.weight, instance.features)
       }
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
-      val initialModel = new WeightedLeastSquares(fitIntercept, regParam,
+      val initialModel = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
         .fit(newInstances)
       initialModel
@@ -788,6 +790,8 @@ class GeneralizedLinearRegressionModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter =
     new GeneralizedLinearRegressionModel.GeneralizedLinearRegressionModelWriter(this)
+
+  override val numFeatures: Int = coefficients.size
 }
 
 @Since("2.0.0")
@@ -988,7 +992,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
     } else {
       link.unlink(0.0)
     }
-    predictions.select(col(model.getLabelCol), w).rdd.map {
+    predictions.select(col(model.getLabelCol).cast(DoubleType), w).rdd.map {
       case Row(y: Double, weight: Double) =>
         family.deviance(y, wtdmu, weight)
     }.sum()
@@ -1000,7 +1004,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   @Since("2.0.0")
   lazy val deviance: Double = {
     val w = weightCol
-    predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
+    predictions.select(col(model.getLabelCol).cast(DoubleType), col(predictionCol), w).rdd.map {
       case Row(label: Double, pred: Double, weight: Double) =>
         family.deviance(label, pred, weight)
     }.sum()
@@ -1026,9 +1030,10 @@ class GeneralizedLinearRegressionSummary private[regression] (
   lazy val aic: Double = {
     val w = weightCol
     val weightSum = predictions.select(w).agg(sum(w)).first().getDouble(0)
-    val t = predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
-      case Row(label: Double, pred: Double, weight: Double) =>
-        (label, pred, weight)
+    val t = predictions.select(
+      col(model.getLabelCol).cast(DoubleType), col(predictionCol), w).rdd.map {
+        case Row(label: Double, pred: Double, weight: Double) =>
+          (label, pred, weight)
     }
     family.aic(t, deviance, numInstances, weightSum) + 2 * rank
   }

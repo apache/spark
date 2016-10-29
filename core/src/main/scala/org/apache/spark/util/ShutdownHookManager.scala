@@ -54,6 +54,7 @@ private[spark] object ShutdownHookManager extends Logging {
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
 
   // Add a shutdown hook to delete the temp dirs when the JVM exits
+  logDebug("Adding shutdown hook") // force eager creation of logger
   addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
     logInfo("Shutdown hook called")
     // we need to materialize the paths to delete because deleteRecursively removes items from

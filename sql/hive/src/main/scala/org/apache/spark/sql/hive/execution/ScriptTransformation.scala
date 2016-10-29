@@ -38,6 +38,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
@@ -51,7 +52,6 @@ import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfig
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  */
-private[hive]
 case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
@@ -61,6 +61,8 @@ case class ScriptTransformation(
   extends UnaryExecNode {
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   protected override def doExecute(): RDD[InternalRow] = {
     def processIterator(inputIterator: Iterator[InternalRow], hadoopConf: Configuration)
@@ -125,7 +127,7 @@ case class ScriptTransformation(
         } else {
           null
         }
-        val mutableRow = new SpecificMutableRow(output.map(_.dataType))
+        val mutableRow = new SpecificInternalRow(output.map(_.dataType))
 
         @transient
         lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
@@ -338,7 +340,6 @@ private class ScriptTransformationWriterThread(
   }
 }
 
-private[hive]
 object HiveScriptIOSchema {
   def apply(input: ScriptInputOutputSchema): HiveScriptIOSchema = {
     HiveScriptIOSchema(
@@ -357,7 +358,6 @@ object HiveScriptIOSchema {
 /**
  * The wrapper class of Hive input and output schema properties
  */
-private[hive]
 case class HiveScriptIOSchema (
     inputRowFormat: Seq[(String, String)],
     outputRowFormat: Seq[(String, String)],

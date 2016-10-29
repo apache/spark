@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
@@ -28,6 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  *
  * @since 1.6.0
  */
+@InterfaceStability.Evolving
 abstract class SQLImplicits {
 
   protected def _sqlContext: SQLContext

@@ -56,7 +56,7 @@ public class JavaSparkHiveExample {
   public static void main(String[] args) {
     // $example on:spark_hive$
     // warehouseLocation points to the default location for managed databases and tables
-    String warehouseLocation = "file:" + System.getProperty("user.dir") + "spark-warehouse";
+    String warehouseLocation = "spark-warehouse";
     SparkSession spark = SparkSession
       .builder()
       .appName("Java Spark Hive Example")
@@ -104,7 +104,7 @@ public class JavaSparkHiveExample {
     // |Key: 0, Value: val_0|
     // ...
 
-    // You can also use DataFrames to create temporary views within a HiveContext.
+    // You can also use DataFrames to create temporary views within a SparkSession.
     List<Record> records = new ArrayList<>();
     for (int key = 1; key < 100; key++) {
       Record record = new Record();

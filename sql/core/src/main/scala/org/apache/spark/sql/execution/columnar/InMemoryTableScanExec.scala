@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
 
 
-private[sql] case class InMemoryTableScanExec(
+case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
@@ -36,7 +36,7 @@ private[sql] case class InMemoryTableScanExec(
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
@@ -63,6 +63,11 @@ private[sql] case class InMemoryTableScanExec(
     case EqualTo(a: AttributeReference, l: Literal) =>
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
     case EqualTo(l: Literal, a: AttributeReference) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+
+    case EqualNullSafe(a: AttributeReference, l: Literal) =>
+      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+    case EqualNullSafe(l: Literal, a: AttributeReference) =>
       statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
 
     case LessThan(a: AttributeReference, l: Literal) => statsFor(a).lowerBound < l

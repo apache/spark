@@ -33,6 +33,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog.{FileContextManager, FileManager, FileSystemManager}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.UninterruptibleThread
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
@@ -45,18 +46,18 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
   test("FileManager: FileContextManager") {
     withTempDir { temp =>
       val path = new Path(temp.getAbsolutePath)
-      testManager(path, new FileContextManager(path, new Configuration))
+      testFileManager(path, new FileContextManager(path, new Configuration))
     }
   }
 
   test("FileManager: FileSystemManager") {
     withTempDir { temp =>
       val path = new Path(temp.getAbsolutePath)
-      testManager(path, new FileSystemManager(path, new Configuration))
+      testFileManager(path, new FileSystemManager(path, new Configuration))
     }
   }
 
-  test("HDFSMetadataLog: basic") {
+  testWithUninterruptibleThread("HDFSMetadataLog: basic") {
     withTempDir { temp =>
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
       val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
@@ -81,7 +82,8 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  testQuietly("HDFSMetadataLog: fallback from FileContext to FileSystem") {
+  testWithUninterruptibleThread(
+    "HDFSMetadataLog: fallback from FileContext to FileSystem", quietly = true) {
     spark.conf.set(
       s"fs.$scheme.impl",
       classOf[FakeFileSystem].getName)
@@ -101,7 +103,26 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("HDFSMetadataLog: restart") {
+  testWithUninterruptibleThread("HDFSMetadataLog: purge") {
+    withTempDir { temp =>
+      val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
+      assert(metadataLog.add(0, "batch0"))
+      assert(metadataLog.add(1, "batch1"))
+      assert(metadataLog.add(2, "batch2"))
+      assert(metadataLog.get(0).isDefined)
+      assert(metadataLog.get(1).isDefined)
+      assert(metadataLog.get(2).isDefined)
+      assert(metadataLog.getLatest().get._1 == 2)
+
+      metadataLog.purge(2)
+      assert(metadataLog.get(0).isEmpty)
+      assert(metadataLog.get(1).isEmpty)
+      assert(metadataLog.get(2).isDefined)
+      assert(metadataLog.getLatest().get._1 == 2)
+    }
+  }
+
+  testWithUninterruptibleThread("HDFSMetadataLog: restart") {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
@@ -124,7 +145,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       val waiter = new Waiter
       val maxBatchId = 100
       for (id <- 0 until 10) {
-        new Thread() {
+        new UninterruptibleThread(s"HDFSMetadataLog: metadata directory collision - thread $id") {
           override def run(): Unit = waiter {
             val metadataLog =
               new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
@@ -153,8 +174,8 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-
-  def testManager(basePath: Path, fm: FileManager): Unit = {
+  /** Basic test case for [[FileManager]] implementation. */
+  private def testFileManager(basePath: Path, fm: FileManager): Unit = {
     // Mkdirs
     val dir = new Path(s"$basePath/dir/subdir/subsubdir")
     assert(!fm.exists(dir))
@@ -182,13 +203,14 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
 
     // Open and delete
-    fm.open(path)
+    val f1 = fm.open(path)
     fm.delete(path)
     assert(!fm.exists(path))
     intercept[IOException] {
       fm.open(path)
     }
     fm.delete(path)  // should not throw exception
+    f1.close()
 
     // Rename
     val path1 = new Path(s"$dir/file1")
