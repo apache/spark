@@ -550,7 +550,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic wi
   usage = "_FUNC_(expr, ...) - Returns the least value of all parameters, skipping null values.",
   extended = """
     Arguments:
-      expr - an expression of any type.
+      expr - an expression of any type except map.
 
     Examples:
       > SELECT _FUNC_(10, 9, 2, 4, 3);
@@ -618,7 +618,7 @@ case class Least(children: Seq[Expression]) extends Expression {
   usage = "_FUNC_(expr, ...) - Returns the greatest value of all parameters, skipping null values.",
   extended = """
     Arguments:
-      expr - an expression of any type.
+      expr - an expression of any type except map.
 
     Examples:
       > SELECT _FUNC_(10, 9, 2, 4, 3);

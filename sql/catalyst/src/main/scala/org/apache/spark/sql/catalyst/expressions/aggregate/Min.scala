@@ -26,7 +26,7 @@ import org.apache.spark.sql.types._
   usage = "_FUNC_(expr) - Returns the minimum value of `expr`.",
   extended = """
     Arguments:
-      expr - an expression of any type.
+      expr - an expression of any type except map.
   """)
 case class Min(child: Expression) extends DeclarativeAggregate {
 

@@ -1105,7 +1105,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date, fmt) - Returns returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.",
+  usage = "_FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.",
   extended = """
     Arguments:
       date - a date expression.

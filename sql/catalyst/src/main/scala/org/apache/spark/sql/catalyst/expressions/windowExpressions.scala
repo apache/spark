@@ -391,9 +391,9 @@ abstract class OffsetWindowFunction
   """,
   extended = """
     Arguments:
-      input - an expression of any type.
+      input - an expression of any type except map.
       offset - a numeric expression. Default is 1.
-      default - an expression of any type. Default is null.
+      default - an expression of any type except map. Default is null.
   """)
 case class Lead(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {
@@ -427,9 +427,9 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   """,
   extended = """
     Arguments:
-      input - an expression of any type.
+      input - an expression of any type except map.
       offset - a numeric expression. Default is 1.
-      default - an expression of any type. Default is null.
+      default - an expression of any type except map. Default is null.
   """)
 case class Lag(input: Expression, offset: Expression, default: Expression)
     extends OffsetWindowFunction {

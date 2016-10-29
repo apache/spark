@@ -116,7 +116,7 @@ case class CollectList(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.",
   extended = """
     Arguments:
-      expr - an expression of any type that represents data to collect as a set.
+      expr - an expression of any type except map that represents data to collect as a set.
   """)
 case class CollectSet(
     child: Expression,

@@ -509,8 +509,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.",
   extended = """
     Arguments:
-      expr1 - an expression of any type.
-      expr2 - an expression of any type.
+      expr1 - an expression of any atomic type.
+      expr2 - an expression of any atomic type.
   """)
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
@@ -528,8 +528,8 @@ case class LessThan(left: Expression, right: Expression)
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.",
   extended = """
     Arguments:
-      expr1 - an expression of any type.
-      expr2 - an expression of any type.
+      expr1 - an expression of any atomic type.
+      expr2 - an expression of any atomic type.
   """)
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
@@ -547,8 +547,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
   extended = """
     Arguments:
-      expr1 - an expression of any type.
-      expr2 - an expression of any type.
+      expr1 - an expression of any atomic type.
+      expr2 - an expression of any atomic type.
   """)
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
@@ -566,8 +566,8 @@ case class GreaterThan(left: Expression, right: Expression)
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.",
   extended = """
     Arguments:
-      expr1 - an expression of any type.
-      expr2 - an expression of any type.
+      expr1 - an expression of any atomic type.
+      expr2 - an expression of any atomic type.
   """)
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
