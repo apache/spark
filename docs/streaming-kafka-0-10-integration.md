@@ -216,7 +216,7 @@ For data stores that support transactions, saving offsets in the same transactio
 	val fromOffsets = selectOffsetsFromYourDatabase.map { resultSet =>
 	  new TopicPartition(resultSet.string("topic"), resultSet.int("partition")) -> resultSet.long("offset")
 	}.toMap
-	
+
 	val stream = KafkaUtils.createDirectStream[String, String](
 	  streamingContext,
 	  PreferConsistent,
