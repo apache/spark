@@ -60,6 +60,12 @@
       <groupId>org.apache.flume</groupId>
       <artifactId>flume-ng-sdk</artifactId>
     </dependency>
+    <!-- Bring back old Netty 3.x to the assembly; Flume's dependencies need it
+      but we exclude Netty 3 in the parent POM for better compatibility -->
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>

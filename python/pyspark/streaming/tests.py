@@ -1532,7 +1532,10 @@ if __name__ == "__main__":
         kinesis_jar_present = True
         jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
-    os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
+    # Set userClassPathFirst in order to let Flume assembly's dependency classes be found
+    os.environ["PYSPARK_SUBMIT_ARGS"] = "--conf spark.driver.userClassPathFirst=true " \
+        "--conf spark.executor.userClassPathFirst=true " \
+        "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
                  KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests,
                  StreamingListenerTests]
