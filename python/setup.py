@@ -26,7 +26,7 @@ from shutil import copyfile, copytree, rmtree
 try:
     exec(open('pyspark/version.py').read())
 except IOError:
-    print("Failed to load PySpark version file - to build packaging you must be in the python dir.",
+    print("Failed to load PySpark version file for packaging you must be in Spark's python dir.",
           file=sys.stderr)
     sys.exit(-1)
 VERSION = __version__
