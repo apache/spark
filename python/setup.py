@@ -23,7 +23,12 @@ import sys
 from setuptools import setup, find_packages
 from shutil import copyfile, copytree, rmtree
 
-exec(open('pyspark/version.py').read())
+try:
+    exec(open('pyspark/version.py').read())
+except IOError:
+    print("Failed to load PySpark version file - to build packaging you must be in the python dir.",
+          file=sys.stderr)
+    sys.exit(-1)
 VERSION = __version__
 # A temporary path so we can access above the Python project root and fetch scripts and jars we need
 TEMP_PATH = "deps"
@@ -73,6 +78,10 @@ try:
             copytree(SCRIPTS_PATH, SCRIPTS_TARGET)
             copytree(EXAMPLES_PATH, EXAMPLES_TARGET)
     else:
+        # If we are not inside of SPARK_HOME verify we have the required symlink farm
+        if not os.path.exists(JARS_TARGET):
+            print("To build packaging must be in the python directory under the SPARK_HOME.",
+                  file=sys.stderr)
         # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
         # find it where expected. The rest of the files aren't copied because they are accessed
         # using Python imports instead which will be resolved correctly.
