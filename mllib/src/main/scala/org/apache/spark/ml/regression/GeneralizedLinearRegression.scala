@@ -501,7 +501,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     val defaultLink: Link = Log
 
     override def initialize(y: Double, weight: Double): Double = {
-      require(y > 0.0, "The response variable of Poisson family " +
+      require(y >= 0.0, "The response variable of Poisson family " +
         s"should be positive, but got $y")
       y
     }
