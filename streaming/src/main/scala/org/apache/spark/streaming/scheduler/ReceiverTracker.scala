@@ -106,14 +106,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   private val receiverInputStreams = ssc.graph.getReceiverInputStreams()
   private val receiverInputStreamIds = receiverInputStreams.map { _.id }
-  private val receivedBlockTracker = new ReceivedBlockTracker(
-    ssc.sparkContext.conf,
-    ssc.sparkContext.hadoopConfiguration,
-    receiverInputStreamIds,
-    ssc.scheduler.clock,
-    ssc.isCheckpointPresent,
-    Option(ssc.checkpointDir)
-  )
+  private var receivedBlockTracker: ReceivedBlockTracker = null
   private val listenerBus = ssc.scheduler.listenerBus
 
   /** Enumeration to identify current state of the ReceiverTracker */
@@ -152,6 +145,17 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   def start(): Unit = synchronized {
     if (isTrackerStarted) {
       throw new SparkException("ReceiverTracker already started")
+    }
+
+    if (receivedBlockTracker == null) {
+      receivedBlockTracker = new ReceivedBlockTracker(
+        ssc.sparkContext.conf,
+        ssc.sparkContext.hadoopConfiguration,
+        receiverInputStreamIds,
+        ssc.scheduler.clock,
+        ssc.isCheckpointPresent,
+        Option(ssc.checkpointDir)
+      )
     }
 
     if (!receiverInputStreams.isEmpty) {
@@ -194,17 +198,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Finally, stop the endpoint
       ssc.env.rpcEnv.stop(endpoint)
       endpoint = null
+      receivedBlockTracker.stop()
       logInfo("ReceiverTracker stopped")
       trackerState = Stopped
     }
-
-    // note that the output writer is created at construction time, we have to close
-    // them even if it hasn't been started.
-    receivedBlockTracker.stop()
   }
 
   /** Allocate all unallocated blocks to the given batch. */
   def allocateBlocksToBatch(batchTime: Time): Unit = {
+    require(receivedBlockTracker != null, "ReceiverTracker should be started first.")
     if (receiverInputStreams.nonEmpty) {
       receivedBlockTracker.allocateBlocksToBatch(batchTime)
     }
@@ -212,11 +214,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Get the blocks for the given batch and all input streams. */
   def getBlocksOfBatch(batchTime: Time): Map[Int, Seq[ReceivedBlockInfo]] = {
+    require(receivedBlockTracker != null, "ReceiverTracker should be started first.")
     receivedBlockTracker.getBlocksOfBatch(batchTime)
   }
 
   /** Get the blocks allocated to the given batch and stream. */
   def getBlocksOfBatchAndStream(batchTime: Time, streamId: Int): Seq[ReceivedBlockInfo] = {
+    require(receivedBlockTracker != null, "ReceiverTracker should be started first.")
     receivedBlockTracker.getBlocksOfBatchAndStream(batchTime, streamId)
   }
 
@@ -225,6 +229,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * older than the threshold time. Note that this does not
    */
   def cleanupOldBlocksAndBatches(cleanupThreshTime: Time) {
+    require(receivedBlockTracker != null, "ReceiverTracker should be started first.")
     // Clean up old block and batch metadata
     receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
 
@@ -344,6 +349,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Add new blocks for the given stream */
   private def addBlock(receivedBlockInfo: ReceivedBlockInfo): Boolean = {
+    require(receivedBlockTracker != null, "ReceiverTracker should be started first.")
     receivedBlockTracker.addBlock(receivedBlockInfo)
   }
 
@@ -398,6 +404,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Check if any blocks are left to be processed */
   def hasUnallocatedBlocks: Boolean = {
+    require(receivedBlockTracker != null, "ReceiverTracker should be started first.")
     receivedBlockTracker.hasUnallocatedReceivedBlocks
   }
 
