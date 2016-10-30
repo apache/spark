@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StructType
  * Acts as a container for all of the metadata required to read from a datasource. All discovery,
  * resolution and merging logic for schemas and partitions has been removed.
  *
- * @param location A [[FileCatalog]] that can enumerate the locations of all the files that
+ * @param location A [[FileIndex]] that can enumerate the locations of all the files that
  *                 comprise this relation.
  * @param partitionSchema The schema of the columns (if any) that are used to partition the relation
  * @param dataSchema The schema of any remaining columns.  Note that if any partition columns are
@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.StructType
  * @param options Configuration used when reading / writing data.
  */
 case class HadoopFsRelation(
-    location: FileCatalog,
+    location: FileIndex,
     partitionSchema: StructType,
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],

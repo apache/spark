@@ -26,23 +26,23 @@ import org.apache.spark.sql.types.StructType
 
 
 /**
- * A [[FileCatalog]] for a metastore catalog table.
+ * A [[FileIndex]] for a metastore catalog table.
  *
  * @param sparkSession a [[SparkSession]]
  * @param table the metadata of the table
  * @param sizeInBytes the table's data size in bytes
  */
-class TableFileCatalog(
+class CatalogFileIndex(
     sparkSession: SparkSession,
     val table: CatalogTable,
-    override val sizeInBytes: Long) extends FileCatalog {
+    override val sizeInBytes: Long) extends FileIndex {
 
   protected val hadoopConf = sparkSession.sessionState.newHadoopConf
 
   private val fileStatusCache = FileStatusCache.newCache(sparkSession)
 
   assert(table.identifier.database.isDefined,
-    "The table identifier must be qualified in TableFileCatalog")
+    "The table identifier must be qualified in CatalogFileIndex")
 
   private val baseLocation = table.storage.locationUri
 
@@ -57,12 +57,12 @@ class TableFileCatalog(
   override def refresh(): Unit = fileStatusCache.invalidateAll()
 
   /**
-   * Returns a [[ListingFileCatalog]] for this table restricted to the subset of partitions
+   * Returns a [[InMemoryFileIndex]] for this table restricted to the subset of partitions
    * specified by the given partition-pruning filters.
    *
    * @param filters partition-pruning filters
    */
-  def filterPartitions(filters: Seq[Expression]): ListingFileCatalog = {
+  def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
     if (table.partitionColumnNames.nonEmpty) {
       val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
         table.identifier, filters)
@@ -70,20 +70,20 @@ class TableFileCatalog(
         PartitionPath(p.toRow(partitionSchema), p.storage.locationUri.get)
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
-      new PrunedTableFileCatalog(
+      new PrunedInMemoryFileIndex(
         sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
     } else {
-      new ListingFileCatalog(sparkSession, rootPaths, table.storage.properties, None)
+      new InMemoryFileIndex(sparkSession, rootPaths, table.storage.properties, None)
     }
   }
 
   override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
 
-  // `TableFileCatalog` may be a member of `HadoopFsRelation`, `HadoopFsRelation` may be a member
+  // `CatalogFileIndex` may be a member of `HadoopFsRelation`, `HadoopFsRelation` may be a member
   // of `LogicalRelation`, and `LogicalRelation` may be used as the cache key. So we need to
   // implement `equals` and `hashCode` here, to make it work with cache lookup.
   override def equals(o: Any): Boolean = o match {
-    case other: TableFileCatalog => this.table.identifier == other.table.identifier
+    case other: CatalogFileIndex => this.table.identifier == other.table.identifier
     case _ => false
   }
 
@@ -97,12 +97,12 @@ class TableFileCatalog(
  * @param tableBasePath The default base path of the Hive metastore table
  * @param partitionSpec The partition specifications from Hive metastore
  */
-private class PrunedTableFileCatalog(
+private class PrunedInMemoryFileIndex(
     sparkSession: SparkSession,
     tableBasePath: Path,
     fileStatusCache: FileStatusCache,
     override val partitionSpec: PartitionSpec)
-  extends ListingFileCatalog(
+  extends InMemoryFileIndex(
     sparkSession,
     partitionSpec.partitions.map(_.path),
     Map.empty,

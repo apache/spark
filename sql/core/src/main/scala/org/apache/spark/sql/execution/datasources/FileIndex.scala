@@ -33,7 +33,7 @@ case class PartitionDirectory(values: InternalRow, files: Seq[FileStatus])
  * An interface for objects capable of enumerating the root paths of a relation as well as the
  * partitions of a relation subject to some pruning expressions.
  */
-trait FileCatalog {
+trait FileIndex {
 
   /**
    * Returns the list of root input paths from which the catalog will get files. There may be a

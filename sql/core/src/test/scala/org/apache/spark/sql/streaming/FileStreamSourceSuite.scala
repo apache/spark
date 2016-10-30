@@ -879,7 +879,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val numFiles = 10000
 
     // This is to avoid running a spark job to list of files in parallel
-    // by the ListingFileCatalog.
+    // by the InMemoryFileIndex.
     spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
 
     withTempDirs { case (root, tmp) =>

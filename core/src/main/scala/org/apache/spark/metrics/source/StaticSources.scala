@@ -76,7 +76,7 @@ object HiveCatalogMetrics extends Source {
   val METRIC_PARTITIONS_FETCHED = metricRegistry.counter(MetricRegistry.name("partitionsFetched"))
 
   /**
-   * Tracks the total number of files discovered off of the filesystem by ListingFileCatalog.
+   * Tracks the total number of files discovered off of the filesystem by InMemoryFileIndex.
    */
   val METRIC_FILES_DISCOVERED = metricRegistry.counter(MetricRegistry.name("filesDiscovered"))
 

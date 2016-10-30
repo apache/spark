@@ -26,7 +26,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream, MetadataLogFileCatalog}
+import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream, MetadataLogFileIndex}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -179,14 +179,14 @@ class FileStreamSinkSuite extends StreamTest {
         .add(StructField("id", IntegerType))
       assert(outputDf.schema === expectedSchema)
 
-      // Verify that MetadataLogFileCatalog is being used and the correct partitioning schema has
+      // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
       // been inferred
       val hadoopdFsRelations = outputDf.queryExecution.analyzed.collect {
         case LogicalRelation(baseRelation, _, _) if baseRelation.isInstanceOf[HadoopFsRelation] =>
           baseRelation.asInstanceOf[HadoopFsRelation]
       }
       assert(hadoopdFsRelations.size === 1)
-      assert(hadoopdFsRelations.head.location.isInstanceOf[MetadataLogFileCatalog])
+      assert(hadoopdFsRelations.head.location.isInstanceOf[MetadataLogFileIndex])
       assert(hadoopdFsRelations.head.partitionSchema.exists(_.name == "id"))
       assert(hadoopdFsRelations.head.dataSchema.exists(_.name == "value"))
 

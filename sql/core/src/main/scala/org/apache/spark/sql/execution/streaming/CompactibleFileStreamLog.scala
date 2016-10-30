@@ -146,7 +146,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
    */
   def allFiles(): Array[T] = {
     var latestId = getLatest().map(_._1).getOrElse(-1L)
-    // There is a race condition when `FileStreamSink` is deleting old files and `StreamFileCatalog`
+    // There is a race condition when `FileStreamSink` is deleting old files and `StreamFileIndex`
     // is calling this method. This loop will retry the reading to deal with the
     // race condition.
     while (true) {
@@ -158,7 +158,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
         } catch {
           case e: IOException =>
             // Another process using `CompactibleFileStreamLog` may delete the batch files when
-            // `StreamFileCatalog` are reading. However, it only happens when a compaction is
+            // `StreamFileIndex` are reading. However, it only happens when a compaction is
             // deleting old files. If so, let's try the next compaction batch and we should find it.
             // Otherwise, this is a real IO issue and we should throw it.
             latestId = nextCompactionBatchId(latestId, compactInterval)

@@ -393,7 +393,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           util.stringToFile(file, fileName)
         }
 
-        val fileCatalog = new ListingFileCatalog(
+        val fileCatalog = new InMemoryFileIndex(
           sparkSession = spark,
           rootPaths = Seq(new Path(tempDir)),
           parameters = Map.empty[String, String],
