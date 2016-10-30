@@ -21,31 +21,32 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 
 class MapAggregateQuerySuite extends QueryTest with SharedSQLContext {
-  import testImplicits._
 
   private val table = "map_aggregate_test"
   private val col1 = "col1"
   private val col2 = "col2"
+  private val schema = StructType(Seq(StructField(col1, StringType), StructField(col2, DoubleType)))
+
   private def query(numBins: Int): DataFrame = {
     sql(s"SELECT map_aggregate($col1, $numBins), map_aggregate($col2, $numBins) FROM $table")
   }
 
   test("null handling") {
     withTempView(table) {
-      val schema = StructType(Seq(StructField(col1, StringType), StructField(col2, DoubleType)))
       // Empty input row
-      val rdd1 = spark.sparkContext.parallelize(Seq(Row(null, null)))
+      val rdd1: RDD[Row] = spark.sparkContext.parallelize(Seq(Row(null, null)))
       spark.createDataFrame(rdd1, schema).createOrReplaceTempView(table)
       checkAnswer(query(numBins = 2), Row(Map.empty, Map.empty))
 
       // Add some non-empty row
-      val rdd2 = spark.sparkContext.parallelize(Seq(Row(null, 3.0D), Row("a", null)))
+      val rdd2: RDD[Row] = spark.sparkContext.parallelize(Seq(Row(null, 3.0D), Row("a", null)))
       spark.createDataFrame(rdd2, schema).createOrReplaceTempView(table)
       checkAnswer(query(numBins = 2), Row(Map(("a", 1)), Map((3.0D, 1))))
     }
@@ -53,9 +54,10 @@ class MapAggregateQuerySuite extends QueryTest with SharedSQLContext {
 
   test("returns empty result when ndv exceeds numBins") {
     withTempView(table) {
-      spark.sparkContext.makeRDD(
-        Seq(("a", 4), ("d", 2), ("c", 4), ("b", 1), ("a", 3), ("a", 2)), 2).toDF(col1, col2)
-        .createOrReplaceTempView(table)
+      val rdd: RDD[Row] = spark.sparkContext.parallelize(
+        Seq(Row("a", 4.0D), Row("d", 2.0D), Row("c", 4.0D), Row("b", 1.0D), Row("a", 3.0D),
+          Row("a", 2.0D)), 2)
+      spark.createDataFrame(rdd, schema).createOrReplaceTempView(table)
       checkAnswer(query(numBins = 4), Row(
         Map(("a", 3), ("b", 1), ("c", 1), ("d", 1)),
         Map((1.0D, 1), (2.0D, 2), (3.0D, 1), (4.0D, 2))))
@@ -85,14 +87,25 @@ class MapAggregateQuerySuite extends QueryTest with SharedSQLContext {
         """.stripMargin)
     }
 
+    val allTypeSchema = StructType(Seq(
+      StructField("c1", ByteType),
+      StructField("c2", ShortType),
+      StructField("c3", IntegerType),
+      StructField("c4", LongType),
+      StructField("c5", FloatType),
+      StructField("c6", DoubleType),
+      StructField("c7", DecimalType(10, 5)),
+      StructField("c8", DateType),
+      StructField("c9", TimestampType),
+      StructField("c10", StringType)))
+
     val ints = Seq(5, 3, 1)
     val doubles = Seq(1.0D, 3.0D, 5.0D)
     val dates = Seq("1970-01-01", "1970-02-02", "1970-03-03")
     val timestamps = Seq("1970-01-01 00:00:00", "1970-01-01 00:00:05", "1970-01-01 00:00:10")
     val strings = Seq("a", "bb", "ccc")
-
     val data = ints.indices.map { i =>
-      (ints(i).toByte,
+      Row(ints(i).toByte,
         ints(i).toShort,
         ints(i),
         ints(i).toLong,
@@ -103,9 +116,11 @@ class MapAggregateQuerySuite extends QueryTest with SharedSQLContext {
         Timestamp.valueOf(timestamps(i)),
         strings(i))
     }
+
     withTempView(table) {
-      data.toDF("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10")
-        .createOrReplaceTempView(table)
+      val rdd: RDD[Row] = spark.sparkContext.parallelize(data)
+      spark.createDataFrame(rdd, allTypeSchema).createOrReplaceTempView(table)
+
       val expected1 = ArrayBuffer.empty[Map[Any, Long]]
       val frequency = Seq(1L, 1L, 1L)
       for (i <- 1 to 7) {

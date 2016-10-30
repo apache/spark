@@ -33,8 +33,8 @@ import org.apache.spark.sql.types.{DataType, _}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * The MapAggregate function for a column returns bins - (distinct value, frequency) pairs
- * of equi-width histogram when the number of distinct values is less than or equal to the
+ * The MapAggregate function for a column returns bins - (distinct non-null value, frequency) pairs
+ * of equi-width histogram when the number of distinct non-null values is less than or equal to the
  * specified maximum number of bins. Otherwise, it returns an empty map.
  *
  * @param child child expression that can produce column value with `child.eval(inputRow)`
@@ -43,8 +43,8 @@ import org.apache.spark.unsafe.types.UTF8String
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, numBins) - Returns bins - (distinct value, frequency) pairs of equi-width
-      histogram when the number of distinct values is less than or equal to the specified
+      _FUNC_(col, numBins) - Returns bins - (distinct non-null value, frequency) pairs of equi-width
+      histogram when the number of distinct non-null values is less than or equal to the specified
       maximum number of bins. Otherwise, it returns an empty map.
     """)
 case class MapAggregate(
@@ -80,7 +80,7 @@ case class MapAggregate(
   }
 
   override def update(buffer: MapDigest, input: InternalRow): Unit = {
-    if (buffer.invalid) {
+    if (buffer.isInvalid) {
       return
     }
     val evaluated = child.eval(input)
@@ -90,9 +90,9 @@ case class MapAggregate(
   }
 
   override def merge(buffer: MapDigest, other: MapDigest): Unit = {
-    if (buffer.invalid) return
-    if (other.invalid) {
-      buffer.invalid = true
+    if (buffer.isInvalid) return
+    if (other.isInvalid) {
+      buffer.isInvalid = true
       buffer.clear()
       return
     }
@@ -100,7 +100,7 @@ case class MapAggregate(
   }
 
   override def eval(buffer: MapDigest): Any = {
-    if (buffer.invalid) {
+    if (buffer.isInvalid) {
       // return empty map
       ArrayBasedMapData(Map.empty)
     } else {
@@ -158,7 +158,7 @@ case class MapAggregate(
 
 trait MapDigest {
   // Mark this MapDigest invalid when the size of the hashmap (ndv of the column) exceeds numBins
-  var invalid: Boolean = false
+  var isInvalid: Boolean = false
 
   def update(dataType: DataType, value: Any, numBins: Int): Unit
   def merge(otherDigest: MapDigest, numBins: Int): Unit
@@ -179,7 +179,7 @@ trait MapDigest {
         baseMap.update(key, baseMap(key) + value)
       } else {
         if (baseMap.size >= numBins) {
-          invalid = true
+          isInvalid = true
           baseMap.clear()
           return
         } else {
@@ -193,9 +193,9 @@ trait MapDigest {
 // Digest class for column of string type.
 case class StringMapDigest(
     bins: mutable.HashMap[UTF8String, Long] = mutable.HashMap.empty) extends MapDigest {
-  def this(bins: mutable.HashMap[UTF8String, Long], invalid: Boolean) = {
+  def this(bins: mutable.HashMap[UTF8String, Long], isInvalid: Boolean) = {
     this(bins)
-    this.invalid = invalid
+    this.isInvalid = isInvalid
   }
 
   override def update(dataType: DataType, value: Any, numBins: Int): Unit = {
@@ -212,7 +212,7 @@ case class StringMapDigest(
 object StringMapDigest {
 
   private final def length(obj: StringMapDigest): Int = {
-    // invalid, size of bins
+    // isInvalid, size of bins
     var len: Int = Ints.BYTES + Ints.BYTES
     obj.bins.foreach { case (key, value) =>
       // length of key, key, value
@@ -223,7 +223,7 @@ object StringMapDigest {
 
   final def serialize(obj: StringMapDigest): Array[Byte] = {
     val buffer = ByteBuffer.wrap(new Array(length(obj)))
-    buffer.putInt(if (obj.invalid) 0 else 1)
+    buffer.putInt(if (obj.isInvalid) 0 else 1)
     buffer.putInt(obj.bins.size)
     obj.bins.foreach { case (key, value) =>
       val bytes = key.getBytes
@@ -236,7 +236,7 @@ object StringMapDigest {
 
   final def deserialize(bytes: Array[Byte]): StringMapDigest = {
     val buffer = ByteBuffer.wrap(bytes)
-    val invalid = if (buffer.getInt == 0) true else false
+    val isInvalid = if (buffer.getInt == 0) true else false
     val size = buffer.getInt
     val bins = new mutable.HashMap[UTF8String, Long]
     var i = 0
@@ -252,16 +252,16 @@ object StringMapDigest {
       bins.put(UTF8String.fromBytes(keyBytes), value)
       i += 1
     }
-    new StringMapDigest(bins, invalid)
+    new StringMapDigest(bins, isInvalid)
   }
 }
 
 // Digest class for column of numeric type.
 case class NumericMapDigest(
     bins: mutable.HashMap[Double, Long] = mutable.HashMap.empty) extends MapDigest {
-  def this(bins: mutable.HashMap[Double, Long], invalid: Boolean) = {
+  def this(bins: mutable.HashMap[Double, Long], isInvalid: Boolean) = {
     this(bins)
-    this.invalid = invalid
+    this.isInvalid = isInvalid
   }
 
   override def update(dataType: DataType, value: Any, numBins: Int): Unit = {
@@ -287,7 +287,7 @@ case class NumericMapDigest(
 object NumericMapDigest {
 
   private final def length(obj: NumericMapDigest): Int = {
-    // invalid, size of bins
+    // isInvalid, size of bins
     var len: Int = Ints.BYTES + Ints.BYTES
     obj.bins.foreach { case (key, value) =>
       // key, value
@@ -298,7 +298,7 @@ object NumericMapDigest {
 
   final def serialize(obj: NumericMapDigest): Array[Byte] = {
     val buffer = ByteBuffer.wrap(new Array(length(obj)))
-    buffer.putInt(if (obj.invalid) 0 else 1)
+    buffer.putInt(if (obj.isInvalid) 0 else 1)
     buffer.putInt(obj.bins.size)
     obj.bins.foreach { case (key, value) =>
       buffer.putDouble(key)
@@ -309,7 +309,7 @@ object NumericMapDigest {
 
   final def deserialize(bytes: Array[Byte]): NumericMapDigest = {
     val buffer = ByteBuffer.wrap(bytes)
-    val invalid = if (buffer.getInt == 0) true else false
+    val isInvalid = if (buffer.getInt == 0) true else false
     val size = buffer.getInt
     val bins = new mutable.HashMap[Double, Long]
     var i = 0
@@ -319,6 +319,6 @@ object NumericMapDigest {
       bins.put(key, value)
       i += 1
     }
-    new NumericMapDigest(bins, invalid)
+    new NumericMapDigest(bins, isInvalid)
   }
 }

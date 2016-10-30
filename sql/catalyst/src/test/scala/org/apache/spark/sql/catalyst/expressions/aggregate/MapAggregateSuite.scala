@@ -75,9 +75,9 @@ class MapAggregateSuite extends SparkFunSuite {
     def compareEquals(left: MapDigest, right: MapDigest): Boolean = {
       (left, right) match {
         case (strDigest1: StringMapDigest, strDigest2: StringMapDigest) =>
-          strDigest1.invalid == strDigest2.invalid && strDigest1.bins.equals(strDigest2.bins)
+          strDigest1.isInvalid == strDigest2.isInvalid && strDigest1.bins.equals(strDigest2.bins)
         case (numDigest1: NumericMapDigest, numDigest2: NumericMapDigest) =>
-          numDigest1.invalid == numDigest2.invalid && numDigest1.bins.equals(numDigest2.bins)
+          numDigest1.isInvalid == numDigest2.isInvalid && numDigest1.bins.equals(numDigest2.bins)
       }
     }
 
