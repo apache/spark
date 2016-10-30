@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.StructType
 
 
 /**
- * A [[FileCatalog]] that generates the list of files to process by recursively listing all the
+ * A [[FileIndex]] that generates the list of files to process by recursively listing all the
  * files present in `paths`.
  *
  * @param rootPaths the list of root table paths to scan
@@ -34,13 +34,13 @@ import org.apache.spark.sql.types.StructType
  * @param partitionSchema an optional partition schema that will be use to provide types for the
  *                        discovered partitions
  */
-class ListingFileCatalog(
+class InMemoryFileIndex(
     sparkSession: SparkSession,
     override val rootPaths: Seq[Path],
     parameters: Map[String, String],
     partitionSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache)
-  extends PartitioningAwareFileCatalog(
+  extends PartitioningAwareFileIndex(
     sparkSession, parameters, partitionSchema, fileStatusCache) {
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
@@ -79,7 +79,7 @@ class ListingFileCatalog(
   }
 
   override def equals(other: Any): Boolean = other match {
-    case hdfs: ListingFileCatalog => rootPaths.toSet == hdfs.rootPaths.toSet
+    case hdfs: InMemoryFileIndex => rootPaths.toSet == hdfs.rootPaths.toSet
     case _ => false
   }
 
