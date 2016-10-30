@@ -226,6 +226,8 @@ class SparkSqlParserSuite extends PlanTest {
       AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
     assertEqual("analyze table t compute statistics noscan",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+    assertEqual("analyze table t partition (a) compute statistics noscan",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
 
     intercept("analyze table t compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
