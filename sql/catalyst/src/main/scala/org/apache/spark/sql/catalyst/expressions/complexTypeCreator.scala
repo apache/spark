@@ -178,7 +178,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
  * and as its name suggests it is a temporary place holder until we're able to determine the
  * actual attribute name.
  */
-case class NamePlaceholder(child: NamedExpression) extends UnaryExpression with Unevaluable {
+case object NamePlaceholder extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
   override def foldable: Boolean = true
   override def nullable: Boolean = false
@@ -191,9 +191,8 @@ case class NamePlaceholder(child: NamedExpression) extends UnaryExpression with 
 object CreateStruct extends FunctionBuilder {
   def apply(children: Seq[Expression]): CreateNamedStruct = {
     CreateNamedStruct(children.zipWithIndex.flatMap {
-      case (e: Star, _) => Seq(Literal("*"), e)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
-      case (e: NamedExpression, _) => Seq(NamePlaceholder(e), e)
+      case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
     })
   }

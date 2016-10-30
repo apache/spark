@@ -83,7 +83,7 @@ class Analyzer(
       ResolveTableValuedFunctions ::
       ResolveRelations ::
       ResolveReferences ::
-      ResolveNamePlaceholders ::
+      ResolveCreateNamedStruct ::
       ResolveDeserializer ::
       ResolveNewInstance ::
       ResolveUpCast ::
@@ -2205,10 +2205,17 @@ object TimeWindowing extends Rule[LogicalPlan] {
 }
 
 /**
- * Resolve a [[NamePlaceholder]] into a string [[Literal]].
+ * Resolve a [[CreateNamedStruct]] if it contains [[NamePlaceholder]]s.
  */
-object ResolveNamePlaceholders extends Rule[LogicalPlan] {
+object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsDown {
-    case NamePlaceholder(e) if e.resolved => Literal(e.name)
+    case e: CreateNamedStruct if !e.resolved =>
+      val children = e.children.grouped(2).flatMap {
+        case Seq(NamePlaceholder, e: NamedExpression) if e.resolved =>
+          Seq(Literal(e.name), e)
+        case kv =>
+          kv
+      }
+      CreateNamedStruct(children.toList)
   }
 }
