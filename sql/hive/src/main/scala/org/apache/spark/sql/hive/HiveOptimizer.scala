@@ -53,10 +53,8 @@ case class PushFilterIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] with 
         }
         if (pruningPredicates.nonEmpty) {
           relation.partitionPruningPred = pruningPredicates
-          filter.withNewChildren(Seq(relation))
-        } else {
-          filter
         }
+        filter
     }
   }
 }
