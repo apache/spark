@@ -44,7 +44,8 @@ exportMethods("glm",
               "spark.gaussianMixture",
               "spark.als",
               "spark.kstest",
-              "spark.logit")
+              "spark.logit",
+              "spark.randomForest")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -350,7 +351,9 @@ export("as.DataFrame",
        "uncacheTable",
        "print.summary.GeneralizedLinearRegressionModel",
        "read.ml",
-       "print.summary.KSTest")
+       "print.summary.KSTest",
+       "print.summary.RandomForestRegressionModel",
+       "print.summary.RandomForestClassificationModel")
 
 export("structField",
        "structField.jobj",
@@ -375,6 +378,8 @@ S3method(print, structField)
 S3method(print, structType)
 S3method(print, summary.GeneralizedLinearRegressionModel)
 S3method(print, summary.KSTest)
+S3method(print, summary.RandomForestRegressionModel)
+S3method(print, summary.RandomForestClassificationModel)
 S3method(structField, character)
 S3method(structField, jobj)
 S3method(structType, jobj)
