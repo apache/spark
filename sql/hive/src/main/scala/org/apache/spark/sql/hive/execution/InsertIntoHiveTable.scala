@@ -258,6 +258,8 @@ case class InsertIntoHiveTable(
             table.catalogTable.identifier.table,
             partitionSpec)
 
+        var doOverwrite = overwrite
+
         if (oldPart.isEmpty || !ifNotExists) {
           // SPARK-18107: Insert overwrite runs much slower than hive-client.
           // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
@@ -279,6 +281,9 @@ case class InsertIntoHiveTable(
               partitionSpecsAndLocs = partitionSpecAndLocation,
               ifNotExists = true
             ).run(sqlContext.sparkSession)
+
+            // Don't let Hive do overwrite operation since it is slower.
+            doOverwrite = false
           }
 
           // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
@@ -289,7 +294,7 @@ case class InsertIntoHiveTable(
             table.catalogTable.identifier.table,
             outputPath.toString,
             partitionSpec,
-            isOverwrite = overwrite,
+            isOverwrite = doOverwrite,
             holdDDLTime = holdDDLTime,
             inheritTableSpecs = inheritTableSpecs)
         }
