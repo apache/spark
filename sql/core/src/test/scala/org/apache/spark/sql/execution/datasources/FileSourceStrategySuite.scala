@@ -24,13 +24,12 @@ import java.util.zip.GZIPOutputStream
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
-import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{util, InternalRow}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ExpressionSet, GetArrayItem, GetStructField, Literal, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateNamedStruct, Expression, ExpressionSet, GetArrayItem, GetStructField, Literal, PredicateHelper}
 import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -39,8 +38,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper
-  with PrivateMethodTester{
+class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
 
   protected override val sparkConf = new SparkConf().set("spark.default.parallelism", "1")
@@ -443,8 +441,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
-  test("[SPARK-4502] pruning nested schema by projects correctly") {
-    val testFunc = PrivateMethod[Seq[StructField]]('generateStructFieldsContainsNesting)
+  test("[SPARK-4502] pruning nested schema by GetStructField projects") {
     // Construct fullSchema like below:
     //    root
     //    |-- col: struct (nullable = true)
@@ -452,11 +449,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     //    |    |    |-- s1_1: long (nullable = true)
     //    |    |    |-- s1_2: long (nullable = true)
     //    |    |-- str: string (nullable = true)
-    //    |    |-- info_list: array (nullable = true)
-    //    |    |    |-- element: struct (containsNull = true)
-    //    |    |    |    |-- s1: struct (nullable = true)
-    //    |    |    |    |    |-- s1_1: long (nullable = true)
-    //    |    |    |    |    |-- s1_2: long (nullable = true)
     //    |-- num: long (nullable = true)
     //    |-- str: string (nullable = true)
     val nested_s1 = StructField("s1",
@@ -467,36 +459,26 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
         )
       ), true)
     val flat_str = StructField("str", StringType, true)
-    val nested_arr = StructField("info_list", ArrayType(StructType(Seq(nested_s1))), true)
 
     val fullSchema = StructType(
       Seq(
-        StructField("col", StructType(Seq(nested_s1, flat_str, nested_arr)), true),
+        StructField("col", StructType(Seq(nested_s1, flat_str)), true),
         StructField("num", LongType, true),
         flat_str
       ))
 
     // Attr of struct col
     val colAttr = AttributeReference("col", StructType(
-      Seq(nested_s1, flat_str, nested_arr)), true)()
+      Seq(nested_s1, flat_str)), true)()
     // Child expression of col.s1.s1_1
     val childExp = GetStructField(
       GetStructField(colAttr, 0, Some("s1")), 0, Some("s1_1"))
-    // Child expression of col.info_list[0].s1.s1_1
-    val arrayChildExp = GetStructField(
-      GetStructField(
-        GetArrayItem(
-          GetStructField(colAttr, 0, Some("info_list")),
-          Literal(0)
-        ), 0, Some("s1")
-      ), 0, Some("s1_1")
-    )
-    // Project list of "select num, col.s1.s1_1 as s1_1, col.info_list[0].s1.s1_1 as complex_get"
+
+    // Project list of "select num, col.s1.s1_1 as s1_1"
     val projects = Seq(
       AttributeReference("num", LongType, true)(),
-      Alias(childExp, "s1_1")(),
-      Alias(arrayChildExp, "complex_get")()
-      )
+      Alias(childExp, "s1_1")()
+    )
     val expextResult =
       Seq(
         StructField("num", LongType, true),
@@ -507,13 +489,82 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
               StructType(Seq(StructField("s1_1", LongType, true))),
               true)
           )
-        ), true),
+        ), true)
+      )
+    // Call the function generateStructFieldsContainsNesting
+    val result = FileSourceStrategy.generateStructFieldsContainsNesting(projects,
+      fullSchema)
+    assert(result == expextResult)
+  }
+
+  test("[SPARK-4502] pruning nested schema by GetArrayItem projects") {
+    // Construct fullSchema like below:
+    //    root
+    //    |-- col: struct (nullable = true)
+    //    |    |-- info_list: array (nullable = true)
+    //    |    |    |-- element: struct (containsNull = true)
+    //    |    |    |    |-- s1: struct (nullable = true)
+    //    |    |    |    |    |-- s1_1: long (nullable = true)
+    //    |    |    |    |    |-- s1_2: long (nullable = true)
+    val nested_s1 = StructField("s1",
+      StructType(
+        Seq(
+          StructField("s1_1", LongType, true),
+          StructField("s1_2", LongType, true)
+        )
+      ), true)
+    val nested_arr = StructField("info_list", ArrayType(StructType(Seq(nested_s1))), true)
+
+    val fullSchema = StructType(
+      Seq(
+        StructField("col", StructType(Seq(nested_arr)), true)
+      ))
+
+    // Attr of struct col
+    val colAttr = AttributeReference("col", StructType(
+      Seq(nested_arr)), true)()
+    // Child expression of col.info_list[0].s1.s1_1
+    val arrayChildExp = GetStructField(
+      GetStructField(
+        GetArrayItem(
+          GetStructField(colAttr, 0, Some("info_list")),
+          Literal(0)
+        ), 0, Some("s1")
+      ), 0, Some("s1_1")
+    )
+    // Project list of "select col.info_list[0].s1.s1_1 as complex_get"
+    val projects = Seq(
+      Alias(arrayChildExp, "complex_get")()
+    )
+    val expextResult =
+      Seq(
         StructField("col", StructType(Seq(nested_arr)))
       )
     // Call the function generateStructFieldsContainsNesting
-    val result = FileSourceStrategy.invokePrivate[Seq[StructField]](testFunc(projects,
-      fullSchema))
+    val result = FileSourceStrategy.generateStructFieldsContainsNesting(projects,
+      fullSchema)
     assert(result == expextResult)
+  }
+
+  test("[SPARK-4502] pruning nested schema while named_struct in project") {
+    val schema = new StructType()
+      .add("f0", IntegerType)
+      .add("f1", new StructType()
+        .add("f10", IntegerType))
+
+    val expr = GetStructField(
+      CreateNamedStruct(Seq(
+        Literal("f10"),
+        AttributeReference("f0", IntegerType)()
+      )),
+      0,
+      Some("f10")
+    )
+
+    val expect = new StructType()
+        .add("f0", IntegerType)
+
+    assert(FileSourceStrategy.generateStructFieldsContainsNesting(expr :: Nil, schema) == expect)
   }
 
   test("spark.files.ignoreCorruptFiles should work in SQL") {

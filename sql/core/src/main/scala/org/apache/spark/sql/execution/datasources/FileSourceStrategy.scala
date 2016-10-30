@@ -100,8 +100,8 @@ object FileSourceStrategy extends Strategy with Logging {
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
       val outputSchema = if (
-          fsRelation.sqlContext.conf.parquetNestedColumnPruningEnabled &&
-          fsRelation.fileFormat.isInstanceOf[ParquetFileFormat]
+        fsRelation.sqlContext.conf.parquetNestedColumnPruningEnabled &&
+        fsRelation.fileFormat.isInstanceOf[ParquetFileFormat]
       ) {
         val fullSchema = readDataColumns.toStructType
         val prunedSchema = StructType(
@@ -141,7 +141,7 @@ object FileSourceStrategy extends Strategy with Logging {
     case _ => Nil
   }
 
-  private def generateStructFieldsContainsNesting(
+  private[sql] def generateStructFieldsContainsNesting(
       projects: Seq[Expression],
       fullSchema: StructType) : Seq[StructField] = {
     // By traverse projects, we can fisrt generate the access path of nested struct, then use the
@@ -164,8 +164,13 @@ object FileSourceStrategy extends Strategy with Logging {
           // Finally reach the leaf node AttributeReference, call getFieldRecursively
           // and pass the access path of current nested struct
           Seq(getFieldRecursively(fullSchema, attr.name :: curField))
-        case sf: GetStructField =>
-          generateStructField(sf.name.get :: curField, sf.child)
+        case sf: GetStructField if !sf.child.isInstanceOf[CreateNamedStruct] &&
+          !sf.child.isInstanceOf[CreateStruct] =>
+          val name = sf.name.getOrElse(sf.dataType match {
+            case StructType(fiedls) =>
+              fiedls(sf.ordinal).name
+          })
+          generateStructField(name :: curField, sf.child)
         case _ =>
           if (node.children.nonEmpty) {
             node.children.flatMap(child => generateStructField(curField, child))
