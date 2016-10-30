@@ -388,16 +388,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           partitionColumnNames = partitioningColumns.getOrElse(Nil),
           bucketSpec = getBucketSpec
         )
-        val createCmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
-        val cmd = if (tableDesc.partitionColumnNames.nonEmpty &&
+        df.sparkSession.sessionState.executePlan(
+          CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
+        if (tableDesc.partitionColumnNames.nonEmpty &&
             df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
           // Need to recover partitions into the metastore so our saved data is visible.
-          val recoverPartitionCmd = AlterTableRecoverPartitionsCommand(tableDesc.identifier)
-          Union(createCmd, recoverPartitionCmd)
-        } else {
-          createCmd
+          df.sparkSession.sessionState.executePlan(
+            AlterTableRecoverPartitionsCommand(tableDesc.identifier)).toRdd
         }
-        df.sparkSession.sessionState.executePlan(cmd).toRdd
     }
   }
 
