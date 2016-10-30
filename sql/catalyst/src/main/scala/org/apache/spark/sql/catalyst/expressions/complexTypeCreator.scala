@@ -174,16 +174,15 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 }
 
 /**
- * An expression representing a not yet available attribute name. this expression is unevaluable
+ * An expression representing a not yet available attribute name. This expression is unevaluable
  * and as its name suggests it is a temporary place holder until we're able to determine the
  * actual attribute name.
  */
-case class NamePlaceholder(child: NamedExpression) extends UnaryExpression with CodegenFallback {
-  override lazy val resolved: Boolean = child.resolved
+case class NamePlaceholder(child: NamedExpression) extends UnaryExpression with Unevaluable {
+  override lazy val resolved: Boolean = false
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
-  override def eval(input: InternalRow): UTF8String = UTF8String.fromString(child.name)
 }
 
 /**
