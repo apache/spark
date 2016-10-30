@@ -19,6 +19,7 @@ application. See the [Deploying](#deploying) subsection below.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+{% highlight scala %}
 
 // Subscribe to 1 topic
 val ds1 = spark
@@ -50,8 +51,10 @@ val ds3 = spark
 ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
+{% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
+{% highlight java %}
 
 // Subscribe to 1 topic
 Dataset<Row> ds1 = spark
@@ -80,8 +83,10 @@ Dataset<Row> ds3 = spark
   .load()
 ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
+{% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
+{% highlight python %}
 
 # Subscribe to 1 topic
 ds1 = spark
@@ -110,6 +115,7 @@ ds3 = spark
   .load()
 ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
+{% endhighlight %}
 </div>
 </div>
 

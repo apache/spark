@@ -17,6 +17,7 @@ For Scala/Java applications using SBT/Maven project definitions, link your strea
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+{% highlight scala %}
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.streaming.kafka010._
@@ -40,10 +41,11 @@ val stream = KafkaUtils.createDirectStream[String, String](
 )
 
 stream.map(record => (record.key, record.value))
-
+{% endhighlight %}
 Each item in the stream is a [ConsumerRecord](http://kafka.apache.org/0100/javadoc/org/apache/kafka/clients/consumer/ConsumerRecord.html)
 </div>
 <div data-lang="java" markdown="1">
+{% highlight java %}
 import java.util.*;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
@@ -80,6 +82,7 @@ stream.mapToPair(
       return new Tuple2<>(record.key(), record.value());
     }
   })
+{% endhighlight %}
 </div>
 </div>
 
@@ -109,6 +112,7 @@ If you have a use case that is better suited to batch processing, you can create
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+{% highlight scala %}
 // Import dependencies and create kafka params as in Create Direct Stream above
 
 val offsetRanges = Array(
@@ -118,9 +122,10 @@ val offsetRanges = Array(
 )
 
 val rdd = KafkaUtils.createRDD[String, String](sparkContext, kafkaParams, offsetRanges, PreferConsistent)
-
+{% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
+{% highlight java %}
 // Import dependencies and create kafka params as in Create Direct Stream above
 
 OffsetRange[] offsetRanges = {
@@ -135,6 +140,7 @@ JavaRDD<ConsumerRecord<String, String>> rdd = KafkaUtils.createRDD(
   offsetRanges,
   LocationStrategies.PreferConsistent()
 );
+{% endhighlight %}
 </div>
 </div>
 
@@ -144,6 +150,7 @@ Note that you cannot use `PreferBrokers`, because without the stream there is no
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+{% highlight scala %}
 stream.foreachRDD { rdd =>
   val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
   rdd.foreachPartition { iter =>
@@ -151,8 +158,10 @@ stream.foreachRDD { rdd =>
     println(s"${o.topic} ${o.partition} ${o.fromOffset} ${o.untilOffset}")
   }
 }
+{% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
+{% highlight java %}
 stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
   @Override
   public void call(JavaRDD<ConsumerRecord<String, String>> rdd) {
@@ -167,6 +176,7 @@ stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
     });
   }
 });
+{% endhighlight %}
 </div>
 </div>
 
@@ -183,16 +193,18 @@ Kafka has an offset commit API that stores offsets in a special Kafka topic.  By
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+{% highlight scala %}
 stream.foreachRDD { rdd =>
   val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
 
   // some time later, after outputs have completed
   stream.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
 }
-
+{% endhighlight %}
 As with HasOffsetRanges, the cast to CanCommitOffsets will only succeed if called on the result of createDirectStream, not after transformations.  The commitAsync call is threadsafe, but must occur after outputs if you want meaningful semantics.
 </div>
 <div data-lang="java" markdown="1">
+{% highlight java %}
 stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
   @Override
   public void call(JavaRDD<ConsumerRecord<String, String>> rdd) {
@@ -202,6 +214,7 @@ stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
     ((CanCommitOffsets) stream.inputDStream()).commitAsync(offsetRanges);
   }
 });
+{% endhighlight %}
 </div>
 </div>
 
@@ -210,6 +223,7 @@ For data stores that support transactions, saving offsets in the same transactio
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+{% highlight scala %}
 // The details depend on your data store, but the general idea looks like this
 
 // begin from the the offsets committed to the database
@@ -236,8 +250,10 @@ stream.foreachRDD { rdd =>
 
   // end your transaction
 }
+{% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
+{% highlight java %}
 // The details depend on your data store, but the general idea looks like this
 
 // begin from the the offsets committed to the database
@@ -268,6 +284,7 @@ stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
     // end your transaction
   }
 });
+{% endhighlight %}
 </div>
 </div>
 
@@ -277,6 +294,7 @@ The new Kafka consumer [supports SSL](http://kafka.apache.org/documentation.html
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+{% highlight scala %}
 val kafkaParams = Map[String, Object](
   // the usual params, make sure to change the port in bootstrap.servers if 9092 is not TLS
   "security.protocol" -> "SSL",
@@ -286,8 +304,10 @@ val kafkaParams = Map[String, Object](
   "ssl.keystore.password" -> "test1234",
   "ssl.key.password" -> "test1234"
 )
+{% endhighlight %}
 </div>
 <div data-lang="java" markdown="1">
+{% highlight java %}
 Map<String, Object> kafkaParams = new HashMap<String, Object>();
 // the usual params, make sure to change the port in bootstrap.servers if 9092 is not TLS
 kafkaParams.put("security.protocol", "SSL");
@@ -296,6 +316,7 @@ kafkaParams.put("ssl.truststore.password", "test1234");
 kafkaParams.put("ssl.keystore.location", "/some-directory/kafka.client.keystore.jks");
 kafkaParams.put("ssl.keystore.password", "test1234");
 kafkaParams.put("ssl.key.password", "test1234");
+{% endhighlight %}
 </div>
 </div>
 
