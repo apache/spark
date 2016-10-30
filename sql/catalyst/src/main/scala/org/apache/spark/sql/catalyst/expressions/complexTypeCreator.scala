@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -171,15 +173,43 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   override def prettyName: String = "map"
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-// scalastyle:on line.size.limit
-case class CreateStruct(children: Seq[Expression]) extends Expression with Unevaluable {
-  override lazy val resolved: Boolean = false
+/**
+ * An expression representing a not yet available attribute name. this expression is unevaluable
+ * and as its name suggests it is a temporary place holder until we're able to determine the
+ * actual attribute name.
+ */
+case class NamePlaceholder(child: NamedExpression) extends UnaryExpression with CodegenFallback {
+  override lazy val resolved: Boolean = child.resolved
+  override def foldable: Boolean = true
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def prettyName: String = "struct"
+  override def dataType: DataType = StringType
+  override def eval(input: InternalRow): UTF8String = UTF8String.fromString(child.name)
+}
+
+/**
+ * Returns a Row containing the evaluation of all children expressions.
+ */
+object CreateStruct extends FunctionBuilder {
+  def apply(children: Seq[Expression]): CreateNamedStruct = {
+    CreateNamedStruct(children.zipWithIndex.flatMap {
+      case (e: Star, _) => Seq(Literal("*"), e)
+      case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
+      case (e: NamedExpression, _) => Seq(NamePlaceholder(e), e)
+      case (e, index) => Seq(Literal(s"col${index + 1}"), e)
+    })
+  }
+
+  /**
+   * Entry to use in the function registry.
+   */
+  val registryEntry: (String, (ExpressionInfo, FunctionBuilder)) = {
+    val info: ExpressionInfo = new ExpressionInfo(
+      "org.apache.spark.sql.catalyst.expressions.NamedStruct",
+      "struct",
+      "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
+      "")
+    ("struct", (info, this))
+  }
 }
 
 /**
