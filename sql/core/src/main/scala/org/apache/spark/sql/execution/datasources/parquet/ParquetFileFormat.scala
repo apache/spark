@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.ObjectInputStream
 import java.net.URI
 import java.util.logging.{Logger => JLogger}
 
@@ -63,6 +64,14 @@ class ParquetFileFormat
   // constructor of this class. This method is idempotent, and essentially a no-op after its first
   // call.
   ParquetFileFormat.ensureParquetLogRedirection
+
+  // Java serialization will not call the default constructor. Make sure we call
+  // ParquetFileFormat.ensureParquetLogRedirection in deserialization by implementing this hook
+  // method.
+  private def readObject(in: ObjectInputStream): Unit = {
+    in.defaultReadObject
+    ParquetFileFormat.ensureParquetLogRedirection
+  }
 
   override def shortName(): String = "parquet"
 
