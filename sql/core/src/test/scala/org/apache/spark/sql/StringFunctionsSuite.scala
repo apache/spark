@@ -449,6 +449,24 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       df2.selectExpr("str_to_map(a)"),
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
+  }
 
+  test("String2StringExpression - no implicit type casting") {
+    def checkTypeErrorMsg(funcName: String): Unit = {
+      val df = Seq(345).toDF("a")
+      val expectedMsg = "argument 1 requires string type, however, '`a`' is of int type"
+      // non-string type of arguments is unacceptable
+      val e = intercept[AnalysisException] {
+        df.selectExpr(s"$funcName(a)")
+      }.getMessage
+      assert(e.contains(expectedMsg))
+    }
+
+    checkTypeErrorMsg("reverse")
+    checkTypeErrorMsg("lower")
+    checkTypeErrorMsg("upper")
+    checkTypeErrorMsg("ltrim")
+    checkTypeErrorMsg("rtrim")
+    checkTypeErrorMsg("trim")
   }
 }
