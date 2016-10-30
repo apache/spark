@@ -146,7 +146,14 @@ class ParquetFileFormat
     }
 
     new OutputWriterFactory {
-      override def newInstance(
+        // OutputWriterFactory is deserialized in the write path on the executor side before any
+        // output is actually written. Redirect Parquet logs at this time.
+        private def readObject(in: ObjectInputStream): Unit = {
+          in.defaultReadObject
+          ParquetFileFormat.ensureParquetLogRedirection
+        }
+
+        override def newInstance(
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
