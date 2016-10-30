@@ -29,7 +29,7 @@ trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
   override def beforeAll() {
     super.beforeAll()
     val conf = new SparkConf()
-      .setMaster("local[2]")
+      .setMaster("local[4]")
       .setAppName("MLlibUnitTest")
     sc = new SparkContext(conf)
     SQLContext.clearActive()

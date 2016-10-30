@@ -49,7 +49,7 @@ public class JavaStatisticsSuite implements Serializable {
   @Before
   public void setUp() {
     SparkConf conf = new SparkConf()
-      .setMaster("local[2]")
+      .setMaster("local[4]")
       .setAppName("JavaStatistics")
       .set("spark.streaming.clock", "org.apache.spark.util.ManualClock");
     sc = new JavaSparkContext(conf);

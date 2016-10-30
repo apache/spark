@@ -37,7 +37,7 @@ public class JavaDefaultReadWriteSuite {
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local[2]", "JavaDefaultReadWriteSuite");
+    jsc = new JavaSparkContext("local[4]", "JavaDefaultReadWriteSuite");
     SQLContext.clearActive();
     sqlContext = new SQLContext(jsc);
     SQLContext.setActive(sqlContext);
