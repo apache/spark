@@ -80,6 +80,8 @@ trait MesosSchedulerUtils extends Logging {
     frameworkId.foreach { id =>
       fwInfoBuilder.setId(FrameworkID.newBuilder().setValue(id).build())
     }
+    fwInfoBuilder.setHostname(Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
+      conf.get(DRIVER_HOST_ADDRESS)))
     conf.getOption("spark.mesos.principal").foreach { principal =>
       fwInfoBuilder.setPrincipal(principal)
       credBuilder.setPrincipal(principal)
