@@ -24,7 +24,17 @@ import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1,expr2,expr3) - If expr1 is TRUE then IF() returns expr2; otherwise it returns expr3.")
+  usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise it returns `expr3`.",
+  extended = """
+    Arguments:
+      expr1 - a boolean expression.
+      expr2 - an expression of any type that represents the return value when `expr1` evaluates to true.
+      expr3 - an expression of any type that represents the return value when `expr1` evaluates to false.
+
+    Examples:
+      > SELECT _FUNC_(1 < 2, 'a', 'b');
+       a
+  """)
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends Expression {
@@ -162,7 +172,15 @@ abstract class CaseWhenBase(
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END - When a = true, returns b; when c = true, return d; else return e.")
+  usage = "CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END - When `expr1` = true, returns `expr2`; when `expr3` = true, return `expr4`; else return `expr5`.",
+  extended = """
+    Arguments:
+      expr1 - a boolean expression.
+      expr2 - an expression of any type.
+      expr3 - a boolean expression.
+      expr4 - an expression of any type.
+      expr5 - an expression of any type.
+  """)
 // scalastyle:on line.size.limit
 case class CaseWhen(
     val branches: Seq[(Expression, Expression)],

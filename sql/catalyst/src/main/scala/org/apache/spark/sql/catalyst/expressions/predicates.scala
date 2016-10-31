@@ -93,7 +93,11 @@ trait PredicateHelper {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_ a - Logical not")
+  usage = "_FUNC_ expr - Logical not.",
+  extended = """
+    Arguments:
+      expr - a boolean expression.
+  """)
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
@@ -115,7 +119,11 @@ case class Not(child: Expression)
  * Evaluates to `true` if `list` contains `value`.
  */
 @ExpressionDescription(
-  usage = "expr _FUNC_(val1, val2, ...) - Returns true if expr equals to any valN.")
+  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.",
+  extended = """
+    Arguments:
+      expr - an expression of any type.
+  """)
 case class In(value: Expression, list: Seq[Expression]) extends Predicate
     with ImplicitCastInputTypes {
 
@@ -252,7 +260,12 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Logical AND.")
+  usage = "expr1 _FUNC_ expr2 - Logical AND.",
+  extended = """
+    Arguments:
+      expr1 - a boolean expression.
+      expr2 - a boolean expression.
+  """)
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -315,7 +328,12 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Logical OR.")
+  usage = "expr1 _FUNC_ expr2 - Logical OR.",
+  extended = """
+    Arguments:
+      expr1 - a boolean expression.
+      expr2 - a boolean expression.
+  """)
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -410,7 +428,12 @@ object Equality {
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a equals b and false otherwise.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2` and false otherwise.",
+  extended = """
+    Arguments:
+      expr1 - an expression of any type.
+      expr2 - an expression of any type.
+  """)
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -436,8 +459,15 @@ case class EqualTo(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = """a _FUNC_ b - Returns same result with EQUAL(=) operator for non-null operands,
-    but returns TRUE if both are NULL, FALSE if one of the them is NULL.""")
+  usage = """
+    expr1 _FUNC_ expr2 - Returns same result as the EQUAL(=) operator for non-null operands,
+      but returns true if both are null, false if one of the them is null.
+  """,
+  extended = """
+    Arguments:
+      expr1 - an expression of any type.
+      expr2 - an expression of any type.
+  """)
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
   override def inputType: AbstractDataType = AnyDataType
@@ -477,7 +507,12 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a is less than b.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.",
+  extended = """
+    Arguments:
+      expr1 - an expression of any atomic type.
+      expr2 - an expression of any atomic type.
+  """)
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -491,7 +526,12 @@ case class LessThan(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a is not greater than b.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.",
+  extended = """
+    Arguments:
+      expr1 - an expression of any atomic type.
+      expr2 - an expression of any atomic type.
+  """)
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -505,7 +545,12 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a is greater than b.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
+  extended = """
+    Arguments:
+      expr1 - an expression of any atomic type.
+      expr2 - an expression of any atomic type.
+  """)
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -519,7 +564,12 @@ case class GreaterThan(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns TRUE if a is not smaller than b.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.",
+  extended = """
+    Arguments:
+      expr1 - an expression of any atomic type.
+      expr2 - an expression of any atomic type.
+  """)
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 

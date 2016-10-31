@@ -28,8 +28,15 @@ import org.apache.spark.sql.types._
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(x,y) - Returns Pearson coefficient of correlation between a set of number pairs.")
+  usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.",
+  extended = """
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
+  """)
+// scalastyle:on line.size.limit
 case class Corr(x: Expression, y: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = Seq(x, y)

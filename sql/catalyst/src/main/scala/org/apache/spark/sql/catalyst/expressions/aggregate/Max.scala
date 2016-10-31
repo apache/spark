@@ -23,7 +23,11 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the maximum value of expr.")
+  usage = "_FUNC_(expr) - Returns the maximum value of `expr`.",
+  extended = """
+    Arguments:
+      expr - an expression of any type except map.
+  """)
 case class Max(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil

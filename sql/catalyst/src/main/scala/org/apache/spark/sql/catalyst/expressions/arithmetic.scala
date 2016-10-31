@@ -25,7 +25,14 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns -a.")
+  usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
+  extended = """
+    Arguments:
+      expr - a numeric or interval expression.
+    Examples:
+      > SELECT _FUNC_(1);
+       -1
+  """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
 
@@ -62,7 +69,11 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns a.")
+  usage = "_FUNC_(expr) - Returns the value of `expr`.",
+  extended = """
+    Arguments:
+      expr - a numeric or interval expression.
+  """)
 case class UnaryPositive(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
   override def prettyName: String = "positive"
@@ -84,7 +95,14 @@ case class UnaryPositive(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric value.",
-  extended = "> SELECT _FUNC_('-1');\n 1")
+  extended = """
+    Arguments:
+      expr - a numeric expression.
+
+    Examples:
+      > SELECT _FUNC_(-1);
+       1
+  """)
 case class Abs(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -131,7 +149,16 @@ object BinaryArithmetic {
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns a+b.")
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",
+  extended = """
+    Arguments:
+      expr1 - a numeric or interval expression.
+      expr2 - a numeric or interval expression.
+
+    Examples:
+      > SELECT 1 _FUNC_ 2;
+       3
+  """)
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
@@ -162,7 +189,16 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns a-b.")
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`-`expr2`.",
+  extended = """
+    Arguments:
+      expr1 - a numeric or interval expression.
+      expr2 - a numeric or interval expression.
+
+    Examples:
+      > SELECT 2 _FUNC_ 1;
+       1
+  """)
 case class Subtract(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -194,7 +230,16 @@ case class Subtract(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Multiplies a by b.")
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
+  extended = """
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
+
+    Examples:
+      > SELECT 2 _FUNC_ 3;
+       6
+  """)
 case class Multiply(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -208,9 +253,21 @@ case class Multiply(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Divides a by b.",
-  extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
+  usage = "expr1 _FUNC_ expr2 - Returns `expr1`/`expr2`. It always performs floating point division.",
+  extended = """
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
+
+    Examples:
+      > SELECT 3 _FUNC_ 2;
+       1.5
+      > SELECT 2L _FUNC_ 2L;
+       1.0
+  """)
+// scalastyle:on line.size.limit
 case class Divide(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -286,7 +343,16 @@ case class Divide(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Returns the remainder when dividing a by b.")
+  usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
+  extended = """
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
+
+    Examples:
+      > SELECT 2 _FUNC_ 1.8;
+       0.2
+  """)
 case class Remainder(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -367,8 +433,18 @@ case class Remainder(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(a, b) - Returns the positive modulo",
-  extended = "> SELECT _FUNC_(10,3);\n 1")
+  usage = "_FUNC_(expr1, expr2) - Returns the positive value of `expr1` mod `expr2`.",
+  extended = """
+    Arguments:
+      expr1 - a numeric expression.
+      expr2 - a numeric expression.
+
+    Examples:
+      > SELECT _FUNC_(10, 3);
+       1
+      > SELECT _FUNC_(-10, 3);
+       2
+  """)
 case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def toString: String = s"pmod($left, $right)"
@@ -471,7 +547,15 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic wi
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n1, ...) - Returns the least value of all parameters, skipping null values.")
+  usage = "_FUNC_(expr, ...) - Returns the least value of all parameters, skipping null values.",
+  extended = """
+    Arguments:
+      expr - an expression of any type except map.
+
+    Examples:
+      > SELECT _FUNC_(10, 9, 2, 4, 3);
+       2
+  """)
 case class Least(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -531,7 +615,15 @@ case class Least(children: Seq[Expression]) extends Expression {
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n1, ...) - Returns the greatest value of all parameters, skipping null values.")
+  usage = "_FUNC_(expr, ...) - Returns the greatest value of all parameters, skipping null values.",
+  extended = """
+    Arguments:
+      expr - an expression of any type except map.
+
+    Examples:
+      > SELECT _FUNC_(10, 9, 2, 4, 3);
+       10
+  """)
 case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = children.forall(_.nullable)

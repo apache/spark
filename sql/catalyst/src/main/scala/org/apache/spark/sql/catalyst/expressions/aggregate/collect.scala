@@ -86,7 +86,11 @@ abstract class Collect extends ImperativeAggregate {
  * Collect a list of elements.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.")
+  usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.",
+  extended = """
+    Arguments:
+      expr - an expression of any type that represents data to collect as a list.
+  """)
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
@@ -106,10 +110,14 @@ case class CollectList(
 }
 
 /**
- * Collect a list of unique elements.
+ * Collect a set of unique elements.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Collects and returns a set of unique elements.")
+  usage = "_FUNC_(expr) - Collects and returns a set of unique elements.",
+  extended = """
+    Arguments:
+      expr - an expression of any type except map that represents data to collect as a set.
+  """)
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
