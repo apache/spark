@@ -64,14 +64,19 @@ class TypeCoercionSuite extends PlanTest {
     shouldNotCast(IntegerType, ArrayType)
     shouldNotCast(IntegerType, MapType)
     shouldNotCast(IntegerType, StructType)
+  }
 
+  test("implicit type cast - CalendarIntervalType") {
     shouldNotCast(CalendarIntervalType, StringType)
+  }
 
-    // Don't implicitly cast complex types to string.
+  test("implicit type cast - ArrayType") {
     shouldNotCast(ArrayType(StringType), StringType)
-    shouldNotCast(MapType(StringType, StringType), StringType)
-    shouldNotCast(MapType(StringType, StringType), StringType)
+  }
 
+  test("implicit type cast - MapType") {
+    shouldNotCast(MapType(StringType, StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
   }
 
   test("implicit type cast - LongType") {
