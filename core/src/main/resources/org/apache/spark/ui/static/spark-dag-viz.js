@@ -35,7 +35,7 @@
  * primitives (e.g. take, any SQL query).
  *
  * In the visualization, an RDD is expressed as a node, and its dependencies
- * as directed edges (from parent to child). operation scopes, stages, and
+ * as directed edges (from parent to child). Operation scopes, stages, and
  * jobs are expressed as clusters that may contain one or many nodes. These
  * clusters may be nested inside of each other in the scenarios described
  * above.
@@ -474,7 +474,7 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
 function addTooltipsForRDDs(svgContainer) {
   svgContainer.selectAll("g.node").each(function() {
     var node = d3.select(this);
-    var tooltipText = node.attr("name");
+    var tooltipText = node.attr("name").replace("\\n", " ");
     if (tooltipText) {
       node.select("circle")
         .attr("data-toggle", "tooltip")
