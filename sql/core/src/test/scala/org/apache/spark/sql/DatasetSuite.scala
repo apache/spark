@@ -933,6 +933,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
             spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
             f
           } finally {
+            // Since the original checkpointDir can be None, we need
+            // to set the variable directly.
             spark.sparkContext.checkpointDir = originalCheckpointDir
           }
         }
