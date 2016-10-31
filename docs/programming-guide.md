@@ -182,7 +182,7 @@ variable called `sc`. Making your own SparkContext will not work. You can set wh
 context connects to using the `--master` argument, and you can add JARs to the classpath
 by passing a comma-separated list to the `--jars` argument. You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
-to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
 can be passed to the `--repositories` argument. For example, to run `bin/spark-shell` on exactly
 four cores, use:
 
@@ -214,9 +214,9 @@ variable called `sc`. Making your own SparkContext will not work. You can set wh
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
 to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
-to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. SonaType)
-can be passed to the `--repositories` argument. Any python dependencies a Spark Package has (listed in
-the requirements.txt of that package) must be manually installed using pip when necessary.
+to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
+can be passed to the `--repositories` argument. Any Python dependencies a Spark package has (listed in
+the requirements.txt of that package) must be manually installed using `pip` when necessary.
 For example, to run `bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}

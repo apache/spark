@@ -30,7 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
@@ -65,6 +65,8 @@ import org.apache.spark.util.Utils
  * @param partitionColumns A list of column names that the relation is partitioned by. When this
  *                         list is empty, the relation is unpartitioned.
  * @param bucketSpec An optional specification for bucketing (hash-partitioning) of the data.
+ * @param catalogTable Optional catalog table reference that can be used to push down operations
+ *                     over the datasource to the catalog service.
  */
 case class DataSource(
     sparkSession: SparkSession,
@@ -73,9 +75,10 @@ case class DataSource(
     userSpecifiedSchema: Option[StructType] = None,
     partitionColumns: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
-    options: Map[String, String] = Map.empty) extends Logging {
+    options: Map[String, String] = Map.empty,
+    catalogTable: Option[CatalogTable] = None) extends Logging {
 
-  case class SourceInfo(name: String, schema: StructType)
+  case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
   lazy val providingClass: Class[_] = lookupDataSource(className)
   lazy val sourceInfo = sourceSchema()
@@ -186,8 +189,11 @@ case class DataSource(
     }
   }
 
-  private def inferFileFormatSchema(format: FileFormat): StructType = {
-    userSpecifiedSchema.orElse {
+  /**
+   * Infer the schema of the given FileFormat, returns a pair of schema and partition column names.
+   */
+  private def inferFileFormatSchema(format: FileFormat): (StructType, Seq[String]) = {
+    userSpecifiedSchema.map(_ -> partitionColumns).orElse {
       val caseInsensitiveOptions = new CaseInsensitiveMap(options)
       val allPaths = caseInsensitiveOptions.get("path")
       val globbedPaths = allPaths.toSeq.flatMap { path =>
@@ -196,15 +202,15 @@ case class DataSource(
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      val fileCatalog = new ListingFileCatalog(sparkSession, globbedPaths, options, None)
-      val partitionCols = fileCatalog.partitionSpec().partitionColumns.fields
+      val fileCatalog = new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
+      val partitionSchema = fileCatalog.partitionSpec().partitionColumns
       val inferred = format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
         fileCatalog.allFiles())
 
       inferred.map { inferredSchema =>
-        StructType(inferredSchema ++ partitionCols)
+        StructType(inferredSchema ++ partitionSchema) -> partitionSchema.map(_.name)
       }
     }.getOrElse {
       throw new AnalysisException("Unable to infer schema. It must be specified manually.")
@@ -217,7 +223,7 @@ case class DataSource(
       case s: StreamSourceProvider =>
         val (name, schema) = s.sourceSchema(
           sparkSession.sqlContext, userSpecifiedSchema, className, options)
-        SourceInfo(name, schema)
+        SourceInfo(name, schema, Nil)
 
       case format: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
@@ -246,7 +252,8 @@ case class DataSource(
               "you may be able to create a static DataFrame on that directory with " +
               "'spark.read.load(directory)' and infer schema from it.")
         }
-        SourceInfo(s"FileSource[$path]", inferFileFormatSchema(format))
+        val (schema, partCols) = inferFileFormatSchema(format)
+        SourceInfo(s"FileSource[$path]", schema, partCols)
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -266,7 +273,13 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
         new FileStreamSource(
-          sparkSession, path, className, sourceInfo.schema, metadataPath, options)
+          sparkSession = sparkSession,
+          path = path,
+          fileFormatClassName = className,
+          schema = sourceInfo.schema,
+          partitionColumns = sourceInfo.partitionColumns,
+          metadataPath = metadataPath,
+          options = options)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
@@ -351,7 +364,7 @@ case class DataSource(
       case (format: FileFormat, _)
           if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val fileCatalog = new MetadataLogFileCatalog(sparkSession, basePath)
+        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
@@ -402,9 +415,16 @@ case class DataSource(
             })
         }
 
-        val fileCatalog =
-          new ListingFileCatalog(
+        val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
+            catalogTable.isDefined && catalogTable.get.partitionProviderIsHive) {
+          new CatalogFileIndex(
+            sparkSession,
+            catalogTable.get,
+            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L))
+        } else {
+          new InMemoryFileIndex(
             sparkSession, globbedPaths, options, partitionSchema)
+        }
 
         val dataSchema = userSpecifiedSchema.map { schema =>
           val equality = sparkSession.sessionState.conf.resolver
@@ -413,7 +433,7 @@ case class DataSource(
           format.inferSchema(
             sparkSession,
             caseInsensitiveOptions,
-            fileCatalog.allFiles())
+            fileCatalog.asInstanceOf[InMemoryFileIndex].allFiles())
         }.getOrElse {
           throw new AnalysisException(
             s"Unable to infer schema for $format at ${allPaths.take(2).mkString(",")}. " +
@@ -422,7 +442,7 @@ case class DataSource(
 
         HadoopFsRelation(
           fileCatalog,
-          partitionSchema = fileCatalog.partitionSpec().partitionColumns,
+          partitionSchema = fileCatalog.partitionSchema,
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
@@ -471,9 +491,7 @@ case class DataSource(
           val existingPartitionColumns = Try {
             resolveRelation()
               .asInstanceOf[HadoopFsRelation]
-              .location
-              .partitionSpec()
-              .partitionColumns
+              .partitionSchema
               .fieldNames
               .toSeq
           }.getOrElse(Seq.empty[String])

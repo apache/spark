@@ -294,6 +294,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.logs.rolling.enableCompression</code></td>
+  <td>false</td>
+  <td>
+    Enable executor log compression. If it is enabled, the rolled executor logs will be compressed.
+    Disabled by default.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
   <td>(none)</td>
   <td>
@@ -624,7 +632,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>
-    Allows stages and corresponding jobs to be killed from the web ui.
+    Allows jobs and stages to be killed from the web UI.
   </td>
 </tr>
 <tr>
@@ -789,6 +797,14 @@ Apart from these, the following properties are also available, and may be useful
     <a href="api/scala/index.html#org.apache.spark.serializer.KryoRegistrator">
     <code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kryo.unsafe</code></td>
+  <td>false</td>
+  <td>
+    Whether to use unsafe based Kryo serializer. Can be
+    substantially faster by using Unsafe Based IO.
   </td>
 </tr>
 <tr>
@@ -1874,6 +1890,21 @@ showDF(properties, numRows = 200, truncate = FALSE)
     <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.backendConnectionTimeout</code></td>
+  <td>6000</td>
+  <td>
+    Connection timeout set by R process on its connection to RBackend in seconds.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.r.heartBeatInterval</code></td>
+  <td>100</td>
+  <td>
+    Interval for heartbeats sents from SparkR backend to R process to prevent connection timeout.
+  </td>
+</tr>
+
 </table>
 
 #### Deploy

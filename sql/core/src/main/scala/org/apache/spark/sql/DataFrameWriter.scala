@@ -25,7 +25,8 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Union}
+import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, CreateTable, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.types.StructType
 
@@ -387,8 +388,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           partitionColumnNames = partitioningColumns.getOrElse(Nil),
           bucketSpec = getBucketSpec
         )
-        val cmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
-        df.sparkSession.sessionState.executePlan(cmd).toRdd
+        df.sparkSession.sessionState.executePlan(
+          CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
+        if (tableDesc.partitionColumnNames.nonEmpty &&
+            df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
+          // Need to recover partitions into the metastore so our saved data is visible.
+          df.sparkSession.sessionState.executePlan(
+            AlterTableRecoverPartitionsCommand(tableDesc.identifier)).toRdd
+        }
     }
   }
 
@@ -426,15 +433,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
-    // connectionProperties should override settings in extraOptions
-    this.extraOptions = this.extraOptions ++ (connectionProperties.asScala)
+    // connectionProperties should override settings in extraOptions.
+    this.extraOptions = this.extraOptions ++ connectionProperties.asScala
     // explicit url and dbtable should override all
     this.extraOptions += ("url" -> url, "dbtable" -> table)
     format("jdbc").save()
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in JSON format at the specified path.
+   * Saves the content of the [[DataFrame]] in JSON format ([[http://jsonlines.org/ JSON Lines text
+   * format or newline-delimited JSON]]) at the specified path.
    * This is equivalent to:
    * {{{
    *   format("json").save(path)

@@ -64,7 +64,7 @@ import org.apache.spark.util.Utils
  *   SparkSession.builder()
  *     .master("local")
  *     .appName("Word Count")
- *     .config("spark.some.config.option", "some-value").
+ *     .config("spark.some.config.option", "some-value")
  *     .getOrCreate()
  * }}}
  */
@@ -814,7 +814,7 @@ object SparkSession {
       if ((session ne null) && !session.sparkContext.isStopped) {
         options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
         if (options.nonEmpty) {
-          logWarning("Use an existing SparkSession, some configuration may not take effect.")
+          logWarning("Using an existing SparkSession; some configuration may not take effect.")
         }
         return session
       }
@@ -826,7 +826,7 @@ object SparkSession {
         if ((session ne null) && !session.sparkContext.isStopped) {
           options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
           if (options.nonEmpty) {
-            logWarning("Use an existing SparkSession, some configuration may not take effect.")
+            logWarning("Using an existing SparkSession; some configuration may not take effect.")
           }
           return session
         }

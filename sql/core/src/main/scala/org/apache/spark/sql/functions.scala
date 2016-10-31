@@ -37,7 +37,6 @@ import org.apache.spark.util.Utils
 
 
 /**
- * :: Experimental ::
  * Functions available for DataFrame operations.
  *
  * @groupname udf_funcs UDF functions
@@ -53,8 +52,7 @@ import org.apache.spark.util.Utils
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
-@Experimental
-@InterfaceStability.Evolving
+@InterfaceStability.Stable
 // scalastyle:off
 object functions {
 // scalastyle:on

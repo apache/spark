@@ -288,15 +288,15 @@ class ChiSqSelector(object):
     ... ]
     >>> model = ChiSqSelector().setNumTopFeatures(1).fit(sc.parallelize(data))
     >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
-    SparseVector(1, {0: 6.0})
+    SparseVector(1, {})
     >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
-    DenseVector([5.0])
+    DenseVector([8.0])
     >>> model = ChiSqSelector().setSelectorType("percentile").setPercentile(0.34).fit(
     ...     sc.parallelize(data))
     >>> model.transform(SparseVector(3, {1: 9.0, 2: 6.0}))
-    SparseVector(1, {0: 6.0})
+    SparseVector(1, {})
     >>> model.transform(DenseVector([8.0, 9.0, 5.0]))
-    DenseVector([5.0])
+    DenseVector([8.0])
     >>> data = [
     ...     LabeledPoint(0.0, SparseVector(4, {0: 8.0, 1: 7.0})),
     ...     LabeledPoint(1.0, SparseVector(4, {1: 9.0, 2: 6.0, 3: 4.0})),
