@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.conf.HiveConf
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog._
@@ -28,7 +29,9 @@ import org.apache.spark.sql.types.IntegerType
 class HiveClientSuite extends SparkFunSuite {
   private val clientBuilder = new HiveClientBuilder
 
-  test(s"getPartitionsByFilter when hive.metastore.try.direct.sql=false") {
+  private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
+
+  test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {
     val testPartitionCount = 5
 
     val storageFormat = CatalogStorageFormat(
@@ -40,7 +43,7 @@ class HiveClientSuite extends SparkFunSuite {
       properties = Map.empty)
 
     val hadoopConf = new Configuration()
-    hadoopConf.setBoolean("hive.metastore.try.direct.sql", false)
+    hadoopConf.setBoolean(tryDirectSqlKey, false)
     val client = clientBuilder.buildClient(HiveUtils.hiveExecutionVersion, hadoopConf)
     client.runSqlHive("CREATE TABLE test (value INT) PARTITIONED BY (part INT)")
 
@@ -50,11 +53,9 @@ class HiveClientSuite extends SparkFunSuite {
     client.createPartitions(
       "default", "test", partitions, ignoreIfExists = false)
 
-    val result = client.getPartitionsByFilter(client.getTable("default", "test"),
+    val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
       Seq(EqualTo(AttributeReference("part", IntegerType)(), Literal(3))))
 
-    // Don't throw an exception when hive.metastore.try.direct.sql=false. Return all partitions
-    // instead
-    assert(result.size == testPartitionCount)
+    assert(filteredPartitions.size == testPartitionCount)
   }
 }
