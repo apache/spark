@@ -23,9 +23,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.ql.exec._
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer
 import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory}
@@ -266,8 +266,19 @@ private[hive] case class HiveGenericUDTF(
 }
 
 /**
- * Currently we don't support partial aggregation for queries using Hive UDAF, which may hurt
- * performance a lot.
+ * While being evaluated by Spark SQL, the aggregation state of a Hive UDAF may be in the following
+ * three formats:
+ *
+ *  1. a Spark SQL value, or
+ *  2. an instance of some concrete `GenericUDAFEvaluator.AggregationBuffer` class, or
+ *  3. a Java object that can be inspected using the `ObjectInspector` returned by the
+ *     `GenericUDAFEvaluator.init()` method.
+ *
+ * We may use the following methods to convert the aggregation state back and forth:
+ *
+ *  - `wrap()`/`wrapperFor()`: from 3 to 1
+ *  - `unwrap()`/`unwrapperFor()`: from 1 to 3
+ *  - `GenericUDAFEvaluator.terminatePartial()`: from 2 to 3
  */
 private[hive] case class HiveUDAFFunction(
     name: String,
@@ -305,11 +316,17 @@ private[hive] case class HiveUDAFFunction(
   private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
 
   @transient
-  private lazy val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
+  private lazy val returnInspector =
+    function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
 
   @transient
   private lazy val partialResultInspector =
     function.init(GenericUDAFEvaluator.Mode.PARTIAL1, inspectors)
+
+  // The following two lines initializes `function: GenericUDAFEvaluator` eagerly. These two fields
+  // are declared as `@transient lazy val` only for the purpose of serialization.
+  returnInspector
+  partialResultInspector
 
   @transient
   private lazy val partialResultDataType = inspectorToDataType(partialResultInspector)
@@ -340,7 +357,7 @@ private[hive] case class HiveUDAFFunction(
 
   override def nullable: Boolean = true
 
-  override def supportsPartial: Boolean = false
+  override def supportsPartial: Boolean = true
 
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 
@@ -361,7 +378,7 @@ private[hive] case class HiveUDAFFunction(
   }
 
   override def merge(buffer: AggregationBuffer, input: AggregationBuffer): Unit = {
-    function.merge(buffer, partialResultUnwrapper(input))
+    function.merge(buffer, function.terminatePartial(input))
   }
 
   override def eval(buffer: AggregationBuffer): Any = resultUnwrapper(function.evaluate(buffer))
@@ -404,7 +421,7 @@ private[hive] object HiveUDAFFunction {
       // workaround here is creating an initial `AggregationBuffer` first and then merge the
       // deserialized object into the buffer.
       val buffer = function.getNewAggregationBuffer
-      val unsafeRow = new UnsafeRow
+      val unsafeRow = new UnsafeRow(1)
       unsafeRow.pointTo(bytes, bytes.length)
       val partialResult = unsafeRow.get(0, partialResultDataType)
       function.merge(buffer, partialResultWrapper(partialResult))
