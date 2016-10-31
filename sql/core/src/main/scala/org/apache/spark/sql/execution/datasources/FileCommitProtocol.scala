@@ -38,7 +38,7 @@ object FileCommitProtocol {
 
 
 /**
- * An interface to define how a Spark job commits its outputs.
+ * An interface to define how a Spark job commits its outputs. Implementations must be serializable.
  *
  * The proper call sequence is:
  *
