@@ -41,7 +41,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
   def post(event: StreamingQueryListener.Event) {
     event match {
       case s: QueryStartedEvent =>
-        sparkListenerBus.postToAll(s)
+        sparkListenerBus.post(s)
         // post to local listeners to trigger callbacks
         postToAll(event)
       case _ =>
