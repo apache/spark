@@ -157,6 +157,21 @@ abstract class ExternalCatalog {
       purge: Boolean): Unit
 
   /**
+   * Drop partitions that belong to the specified table, assuming it exists, that
+   * satisfy the given partition-pruning predicate expressions.
+   *
+   * @param db database name
+   * @param table table name
+   * @param predicates  partition-pruning predicates
+   */
+  def dropPartitionsByFilter(
+      db: String,
+      table: String,
+      predicates: Seq[Expression],
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit
+
+  /**
    * Override the specs of one or many existing table partitions, assuming they exist.
    * This assumes index i of `specs` corresponds to index i of `newSpecs`.
    */

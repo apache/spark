@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison,
+  EqualTo, Expression, PredicateHelper}
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -418,10 +419,14 @@ case class AlterTableRenamePartitionCommand(
  */
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
-    specs: Seq[TablePartitionSpec],
+    specs: Seq[Expression],
     ifExists: Boolean,
     purge: Boolean)
-  extends RunnableCommand {
+  extends RunnableCommand with PredicateHelper {
+
+  private def hasComplexExpr(expr: Expression): Boolean = {
+    expr.find(e => e.isInstanceOf[BinaryComparison] && !e.isInstanceOf[EqualTo]).isDefined
+  }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -429,16 +434,26 @@ case class AlterTableDropPartitionCommand(
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
-    val normalizedSpecs = specs.map { spec =>
-      PartitioningUtils.normalizePartitionSpec(
-        spec,
-        table.partitionColumnNames,
-        table.identifier.quotedString,
-        sparkSession.sessionState.conf.resolver)
+    if (specs.exists(hasComplexExpr)) {
+      catalog.dropPartitionsByFilter(
+        table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
+    } else {
+      val partitionSpec = specs.map { x =>
+        splitConjunctivePredicates(x)
+          .map(_.asInstanceOf[BinaryComparison])
+          .map(p => p.left.asInstanceOf[AttributeReference].name -> p.right.toString)
+          .toMap
+      }
+      val normalizedSpecs = partitionSpec.map { spec =>
+        PartitioningUtils.normalizePartitionSpec(
+          spec,
+          table.partitionColumnNames,
+          table.identifier.quotedString,
+          sparkSession.sessionState.conf.resolver)
+      }
+      catalog.dropPartitions(
+        table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge)
     }
-
-    catalog.dropPartitions(
-      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
 

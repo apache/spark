@@ -243,7 +243,7 @@ partitionSpec
     ;
 
 partitionVal
-    : identifier (EQ constant)?
+    : identifier (comparisonOperator constant)?
     ;
 
 describeFuncName

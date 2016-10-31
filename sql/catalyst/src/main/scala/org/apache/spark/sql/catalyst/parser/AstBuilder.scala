@@ -196,6 +196,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText
+      val operator = Option(pVal.comparisonOperator).map(_.getText)
+      validate(operator.isEmpty || operator.get.equals("="),
+        "Only '=' partition specification is allowed.", ctx)
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
     }
@@ -204,6 +207,38 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // partition columns will be done in analyzer.
     checkDuplicateKeys(parts, ctx)
     parts.toMap
+  }
+
+  /**
+   * Create a partition filter specification.
+   */
+  def visitPartitionFilterSpec(ctx: PartitionSpecContext): Expression = withOrigin(ctx) {
+    val parts = ctx.partitionVal.asScala.map { pVal =>
+      val name = pVal.identifier.getText.toLowerCase
+      val operator = Option(pVal.comparisonOperator).map(_.getText)
+      if (operator.isDefined) {
+        val left = AttributeReference(name, DataTypes.StringType)()
+        val right = expression(pVal.constant)
+        val operator = pVal.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
+        operator.getSymbol.getType match {
+          case SqlBaseParser.EQ =>
+            EqualTo(left, right)
+          case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
+            Not(EqualTo(left, right))
+          case SqlBaseParser.LT =>
+            LessThan(left, right)
+          case SqlBaseParser.LTE =>
+            LessThanOrEqual(left, right)
+          case SqlBaseParser.GT =>
+            GreaterThan(left, right)
+          case SqlBaseParser.GTE =>
+            GreaterThanOrEqual(left, right)
+        }
+      } else {
+        throw new ParseException("Invalid partition filter specification", ctx)
+      }
+    }
+    parts.reduceLeft(And)
   }
 
   /**
