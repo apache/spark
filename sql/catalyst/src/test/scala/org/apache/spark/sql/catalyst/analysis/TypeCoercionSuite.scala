@@ -30,37 +30,92 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 class TypeCoercionSuite extends PlanTest {
 
-  test("eligible implicit type cast") {
-    def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
-      val got = TypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
-      assert(got.map(_.dataType) == Option(expected),
-        s"Failed to cast $from to $to")
-    }
+  private def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
+    val got = TypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
+    assert(got.map(_.dataType) == Option(expected),
+      s"Failed to cast $from to $to")
+  }
 
+  private def shouldNotCast(from: DataType, to: AbstractDataType): Unit = {
+    val got = TypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
+    assert(got.isEmpty, s"Should not be able to cast $from to $to, but got $got")
+  }
+
+  test("implicit type cast - NullType") {
     shouldCast(NullType, NullType, NullType)
     shouldCast(NullType, IntegerType, IntegerType)
     shouldCast(NullType, DecimalType, DecimalType.SYSTEM_DEFAULT)
+  }
 
+  test("implicit type cast - ByteType") {
     shouldCast(ByteType, IntegerType, IntegerType)
+    shouldCast(BinaryType, StringType, StringType)
+
+  }
+
+  test("implicit type cast - IntegerType") {
     shouldCast(IntegerType, IntegerType, IntegerType)
     shouldCast(IntegerType, LongType, LongType)
     shouldCast(IntegerType, DecimalType, DecimalType(10, 0))
+    shouldCast(IntegerType, StringType, StringType)
+
+    shouldNotCast(IntegerType, DateType)
+    shouldNotCast(IntegerType, TimestampType)
+    shouldNotCast(IntegerType, ArrayType)
+    shouldNotCast(IntegerType, MapType)
+    shouldNotCast(IntegerType, StructType)
+
+    shouldNotCast(CalendarIntervalType, StringType)
+
+    // Don't implicitly cast complex types to string.
+    shouldNotCast(ArrayType(StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
+    shouldNotCast(MapType(StringType, StringType), StringType)
+
+  }
+
+  test("implicit type cast - LongType") {
     shouldCast(LongType, IntegerType, IntegerType)
     shouldCast(LongType, DecimalType, DecimalType(20, 0))
 
-    shouldCast(DateType, TimestampType, TimestampType)
-    shouldCast(TimestampType, DateType, DateType)
+    shouldNotCast(LongType, DateType)
+    shouldNotCast(LongType, TimestampType)
+  }
 
+  test("implicit type cast - DateType") {
+    shouldCast(DateType, TimestampType, TimestampType)
+    shouldCast(DateType, StringType, StringType)
+  }
+
+  test("implicit type cast - TimestampType") {
+    shouldCast(TimestampType, DateType, DateType)
+    shouldCast(TimestampType, StringType, StringType)
+  }
+
+  test("implicit type cast - StringType") {
     shouldCast(StringType, IntegerType, IntegerType)
     shouldCast(StringType, DateType, DateType)
     shouldCast(StringType, TimestampType, TimestampType)
-    shouldCast(IntegerType, StringType, StringType)
-    shouldCast(DateType, StringType, StringType)
-    shouldCast(TimestampType, StringType, StringType)
-
     shouldCast(StringType, BinaryType, BinaryType)
-    shouldCast(BinaryType, StringType, StringType)
+    shouldCast(StringType, NumericType, DoubleType)
 
+    shouldNotCast(new StructType().add("a1", StringType), StringType)
+  }
+
+  test("implicit type cast - DecimalType") {
+    shouldNotCast(DecimalType.SYSTEM_DEFAULT, DateType)
+    shouldNotCast(DecimalType.SYSTEM_DEFAULT, TimestampType)
+  }
+
+  test("eligible implicit type cast") {
+    // NumericType should not be changed when function accepts any of them.
+    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
+      DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2)).foreach { tpe =>
+      shouldCast(tpe, NumericType, tpe)
+    }
+  }
+
+  test("eligible implicit type cast - TypeCollection") {
     shouldCast(NullType, TypeCollection(StringType, BinaryType), StringType)
 
     shouldCast(StringType, TypeCollection(StringType, BinaryType), StringType)
@@ -81,14 +136,7 @@ class TypeCoercionSuite extends PlanTest {
     shouldCast(DecimalType(10, 2), TypeCollection(DecimalType, IntegerType), DecimalType(10, 2))
     shouldCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType), DecimalType(10, 2))
 
-    shouldCast(StringType, NumericType, DoubleType)
     shouldCast(StringType, TypeCollection(NumericType, BinaryType), DoubleType)
-
-    // NumericType should not be changed when function accepts any of them.
-    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-      DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2)).foreach { tpe =>
-      shouldCast(tpe, NumericType, tpe)
-    }
 
     shouldCast(
       ArrayType(StringType, false),
@@ -101,32 +149,8 @@ class TypeCoercionSuite extends PlanTest {
       ArrayType(StringType, true))
   }
 
-  test("ineligible implicit type cast") {
-    def shouldNotCast(from: DataType, to: AbstractDataType): Unit = {
-      val got = TypeCoercion.ImplicitTypeCasts.implicitCast(Literal.create(null, from), to)
-      assert(got.isEmpty, s"Should not be able to cast $from to $to, but got $got")
-    }
-
-    shouldNotCast(IntegerType, DateType)
-    shouldNotCast(IntegerType, TimestampType)
-    shouldNotCast(LongType, DateType)
-    shouldNotCast(LongType, TimestampType)
-    shouldNotCast(DecimalType.SYSTEM_DEFAULT, DateType)
-    shouldNotCast(DecimalType.SYSTEM_DEFAULT, TimestampType)
-
+  test("ineligible implicit type cast - TypeCollection") {
     shouldNotCast(IntegerType, TypeCollection(DateType, TimestampType))
-
-    shouldNotCast(IntegerType, ArrayType)
-    shouldNotCast(IntegerType, MapType)
-    shouldNotCast(IntegerType, StructType)
-
-    shouldNotCast(CalendarIntervalType, StringType)
-
-    // Don't implicitly cast complex types to string.
-    shouldNotCast(ArrayType(StringType), StringType)
-    shouldNotCast(MapType(StringType, StringType), StringType)
-    shouldNotCast(new StructType().add("a1", StringType), StringType)
-    shouldNotCast(MapType(StringType, StringType), StringType)
   }
 
   test("tightest common bound for types") {
