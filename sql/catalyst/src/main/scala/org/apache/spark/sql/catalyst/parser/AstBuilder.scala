@@ -178,15 +178,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
     val overwrite = ctx.OVERWRITE != null
-    val overwritePartition = if (overwrite) {
-      if (partitionKeys.nonEmpty && dynamicPartitionKeys.isEmpty) {
+    val overwritePartition =
+      if (overwrite && partitionKeys.nonEmpty && dynamicPartitionKeys.isEmpty) {
         Some(partitionKeys.map(t => (t._1, t._2.get)))
       } else {
         None
       }
-    } else {
-      None
-    }
 
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
