@@ -486,8 +486,6 @@ class Dataset[T] private[sql](
   /**
    * Returns a checkpointed version of this Dataset.
    *
-   * @param eager When true, materializes the underlying checkpointed RDD eagerly.
-   *
    * @group basic
    * @since 2.1.0
    */
