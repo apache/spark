@@ -40,14 +40,19 @@ class MapAggregateQuerySuite extends QueryTest with SharedSQLContext {
 
   test("null handling") {
     withTempView(table) {
-      // Empty input row
-      val rdd1: RDD[Row] = spark.sparkContext.parallelize(Seq(Row(null, null)))
-      spark.createDataFrame(rdd1, schema).createOrReplaceTempView(table)
-      checkAnswer(query(numBins = 2), Row(Map.empty, Map.empty))
+      // Null input
+      val nullRdd: RDD[Row] = spark.sparkContext.parallelize(Seq(Row(null, null)))
+      spark.createDataFrame(nullRdd, schema).createOrReplaceTempView(table)
+      checkAnswer(query(numBins = 2), Row(null, null))
 
-      // Add some non-empty row
-      val rdd2: RDD[Row] = spark.sparkContext.parallelize(Seq(Row(null, 3.0D), Row("a", null)))
-      spark.createDataFrame(rdd2, schema).createOrReplaceTempView(table)
+      // Empty input
+      val emptyRdd: RDD[Row] = spark.sparkContext.parallelize(Seq.empty)
+      spark.createDataFrame(emptyRdd, schema).createOrReplaceTempView(table)
+      checkAnswer(query(numBins = 2), Row(null, null))
+
+      // Add some non-null data
+      val rdd: RDD[Row] = spark.sparkContext.parallelize(Seq(Row(null, 3.0D), Row("a", null)))
+      spark.createDataFrame(rdd, schema).createOrReplaceTempView(table)
       checkAnswer(query(numBins = 2), Row(Map(("a", 1)), Map((3.0D, 1))))
     }
   }

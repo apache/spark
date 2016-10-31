@@ -33,9 +33,11 @@ import org.apache.spark.sql.types.{DataType, _}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * The MapAggregate function for a column returns bins - (distinct non-null value, frequency) pairs
- * of equi-width histogram when the number of distinct non-null values is less than or equal to the
- * specified maximum number of bins. Otherwise, it returns an empty map.
+ * The MapAggregate function for a column returns:
+ * 1. null if no non-null value exists.
+ * 2. (distinct non-null value, frequency) pairs of equi-width histogram when the number of
+ * distinct non-null values is less than or equal to the specified maximum number of bins.
+ * 3. an empty map otherwise.
  *
  * @param child child expression that can produce column value with `child.eval(inputRow)`
  * @param numBinsExpression The maximum number of bins.
@@ -43,9 +45,10 @@ import org.apache.spark.unsafe.types.UTF8String
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, numBins) - Returns bins - (distinct non-null value, frequency) pairs of equi-width
-      histogram when the number of distinct non-null values is less than or equal to the specified
-      maximum number of bins. Otherwise, it returns an empty map.
+      _FUNC_(col, numBins) - Returns 1. null if no non-null value exists.
+      2. (distinct non-null value, frequency) pairs of equi-width histogram when the number of
+      distinct non-null values is less than or equal to the specified maximum number of bins.
+      3. an empty map otherwise.
     """)
 case class MapAggregate(
     child: Expression,
@@ -109,7 +112,12 @@ case class MapAggregate(
         case stringDigest: StringMapDigest => TreeMap[UTF8String, Long](stringDigest.bins.toSeq: _*)
         case numericDigest: NumericMapDigest => TreeMap[Double, Long](numericDigest.bins.toSeq: _*)
       }
-      ArrayBasedMapData(sorted.keys.toArray, sorted.values.toArray)
+      if (sorted.isEmpty) {
+        // don't have non-null values
+        null
+      } else {
+        ArrayBasedMapData(sorted.keys.toArray, sorted.values.toArray)
+      }
     }
   }
 
@@ -142,7 +150,7 @@ case class MapAggregate(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
   }
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
 
   override def dataType: DataType = {
     child.dataType match {

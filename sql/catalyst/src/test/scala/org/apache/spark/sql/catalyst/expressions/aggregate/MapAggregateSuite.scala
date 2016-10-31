@@ -149,7 +149,7 @@ class MapAggregateSuite extends SparkFunSuite {
       child: Expression,
       numBins: Int): (MapAggregate, MapDigest) = {
     val agg = new MapAggregate(child, Literal(numBins))
-    assert(!agg.nullable)
+    assert(agg.nullable)
     val group1 = 0 until data.length / 2
     val group1Buffer = agg.createAggregationBuffer()
     group1.foreach { index =>
