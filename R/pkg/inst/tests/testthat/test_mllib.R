@@ -133,7 +133,7 @@ test_that("spark.glm summary", {
   w <- c(1, 2, 3, 4)
   b <- c(1, 0, 1, 0)
   data <- as.data.frame(cbind(a1, a2, w, b))
-  df <- suppressWarnings(createDataFrame(data))
+  df <- createDataFrame(data)
 
   stats <- summary(spark.glm(df, b ~ a1 + a2, family = "binomial", weightCol = "w"))
   rStats <- summary(glm(b ~ a1 + a2, family = "binomial", data = data, weights = w))
@@ -575,7 +575,7 @@ test_that("spark.isotonicRegression", {
   feature <- c(0.0, 1.0, 2.0, 3.0, 4.0)
   weight <- c(1.0, 1.0, 1.0, 1.0, 1.0)
   data <- as.data.frame(cbind(label, feature, weight))
-  df <- suppressWarnings(createDataFrame(data))
+  df <- createDataFrame(data)
 
   model <- spark.isoreg(df, label ~ feature, isotonic = FALSE,
                         weightCol = "weight")
