@@ -17,10 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Date
+
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.SparkHadoopWriter
+import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
+import org.apache.spark.sql.internal.SQLConf
 
 
 object FileCommitProtocol {
@@ -36,7 +43,7 @@ object FileCommitProtocol {
  * The proper call sequence is:
  *
  * 1. Driver calls setupJob.
- * 2. As part of each task's execution, executor calls setupTask[] and then commitTask
+ * 2. As part of each task's execution, executor calls setupTask and then commitTask
  *    (or abortTask if task failed).
  * 3. When all necessary tasks completed successfully, the driver calls commitJob. If the job
  *    failed to execute (e.g. too many failed tasks), the job should call abortJob.
@@ -69,13 +76,53 @@ abstract class FileCommitProtocol {
 
 /**
  * An [[FileCommitProtocol]] implementation backed by an underlying Hadoop OutputCommitter
- * (confusingly from the newer mapreduce API, not the old mapred API).
+ * (from the newer mapreduce API, not the old mapred API).
+ *
+ * Unlike Hadoop's OutputCommitter, this implementation is serializable.
  */
-class MapReduceFileCommitterProtocol(committer: OutputCommitter) extends FileCommitProtocol {
+class MapReduceFileCommitterProtocol(path: String, isAppend: Boolean)
+  extends FileCommitProtocol with Logging {
+
   import FileCommitProtocol._
 
-  def this(outputFormatClass: Class[_ <: OutputFormat[_, _]], taskContext: TaskAttemptContext) = {
-    this(outputFormatClass.newInstance().getOutputCommitter(taskContext))
+  /** OutputCommitter from Hadoop is not always serializable. */
+  @transient private var committer: OutputCommitter = _
+
+  private def setupCommitter(context: TaskAttemptContext): Unit = {
+    committer = context.getOutputFormatClass.newInstance().getOutputCommitter(context)
+
+    if (!isAppend) {
+      // If we are appending data to an existing dir, we will only use the output committer
+      // associated with the file output format since it is not safe to use a custom
+      // committer for appending. For example, in S3, direct parquet output committer may
+      // leave partial data in the destination dir when the appending job fails.
+      // See SPARK-8578 for more details.
+      val configuration = context.getConfiguration
+      val clazz =
+        configuration.getClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
+
+      if (clazz != null) {
+        logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
+
+        // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
+        // has an associated output committer. To override this output committer,
+        // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
+        // If a data source needs to override the output committer, it needs to set the
+        // output committer in prepareForWrite method.
+        if (classOf[FileOutputCommitter].isAssignableFrom(clazz)) {
+          // The specified output committer is a FileOutputCommitter.
+          // So, we will use the FileOutputCommitter-specified constructor.
+          val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
+          committer = ctor.newInstance(new Path(path), context)
+        } else {
+          // The specified output committer is just an OutputCommitter.
+          // So, we will use the no-argument constructor.
+          val ctor = clazz.getDeclaredConstructor()
+          committer = ctor.newInstance()
+        }
+      }
+    }
+    logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
   }
 
   override def stagingDir: Option[String] = committer match {
@@ -85,6 +132,21 @@ class MapReduceFileCommitterProtocol(committer: OutputCommitter) extends FileCom
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
+    // Setup IDs
+    val jobId = SparkHadoopWriter.createJobID(new Date, 0)
+    val taskId = new TaskID(jobId, TaskType.MAP, 0)
+    val taskAttemptId = new TaskAttemptID(taskId, 0)
+
+    // Set up the configuration object
+    jobContext.getConfiguration.set("mapred.job.id", jobId.toString)
+    jobContext.getConfiguration.set("mapred.tip.id", taskAttemptId.getTaskID.toString)
+    jobContext.getConfiguration.set("mapred.task.id", taskAttemptId.toString)
+    jobContext.getConfiguration.setBoolean("mapred.task.is.map", true)
+    jobContext.getConfiguration.setInt("mapred.task.partition", 0)
+
+    val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
+    setupCommitter(taskAttemptContext)
+
     committer.setupJob(jobContext)
   }
 
@@ -97,6 +159,7 @@ class MapReduceFileCommitterProtocol(committer: OutputCommitter) extends FileCom
   }
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
+    setupCommitter(taskContext)
     committer.setupTask(taskContext)
   }
 
