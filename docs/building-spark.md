@@ -261,7 +261,7 @@ If you have JDK 8 installed but it is not the system default, you can set JAVA_H
 
 ## PySpark pip installable
 
-If your are building Spark for use in a Python environment and you wish to pip install it, you will first need to build the Spark JARs as described above. Then you can construct an sdist package suitable for setup.py and pip installable package.
+If you are building Spark for use in a Python environment and you wish to pip install it, you will first need to build the Spark JARs as described above. Then you can construct an sdist package suitable for setup.py and pip installable package.
 
     cd python; python setup.py sdist
 
