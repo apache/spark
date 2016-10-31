@@ -35,7 +35,7 @@ class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("m1one", "m1one"))
   }
 
-  test("reflect and java_method throws an analysis exception for unsupported types") {
+  test("reflect and java_method throw an analysis exception for unsupported types") {
     val df = Seq((new Timestamp(1), Decimal(10))).toDF("a", "b")
     val className = ReflectClass.getClass.getName.stripSuffix("$")
     val messageOne = intercept[AnalysisException] {
@@ -57,7 +57,7 @@ class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
         "integer, long, float, double or string expressions"))
   }
 
-  test("reflect and java_method throws an analysis exception for non-existing method/class") {
+  test("reflect and java_method throw an analysis exception for non-existing method/class") {
     val df = Seq((1, "one")).toDF("a", "b")
     val className = ReflectClass.getClass.getName.stripSuffix("$")
     val messageOne = intercept[AnalysisException] {
