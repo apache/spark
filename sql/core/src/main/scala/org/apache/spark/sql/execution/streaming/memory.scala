@@ -106,8 +106,8 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
     val startOrdinal =
-      start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
-    val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
+      start.map(LongOffset(_)).getOrElse(LongOffset(-1)).offset.toInt + 1
+    val endOrdinal = LongOffset(end).offset.toInt + 1
 
     // Internal buffer only holds the batches after lastCommittedOffset.
     val newBlocks = synchronized {
