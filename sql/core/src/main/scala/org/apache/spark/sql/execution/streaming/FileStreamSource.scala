@@ -131,8 +131,12 @@ class FileStreamSource(
    * Returns the data that is between the offsets (`start`, `end`].
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
-    val endId = end.asInstanceOf[LongOffset].offset
+    def getOffset(offset: Offset) = offset match {
+      case lo : LongOffset => lo.offset
+      case so : SerializedOffset => LongOffset(so).offset
+    }
+    val startId = start.map(getOffset).getOrElse(-1L)
+    val endId = getOffset(end)
 
     assert(startId <= endId)
     val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
