@@ -110,7 +110,7 @@ abstract class FileCommitProtocol {
  * Unlike Hadoop's OutputCommitter, this implementation is serializable.
  */
 class MapReduceFileCommitterProtocol(path: String, isAppend: Boolean)
-  extends FileCommitProtocol with Logging {
+  extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
 
