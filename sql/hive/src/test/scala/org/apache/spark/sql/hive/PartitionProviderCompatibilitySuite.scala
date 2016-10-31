@@ -145,6 +145,10 @@ class PartitionProviderCompatibilitySuite
               |partition (partCol=1)
               |select * from range(100)""".stripMargin)
           assert(spark.sql("select * from test").count() == 100)
+
+          // Dynamic partitions case
+          spark.sql("insert overwrite table test select id, id from range(10)".stripMargin)
+          assert(spark.sql("select * from test").count() == 10)
         }
       }
     }
@@ -161,6 +165,8 @@ class PartitionProviderCompatibilitySuite
               |partition (partCol=1)
               |select * from range(100)""".stripMargin)
           assert(spark.sql("select * from test").count() == 104)
+
+          // Test overwriting a partition that has a custom location
           withTempDir { dir2 =>
             sql(
               s"""alter table test partition (partCol=1)
