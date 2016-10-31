@@ -1440,16 +1440,14 @@ class SparkContext(config: SparkConf) extends Logging {
     val scheme = new URI(schemeCorrectedPath).getScheme
     if (!Array("http", "https", "ftp").contains(scheme)) {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
-      if (fs.exists(hadoopPath)) {
-        val isDir = fs.getFileStatus(hadoopPath).isDirectory
-        if (!isLocal && scheme == "file" && isDir) {
-          throw new SparkException(s"addFile does not support local directories when not running " +
-            "local mode.")
-        }
-        if (!recursive && isDir) {
-          throw new SparkException(s"Added file $hadoopPath is a directory and recursive is not " +
-            "turned on.")
-        }
+      val isDir = fs.getFileStatus(hadoopPath).isDirectory
+      if (!isLocal && scheme == "file" && isDir) {
+        throw new SparkException(s"addFile does not support local directories when not running " +
+          "local mode.")
+      }
+      if (!recursive && isDir) {
+        throw new SparkException(s"Added file $hadoopPath is a directory and recursive is not " +
+          "turned on.")
       }
     } else {
       // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
@@ -1457,18 +1455,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     val key = if (!isLocal && scheme == "file") {
-      if (master == "yarn" && deployMode == "cluster") {
-        // fallback to container working directory if the absolute path file is not
-        // found in yarn-cluster mode. Because --files would be copied to working directory of
-        // container through yarn dist cache.
-        if (new File(uri.getPath).exists()) {
-          env.rpcEnv.fileServer.addFile(new File(uri.getPath))
-        } else {
-          env.rpcEnv.fileServer.addFile(new File(new Path(uri.getPath).getName))
-        }
-      } else {
-        env.rpcEnv.fileServer.addFile(new File(uri.getPath))
-      }
+      env.rpcEnv.fileServer.addFile(new File(uri.getPath))
     } else {
       schemeCorrectedPath
     }
