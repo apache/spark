@@ -41,83 +41,171 @@ class TypeCoercionSuite extends PlanTest {
     assert(got.isEmpty, s"Should not be able to cast $from to $to, but got $got")
   }
 
-  test("implicit type cast - NullType") {
-    shouldCast(NullType, NullType, NullType)
-    shouldCast(NullType, IntegerType, IntegerType)
-    shouldCast(NullType, DecimalType, DecimalType.SYSTEM_DEFAULT)
+  val integralTypes: Seq[DataType] =
+    Seq(ByteType, ShortType, IntegerType, LongType)
+  val fractionalTypes: Seq[DataType] =
+    Seq(DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2))
+  val numericTypes: Seq[DataType] = integralTypes ++ fractionalTypes
+  val atomicTypes: Seq[DataType] =
+    numericTypes ++ Seq(BinaryType, BooleanType, StringType, DateType, TimestampType)
+  val complexTypes: Seq[DataType] =
+    Seq(ArrayType(IntegerType),
+      ArrayType(StringType),
+      MapType(StringType, StringType),
+      new StructType().add("a1", StringType),
+      new StructType().add("a1", StringType).add("a2", IntegerType))
+  val allTypes: Seq[DataType] =
+    atomicTypes ++ complexTypes ++ Seq(NullType, CalendarIntervalType)
+
+  // Check whether the type `checkedType` can be cast to all the types in `castableTypes`,
+  // but cannot be cast to the other types in `allTypes`.
+  private def checkTypeCasting(checkedType: DataType, castableTypes: Seq[DataType]): Unit = {
+    val nonCastableTypes = allTypes.filterNot(castableTypes.contains)
+
+    castableTypes.foreach { tpe =>
+      shouldCast(checkedType, tpe, tpe)
+    }
+    nonCastableTypes.foreach { tpe =>
+      shouldNotCast(checkedType, tpe)
+    }
   }
 
   test("implicit type cast - ByteType") {
-    shouldCast(ByteType, IntegerType, IntegerType)
-    shouldCast(BinaryType, StringType, StringType)
+    val checkedType = ByteType
+    checkTypeCasting(checkedType, castableTypes = numericTypes ++ Seq(StringType))
+    shouldCast(checkedType, DecimalType, DecimalType.ByteDecimal)
+    shouldCast(checkedType, NumericType, checkedType)
+    shouldCast(checkedType, IntegralType, checkedType)
+  }
 
+  test("implicit type cast - ShortType") {
+    val checkedType = ShortType
+    checkTypeCasting(checkedType, castableTypes = numericTypes ++ Seq(StringType))
+    shouldCast(checkedType, DecimalType, DecimalType.ShortDecimal)
+    shouldCast(checkedType, NumericType, checkedType)
+    shouldCast(checkedType, IntegralType, checkedType)
   }
 
   test("implicit type cast - IntegerType") {
-    shouldCast(IntegerType, IntegerType, IntegerType)
-    shouldCast(IntegerType, LongType, LongType)
-    shouldCast(IntegerType, DecimalType, DecimalType(10, 0))
-    shouldCast(IntegerType, StringType, StringType)
-
-    shouldNotCast(IntegerType, DateType)
-    shouldNotCast(IntegerType, TimestampType)
-    shouldNotCast(IntegerType, ArrayType)
-    shouldNotCast(IntegerType, MapType)
-    shouldNotCast(IntegerType, StructType)
-  }
-
-  test("implicit type cast - CalendarIntervalType") {
-    shouldNotCast(CalendarIntervalType, StringType)
-  }
-
-  test("implicit type cast - ArrayType") {
-    shouldNotCast(ArrayType(StringType), StringType)
-  }
-
-  test("implicit type cast - MapType") {
-    shouldNotCast(MapType(StringType, StringType), StringType)
-    shouldNotCast(MapType(StringType, StringType), StringType)
+    val checkedType = IntegerType
+    checkTypeCasting(checkedType, castableTypes = numericTypes ++ Seq(StringType))
+    shouldCast(IntegerType, DecimalType, DecimalType.IntDecimal)
+    shouldCast(checkedType, NumericType, checkedType)
+    shouldCast(checkedType, IntegralType, checkedType)
   }
 
   test("implicit type cast - LongType") {
-    shouldCast(LongType, IntegerType, IntegerType)
-    shouldCast(LongType, DecimalType, DecimalType(20, 0))
-
-    shouldNotCast(LongType, DateType)
-    shouldNotCast(LongType, TimestampType)
+    val checkedType = LongType
+    checkTypeCasting(checkedType, castableTypes = numericTypes ++ Seq(StringType))
+    shouldCast(checkedType, DecimalType, DecimalType.LongDecimal)
+    shouldCast(checkedType, NumericType, checkedType)
+    shouldCast(checkedType, IntegralType, checkedType)
   }
 
-  test("implicit type cast - DateType") {
-    shouldCast(DateType, TimestampType, TimestampType)
-    shouldCast(DateType, StringType, StringType)
+  test("implicit type cast - FloatType") {
+    val checkedType = FloatType
+    checkTypeCasting(checkedType, castableTypes = numericTypes ++ Seq(StringType))
+    shouldCast(checkedType, DecimalType, DecimalType.FloatDecimal)
+    shouldCast(checkedType, NumericType, checkedType)
+    shouldNotCast(checkedType, IntegralType)
   }
 
-  test("implicit type cast - TimestampType") {
-    shouldCast(TimestampType, DateType, DateType)
-    shouldCast(TimestampType, StringType, StringType)
+  test("implicit type cast - DoubleType") {
+    val checkedType = DoubleType
+    checkTypeCasting(checkedType, castableTypes = numericTypes ++ Seq(StringType))
+    shouldCast(checkedType, DecimalType, DecimalType.DoubleDecimal)
+    shouldCast(checkedType, NumericType, checkedType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - DecimalType(10, 2)") {
+    val checkedType = DecimalType(10, 2)
+    checkTypeCasting(checkedType, castableTypes = numericTypes ++ Seq(StringType))
+    shouldCast(checkedType, DecimalType, checkedType)
+    shouldCast(checkedType, NumericType, checkedType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - BinaryType") {
+    val checkedType = BinaryType
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType))
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - BooleanType") {
+    val checkedType = BooleanType
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType))
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
   }
 
   test("implicit type cast - StringType") {
-    shouldCast(StringType, IntegerType, IntegerType)
-    shouldCast(StringType, DateType, DateType)
-    shouldCast(StringType, TimestampType, TimestampType)
-    shouldCast(StringType, BinaryType, BinaryType)
-    shouldCast(StringType, NumericType, DoubleType)
-
-    shouldNotCast(new StructType().add("a1", StringType), StringType)
+    val checkedType = StringType
+    val nonCastableTypes =
+      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
+    checkTypeCasting(checkedType, castableTypes = allTypes.filterNot(nonCastableTypes.contains))
+    shouldCast(checkedType, DecimalType, DecimalType.SYSTEM_DEFAULT)
+    shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
+    shouldNotCast(checkedType, IntegralType)
   }
 
-  test("implicit type cast - DecimalType") {
-    shouldNotCast(DecimalType.SYSTEM_DEFAULT, DateType)
-    shouldNotCast(DecimalType.SYSTEM_DEFAULT, TimestampType)
+  test("implicit type cast - DateType") {
+    val checkedType = DateType
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType, TimestampType))
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
   }
 
-  test("eligible implicit type cast") {
-    // NumericType should not be changed when function accepts any of them.
-    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-      DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2)).foreach { tpe =>
-      shouldCast(tpe, NumericType, tpe)
-    }
+  test("implicit type cast - TimestampType") {
+    val checkedType = TimestampType
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType, DateType))
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - ArrayType(StringType)") {
+    val checkedType = ArrayType(StringType)
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType))
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - MapType(StringType, StringType)") {
+    val checkedType = MapType(StringType, StringType)
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType))
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - StructType().add(\"a1\", StringType)") {
+    val checkedType = new StructType().add("a1", StringType)
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType))
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - NullType") {
+    val checkedType = NullType
+    checkTypeCasting(checkedType, castableTypes = allTypes)
+    shouldCast(checkedType, DecimalType, DecimalType.SYSTEM_DEFAULT)
+    shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
+    shouldCast(checkedType, IntegralType, IntegralType.defaultConcreteType)
+  }
+
+  test("implicit type cast - CalendarIntervalType") {
+    val checkedType = CalendarIntervalType
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType))
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
   }
 
   test("eligible implicit type cast - TypeCollection") {
