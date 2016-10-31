@@ -33,7 +33,7 @@ package object config {
   private[spark] val RECOVERY_MODE =
     ConfigBuilder("spark.deploy.recoveryMode")
       .stringConf
-      .createOptional
+      .createWithDefault("NONE")
 
   private[spark] val DISPATCHER_WEBUI_URL =
     ConfigBuilder("spark.mesos.dispatcher.webui.url")

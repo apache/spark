@@ -52,7 +52,7 @@ private[mesos] class MesosClusterDispatcher(
   extends Logging {
 
   private val publicAddress = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(args.host)
-  private val recoveryMode = conf.get(RECOVERY_MODE).getOrElse("NONE").toUpperCase()
+  private val recoveryMode = conf.get(RECOVERY_MODE).toUpperCase()
   logInfo("Recovery mode in Mesos dispatcher set to: " + recoveryMode)
 
   private val engineFactory = recoveryMode match {
