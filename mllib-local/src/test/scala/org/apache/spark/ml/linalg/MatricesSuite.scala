@@ -176,17 +176,17 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(!dm3.isTransposed)
     assert(dm3.values.equals(dm1.values))
 
-    val dm4 = dm1.toDense(false)
+    val dm4 = dm1.toDenseMatrix(false)
     assert(dm4 === dm1)
     assert(dm4.isTransposed)
     assert(dm4.values === Array(4.0, 2.0, -8.0, -1.0, 7.0, 4.0))
 
-    val dm5 = dm2.toDense(true)
+    val dm5 = dm2.toDenseMatrix(true)
     assert(dm5 === dm2)
     assert(!dm5.isTransposed)
     assert(dm5.values === Array(5.0, 1.0, -9.0, -3.0, 4.0, -8.0))
 
-    val dm6 = dm2.toDense(false)
+    val dm6 = dm2.toDenseMatrix(false)
     assert(dm6 === dm2)
     assert(dm6.isTransposed)
     assert(dm6.values.equals(dm2.values))
@@ -207,32 +207,32 @@ class MatricesSuite extends SparkMLFunSuite {
     val dm2 = new DenseMatrix(2, 3, Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0), isTransposed = true)
     val dm3 = new DenseMatrix(2, 3, Array(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
 
-    val sm1 = dm1.toSparse(true)
+    val sm1 = dm1.toSparseMatrix(true)
     assert(sm1 === dm1)
     assert(!sm1.isTransposed)
     assert(sm1.values === Array(4.0, 2.0, 5.0))
 
-    val sm2 = dm1.toSparse(false)
+    val sm2 = dm1.toSparseMatrix(false)
     assert(sm2 === dm1)
     assert(sm2.isTransposed)
     assert(sm2.values === Array(4.0, 5.0, 2.0))
 
-    val sm3 = dm2.toSparse(true)
+    val sm3 = dm2.toSparseMatrix(true)
     assert(sm3 === dm2)
     assert(!sm3.isTransposed)
     assert(sm3.values === Array(4.0, 2.0, 5.0))
 
-    val sm4 = dm2.toSparse(false)
+    val sm4 = dm2.toSparseMatrix(false)
     assert(sm4 === dm2)
     assert(sm4.isTransposed)
     assert(sm4.values === Array(4.0, 5.0, 2.0))
 
-    val sm5 = dm3.toSparse(true)
+    val sm5 = dm3.toSparseMatrix(true)
     assert(sm5 === dm3)
     assert(sm5.values === Array.empty[Double])
     assert(!sm5.isTransposed)
 
-    val sm6 = dm3.toSparse(false)
+    val sm6 = dm3.toSparseMatrix(false)
     assert(sm6 === dm3)
     assert(sm6.values === Array.empty[Double])
     assert(sm6.isTransposed)
@@ -255,22 +255,22 @@ class MatricesSuite extends SparkMLFunSuite {
     val smZeros = new SparseMatrix(2, 3, Array(0, 2, 4, 6), Array(0, 1, 0, 1, 0, 1),
       Array(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
 
-    val sm5 = sm1.toSparse(false)
+    val sm5 = sm1.toSparseMatrix(false)
     assert(sm5 === sm1)
     assert(sm5.isTransposed)
     assert(sm5.values === Array(4.0, 5.0, 2.0))
 
-    val sm6 = sm1.toSparse(true)
+    val sm6 = sm1.toSparseMatrix(true)
     assert(sm6 === sm1)
     assert(!sm6.isTransposed)
     assert(sm6.values.equals(sm1.values))
 
-    val sm7 = sm2.toSparse(true)
+    val sm7 = sm2.toSparseMatrix(true)
     assert(sm7 === sm2)
     assert(!sm7.isTransposed)
     assert(sm7.values === Array(4.0, 2.0, 5.0))
 
-    val sm8 = sm2.toSparse(false)
+    val sm8 = sm2.toSparseMatrix(false)
     assert(sm8 === sm2)
     assert(sm8.isTransposed)
     assert(sm8.values.equals(sm2.values))
@@ -280,12 +280,12 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sm9.values === Array(4.0, 2.0, 5.0))
     assert(!sm9.isTransposed)
 
-    val sm10 = sm3.toSparse(false)
+    val sm10 = sm3.toSparseMatrix(false)
     assert(sm10 === sm3)
     assert(sm10.values === Array(4.0, 5.0, 2.0))
     assert(sm10.isTransposed)
 
-    val sm11 = sm4.toSparse(false)
+    val sm11 = sm4.toSparseMatrix(false)
     assert(sm11 === sm4)
     assert(sm11.values === Array(4.0, 5.0, 2.0))
     assert(sm11.isTransposed)
@@ -319,7 +319,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(!dm1.isTransposed)
     assert(dm1.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
 
-    val dm2 = sm1.toDense(false)
+    val dm2 = sm1.toDenseMatrix(false)
     assert(dm2 === sm1)
     assert(dm2.isTransposed)
     assert(dm2.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
@@ -329,7 +329,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(!dm3.isTransposed)
     assert(dm3.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
 
-    val dm4 = sm2.toDense(false)
+    val dm4 = sm2.toDenseMatrix(false)
     assert(dm4 === sm2)
     assert(dm4.isTransposed)
     assert(dm4.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
