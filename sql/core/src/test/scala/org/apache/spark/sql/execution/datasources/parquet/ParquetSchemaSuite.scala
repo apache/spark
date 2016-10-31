@@ -1081,6 +1081,34 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   }
 
   testSchemaClipping(
+    "falls back to case insensitive resolution",
+
+    parquetSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin,
+
+    catalystSchema = {
+      val nestedType = new StructType().add("b", IntegerType, nullable = true)
+      new StructType()
+        .add("a", nestedType, nullable = true)
+        .add("c", IntegerType, nullable = true)
+    },
+
+    expectedSchema =
+      """message root {
+        |  required group A {
+        |    optional int32 B;
+        |  }
+        |  optional int32 c;
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
     "simple nested struct",
 
     parquetSchema =

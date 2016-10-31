@@ -109,7 +109,7 @@ class SparkContext(object):
         ValueError:...
         """
         self._callsite = first_spark_call() or CallSite(None, None, None)
-        SparkContext._ensure_initialized(self, gateway=gateway)
+        SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
                           conf, jsc, profiler_cls)
@@ -121,7 +121,15 @@ class SparkContext(object):
     def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
                  conf, jsc, profiler_cls):
         self.environment = environment or {}
-        self._conf = conf or SparkConf(_jvm=self._jvm)
+        # java gateway must have been launched at this point.
+        if conf is not None and conf._jconf is not None:
+            # conf has been initialized in JVM properly, so use conf directly. This represent the
+            # scenario that JVM has been launched before SparkConf is created (e.g. SparkContext is
+            # created and then stopped, and we create a new SparkConf and new SparkContext again)
+            self._conf = conf
+        else:
+            self._conf = SparkConf(_jvm=SparkContext._jvm)
+
         self._batchSize = batchSize  # -1 represents an unlimited batch size
         self._unbatched_serializer = serializer
         if batchSize == 0:
@@ -173,9 +181,8 @@ class SparkContext(object):
         # they will be passed back to us through a TCP server
         self._accumulatorServer = accumulators._start_update_server()
         (host, port) = self._accumulatorServer.server_address
-        self._javaAccumulator = self._jsc.accumulator(
-            self._jvm.java.util.ArrayList(),
-            self._jvm.PythonAccumulatorParam(host, port))
+        self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port)
+        self._jsc.sc().register(self._javaAccumulator)
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
@@ -233,14 +240,14 @@ class SparkContext(object):
         return self._jvm.JavaSparkContext(jconf)
 
     @classmethod
-    def _ensure_initialized(cls, instance=None, gateway=None):
+    def _ensure_initialized(cls, instance=None, gateway=None, conf=None):
         """
         Checks whether a SparkContext is initialized or not.
         Throws error if a SparkContext is already running.
         """
         with SparkContext._lock:
             if not SparkContext._gateway:
-                SparkContext._gateway = gateway or launch_gateway()
+                SparkContext._gateway = gateway or launch_gateway(conf)
                 SparkContext._jvm = SparkContext._gateway.jvm
 
             if instance:
@@ -331,6 +338,11 @@ class SparkContext(object):
         u'local-...'
         """
         return self._jsc.sc().applicationId()
+
+    @property
+    def uiWebUrl(self):
+        """Return the URL of the SparkUI instance started by this SparkContext"""
+        return self._jsc.sc().uiWebUrl().get()
 
     @property
     def startTime(self):
@@ -762,7 +774,7 @@ class SparkContext(object):
         SparkContext._next_accum_id += 1
         return Accumulator(SparkContext._next_accum_id - 1, value, accum_param)
 
-    def addFile(self, path):
+    def addFile(self, path, recursive=False):
         """
         Add a file to be downloaded with this Spark job on every node.
         The C{path} passed can be either a local file, a file in HDFS
@@ -772,6 +784,9 @@ class SparkContext(object):
         To access the file in Spark jobs, use
         L{SparkFiles.get(fileName)<pyspark.files.SparkFiles.get>} with the
         filename to find its download location.
+
+        A directory can be given if the recursive option is set to True.
+        Currently directories are only supported for Hadoop-supported filesystems.
 
         >>> from pyspark import SparkFiles
         >>> path = os.path.join(tempdir, "test.txt")
@@ -785,7 +800,7 @@ class SparkContext(object):
         >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
         [100, 200, 300, 400]
         """
-        self._jsc.sc().addFile(path)
+        self._jsc.sc().addFile(path, recursive)
 
     def addPyFile(self, path):
         """

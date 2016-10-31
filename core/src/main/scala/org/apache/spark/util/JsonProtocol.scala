@@ -281,7 +281,7 @@ private[spark] object JsonProtocol {
     ("Finish Time" -> taskInfo.finishTime) ~
     ("Failed" -> taskInfo.failed) ~
     ("Killed" -> taskInfo.killed) ~
-    ("Accumulables" -> JArray(taskInfo.accumulables.map(accumulableInfoToJson).toList))
+    ("Accumulables" -> JArray(taskInfo.accumulables.toList.map(accumulableInfoToJson)))
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
@@ -348,7 +348,9 @@ private[spark] object JsonProtocol {
           ("Status" -> blockStatusToJson(status))
       })
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
+    ("Executor Deserialize CPU Time" -> taskMetrics.executorDeserializeCpuTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
+    ("Executor CPU Time" -> taskMetrics.executorCpuTime) ~
     ("Result Size" -> taskMetrics.resultSize) ~
     ("JVM GC Time" -> taskMetrics.jvmGCTime) ~
     ("Result Serialization Time" -> taskMetrics.resultSerializationTime) ~
@@ -759,7 +761,15 @@ private[spark] object JsonProtocol {
       return metrics
     }
     metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
+    metrics.setExecutorDeserializeCpuTime((json \ "Executor Deserialize CPU Time") match {
+      case JNothing => 0
+      case x => x.extract[Long]
+    })
     metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
+    metrics.setExecutorCpuTime((json \ "Executor CPU Time") match {
+      case JNothing => 0
+      case x => x.extract[Long]
+    })
     metrics.setResultSize((json \ "Result Size").extract[Long])
     metrics.setJvmGCTime((json \ "JVM GC Time").extract[Long])
     metrics.setResultSerializationTime((json \ "Result Serialization Time").extract[Long])

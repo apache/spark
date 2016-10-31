@@ -166,3 +166,38 @@ test_that("spark.lapply should perform simple transforms", {
   expect_equal(doubled, as.list(2 * 1:10))
   sparkR.session.stop()
 })
+
+test_that("add and get file to be downloaded with Spark job on every node", {
+  sparkR.sparkContext()
+  # Test add file.
+  path <- tempfile(pattern = "hello", fileext = ".txt")
+  filename <- basename(path)
+  words <- "Hello World!"
+  writeLines(words, path)
+  spark.addFile(path)
+  download_path <- spark.getSparkFiles(filename)
+  expect_equal(readLines(download_path), words)
+  unlink(path)
+
+  # Test add directory recursively.
+  path <- paste0(tempdir(), "/", "recursive_dir")
+  dir.create(path)
+  dir_name <- basename(path)
+  path1 <- paste0(path, "/", "hello.txt")
+  file.create(path1)
+  sub_path <- paste0(path, "/", "sub_hello")
+  dir.create(sub_path)
+  path2 <- paste0(sub_path, "/", "sub_hello.txt")
+  file.create(path2)
+  words <- "Hello World!"
+  sub_words <- "Sub Hello World!"
+  writeLines(words, path1)
+  writeLines(sub_words, path2)
+  spark.addFile(path, recursive = TRUE)
+  download_path1 <- spark.getSparkFiles(paste0(dir_name, "/", "hello.txt"))
+  expect_equal(readLines(download_path1), words)
+  download_path2 <- spark.getSparkFiles(paste0(dir_name, "/", "sub_hello/sub_hello.txt"))
+  expect_equal(readLines(download_path2), sub_words)
+  unlink(path, recursive = TRUE)
+  sparkR.session.stop()
+})

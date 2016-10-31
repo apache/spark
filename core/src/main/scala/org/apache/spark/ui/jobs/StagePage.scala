@@ -1050,89 +1050,38 @@ private[ui] class TaskDataSource(
    * Return Ordering according to sortColumn and desc
    */
   private def ordering(sortColumn: String, desc: Boolean): Ordering[TaskTableRowData] = {
-    val ordering = sortColumn match {
-      case "Index" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Int.compare(x.index, y.index)
-      }
-      case "ID" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.taskId, y.taskId)
-      }
-      case "Attempt" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Int.compare(x.attempt, y.attempt)
-      }
-      case "Status" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.String.compare(x.status, y.status)
-      }
-      case "Locality Level" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.String.compare(x.taskLocality, y.taskLocality)
-      }
-      case "Executor ID / Host" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.String.compare(x.executorIdAndHost, y.executorIdAndHost)
-      }
-      case "Launch Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.launchTime, y.launchTime)
-      }
-      case "Duration" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.duration, y.duration)
-      }
-      case "Scheduler Delay" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.schedulerDelay, y.schedulerDelay)
-      }
-      case "Task Deserialization Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.taskDeserializationTime, y.taskDeserializationTime)
-      }
-      case "GC Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.gcTime, y.gcTime)
-      }
-      case "Result Serialization Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.serializationTime, y.serializationTime)
-      }
-      case "Getting Result Time" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.gettingResultTime, y.gettingResultTime)
-      }
-      case "Peak Execution Memory" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.Long.compare(x.peakExecutionMemoryUsed, y.peakExecutionMemoryUsed)
-      }
+    val ordering: Ordering[TaskTableRowData] = sortColumn match {
+      case "Index" => Ordering.by(_.index)
+      case "ID" => Ordering.by(_.taskId)
+      case "Attempt" => Ordering.by(_.attempt)
+      case "Status" => Ordering.by(_.status)
+      case "Locality Level" => Ordering.by(_.taskLocality)
+      case "Executor ID / Host" => Ordering.by(_.executorIdAndHost)
+      case "Launch Time" => Ordering.by(_.launchTime)
+      case "Duration" => Ordering.by(_.duration)
+      case "Scheduler Delay" => Ordering.by(_.schedulerDelay)
+      case "Task Deserialization Time" => Ordering.by(_.taskDeserializationTime)
+      case "GC Time" => Ordering.by(_.gcTime)
+      case "Result Serialization Time" => Ordering.by(_.serializationTime)
+      case "Getting Result Time" => Ordering.by(_.gettingResultTime)
+      case "Peak Execution Memory" => Ordering.by(_.peakExecutionMemoryUsed)
       case "Accumulators" =>
         if (hasAccumulators) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.String.compare(x.accumulators.get, y.accumulators.get)
-          }
+          Ordering.by(_.accumulators.get)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Accumulators because of no accumulators")
         }
       case "Input Size / Records" =>
         if (hasInput) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.input.get.inputSortable, y.input.get.inputSortable)
-          }
+          Ordering.by(_.input.get.inputSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Input Size / Records because of no inputs")
         }
       case "Output Size / Records" =>
         if (hasOutput) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.output.get.outputSortable, y.output.get.outputSortable)
-          }
+          Ordering.by(_.output.get.outputSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Output Size / Records because of no outputs")
@@ -1140,33 +1089,21 @@ private[ui] class TaskDataSource(
       // ShuffleRead
       case "Shuffle Read Blocked Time" =>
         if (hasShuffleRead) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleRead.get.shuffleReadBlockedTimeSortable,
-                y.shuffleRead.get.shuffleReadBlockedTimeSortable)
-          }
+          Ordering.by(_.shuffleRead.get.shuffleReadBlockedTimeSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Read Blocked Time because of no shuffle reads")
         }
       case "Shuffle Read Size / Records" =>
         if (hasShuffleRead) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleRead.get.shuffleReadSortable,
-                y.shuffleRead.get.shuffleReadSortable)
-          }
+          Ordering.by(_.shuffleRead.get.shuffleReadSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Read Size / Records because of no shuffle reads")
         }
       case "Shuffle Remote Reads" =>
         if (hasShuffleRead) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleRead.get.shuffleReadRemoteSortable,
-                y.shuffleRead.get.shuffleReadRemoteSortable)
-          }
+          Ordering.by(_.shuffleRead.get.shuffleReadRemoteSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Remote Reads because of no shuffle reads")
@@ -1174,22 +1111,14 @@ private[ui] class TaskDataSource(
       // ShuffleWrite
       case "Write Time" =>
         if (hasShuffleWrite) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleWrite.get.writeTimeSortable,
-                y.shuffleWrite.get.writeTimeSortable)
-          }
+          Ordering.by(_.shuffleWrite.get.writeTimeSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Write Time because of no shuffle writes")
         }
       case "Shuffle Write Size / Records" =>
         if (hasShuffleWrite) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.shuffleWrite.get.shuffleWriteSortable,
-                y.shuffleWrite.get.shuffleWriteSortable)
-          }
+          Ordering.by(_.shuffleWrite.get.shuffleWriteSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Write Size / Records because of no shuffle writes")
@@ -1197,30 +1126,19 @@ private[ui] class TaskDataSource(
       // BytesSpilled
       case "Shuffle Spill (Memory)" =>
         if (hasBytesSpilled) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.bytesSpilled.get.memoryBytesSpilledSortable,
-                y.bytesSpilled.get.memoryBytesSpilledSortable)
-          }
+          Ordering.by(_.bytesSpilled.get.memoryBytesSpilledSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Spill (Memory) because of no spills")
         }
       case "Shuffle Spill (Disk)" =>
         if (hasBytesSpilled) {
-          new Ordering[TaskTableRowData] {
-            override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-              Ordering.Long.compare(x.bytesSpilled.get.diskBytesSpilledSortable,
-                y.bytesSpilled.get.diskBytesSpilledSortable)
-          }
+          Ordering.by(_.bytesSpilled.get.diskBytesSpilledSortable)
         } else {
           throw new IllegalArgumentException(
             "Cannot sort by Shuffle Spill (Disk) because of no spills")
         }
-      case "Errors" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          Ordering.String.compare(x.error, y.error)
-      }
+      case "Errors" => Ordering.by(_.error)
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
     if (desc) {

@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.execution
 import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
-import java.util
 import java.util.{Date, Random}
 
 import scala.collection.JavaConverters._
@@ -36,6 +35,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
@@ -147,8 +147,7 @@ case class InsertIntoHiveTable(
     val hadoopConf = sessionState.newHadoopConf()
     val tmpLocation = getExternalTmpPath(tableLocation, hadoopConf)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
-    val isCompressed =
-      sessionState.conf.getConfString("hive.exec.compress.output", "false").toBoolean
+    val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
 
     if (isCompressed) {
       // Please note that isCompressed, "mapred.output.compress", "mapred.output.compression.codec",
@@ -182,15 +181,13 @@ case class InsertIntoHiveTable(
     // Validate partition spec if there exist any dynamic partitions
     if (numDynamicPartitions > 0) {
       // Report error if dynamic partitioning is not enabled
-      if (!sessionState.conf.getConfString("hive.exec.dynamic.partition", "true").toBoolean) {
+      if (!hadoopConf.get("hive.exec.dynamic.partition", "true").toBoolean) {
         throw new SparkException(ErrorMsg.DYNAMIC_PARTITION_DISABLED.getMsg)
       }
 
       // Report error if dynamic partition strict mode is on but no static partition is found
       if (numStaticPartitions == 0 &&
-          sessionState.conf.getConfString(
-            "hive.exec.dynamic.partition.mode", "strict").equalsIgnoreCase("strict"))
-      {
+        hadoopConf.get("hive.exec.dynamic.partition.mode", "strict").equalsIgnoreCase("strict")) {
         throw new SparkException(ErrorMsg.DYNAMIC_PARTITION_STRICT_MODE.getMsg)
       }
 
@@ -293,6 +290,8 @@ case class InsertIntoHiveTable(
     // TODO: implement hive compatibility as rules.
     Seq.empty[InternalRow]
   }
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 

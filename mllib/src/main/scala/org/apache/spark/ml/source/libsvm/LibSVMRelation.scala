@@ -25,6 +25,7 @@ import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
+import org.apache.spark.TaskContext
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
@@ -34,26 +35,29 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 private[libsvm] class LibSVMOutputWriter(
-    path: String,
+    stagingDir: String,
+    fileNamePrefix: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
+
+  override val path: String = {
+    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
+    new Path(stagingDir, fileNamePrefix + ".libsvm" + compressionExtension).toString
+  }
 
   private[this] val buffer = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        new Path(path)
       }
     }.getRecordWriter(context)
   }
@@ -131,12 +135,11 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       dataSchema: StructType): OutputWriterFactory = {
     new OutputWriterFactory {
       override def newInstance(
-          path: String,
-          bucketId: Option[Int],
+          stagingDir: String,
+          fileNamePrefix: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        if (bucketId.isDefined) { sys.error("LibSVM doesn't support bucketing") }
-        new LibSVMOutputWriter(path, dataSchema, context)
+        new LibSVMOutputWriter(stagingDir, fileNamePrefix, dataSchema, context)
       }
     }
   }
@@ -159,8 +162,10 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val points =
-        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+
+      val points = linesReader
           .map(_.toString.trim)
           .filterNot(line => line.isEmpty || line.startsWith("#"))
           .map { line =>

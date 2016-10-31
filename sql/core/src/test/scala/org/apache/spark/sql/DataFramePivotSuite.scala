@@ -197,4 +197,15 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
         Row(2013, Seq(48000.0, 7.0), Seq(30000.0, 7.0)) :: Nil
     )
   }
+
+  test("pivot preserves aliases if given") {
+    assertResult(
+      Array("year", "dotNET_foo", "dotNET_avg(`earnings`)", "Java_foo", "Java_avg(`earnings`)")
+    )(
+      courseSales.groupBy($"year")
+        .pivot("course", Seq("dotNET", "Java"))
+        .agg(sum($"earnings").as("foo"), avg($"earnings")).columns
+    )
+  }
+
 }

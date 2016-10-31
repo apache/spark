@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -200,12 +200,24 @@ abstract class ProbabilisticClassificationModel[
     if (!isDefined(thresholds)) {
       probability.argmax
     } else {
-      val thresholds: Array[Double] = getThresholds
-      val scaledProbability: Array[Double] =
-        probability.toArray.zip(thresholds).map { case (p, t) =>
-          if (t == 0.0) Double.PositiveInfinity else p / t
+      val thresholds = getThresholds
+      var argMax = 0
+      var max = Double.NegativeInfinity
+      var i = 0
+      val probabilitySize = probability.size
+      while (i < probabilitySize) {
+        // Thresholds are all > 0, excepting that at most one may be 0.
+        // The single class whose threshold is 0, if any, will always be predicted
+        // ('scaled' = +Infinity). However in the case that this class also has
+        // 0 probability, the class will not be selected ('scaled' is NaN).
+        val scaled = probability(i) / thresholds(i)
+        if (scaled > max) {
+          max = scaled
+          argMax = i
         }
-      Vectors.dense(scaledProbability).argmax
+        i += 1
+      }
+      argMax
     }
   }
 }

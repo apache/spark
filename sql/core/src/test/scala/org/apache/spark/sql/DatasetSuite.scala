@@ -336,6 +336,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       "a", "30", "b", "3", "c", "1")
   }
 
+  test("groupBy function, mapValues, flatMap") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val keyValue = ds.groupByKey(_._1).mapValues(_._2)
+    val agged = keyValue.mapGroups { case (g, iter) => (g, iter.sum) }
+    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+
+    val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
+    val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
+    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+  }
+
   test("groupBy function, reduce") {
     val ds = Seq("abc", "xyz", "hello").toDS()
     val agged = ds.groupByKey(_.length).reduceGroups(_ + _)
@@ -870,6 +881,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.dropDuplicates("_1", "_2"),
       ("a", 1), ("a", 2), ("b", 1))
+  }
+
+  test("dropDuplicates: columns with same column name") {
+    val ds1 = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    val ds2 = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    // The dataset joined has two columns of the same name "_2".
+    val joined = ds1.join(ds2, "_1").select(ds1("_2").as[Int], ds2("_2").as[Int])
+    checkDataset(
+      joined.dropDuplicates(),
+      (1, 2), (1, 1), (2, 1), (2, 2))
+  }
+
+  test("dropDuplicates should not change child plan output") {
+    val ds = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    checkDataset(
+      ds.dropDuplicates("_1").select(ds("_1").as[String], ds("_2").as[Int]),
+      ("a", 1), ("b", 1))
   }
 
   test("SPARK-16097: Encoders.tuple should handle null object correctly") {

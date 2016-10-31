@@ -184,6 +184,8 @@ private[spark] class ApplicationMaster(
     try {
       val appAttemptId = client.getAttemptId()
 
+      var attemptID: Option[String] = None
+
       if (isClusterMode) {
         // Set the web ui port to be ephemeral for yarn so we don't conflict with
         // other spark processes running on the same box
@@ -196,7 +198,12 @@ private[spark] class ApplicationMaster(
         // Set this internal configuration if it is running on cluster mode, this
         // configuration will be checked in SparkContext to avoid misuse of yarn cluster mode.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
+
+        attemptID = Option(appAttemptId.getAttemptId.toString)
       }
+
+      new CallerContext("APPMASTER",
+        Option(appAttemptId.getApplicationId.toString), attemptID).setCurrentContext()
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 

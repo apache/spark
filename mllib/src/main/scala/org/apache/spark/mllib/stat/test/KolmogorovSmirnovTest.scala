@@ -124,7 +124,8 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
     val pResults = partDiffs.foldLeft(initAcc) { case ((pMin, pMax, pCt), (dl, dp)) =>
       (math.min(pMin, dl), math.max(pMax, dp), pCt + 1)
     }
-    val results = if (pResults == initAcc) Array[(Double, Double, Double)]() else Array(pResults)
+    val results =
+      if (pResults == initAcc) Array.empty[(Double, Double, Double)] else Array(pResults)
     results.iterator
   }
 

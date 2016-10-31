@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
@@ -36,11 +35,11 @@ import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 

@@ -28,6 +28,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, UDT}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
@@ -554,7 +555,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     verifyCars(cars, withHeader = true, checkValues = false)
     val results = cars.collect()
-    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", null, null))
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
@@ -854,6 +855,38 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         Row("2016/01/28 20:00"))
 
       checkAnswer(stringTimestampsWithFormat, expectedStringTimestampsWithFormat)
+    }
+  }
+
+  test("load duplicated field names consistently with null or empty strings - case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTempPath { path =>
+        Seq("a,a,c,A,b,B").toDF().write.text(path.getAbsolutePath)
+        val actualSchema = spark.read
+          .format("csv")
+          .option("header", true)
+          .load(path.getAbsolutePath)
+          .schema
+        val fields = Seq("a0", "a1", "c", "A", "b", "B").map(StructField(_, StringType, true))
+        val expectedSchema = StructType(fields)
+        assert(actualSchema == expectedSchema)
+      }
+    }
+  }
+
+  test("load duplicated field names consistently with null or empty strings - case insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        Seq("a,A,c,A,b,B").toDF().write.text(path.getAbsolutePath)
+        val actualSchema = spark.read
+          .format("csv")
+          .option("header", true)
+          .load(path.getAbsolutePath)
+          .schema
+        val fields = Seq("a0", "A1", "c", "A3", "b4", "B5").map(StructField(_, StringType, true))
+        val expectedSchema = StructType(fields)
+        assert(actualSchema == expectedSchema)
+      }
     }
   }
 }

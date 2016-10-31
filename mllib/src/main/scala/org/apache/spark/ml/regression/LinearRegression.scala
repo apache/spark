@@ -31,13 +31,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
-import org.apache.spark.ml.optim.WeightedLeastSquares
+import org.apache.spark.ml.optim.{NormalEquationSolver, WeightedLeastSquares}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
@@ -178,6 +177,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
+   *
    * @group expertSetParam
    */
   @Since("2.1.0")
@@ -189,26 +189,24 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
-    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 &&
+    val instances: RDD[Instance] = dataset.select(
+      col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+      case Row(label: Double, weight: Double, features: Vector) =>
+        Instance(label, weight, features)
+    }
+
+    if (($(solver) == "auto" &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
-      require($(elasticNetParam) == 0.0, "Only L2 regularization can be used when normal " +
-        "solver is used.'")
-      // For low dimensional data, WeightedLeastSquares is more efficiently since the
+      // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
-      val instances: RDD[Instance] = dataset.select(
-        col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
-          case Row(label: Double, weight: Double, features: Vector) =>
-            Instance(label, weight, features)
-      }
 
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
-        $(standardization), true)
+        elasticNetParam = $(elasticNetParam), $(standardization), true,
+        solverType = WeightedLeastSquares.Auto, maxIter = $(maxIter), tol = $(tol))
       val model = optimizer.fit(instances)
       // When it is trained by WeightedLeastSquares, training summary does not
-      // attached returned model.
+      // attach returned model.
       val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
-      // WeightedLeastSquares does not run through iterations. So it does not generate
-      // an objective history.
       val (summaryModel, predictionColName) = lrModel.findSummaryModelAndPredictionCol()
       val trainingSummary = new LinearRegressionTrainingSummary(
         summaryModel.transform(dataset),
@@ -217,16 +215,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         $(featuresCol),
         summaryModel,
         model.diagInvAtWA.toArray,
-        Array(0D))
+        model.objectiveHistory)
 
       return lrModel.setSummary(trainingSummary)
     }
-
-    val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -249,7 +241,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val yMean = ySummarizer.mean(0)
     val rawYStd = math.sqrt(ySummarizer.variance(0))
     if (rawYStd == 0.0) {
-      if ($(fitIntercept) || yMean==0.0) {
+      if ($(fitIntercept) || yMean == 0.0) {
         // If the rawYStd is zero and fitIntercept=true, then the intercept is yMean with
         // zero coefficient; as a result, training is not needed.
         // Also, if yMean==0 and rawYStd==0, all the coefficients are zero regardless of

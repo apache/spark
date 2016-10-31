@@ -27,11 +27,13 @@ import scala.util.control.NonFatal
 import com.google.common.base.Splitter
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.FrameworkInfo.Capability
 import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 
@@ -91,6 +93,10 @@ trait MesosSchedulerUtils extends Logging {
     }
     conf.getOption("spark.mesos.role").foreach { role =>
       fwInfoBuilder.setRole(role)
+    }
+    val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+    if (maxGpus > 0) {
+      fwInfoBuilder.addCapabilities(Capability.newBuilder().setType(Capability.Type.GPU_RESOURCES))
     }
     if (credBuilder.hasPrincipal) {
       new MesosSchedulerDriver(
@@ -424,7 +430,7 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  val managedPortNames = List("spark.executor.port", "spark.blockManager.port")
+  val managedPortNames = List("spark.executor.port", BLOCK_MANAGER_PORT.key)
 
   /**
    * The values of the non-zero ports to be used by the executor process.
