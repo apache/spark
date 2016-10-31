@@ -33,13 +33,17 @@ case class LongOffset(offset: Long) extends Offset {
 object LongOffset {
 
   /**
-   * LongOffset factory from Offset.
-   * @param offset used to initialize LongOffset. Assumed to be
-   *               either a LongOffset or SerializedOffset
+   * LongOffset factory from serialized offset.
    * @return new LongOffset
    */
-  def apply(offset: Offset) : LongOffset = offset match {
-    case lo: LongOffset => new LongOffset(lo.offset)
-    case so: SerializedOffset => new LongOffset(offset.json.toLong)
+  def apply(offset: SerializedOffset) : LongOffset = new LongOffset(offset.json.toLong)
+
+  /**
+   * Convert generic Offset to LongOffset if possible.
+   * @return converted LongOffset
+   */
+  def convert(offset: Offset): LongOffset = offset match {
+    case lo: LongOffset => lo
+    case so: SerializedOffset => LongOffset(so)
   }
 }

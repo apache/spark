@@ -58,11 +58,7 @@ private[kafka010] object KafkaSourceOffset {
 
   /**
    * Returns [[KafkaSourceOffset]] from a JSON [[SerializedOffset]]
-   * or [[KafkaSourceOffset]]
    */
-  def apply(offset: Offset): KafkaSourceOffset = offset match {
-    case kso: KafkaSourceOffset => KafkaSourceOffset(kso.partitionToOffsets)
-    case so: SerializedOffset =>
-      KafkaSourceOffset(JsonUtils.partitionOffsets(offset.json))
-  }
+  def apply(offset: SerializedOffset): KafkaSourceOffset =
+    KafkaSourceOffset(JsonUtils.partitionOffsets(offset.json))
 }
