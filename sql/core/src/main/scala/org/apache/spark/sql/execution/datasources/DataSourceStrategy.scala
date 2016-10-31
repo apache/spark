@@ -175,14 +175,14 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.rootPaths
       }.flatten
 
-      // TODO(ekl) overwrite partition?
       val mode = if (overwrite.enabled) SaveMode.Overwrite else SaveMode.Append
       if (overwrite.enabled && inputPaths.contains(outputPath)) {
         throw new AnalysisException(
           "Cannot overwrite a path that is also being read from.")
       }
 
-      val overwritePartitionPath = if (overwrite.specificPartition.isDefined) {
+      val overwritePartitionPath = if (overwrite.specificPartition.isDefined &&
+          l.catalogTable.get.partitionProviderIsHive) {
         val partition = t.sparkSession.sessionState.catalog.getPartition(
           l.catalogTable.get.identifier, overwrite.specificPartition.get)
         Some(new Path(partition.storage.locationUri.get))

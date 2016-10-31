@@ -241,7 +241,6 @@ case class CreateDataSourceTableAsSelectCommand(
     result match {
       case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
           sparkSession.sqlContext.conf.manageFilesourcePartitions =>
-        println("alter table recover partitions from createDataSourceTables")
         // Need to recover partitions into the metastore so our saved data is visible.
         sparkSession.sessionState.executePlan(
           AlterTableRecoverPartitionsCommand(table.identifier)).toRdd

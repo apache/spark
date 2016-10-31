@@ -345,11 +345,17 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override lazy val statistics: Statistics = super.statistics.copy(isBroadcastable = true)
 }
 
+/**
+ * Options for writing new data into a table.
+ *
+ * @param enabled whether to overwrite existing data in the table.
+ * @param specificPartition only data in the specified partition will be overwritten.
+ */
 case class OverwriteOptions(
     enabled: Boolean,
     specificPartition: Option[Map[String, String]] = None) {
   if (specificPartition.isDefined) {
-    assert(enabled)
+    assert(enabled, "Overwrite must be enabled when specifying a partition to overwrite.")
   }
 }
 

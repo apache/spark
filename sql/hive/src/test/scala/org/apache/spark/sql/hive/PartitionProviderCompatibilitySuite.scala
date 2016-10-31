@@ -134,4 +134,47 @@ class PartitionProviderCompatibilitySuite
       }
     }
   }
+
+  test("insert overwrite partition of legacy datasource table overwrites entire table") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedDatasourceTable("test", dir)
+          spark.sql(
+            """insert overwrite table test
+              |partition (partCol=1)
+              |select * from range(100)""".stripMargin)
+          assert(spark.sql("select * from test").count() == 100)
+        }
+      }
+    }
+  }
+
+  test("insert overwrite partition of new datasource table overwrites just partition") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedDatasourceTable("test", dir)
+          sql("msck repair table test")
+          spark.sql(
+            """insert overwrite table test
+              |partition (partCol=1)
+              |select * from range(100)""".stripMargin)
+          assert(spark.sql("select * from test").count() == 104)
+// TODO(ekl) enable this test for SPARK-18184
+//          withTempDir { dir2 =>
+//            spark.sql(
+//              s"""alter table test partition (partCol=1)
+//                |set location '${dir2.getAbsolutePath}'""".stripMargin)
+//            assert(spark.sql("select * from test").count() == 4)
+//            spark.sql(
+//              """insert overwrite table test
+//                |partition (partCol=1)
+//                |select * from range(50)""".stripMargin)
+//            assert(spark.sql("select * from test").count() == 54)
+//          }
+        }
+      }
+    }
+  }
 }

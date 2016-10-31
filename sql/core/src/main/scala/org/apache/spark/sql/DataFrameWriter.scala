@@ -392,7 +392,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
         if (tableDesc.partitionColumnNames.nonEmpty &&
             df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
-          println("alter table recover partitions")
           // Need to recover partitions into the metastore so our saved data is visible.
           df.sparkSession.sessionState.executePlan(
             AlterTableRecoverPartitionsCommand(tableDesc.identifier)).toRdd

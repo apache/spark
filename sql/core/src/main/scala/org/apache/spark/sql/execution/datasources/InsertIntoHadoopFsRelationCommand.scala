@@ -77,7 +77,6 @@ case class InsertIntoHadoopFsRelationCommand(
         } else {
           qualifiedOutputPath
         }
-        println("Delete: " + pathToDelete)
         if (fs.exists(pathToDelete) && !fs.delete(pathToDelete, true /* recursively */)) {
           throw new IOException(s"Unable to clear output " +
             s"directory $pathToDelete prior to writing to it")
