@@ -282,6 +282,37 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     }
   }
 
+  test("distribute archive multiple times") {
+    val libs = Utils.createTempDir()
+    val jarsDir = new File(libs, "jars")
+    assert(jarsDir.mkdir())
+    new FileOutputStream(new File(libs, "RELEASE")).close()
+    val userLib1 = Utils.createTempDir()
+    val userLib2 = Utils.createTempDir()
+
+    val jar1 = TestUtils.createJarWithFiles(Map(), jarsDir)
+    val jar2 = TestUtils.createJarWithFiles(Map(), userLib1)
+    // Copy jar2 to jar3 with same name
+    val jar3 = {
+      val target = new File(userLib2, new File(jar2.toURI).getName)
+      val input = new FileInputStream(jar2.getPath)
+      val output = new FileOutputStream(target)
+      Utils.copyStream(input, output, closeStreams = true)
+      target.toURI.toURL
+    }
+
+    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> libs.getAbsolutePath))
+      .set(FILES_TO_DISTRIBUTE, Seq(jar2.getPath, jar3.getPath))
+      .set(ARCHIVES_TO_DISTRIBUTE, Seq(jar2.getPath, jar3.getPath))
+
+
+    val client = createClient(sparkConf)
+    val tempDir = Utils.createTempDir()
+    intercept[IllegalArgumentException] {
+      client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
+    }
+  }
+
   test("distribute local spark jars") {
     val temp = Utils.createTempDir()
     val jarsDir = new File(temp, "jars")
