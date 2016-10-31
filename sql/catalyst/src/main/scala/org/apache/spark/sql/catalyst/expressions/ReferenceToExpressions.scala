@@ -63,31 +63,33 @@ case class ReferenceToExpressions(result: Expression, children: Seq[Expression])
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childrenGen = children.map(_.genCode(ctx))
-    val childrenVars = childrenGen.zip(children).map {
-      case (childGen, child) => LambdaVariable(childGen.value, childGen.isNull, child.dataType)
-    }
+    val (childrenVars, classChildrenVars) = childrenGen.zip(children).map {
+      case (childGen, child) =>
+        val childVar = LambdaVariable(childGen.value, childGen.isNull, child.dataType)
 
-    // SPARK-18125: The children vars are local variables. If the result expression uses
-    // splitExpression, those variables cannot be accessed so compilation fails.
-    // To fix it, we use class variables to hold those local variables.
-    val initClassChildVars = childrenVars.map { childVar =>
-      val childVarInClass = ctx.freshName("childVarInClass")
-      ctx.addMutableState(ctx.javaType(childVar.dataType), childVarInClass, "")
-      val isNullInClass = ctx.freshName("childVarInClassIsNull")
-      ctx.addMutableState("boolean", isNullInClass, "")
-      LambdaVariable(childVarInClass, isNullInClass, childVar.dataType)
-    }
+        // SPARK-18125: The children vars are local variables. If the result expression uses
+        // splitExpression, those variables cannot be accessed so compilation fails.
+        // To fix it, we use class variables to hold those local variables.
+        val classChildVarName = ctx.freshName("classChildVar")
+        val classChildVarIsNull = ctx.freshName("classChildVarIsNull")
+        ctx.addMutableState(ctx.javaType(childVar.dataType), classChildVarName, "")
+        ctx.addMutableState("boolean", classChildVarIsNull, "")
+        val classChildVar =
+          LambdaVariable(classChildVarName, classChildVarIsNull, childVar.dataType)
 
-    val initClassChildVarsCode = initClassChildVars.zipWithIndex.map { case (childVarInClass, i) =>
-      s"${childVarInClass.value} = ${childrenVars(i).value};\n" +
-        s"${childVarInClass.isNull} = ${childrenVars(i).isNull};"
+        (childVar, classChildVar)
+    }.unzip
+
+    val initClassChildrenVars = classChildrenVars.zipWithIndex.map { case (classChildrenVar, i) =>
+      s"${classChildrenVar.value} = ${childrenVars(i).value};\n" +
+        s"${classChildrenVar.isNull} = ${childrenVars(i).isNull};"
     }.mkString("\n")
 
     val resultGen = result.transform {
-      case b: BoundReference => initClassChildVars(b.ordinal)
+      case b: BoundReference => classChildrenVars(b.ordinal)
     }.genCode(ctx)
 
-    ExprCode(code = childrenGen.map(_.code).mkString("\n") + "\n" + initClassChildVarsCode +
+    ExprCode(code = childrenGen.map(_.code).mkString("\n") + "\n" + initClassChildrenVars +
       resultGen.code, isNull = resultGen.isNull, value = resultGen.value)
   }
 }
