@@ -34,19 +34,19 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * An abstract class that represents [[FileCatalog]]s that are aware of partitioned tables.
+ * An abstract class that represents [[FileIndex]]s that are aware of partitioned tables.
  * It provides the necessary methods to parse partition data based on a set of files.
  *
  * @param parameters as set of options to control partition discovery
  * @param userPartitionSchema an optional partition schema that will be use to provide types for
  *                            the discovered partitions
  */
-abstract class PartitioningAwareFileCatalog(
+abstract class PartitioningAwareFileIndex(
     sparkSession: SparkSession,
     parameters: Map[String, String],
     userPartitionSchema: Option[StructType],
-    fileStatusCache: FileStatusCache = NoopCache) extends FileCatalog with Logging {
-  import PartitioningAwareFileCatalog.BASE_PATH_PARAM
+    fileStatusCache: FileStatusCache = NoopCache) extends FileIndex with Logging {
+  import PartitioningAwareFileIndex.BASE_PATH_PARAM
 
   /** Returns the specification of the partitions inferred from the data. */
   def partitionSpec(): PartitionSpec
@@ -253,9 +253,9 @@ abstract class PartitioningAwareFileCatalog(
     }
     val discovered = if (pathsToFetch.length >=
         sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      PartitioningAwareFileCatalog.listLeafFilesInParallel(pathsToFetch, hadoopConf, sparkSession)
+      PartitioningAwareFileIndex.listLeafFilesInParallel(pathsToFetch, hadoopConf, sparkSession)
     } else {
-      PartitioningAwareFileCatalog.listLeafFilesInSerial(pathsToFetch, hadoopConf)
+      PartitioningAwareFileIndex.listLeafFilesInSerial(pathsToFetch, hadoopConf)
     }
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
@@ -266,7 +266,7 @@ abstract class PartitioningAwareFileCatalog(
   }
 }
 
-object PartitioningAwareFileCatalog extends Logging {
+object PartitioningAwareFileIndex extends Logging {
   val BASE_PATH_PARAM = "basePath"
 
   /** A serializable variant of HDFS's BlockLocation. */
@@ -383,7 +383,7 @@ object PartitioningAwareFileCatalog extends Logging {
     if (shouldFilterOut(name)) {
       Seq.empty[FileStatus]
     } else {
-      // [SPARK-17599] Prevent ListingFileCatalog from failing if path doesn't exist
+      // [SPARK-17599] Prevent InMemoryFileIndex from failing if path doesn't exist
       // Note that statuses only include FileStatus for the files and dirs directly under path,
       // and does not include anything else recursively.
       val statuses = try fs.listStatus(path) catch {
