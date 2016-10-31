@@ -180,9 +180,11 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
  */
 case object NamePlaceholder extends LeafExpression with Unevaluable {
   override lazy val resolved: Boolean = false
-  override def foldable: Boolean = true
+  override def foldable: Boolean = false
   override def nullable: Boolean = false
   override def dataType: DataType = StringType
+  override def prettyName: String = "NamePlaceholder"
+  override def toString: String = prettyName
 }
 
 /**
