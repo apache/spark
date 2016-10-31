@@ -81,6 +81,9 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 }
 
+/**
+ * A testing Hive UDAF that computes the counts of both non-null values and nulls of a given column.
+ */
 class MockUDAF extends AbstractGenericUDAFResolver {
   override def getEvaluator(info: Array[TypeInfo]): GenericUDAFEvaluator = new MockUDAFEvaluator
 }
