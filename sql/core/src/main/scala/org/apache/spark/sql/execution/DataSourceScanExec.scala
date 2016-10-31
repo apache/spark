@@ -249,15 +249,15 @@ case class FileSourceScanExec(
 
   private lazy val inputRDD: RDD[InternalRow] = {
     val originalPartitions = relation.location.listFiles(partitionFilters)
-    val filteredPartitions = if (relation.location.paths.isEmpty) {
+    val filteredPartitions = if (relation.location.rootPaths.isEmpty) {
       originalPartitions
     } else {
       relation.fileFormat.filterPartitions(
         dataFilters,
         outputSchema,
         relation.sparkSession.sparkContext.hadoopConfiguration,
-        relation.location.allFiles(),
-        relation.location.paths.head,
+        relation.location.inputFiles,
+        relation.location.rootPaths.head,
         originalPartitions)
     }
     val totalFilesRaw = originalPartitions.map(_.files.size).sum

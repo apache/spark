@@ -128,11 +128,6 @@ class ParquetFileFormat
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
-    // SPARK-15719: Disables writing Parquet summary files by default.
-    if (conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
-      conf.setBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
-    }
-
     ParquetFileFormat.redirectParquetLogs()
 
     new OutputWriterFactory {
@@ -432,24 +427,19 @@ class ParquetFileFormat
       filters: Seq[Filter],
       schema: StructType,
       conf: Configuration,
-      allFiles: Seq[FileStatus],
+      allFiles: Array[String],
       root: Path,
-      partitions: Seq[Partition]): Seq[Partition] = {
+      partitions: Seq[PartitionDirectory]): Seq[PartitionDirectory] = {
     // Read the "_metadata" file if available, contains all block headers. On S3 better to grab
     // all of the footers in a batch rather than having to read every single file just to get its
     // footer.
-    allFiles.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE).map { stat =>
-      val metadata = getOrReadMetadata(conf, stat)
-      partitions.map { part =>
-        filterByMetadata(
-          filters,
-          schema,
-          conf,
-          root,
-          metadata,
-          part)
-      }.filterNot(_.files.isEmpty)
-    }.getOrElse(partitions)
+    allFiles.map(new Path(_)).find(_.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
+      .map { path =>
+        val metadata = getOrReadMetadata(conf, path)
+        partitions.map { partition =>
+          filterByMetadata(filters, schema, conf, root, metadata, partition)
+        }.filterNot(_.files.isEmpty)
+      }.getOrElse(partitions)
   }
 
   private def filterByMetadata(
@@ -458,7 +448,7 @@ class ParquetFileFormat
       conf: Configuration,
       root: Path,
       metadata: ParquetMetadata,
-      partition: Partition): Partition = {
+      partition: PartitionDirectory): PartitionDirectory = {
     val blockMetadatas = metadata.getBlocks.asScala
     val parquetSchema = metadata.getFileMetaData.getSchema
     val conjunctiveFilter = filters
@@ -469,16 +459,16 @@ class ParquetFileFormat
         FilterCompat.get(conjunction), blockMetadatas.asJava, parquetSchema).asScala.map { bmd =>
         new Path(root, bmd.getPath).toString
       }
-      Partition(partition.values, partition.files.filter { f =>
+      PartitionDirectory(partition.values, partition.files.filter { f =>
         filteredBlocks.contains(f.getPath.toString)
       })
     }.getOrElse(partition)
   }
 
-  private def getOrReadMetadata(conf: Configuration, stat: FileStatus): ParquetMetadata = {
+  private def getOrReadMetadata(conf: Configuration, path: Path): ParquetMetadata = {
     if (cachedMetadata == null) {
       logInfo("Reading summary metadata into cache in ParquetFileFormat")
-      cachedMetadata = ParquetFileReader.readFooter(conf, stat, ParquetMetadataConverter.NO_FILTER)
+      cachedMetadata = ParquetFileReader.readFooter(conf, path, ParquetMetadataConverter.NO_FILTER)
     } else {
       logInfo("Using cached summary metadata")
     }
