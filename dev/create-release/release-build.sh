@@ -183,7 +183,7 @@ if [[ "$1" == "package" ]]; then
       --output $PYTHON_DIST_NAME.asc \
       --detach-sig $PYTHON_DIST_NAME
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-      MD5 $PYTHON_DIST_NAME.gz > \
+      MD5 $PYTHON_DIST_NAME > \
       $PYTHON_DIST_NAME.md5
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
       SHA512 $PYTHON_DIST_NAME > \
