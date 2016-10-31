@@ -51,18 +51,54 @@ object FileCommitProtocol {
 abstract class FileCommitProtocol {
   import FileCommitProtocol._
 
+  /**
+   * Setups up a job. Must be called on the driver before any other methods can be invoked.
+   */
   def setupJob(jobContext: JobContext): Unit
 
+  /**
+   * Commits a job after the writes succeed. Must be called on the driver.
+   */
   def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit
 
+  /**
+   * Aborts a job after the writes fail. Must be called on the driver.
+   *
+   * Calling this function is a best-effort attempt, because it is possible that the driver
+   * just crashes (or killed) before it can call abort.
+   */
   def abortJob(jobContext: JobContext): Unit
 
+  /**
+   * Sets up a task within a job.
+   * Must be called before any other task related methods can be invoked.
+   */
   def setupTask(taskContext: TaskAttemptContext): Unit
 
+  /**
+   * Notifies the commit protocol to add a new file, and gets back the full path that should be
+   * used. Must be called on the executors when running tasks.
+   *
+   * A full file path consists of the following parts:
+   *  1. the base path
+   *  2. some sub-directory within the base path, used to specify partitioning
+   *  3. file prefix, usually some unique job id with the task id
+   *  4. bucket id
+   *  5. source specific file extension, e.g. ".snappy.parquet"
+   *
+   * The "dir" parameter specifies 2, and "ext" parameter specifies both 4 and 5, and the rest
+   * are left to the commit protocol implementation to decide.
+   */
   def addTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
 
+  /**
+   * Commits a task after the writes succeed. Must be called on the executors when running tasks.
+   */
   def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage
 
+  /**
+   * Aborts a task after the writes have failed. Must be called on the executors when running tasks.
+   */
   def abortTask(taskContext: TaskAttemptContext): Unit
 }
 
