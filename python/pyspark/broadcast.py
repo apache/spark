@@ -21,7 +21,7 @@ import gc
 from tempfile import NamedTemporaryFile
 
 from pyspark.cloudpickle import print_exec
-from pyspark.broadcast import protocol
+from pyspark.serializers import protocol
 
 if sys.version < '3':
     import cPickle as pickle
