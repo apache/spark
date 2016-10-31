@@ -27,6 +27,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
+import org.apache.spark.api.java.function.{ Function0 => JFunction0 }
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.StreamingContext
@@ -69,6 +70,8 @@ object KafkaUtils extends Logging {
    * Java constructor for a batch-oriented interface for consuming from Kafka.
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
+   * @param keyClass Class of the keys in the Kafka records
+   * @param valueClass Class of the values in the Kafka records
    * @param kafkaParams Kafka
    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
@@ -138,6 +141,8 @@ object KafkaUtils extends Logging {
    * :: Experimental ::
    * Java constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
+   * @param keyClass Class of the keys in the Kafka records
+   * @param valueClass Class of the values in the Kafka records
    * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
    *   see [[LocationStrategies]] for more details.
    * @param consumerStrategy In most cases, pass in ConsumerStrategies.subscribe,

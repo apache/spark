@@ -44,6 +44,11 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * per second that each '''partition''' will accept.
  * @param locationStrategy In most cases, pass in [[PreferConsistent]],
  *   see [[LocationStrategy]] for more details.
+ * @param executorKafkaParams Kafka
+ * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+ * configuration parameters</a>.
+ *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
+ *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
  * @param consumerStrategy In most cases, pass in [[Subscribe]],
  *   see [[ConsumerStrategy]] for more details
  * @tparam K type of Kafka message key
