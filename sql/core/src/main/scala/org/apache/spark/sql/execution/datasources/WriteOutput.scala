@@ -27,7 +27,6 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
@@ -35,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SQLExecution, UnsafeKVExternalSorter}
+import org.apache.spark.sql.execution.datasources.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -117,10 +117,12 @@ object WriteOutput extends Logging {
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       // This call shouldn't be put into the `try` block below because it only initializes and
       // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-      val committer = setupDriverCommitter(job, outputPath.toString, isAppend)
+      val committer = new MapReduceFileCommitterProtocol(
+        setupDriverCommitter(job, outputPath.toString, isAppend))
+      committer.setupJob(job)
 
       try {
-        sparkSession.sparkContext.runJob(queryExecution.toRdd,
+        val commitMsgs = sparkSession.sparkContext.runJob(queryExecution.toRdd,
           (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
             executeTask(
               description = description,
@@ -130,12 +132,12 @@ object WriteOutput extends Logging {
               iterator = iter)
           })
 
-        committer.commitJob(job)
+        committer.commitJob(job, commitMsgs)
         logInfo(s"Job ${job.getJobID} committed.")
         refreshFunction()
       } catch { case cause: Throwable =>
         logError(s"Aborting job ${job.getJobID}.", cause)
-        committer.abortJob(job, JobStatus.State.FAILED)
+        committer.abortJob(job)
         throw new SparkException("Job aborted.", cause)
       }
     }
@@ -147,7 +149,7 @@ object WriteOutput extends Logging {
       sparkStageId: Int,
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
-      iterator: Iterator[InternalRow]): Unit = {
+      iterator: Iterator[InternalRow]): TaskCommitMessage = {
 
     val jobId = SparkHadoopWriter.createJobID(new Date, sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
@@ -166,32 +168,27 @@ object WriteOutput extends Logging {
       new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
     }
 
-    val committer = newOutputCommitter(
-      description.outputFormatClass, taskAttemptContext, description.path, description.isAppend)
+    val committer = new MapReduceFileCommitterProtocol(newOutputCommitter(
+      description.outputFormatClass, taskAttemptContext, description.path, description.isAppend))
     committer.setupTask(taskAttemptContext)
 
     // Figure out where we need to write data to for staging.
     // For FileOutputCommitter it has its own staging path called "work path".
-    val stagingPath = committer match {
-      case f: FileOutputCommitter => f.getWorkPath.toString
-      case _ => description.path
-    }
+    val stagingPath = committer.stagingDir.getOrElse(description.path)
 
     val writeTask =
       if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
-        new SingleDirectoryWriteTask(description, taskAttemptContext, stagingPath)
+        new SingleDirectoryWriteTask(description, taskAttemptContext, committer, stagingPath)
       } else {
-        new DynamicPartitionWriteTask(description, taskAttemptContext, stagingPath)
+        new DynamicPartitionWriteTask(description, taskAttemptContext, committer, stagingPath)
       }
 
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-        // Execute the task to write rows out
+        // Execute the task to write rows out and commit the task.
         writeTask.execute(iterator)
         writeTask.releaseResources()
-
-        // Commit the task
-        SparkHadoopMapRedUtil.commitTask(committer, taskAttemptContext, jobId.getId, taskId.getId)
+        committer.commitTask(taskAttemptContext)
       })(catchBlock = {
         // If there is an error, release resource and then abort the task
         try {
@@ -226,6 +223,7 @@ object WriteOutput extends Logging {
   private class SingleDirectoryWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
+      committer: FileCommitProtocol,
       stagingPath: String) extends ExecuteWriteTask {
 
     private[this] var outputWriter: OutputWriter = {
@@ -237,6 +235,7 @@ object WriteOutput extends Logging {
         dataSchema = description.nonPartitionColumns.toStructType,
         context = taskAttemptContext)
       outputWriter.initConverter(dataSchema = description.nonPartitionColumns.toStructType)
+      committer.addTaskFile(taskAttemptContext, outputWriter.path)
       outputWriter
     }
 
@@ -262,6 +261,7 @@ object WriteOutput extends Logging {
   private class DynamicPartitionWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
+      committer: FileCommitProtocol,
       stagingPath: String) extends ExecuteWriteTask {
 
     // currentWriter is initialized whenever we see a new key
@@ -324,6 +324,7 @@ object WriteOutput extends Logging {
         dataSchema = description.nonPartitionColumns.toStructType,
         context = taskAttemptContext)
       newWriter.initConverter(description.nonPartitionColumns.toStructType)
+      committer.addTaskFile(taskAttemptContext, newWriter.path)
       newWriter
     }
 
