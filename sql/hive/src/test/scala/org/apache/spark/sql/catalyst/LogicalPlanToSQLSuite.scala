@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, NoSuchFileException, Paths}
 
+import scala.io.Source
 import scala.util.control.NonFatal
+
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -29,8 +31,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
-
-import scala.io.Source
 
 /**
  * A test suite for LogicalPlan-to-SQL conversion.
