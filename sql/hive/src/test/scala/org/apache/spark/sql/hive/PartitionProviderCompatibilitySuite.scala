@@ -161,18 +161,21 @@ class PartitionProviderCompatibilitySuite
               |partition (partCol=1)
               |select * from range(100)""".stripMargin)
           assert(spark.sql("select * from test").count() == 104)
-// TODO(ekl) enable this test for SPARK-18184
-//          withTempDir { dir2 =>
-//            spark.sql(
-//              s"""alter table test partition (partCol=1)
-//                |set location '${dir2.getAbsolutePath}'""".stripMargin)
-//            assert(spark.sql("select * from test").count() == 4)
-//            spark.sql(
-//              """insert overwrite table test
-//                |partition (partCol=1)
-//                |select * from range(50)""".stripMargin)
-//            assert(spark.sql("select * from test").count() == 54)
-//          }
+          withTempDir { dir2 =>
+            sql(
+              s"""alter table test partition (partCol=1)
+                |set location '${dir2.getAbsolutePath}'""".stripMargin)
+            assert(sql("select * from test").count() == 4)
+            sql(
+              """insert overwrite table test
+                |partition (partCol=1)
+                |select * from range(30)""".stripMargin)
+            sql(
+              """insert overwrite table test
+                |partition (partCol=1)
+                |select * from range(20)""".stripMargin)
+            assert(sql("select * from test").count() == 24)
+          }
         }
       }
     }

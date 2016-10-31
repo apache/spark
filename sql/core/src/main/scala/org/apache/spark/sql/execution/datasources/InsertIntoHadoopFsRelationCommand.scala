@@ -65,24 +65,23 @@ case class InsertIntoHadoopFsRelationCommand(
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    val qualifiedOutputPath = if (overwritePartitionPath.isDefined) {
+      overwritePartitionPath.get.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    } else {
+      outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    }
 
     val pathExists = fs.exists(qualifiedOutputPath)
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
-      case (SaveMode.Overwrite, _) =>
-        val pathToDelete = if (overwritePartitionPath.isDefined) {
-          overwritePartitionPath.get.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        } else {
-          qualifiedOutputPath
-        }
-        if (fs.exists(pathToDelete) && !fs.delete(pathToDelete, true /* recursively */)) {
+      case (SaveMode.Overwrite, true) =>
+        if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
           throw new IOException(s"Unable to clear output " +
-            s"directory $pathToDelete prior to writing to it")
+            s"directory $qualifiedOutputPath prior to writing to it")
         }
         true
-      case (SaveMode.Append, _) | (SaveMode.ErrorIfExists, false) =>
+      case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
         true
       case (SaveMode.Ignore, exists) =>
         !exists
@@ -99,7 +98,11 @@ case class InsertIntoHadoopFsRelationCommand(
         fileFormat,
         qualifiedOutputPath,
         hadoopConf,
-        partitionColumns,
+        if (overwritePartitionPath.isDefined) {
+          Nil  // write directly to only this partition directory
+        } else {
+          partitionColumns
+        },
         bucketSpec,
         refreshFunction,
         options,
