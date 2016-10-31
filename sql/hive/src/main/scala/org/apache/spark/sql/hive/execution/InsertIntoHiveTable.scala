@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.command.AlterTableAddPartitionCommand
+import org.apache.spark.sql.execution.command.{AlterTableAddPartitionCommand, AlterTableDropPartitionCommand}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
@@ -266,24 +266,21 @@ case class InsertIntoHiveTable(
           // version and we may not want to catch up new Hive version every time. We delete the
           // Hive partition first and then load data file into the Hive partition.
           if (oldPart.nonEmpty && overwrite) {
-            externalCatalog.dropPartitions(
-              table.catalogTable.database,
-              table.catalogTable.identifier.table,
-              parts = Seq(partitionSpec),
-              ignoreIfNotExists = true,
-              purge = false)
-            // Although `externalCatalog.loadPartition` will create the partition,
-            // the old partition may use custom properties such as location, so we need to create
-            // it manually.
-            val partitionSpecAndLocation = Seq((partitionSpec, oldPart.get.storage.locationUri))
-            AlterTableAddPartitionCommand(
-              tableName = table.catalogTable.identifier,
-              partitionSpecsAndLocs = partitionSpecAndLocation,
-              ifNotExists = true
-            ).run(sqlContext.sparkSession)
-
-            // Don't let Hive do overwrite operation since it is slower.
-            doOverwrite = false
+            oldPart.get.storage.locationUri.map { uri =>
+              val partitionPath = new Path(uri)
+              val fs = partitionPath.getFileSystem(hadoopConf)
+              if (fs.exists(partitionPath)) {
+                val pathPermission = fs.getFileStatus(partitionPath).getPermission()
+                if (!fs.delete(partitionPath, true)) {
+                  throw new RuntimeException(
+                    "Cannot remove partition directory '" + partitionPath.toString)
+                } else {
+                  fs.mkdirs(partitionPath, pathPermission)
+                }
+                // Don't let Hive do overwrite operation since it is slower.
+                doOverwrite = false
+              }
+            }
           }
 
           // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
