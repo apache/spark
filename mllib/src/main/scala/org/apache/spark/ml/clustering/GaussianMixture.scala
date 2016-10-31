@@ -323,6 +323,9 @@ class GaussianMixture @Since("2.0.0") (
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 
+    val instr = Instrumentation.create(this, rdd)
+    instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
+
     val algo = new MLlibGM()
       .setK($(k))
       .setMaxIterations($(maxIter))
@@ -337,6 +340,9 @@ class GaussianMixture @Since("2.0.0") (
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
     model.setSummary(summary)
+    instr.logNumFeatures(model.gaussians.head.mean.size)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("2.0.0")
