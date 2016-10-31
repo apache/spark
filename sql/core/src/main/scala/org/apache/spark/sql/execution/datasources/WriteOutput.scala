@@ -168,15 +168,11 @@ object WriteOutput extends Logging {
 
     committer.setupTask(taskAttemptContext)
 
-    // Figure out where we need to write data to for staging.
-    // For FileOutputCommitter it has its own staging path called "work path".
-    val stagingPath = committer.stagingDir.getOrElse(description.path)
-
     val writeTask =
       if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
-        new SingleDirectoryWriteTask(description, taskAttemptContext, committer, stagingPath)
+        new SingleDirectoryWriteTask(description, taskAttemptContext, committer)
       } else {
-        new DynamicPartitionWriteTask(description, taskAttemptContext, committer, stagingPath)
+        new DynamicPartitionWriteTask(description, taskAttemptContext, committer)
       }
 
     try {
@@ -211,7 +207,7 @@ object WriteOutput extends Logging {
 
     final def filePrefix(split: Int, uuid: String, bucketId: Option[Int]): String = {
       val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-      f"part-r-$split%05d-$uuid$bucketString"
+      f"part-$split%05d-$uuid$bucketString"
     }
   }
 
@@ -219,19 +215,19 @@ object WriteOutput extends Logging {
   private class SingleDirectoryWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
-      committer: FileCommitProtocol,
-      stagingPath: String) extends ExecuteWriteTask {
+      committer: FileCommitProtocol) extends ExecuteWriteTask {
 
     private[this] var outputWriter: OutputWriter = {
-      val split = taskAttemptContext.getTaskAttemptID.getTaskID.getId
+      val tmpFilePath = committer.addTaskTempFile(
+        taskAttemptContext,
+        None,
+        description.outputWriterFactory.getFileExtension(taskAttemptContext))
 
       val outputWriter = description.outputWriterFactory.newInstance(
-        stagingDir = stagingPath,
-        fileNamePrefix = filePrefix(split, description.uuid, None),
+        path = tmpFilePath,
         dataSchema = description.nonPartitionColumns.toStructType,
         context = taskAttemptContext)
       outputWriter.initConverter(dataSchema = description.nonPartitionColumns.toStructType)
-      committer.addTaskFile(taskAttemptContext, outputWriter.path)
       outputWriter
     }
 
@@ -257,8 +253,7 @@ object WriteOutput extends Logging {
   private class DynamicPartitionWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
-      committer: FileCommitProtocol,
-      stagingPath: String) extends ExecuteWriteTask {
+      committer: FileCommitProtocol) extends ExecuteWriteTask {
 
     // currentWriter is initialized whenever we see a new key
     private var currentWriter: OutputWriter = _
@@ -298,29 +293,23 @@ object WriteOutput extends Logging {
      * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
      */
     private def newOutputWriter(key: InternalRow, partString: UnsafeProjection): OutputWriter = {
-      val path =
-        if (description.partitionColumns.nonEmpty) {
-          val partitionPath = partString(key).getString(0)
-          new Path(stagingPath, partitionPath).toString
-        } else {
-          stagingPath
-        }
+      val partDir =
+        if (description.partitionColumns.isEmpty) None else Option(partString(key).getString(0))
 
       // If the bucket spec is defined, the bucket column is right after the partition columns
       val bucketId = if (description.bucketSpec.isDefined) {
-        Some(key.getInt(description.partitionColumns.length))
+        BucketingUtils.bucketIdToString(key.getInt(description.partitionColumns.length))
       } else {
-        None
+        ""
       }
+      val ext = bucketId + description.outputWriterFactory.getFileExtension(taskAttemptContext)
 
-      val split = taskAttemptContext.getTaskAttemptID.getTaskID.getId
+      val path = committer.addTaskTempFile(taskAttemptContext, partDir, ext)
       val newWriter = description.outputWriterFactory.newInstance(
-        stagingDir = path,
-        fileNamePrefix = filePrefix(split, description.uuid, bucketId),
+        path = path,
         dataSchema = description.nonPartitionColumns.toStructType,
         context = taskAttemptContext)
       newWriter.initConverter(description.nonPartitionColumns.toStructType)
-      committer.addTaskFile(taskAttemptContext, newWriter.path)
       newWriter
     }
 

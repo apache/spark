@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.Date
+import java.util.{Date, UUID}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -51,13 +51,6 @@ object FileCommitProtocol {
 abstract class FileCommitProtocol {
   import FileCommitProtocol._
 
-  /**
-   * The temporary location to write to, if available.
-   *
-   * If this function returns None, then Spark will always write directly to the final destination.
-   */
-  def stagingDir: Option[String]
-
   def setupJob(jobContext: JobContext): Unit
 
   def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit
@@ -66,7 +59,7 @@ abstract class FileCommitProtocol {
 
   def setupTask(taskContext: TaskAttemptContext): Unit
 
-  def addTaskFile(taskContext: TaskAttemptContext, path: String): Unit
+  def addTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
 
   def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage
 
@@ -87,6 +80,9 @@ class MapReduceFileCommitterProtocol(path: String, isAppend: Boolean)
 
   /** OutputCommitter from Hadoop is not always serializable. */
   @transient private var committer: OutputCommitter = _
+
+  /** UUID used to identify the job in file name. */
+  private val uuid: String = UUID.randomUUID().toString
 
   private def setupCommitter(context: TaskAttemptContext): Unit = {
     committer = context.getOutputFormatClass.newInstance().getOutputCommitter(context)
@@ -125,10 +121,25 @@ class MapReduceFileCommitterProtocol(path: String, isAppend: Boolean)
     logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
   }
 
-  override def stagingDir: Option[String] = committer match {
-    // For FileOutputCommitter it has its own staging path called "work path".
-    case f: FileOutputCommitter => Option(f.getWorkPath.toString)
-    case _ => None
+  override def addTaskTempFile(
+      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
+    // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
+    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
+    // the file name is fine and won't overflow.
+    val split = taskContext.getTaskAttemptID.getTaskID.getId
+    val filename = f"part-$split%05d-$uuid$ext"
+
+    val stagingDir: String = committer match {
+      // For FileOutputCommitter it has its own staging path called "work path".
+      case f: FileOutputCommitter => Option(f.getWorkPath.toString).getOrElse(path)
+      case _ => path
+    }
+
+    dir.map { d =>
+      new Path(new Path(stagingDir, d), filename).toString
+    }.getOrElse {
+      new Path(stagingDir, filename).toString
+    }
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
@@ -172,9 +183,5 @@ class MapReduceFileCommitterProtocol(path: String, isAppend: Boolean)
 
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
     committer.abortTask(taskContext)
-  }
-
-  override def addTaskFile(taskContext: TaskAttemptContext, path: String): Unit = {
-    // Do nothing
   }
 }
