@@ -2616,13 +2616,23 @@ private[spark] class CallerContext(
         val callerContext = Class.forName("org.apache.hadoop.ipc.CallerContext")
         val builder = Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
         // scalastyle:on classforname
-        val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
+        val builderInst = builder.getConstructor(classOf[String]).newInstance(prepareContext(context))
         val hdfsContext = builder.getMethod("build").invoke(builderInst)
         callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
       } catch {
         case NonFatal(e) =>
           logWarning("Fail to set Spark caller context", e)
       }
+    }
+  }
+
+  def prepareContext(context: String): String = {
+    // The default max size of Hadoop caller context is 128
+    lazy val len = SparkHadoopUtil.get.conf.getInt("hadoop.caller.context.max.size", 128)
+    if (context == null || context.length <= len) {
+      context
+    } else {
+      context.substring(0, len)
     }
   }
 }
