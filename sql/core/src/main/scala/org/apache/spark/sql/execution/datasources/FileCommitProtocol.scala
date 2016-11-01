@@ -62,8 +62,11 @@ object FileCommitProtocol {
 
 
 /**
- * An interface to define how a Spark job commits its outputs. Implementations must be serializable,
- * as the committer instance instantiated on the driver will be used for tasks on executors.
+ * An interface to define how a single Spark job commits its outputs. Two notes:
+ *
+ * 1. Implementations must be serializable, as the committer instance instantiated on the driver
+ *    will be used for tasks on executors.
+ * 2. A committer should not be reused across multiple Spark jobs.
  *
  * The proper call sequence is:
  *
