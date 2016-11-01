@@ -1566,14 +1566,26 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-10562: partition by column with mixed case name") {
-    withTable("tbl10562") {
-      val df = Seq(2012 -> "a").toDF("Year", "val")
-      df.write.partitionBy("Year").saveAsTable("tbl10562")
-      checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
-      checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
-      checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
-      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
-      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
+    def runOnce() {
+      withTable("tbl10562") {
+        val df = Seq(2012 -> "a").toDF("Year", "val")
+        df.write.partitionBy("Year").saveAsTable("tbl10562")
+        checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
+        checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
+        checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
+        checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
+        checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
+      }
+    }
+    try {
+      runOnce()
+    } catch {
+      case t: Throwable =>
+        // Retry to gather more test data. TODO(ekl) revert this once we deflake this test.
+        runOnce()
+        runOnce()
+        runOnce()
+        throw t
     }
   }
 
