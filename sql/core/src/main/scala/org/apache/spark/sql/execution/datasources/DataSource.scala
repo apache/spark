@@ -528,7 +528,7 @@ case class DataSource(
             columns,
             bucketSpec,
             format,
-            () => Unit, // No existing table needs to be refreshed.
+            _ => Unit, // No existing table needs to be refreshed.
             options,
             data.logicalPlan,
             mode)
