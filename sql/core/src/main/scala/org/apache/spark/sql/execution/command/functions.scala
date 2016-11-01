@@ -118,14 +118,15 @@ case class DescribeFunctionCommand(
       case _ =>
         try {
           val info = sparkSession.sessionState.catalog.lookupFunctionInfo(functionName)
+          val name = if (info.getDb != null) info.getDb + "." + info.getName else info.getName
           val result =
-            Row(s"Function: ${info.getName}") ::
+            Row(s"Function: $name") ::
               Row(s"Class: ${info.getClassName}") ::
               Row(s"Usage: ${replaceFunctionName(info.getUsage, info.getName)}") :: Nil
 
           if (isExtended) {
             result :+
-              Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
+              Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, name)}")
           } else {
             result
           }
