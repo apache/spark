@@ -183,16 +183,10 @@ private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWrit
 }
 
 private[csv] class CsvOutputWriter(
-    stagingDir: String,
-    fileNamePrefix: String,
+    path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
-
-  override val path: String = {
-    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
-    new Path(stagingDir, fileNamePrefix + ".csv" + compressionExtension).toString
-  }
 
   // create the Generator without separator inserted between 2 records
   private[this] val text = new Text()

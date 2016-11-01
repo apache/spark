@@ -132,11 +132,6 @@ class TextOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  override val path: String = {
-    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
-    new Path(stagingDir, fileNamePrefix + ".txt" + compressionExtension).toString
-  }
-
   private[this] val buffer = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
