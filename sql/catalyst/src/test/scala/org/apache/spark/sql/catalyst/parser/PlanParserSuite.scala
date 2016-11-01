@@ -180,7 +180,16 @@ class PlanParserSuite extends PlanTest {
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(table("s"), partition, plan, OverwriteOptions(true), ifNotExists)
+      InsertIntoTable(
+        table("s"), partition, plan,
+        OverwriteOptions(
+          overwrite,
+          if (overwrite && partition.nonEmpty) {
+            Some(partition.map(kv => (kv._1, kv._2.get)))
+          } else {
+            None
+          }),
+        ifNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
