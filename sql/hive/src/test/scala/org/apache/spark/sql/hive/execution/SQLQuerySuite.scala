@@ -1565,7 +1565,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
-  test("SPARK-10562: partition by column with mixed case name") {
+  ignore("SPARK-10562: partition by column with mixed case name") {
     def runOnce() {
       withTable("tbl10562") {
         val df = Seq(2012 -> "a").toDF("Year", "val")
