@@ -28,12 +28,36 @@ import org.apache.spark.SparkHadoopWriter
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 
 object FileCommitProtocol {
   class TaskCommitMessage(obj: Any) extends Serializable
 
   object EmptyTaskCommitMessage extends TaskCommitMessage(Unit)
+
+  /**
+   * Instantiates a FileCommitProtocol using the given className.
+   */
+  def instantiate(className: String, outputPath: String, isAppend: Boolean): FileCommitProtocol = {
+    try {
+      val clazz = Utils.classForName(className).asInstanceOf[Class[FileCommitProtocol]]
+
+      // First try the one with argument (outputPath: String, isAppend: Boolean).
+      // If that doesn't exist, try the one with (outputPath: String).
+      try {
+        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[Boolean])
+        ctor.newInstance(outputPath, isAppend.asInstanceOf[java.lang.Boolean])
+      } catch {
+        case _: NoSuchMethodException =>
+          val ctor = clazz.getDeclaredConstructor(classOf[String])
+          ctor.newInstance(outputPath)
+      }
+    } catch {
+      case e: ClassNotFoundException =>
+        throw e
+    }
+  }
 }
 
 
@@ -114,7 +138,7 @@ class MapReduceFileCommitterProtocol(path: String, isAppend: Boolean)
 
   import FileCommitProtocol._
 
-  /** OutputCommitter from Hadoop is not always serializable. */
+  /** OutputCommitter from Hadoop is not serializable so marking it transient. */
   @transient private var committer: OutputCommitter = _
 
   /** UUID used to identify the job in file name. */

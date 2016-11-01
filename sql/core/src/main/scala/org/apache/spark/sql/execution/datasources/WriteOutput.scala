@@ -114,7 +114,10 @@ object WriteOutput extends Logging {
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       // This call shouldn't be put into the `try` block below because it only initializes and
       // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-      val committer = new MapReduceFileCommitterProtocol(outputPath.toString, isAppend)
+      val committer = FileCommitProtocol.instantiate(
+        sparkSession.sessionState.conf.fileCommitProtocolClass,
+        outputPath.toString,
+        isAppend)
       committer.setupJob(job)
 
       try {
