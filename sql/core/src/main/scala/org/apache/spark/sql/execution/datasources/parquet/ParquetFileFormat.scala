@@ -128,6 +128,11 @@ class ParquetFileFormat
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
+    // SPARK-15719: Disables writing Parquet summary files by default.
+    if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null) {
+      conf.set(ParquetOutputFormat.JOB_SUMMARY_LEVEL, "NONE")
+    }
+
     ParquetFileFormat.redirectParquetLogs()
 
     new OutputWriterFactory {
