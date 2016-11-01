@@ -88,8 +88,8 @@ public class AesConfigMessage implements Encodable {
     ByteBuf buf = Unpooled.wrappedBuffer(buffer);
 
     if (buf.readByte() != TAG_BYTE) {
-      throw new IllegalStateException("Expected SaslMessage, received something else"
-        + " (maybe your client does not have SASL enabled?)");
+      throw new IllegalStateException("Expected AesConfigMessage, received something else"
+        + " (maybe your client does not have AES enabled?)");
     }
 
     int keySize = buf.readInt();

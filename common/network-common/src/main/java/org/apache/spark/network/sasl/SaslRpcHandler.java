@@ -119,10 +119,10 @@ class SaslRpcHandler extends RpcHandler {
       if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("SASL authentication successful for channel {}", client);
         complete(true);
-        return ;
+        return;
       }
 
-      if (!conf.AesEncryptionEnabled()) {
+      if (!conf.aesEncryptionEnabled()) {
         logger.debug("Enabling encryption for channel {}", client);
         SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
         complete(false);

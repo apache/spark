@@ -20,47 +20,51 @@ package org.apache.spark.network.util;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.util.LinkedList;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 
 public class ByteArrayReadableChannel implements ReadableByteChannel {
-  private byte[] backArray;
-  private ByteBuf data;
+  private final LinkedList<ByteBuf> buffers = new LinkedList<>();
 
   public int length() {
-    return data.readableBytes();
+    if (!buffers.isEmpty()) {
+      return buffers.getFirst().readableBytes();
+    } else {
+      return 0;
+    }
   }
 
-  public void reset() {
-    data.clear();
-  }
-
-  public ByteArrayReadableChannel(int size) {
-    backArray = new byte[size];
-    data = Unpooled.wrappedBuffer(backArray);
-    data.clear();
+  public ByteArrayReadableChannel() {
   }
 
   public void feedData(ByteBuf buf) {
-    int toFeed = Math.min(data.writableBytes(), buf.readableBytes());
-    buf.readBytes(data, toFeed);
+    buffers.add(buf);
   }
 
   @Override
   public int read(ByteBuffer dst) throws IOException {
-    int toPut = Math.min(data.readableBytes(), dst.remaining());
-    dst.put(backArray, data.readerIndex(), toPut);
-    data.skipBytes(toPut);
-    return toPut;
+    if (!buffers.isEmpty()) {
+      ByteBuf first = buffers.getFirst();
+      int bytesToRead = Math.min(first.readableBytes(), dst.remaining());
+      ByteBuffer src = first.readSlice(bytesToRead).nioBuffer();
+      dst.put(src);
+
+      if (first.readableBytes() == 0) {
+        buffers.removeFirst().release();
+      }
+
+      return bytesToRead;
+    }
+
+    return 0;
   }
 
   @Override
   public void close() throws IOException {
-    data.release();
+    while (!buffers.isEmpty()) {
+      buffers.removeFirst().release();
+    }
   }
 
   @Override

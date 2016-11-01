@@ -91,19 +91,14 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
             new SaslException("Encryption requests by negotiated non-encrypted connection."));
         }
 
-        if (conf.AesEncryptionEnabled()) {
+        if (conf.aesEncryptionEnabled()) {
           // Generate a request config message to send to server.
           AesConfigMessage configMessage = AesCipher.createConfigMessage(conf);
           ByteBuffer buf = configMessage.encodeMessage();
-
-          ByteBuffer response = client.sendRpcSync(buf, conf.saslRTTimeoutMs());
-          if (JavaUtils.bytesToString(response).equals(AesCipher.TRANSFORM)) {
-            AesCipher cipher = new AesCipher(configMessage);
-            logger.info("Enabling AES cipher for client channel {}", client);
-            cipher.addToChannel(channel);
-          } else {
-            throw new RuntimeException("AES is not supported in server side");
-          }
+          client.sendRpcSync(buf, conf.saslRTTimeoutMs());
+          AesCipher cipher = new AesCipher(configMessage);
+          logger.info("Enabling AES cipher for client channel {}", client);
+          cipher.addToChannel(channel);
         } else {
           SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
         }

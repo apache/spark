@@ -1442,11 +1442,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.authenticate.encryption.aes.cipher.keySizeBits</code></td>
+  <td><code>spark.authenticate.encryption.aes.cipher.keySize</code></td>
   <td>16</td>
   <td>
     The bytes of AES cipher key which is effective when AES cipher is enabled. AES
-    works with 16, 24 and 32 bit keys.
+    works with 16, 24 and 32 bytes keys.
   </td>
 </tr>
 <tr>

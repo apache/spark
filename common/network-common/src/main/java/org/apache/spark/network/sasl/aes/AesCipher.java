@@ -50,15 +50,14 @@ public class AesCipher {
   private static final Logger logger = LoggerFactory.getLogger(AesCipher.class);
   public static final String ENCRYPTION_HANDLER_NAME = "AesEncryption";
   public static final String DECRYPTION_HANDLER_NAME = "AesDecryption";
+  public static final int STREAM_BUFFER_SIZE = 1024 * 32;
+  public static final String TRANSFORM = "AES/CTR/NoPadding";
 
   private final SecretKeySpec inKeySpec;
   private final IvParameterSpec inIvSpec;
   private final SecretKeySpec outKeySpec;
   private final IvParameterSpec outIvSpec;
   private Properties properties;
-
-  public static final int STREAM_BUFFER_SIZE = 1024 * 32;
-  public static final String TRANSFORM = "AES/CTR/NoPadding";
 
   public AesCipher(
       Properties properties,
@@ -84,7 +83,7 @@ public class AesCipher {
    * @return Return output crypto stream for encryption.
    * @throws IOException
    */
-  public CryptoOutputStream CreateOutputStream(WritableByteChannel ch) throws IOException {
+  public CryptoOutputStream createOutputStream(WritableByteChannel ch) throws IOException {
     return new CryptoOutputStream(TRANSFORM, properties, ch, outKeySpec, outIvSpec);
   }
 
@@ -94,7 +93,7 @@ public class AesCipher {
    * @return Return input crypto stream for decryption.
    * @throws IOException
    */
-  public CryptoInputStream CreateInputStream(ReadableByteChannel ch) throws IOException {
+  public CryptoInputStream createInputStream(ReadableByteChannel ch) throws IOException {
     return new CryptoInputStream(TRANSFORM, properties, ch, inKeySpec, inIvSpec);
   }
 
@@ -114,8 +113,8 @@ public class AesCipher {
    * @param conf is the local transport configuration.
    * @return Config message for sending.
    */
-  public static AesConfigMessage createConfigMessage(TransportConf conf){
-    int keySize = conf.AesCipherKeySize();
+  public static AesConfigMessage createConfigMessage(TransportConf conf) {
+    int keySize = conf.aesCipherKeySize();
     Properties properties = new Properties();
 
     try {
@@ -145,7 +144,7 @@ public class AesCipher {
 
     AesEncryptHandler(AesCipher cipher) throws IOException {
       byteChannel = new ByteArrayWritableChannel(AesCipher.STREAM_BUFFER_SIZE);
-      cos = cipher.CreateOutputStream(byteChannel);
+      cos = cipher.createOutputStream(byteChannel);
     }
 
     @Override
@@ -165,46 +164,36 @@ public class AesCipher {
   }
 
   private static class AesDecryptHandler extends ChannelInboundHandlerAdapter {
-    private static Logger logger = LoggerFactory.getLogger(AesDecryptHandler.class);
     private final CryptoInputStream cis;
     private final ByteArrayReadableChannel byteChannel;
-    private long totalDecrypted;
 
     AesDecryptHandler(AesCipher cipher) throws IOException {
-      byteChannel = new ByteArrayReadableChannel(AesCipher.STREAM_BUFFER_SIZE);
-      cis = cipher.CreateInputStream(byteChannel);
-      this.totalDecrypted = 0;
+      byteChannel = new ByteArrayReadableChannel();
+      cis = cipher.createInputStream(byteChannel);
     }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
       ByteBuf in = (ByteBuf) data;
+      byteChannel.feedData(in);
 
-      while (in.isReadable()) {
-        byteChannel.feedData(in);
-        int i;
-        byte[] decryptedData = new byte[byteChannel.length()];
-        int offset = 0;
-        while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > 0) {
-          offset += i;
-          if (offset >= decryptedData.length) {
-            break;
-          }
+      int i;
+      byte[] decryptedData = new byte[byteChannel.length()];
+      int offset = 0;
+      while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > 0) {
+        offset += i;
+        if (offset >= decryptedData.length) {
+          break;
         }
-
-        totalDecrypted += offset;
-        byteChannel.reset();
-        ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, decryptedData.length));
       }
 
-      in.release();
+      ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, decryptedData.length));
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
       try {
         cis.close();
-        logger.debug("{} channel decrypted {} bytes.", ctx.channel(), totalDecrypted);
       } finally {
         super.channelInactive(ctx);
       }
@@ -264,22 +253,20 @@ public class AesCipher {
           encryptMore();
         }
 
-        int byteWritten = currentEncrypted.remaining();
+        int bytesWritten = currentEncrypted.remaining();
         target.write(currentEncrypted);
-        byteWritten -= currentEncrypted.remaining();
-        transferred += byteWritten;
+        bytesWritten -= currentEncrypted.remaining();
+        transferred += bytesWritten;
         if (!currentEncrypted.hasRemaining()) {
           currentEncrypted = null;
           byteEncChannel.reset();
         }
       } while (transferred < count());
 
-      logger.debug("{} transferred total {} bytes", target, transferred);
-
       return transferred;
     }
 
-    public void encryptMore() throws IOException {
+    private void encryptMore() throws IOException {
       byteRawChannel.reset();
 
       if (isByteBuf) {

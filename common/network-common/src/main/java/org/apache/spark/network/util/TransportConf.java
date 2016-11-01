@@ -178,7 +178,7 @@ public class TransportConf {
   /**
    * The trigger for enabling AES encryption.
    */
-  public boolean AesEncryptionEnabled() {
+  public boolean aesEncryptionEnabled() {
     return conf.getBoolean("spark.authenticate.encryption.aes.enabled", false);
   }
 
@@ -186,7 +186,7 @@ public class TransportConf {
    * The bytes of AES cipher key which is effective when AES cipher is enabled. Notice that
    * the length should be 16, 24 or 32 bytes.
    */
-  public int AesCipherKeySize() {
+  public int aesCipherKeySize() {
     return conf.getInt("spark.authenticate.encryption.aes.cipher.keySize", 16);
   }
 }

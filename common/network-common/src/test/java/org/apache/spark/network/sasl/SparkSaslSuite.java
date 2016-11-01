@@ -383,7 +383,7 @@ public class SparkSaslSuite {
     try {
       final TransportConf conf = new TransportConf("rpc", new SystemPropertyConfigProvider());
       final TransportConf spyConf = spy(conf);
-      doReturn(true).when(spyConf).AesEncryptionEnabled();
+      doReturn(true).when(spyConf).aesEncryptionEnabled();
 
       StreamManager sm = mock(StreamManager.class);
       when(sm.getChunk(anyLong(), anyInt())).thenAnswer(new Answer<ManagedBuffer>() {
@@ -396,7 +396,7 @@ public class SparkSaslSuite {
       RpcHandler rpcHandler = mock(RpcHandler.class);
       when(rpcHandler.getStreamManager()).thenReturn(sm);
 
-      byte[] data = new byte[ 256 * 1024 * 1024];
+      byte[] data = new byte[256 * 1024 * 1024];
       new Random().nextBytes(data);
       Files.write(data, file);
 
@@ -458,7 +458,7 @@ public class SparkSaslSuite {
 
       if (aesEnable) {
         conf = spy(conf);
-        doReturn(true).when(conf).AesEncryptionEnabled();
+        doReturn(true).when(conf).aesEncryptionEnabled();
       }
 
       SecretKeyHolder keyHolder = mock(SecretKeyHolder.class);
