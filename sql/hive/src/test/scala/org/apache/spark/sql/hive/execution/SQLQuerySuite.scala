@@ -1566,14 +1566,26 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-10562: partition by column with mixed case name") {
-    withTable("tbl10562") {
-      val df = Seq(2012 -> "a").toDF("Year", "val")
-      df.write.partitionBy("Year").saveAsTable("tbl10562")
-      checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
-      checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
-      checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
-      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
-      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
+    def runOnce() {
+      withTable("tbl10562") {
+        val df = Seq(2012 -> "a").toDF("Year", "val")
+        df.write.partitionBy("Year").saveAsTable("tbl10562")
+        checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
+        checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
+        checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
+        checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
+        checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
+      }
+    }
+    try {
+      runOnce()
+    } catch {
+      case t: Throwable =>
+        // Retry to gather more test data. TODO(ekl) revert this once we deflake this test.
+        runOnce()
+        runOnce()
+        runOnce()
+        throw t
     }
   }
 
@@ -1958,6 +1970,39 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }.getMessage
         assert(m2.contains("LOAD DATA input path allows only filename wildcard"))
       }
+    }
+  }
+
+  test("Insert overwrite with partition") {
+    withTable("tableWithPartition") {
+      sql(
+        """
+          |CREATE TABLE tableWithPartition (key int, value STRING)
+          |PARTITIONED BY (part STRING)
+        """.stripMargin)
+      sql(
+        """
+          |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part = '1')
+          |SELECT * FROM default.src
+        """.stripMargin)
+       checkAnswer(
+         sql("SELECT part, key, value FROM tableWithPartition"),
+         sql("SELECT '1' AS part, key, value FROM default.src")
+       )
+
+      sql(
+        """
+          |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part = '1')
+          |SELECT * FROM VALUES (1, "one"), (2, "two"), (3, null) AS data(key, value)
+        """.stripMargin)
+      checkAnswer(
+        sql("SELECT part, key, value FROM tableWithPartition"),
+        sql(
+          """
+            |SELECT '1' AS part, key, value FROM VALUES
+            |(1, "one"), (2, "two"), (3, null) AS data(key, value)
+          """.stripMargin)
+      )
     }
   }
 

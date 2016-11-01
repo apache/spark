@@ -171,11 +171,14 @@ object CSVRelation extends Logging {
 
 private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
-      stagingDir: String,
-      fileNamePrefix: String,
+      path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    new CsvOutputWriter(stagingDir, fileNamePrefix, dataSchema, context, params)
+    new CsvOutputWriter(path, dataSchema, context, params)
+  }
+
+  override def getFileExtension(context: TaskAttemptContext): String = {
+    ".csv" + TextOutputWriter.getCompressionExtension(context)
   }
 }
 

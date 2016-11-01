@@ -135,11 +135,14 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       dataSchema: StructType): OutputWriterFactory = {
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new LibSVMOutputWriter(stagingDir, fileNamePrefix, dataSchema, context)
+        new LibSVMOutputWriter(path, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".libsvm" + TextOutputWriter.getCompressionExtension(context)
       }
     }
   }
