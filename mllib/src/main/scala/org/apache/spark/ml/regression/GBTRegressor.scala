@@ -98,10 +98,16 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /**
    * Note that the loss-based impurity is currently NOT compatible with absolute loss.
+   *
+   * Impurity-setting is currently only offered as a way to recover pre-2.0.2 Spark GBT
+   * behavior (which is Stochastic Gradient Boosting): set impurity to `"variance"` for this.
    * @param value new impurity value
    * @return this
    */
   @Since("1.4.0")
+  @deprecated(
+    "Control over impurity will be removed, as it is an implementation detail of GBTs",
+    "2.0.2")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   // Parameters from TreeEnsembleParams:

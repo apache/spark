@@ -516,8 +516,11 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
    * Also used for terminal leaf value prediction.
    * Supported: "loss-based" (default) and "variance"
    *
-   * @group param
+   * @group expertParam
    */
+  @deprecated(
+      "Control over impurity will be removed, as it is an implementation detail of GBTs",
+      "2.0.2")
   override val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${GBTClassifierParams.supportedImpurities.mkString(", ")}",
@@ -590,8 +593,11 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
    * Also used for terminal leaf value prediction.
    * Supported: "loss-based" and "variance" (default)
    *
-   * @group param
+   * @group expertParam
    */
+  @deprecated(
+    "Control over impurity will be removed, as it is an implementation detail of GBTs",
+    "2.0.2")
   override val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${GBTRegressorParams.supportedImpurities.mkString(", ")}",

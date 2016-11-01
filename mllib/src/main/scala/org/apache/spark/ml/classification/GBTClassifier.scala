@@ -59,9 +59,8 @@ import org.apache.spark.sql.types.DoubleType
  *  - In the case of squared error loss, variance impurity and mean leaf estimates happen
  *    to make the SGB and TreeBoost algorithms identical.
  *
- * [[GBTClassifier]] will use the usual `"loss-based"` impurity by default, conforming to
+ * [[GBTClassifier]] will use the `"loss-based"` impurity by default, conforming to
  * TreeBoost behavior. For SGB, set impurity to `"variance"`.
- * To use of TreeBoost, set impurity to `"loss-based"`.
  *
  * Currently, however, even TreeBoost behavior uses variance impurity for split selection for
  * ease and speed. This is the approach `R`'s
@@ -70,7 +69,7 @@ import org.apache.spark.sql.types.DoubleType
 @Since("1.4.0")
 class GBTClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
-  extends Classifier[Vector, GBTClassifier, GBTClassificationModel]
+  extends Predictor[Vector, GBTClassifier, GBTClassificationModel]
   with GBTClassifierParams with DefaultParamsWritable with Logging {
 
   @Since("1.4.0")
@@ -101,6 +100,18 @@ class GBTClassifier @Since("1.4.0") (
 
   @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
+
+  /**
+   * Impurity-setting is currently only offered as a way to recover pre-2.0.2 Spark GBT
+   * behavior (which is Stochastic Gradient Boosting): set impurity to `"variance"` for this.
+   * @param value new impurity value
+   * @return this
+   */
+  @Since("1.4.0")
+  @deprecated(
+    "Control over impurity will be removed, as it is an implementation detail of GBTs",
+    "2.0.2")
+  override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   // Parameters from TreeEnsembleParams:
 
