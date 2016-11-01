@@ -47,19 +47,19 @@ public class ExpressionInfo {
         return db;
     }
 
-    public ExpressionInfo(String className, String name, String usage, String extended, String db) {
+    public ExpressionInfo(String className, String db, String name, String usage, String extended) {
         this.className = className;
+        this.db = db;
         this.name = name;
         this.usage = usage;
         this.extended = extended;
-        this.db = db;
     }
 
     public ExpressionInfo(String className, String name) {
-        this(className, name, null, null, null);
+        this(className, null, name, null, null);
     }
 
     public ExpressionInfo(String className, String db, String name) {
-        this(className, name, null, null, db);
+        this(className, db, name, null, null);
     }
 }
