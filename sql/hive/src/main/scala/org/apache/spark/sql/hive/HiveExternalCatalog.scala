@@ -1008,6 +1008,27 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   // --------------------------------------------------------------------------
+  // Columns
+  // --------------------------------------------------------------------------
+
+  override def alterColumnComments(
+      db: String,
+      table: String,
+      columnComments: Map[String, String]): Unit = withClient {
+    val oldTable = client.getTable(db, table)
+    val newSchema = oldTable.schema.fields.map { field =>
+      // If `columns` contains field name, update the field with new comment,
+      // else respect the field.
+      columnComments.get(field.name).map(field.withComment(_)).getOrElse(field)
+    }
+    client.alterTable(oldTable.copy(schema = StructType(newSchema)))
+  }
+
+  override def listColumns(db: String, table: String): Seq[StructField] = withClient {
+    client.getTable(db, table).schema.fields
+  }
+
+  // --------------------------------------------------------------------------
   // Functions
   // --------------------------------------------------------------------------
 
@@ -1049,7 +1070,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireDbExists(db)
     client.listFunctions(db, pattern)
   }
-
 }
 
 object HiveExternalCatalog {

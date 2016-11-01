@@ -89,6 +89,8 @@ statement
         SET TBLPROPERTIES tablePropertyList                            #setTableProperties
     | ALTER (TABLE | VIEW) tableIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
+    | ALTER (TABLE | VIEW) tableIdentifier
+        CHANGE (COLUMN)? changeColTypeList                             #changeColumns
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
@@ -591,6 +593,14 @@ colTypeList
 
 colType
     : identifier dataType (COMMENT STRING)?
+    ;
+
+changeColTypeList
+    : changeColType (',' changeColType)*
+    ;
+
+changeColType
+    : identifier colType (FIRST | AFTER identifier)?
     ;
 
 complexColTypeList

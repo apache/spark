@@ -877,6 +877,21 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
+   * Create a [[AlterTableChangeColumnsCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table CHANGE COLUMN `col` `col` dataType "comment" (FIRST | AFTER `otherCol`)
+   *   [, `col2` `col2` dataType "comment" (FIRST | AFTER `otherCol`), ...]
+   *   ALTER VIEW view CHANGE COLUMN `col` `col` dataType "comment" (FIRST | AFTER `otherCol`)
+   *   [, `col2` `col2` dataType "comment" (FIRST | AFTER `otherCol`), ...]
+   * }}}
+   */
+//  override def visitChangeColumns(ctx: ChangeColumnsContext): LogicalPlan = withOrigin(ctx) {
+//    AlterTableChangeColumnsCommand()
+//  }
+
+  /**
    * Create location string.
    */
   override def visitLocationSpec(ctx: LocationSpecContext): String = withOrigin(ctx) {

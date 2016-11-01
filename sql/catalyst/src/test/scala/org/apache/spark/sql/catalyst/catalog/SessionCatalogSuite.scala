@@ -946,6 +946,54 @@ class SessionCatalogSuite extends SparkFunSuite {
   }
 
   // --------------------------------------------------------------------------
+  // Columns
+  // --------------------------------------------------------------------------
+
+  test("alter column comments") {
+    val externalCatalog = newBasicCatalog()
+    val sessionCatalog = new SessionCatalog(externalCatalog)
+    assert(columnsEqual(externalCatalog.listColumns("db2", "tbl1"), schema.fields.toList))
+    val columnComments = Map(field1.name -> "insert comment", field2.name -> s"^*`%?",
+      field3.name -> "change comment")
+    sessionCatalog.alterColumnComments(TableIdentifier("tbl1", Some("db2")), columnComments)
+    val newColumns = field1.withComment("insert comment") :: field2.withComment(s"^*`%?") ::
+      field3.withComment("change comment") :: field4 :: Nil
+    assert(columnsEqual(externalCatalog.listColumns("db2", "tbl1"), newColumns))
+  }
+
+  test("alter column comments when database/table does not exist") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val columnComments = Map(field1.name -> "insert comment")
+    intercept[NoSuchDatabaseException] {
+      catalog.alterColumnComments(TableIdentifier("tbl1", Some("unknown_db")), columnComments)
+    }
+    intercept[NoSuchTableException] {
+      catalog.alterColumnComments(TableIdentifier("unknown_table", Some("db2")), columnComments)
+    }
+  }
+
+  test("alter column comments when column does not exist") {
+    val externalCatalog = newBasicCatalog()
+    val sessionCatalog = new SessionCatalog(externalCatalog)
+    val columnComments = Map("unknown_col" -> "insert comment")
+    sessionCatalog.alterColumnComments(TableIdentifier("tbl1", Some("db2")), columnComments)
+    // Columns are not changed.
+    assert(columnsEqual(externalCatalog.listColumns("db2", "tbl1"), schema.fields.toList))
+  }
+
+  test("list columns") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    assert(columnsEqual(
+      catalog.listColumns(TableIdentifier("tbl1", Some("db2"))), schema.fields.toList))
+    intercept[NoSuchDatabaseException] {
+      catalog.listColumns(TableIdentifier("tbl1", Some("unknown_db")))
+    }
+    intercept[NoSuchTableException] {
+      catalog.listColumns(TableIdentifier("unknown_table", Some("db2")))
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // Functions
   // --------------------------------------------------------------------------
 

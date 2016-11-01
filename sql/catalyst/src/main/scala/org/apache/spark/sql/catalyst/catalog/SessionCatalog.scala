@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.types.StructField
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -836,6 +837,40 @@ class SessionCatalog(
             s"in table '${table.identifier}'")
       }
     }
+  }
+
+  // ----------------------------------------------------------------------------
+  // Columns
+  // ----------------------------------------------------------------------------
+  // All methods in this category interact directly with the underlying catalog.
+  // These methods are concerned with only metastore tables.
+  // ----------------------------------------------------------------------------
+
+  /**
+   * Alter one or more columns(s)'s comment, assuming they exist.
+   *
+   * Note: If the underlying implementation does not support altering a certain field,
+   * this becomes a no-op.
+   */
+  def alterColumnComments(
+      tableName: TableIdentifier,
+      columnComments: Map[String, String]): Unit = {
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(tableName.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
+    externalCatalog.alterColumnComments(db, table, columnComments)
+  }
+
+  /**
+   * List the metadata of all columns that belong to the specified table, assuming it exists.
+   */
+  def listColumns(tableName: TableIdentifier): Seq[StructField] = {
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(tableName.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
+    externalCatalog.listColumns(db, table)
   }
 
   // ----------------------------------------------------------------------------

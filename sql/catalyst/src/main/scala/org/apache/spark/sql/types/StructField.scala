@@ -74,4 +74,11 @@ case class StructField(
   def getComment(): Option[String] = {
     if (metadata.contains("comment")) Option(metadata.getString("comment")) else None
   }
+
+  /**
+   * Return the full description of the StructField.
+   */
+  def getDesc(): String = {
+    s"StructField($name,$dataType,$nullable$metadata)"
+  }
 }
