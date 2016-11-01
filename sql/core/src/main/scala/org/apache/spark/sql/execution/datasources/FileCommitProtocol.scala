@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 
 
 object FileCommitProtocol {
-  class TaskCommitMessage(obj: Any) extends Serializable
+  class TaskCommitMessage(val obj: Any) extends Serializable
 
   object EmptyTaskCommitMessage extends TaskCommitMessage(Unit)
 
