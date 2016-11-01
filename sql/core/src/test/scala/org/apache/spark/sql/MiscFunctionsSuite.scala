@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.Timestamp
-
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.Decimal
 
 class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -33,47 +30,6 @@ class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
         s"reflect('$className', 'method1', a, b)",
         s"java_method('$className', 'method1', a, b)"),
       Row("m1one", "m1one"))
-  }
-
-  test("reflect and java_method throw an analysis exception for unsupported types") {
-    val df = Seq((new Timestamp(1), Decimal(10))).toDF("a", "b")
-    val className = ReflectClass.getClass.getName.stripSuffix("$")
-    val messageOne = intercept[AnalysisException] {
-      df.selectExpr(
-        s"reflect('$className', 'method1', a, b)").collect()
-    }.getMessage
-
-    assert(messageOne.contains(
-      "arguments from the third require boolean, byte, short, " +
-        "integer, long, float, double or string expressions"))
-
-    val messageTwo = intercept[AnalysisException] {
-      df.selectExpr(
-        s"java_method('$className', 'method1', a, b)").collect()
-    }.getMessage
-
-    assert(messageTwo.contains(
-      "arguments from the third require boolean, byte, short, " +
-        "integer, long, float, double or string expressions"))
-  }
-
-  test("reflect and java_method throw an analysis exception for non-existing method/class") {
-    val df = Seq((1, "one")).toDF("a", "b")
-    val className = ReflectClass.getClass.getName.stripSuffix("$")
-    val messageOne = intercept[AnalysisException] {
-      df.selectExpr(
-        s"reflect('$className', 'abcde', a, b)").collect()
-    }.getMessage
-
-    assert(messageOne.contains(
-      "cannot find a static method that matches the argument types in"))
-
-    val messageTwo = intercept[AnalysisException] {
-      df.selectExpr(
-        s"reflect('abcd', 'method1', a, b)").collect()
-    }.getMessage
-
-    assert(messageTwo.contains("class abcd not found"))
   }
 }
 
