@@ -448,7 +448,7 @@ private[spark] class MesosClusterScheduler(
     }
     desc.schedulerProperties
       .filter { case (key, _) => !replicatedOptionsBlacklist.contains(key) }
-      .foreach { case (key, value) => options ++= Seq("--conf", s"$key=${shellEscape(value)}") }
+      .foreach { case (key, value) => options ++= Seq("--conf", s""""$key=${shellEscape(value)}"""".stripMargin) }
     options
   }
 
