@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -349,12 +350,11 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
  * Options for writing new data into a table.
  *
  * @param enabled whether to overwrite existing data in the table.
- * @param specificPartition only data in the specified partition will be overwritten. The map is
- *                          from partition keys to values (cast to string).
+ * @param specificPartition only data in the specified partition will be overwritten.
  */
 case class OverwriteOptions(
     enabled: Boolean,
-    specificPartition: Option[Map[String, String]] = None) {
+    specificPartition: Option[CatalogTypes.TablePartitionSpec] = None) {
   if (specificPartition.isDefined) {
     assert(enabled, "Overwrite must be enabled when specifying a partition to overwrite.")
   }
