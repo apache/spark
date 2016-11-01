@@ -558,7 +558,7 @@ class BlockManagerPrioritizerReplicationSuite extends BlockManagerReplicationBeh
   override val conf: SparkConf = new SparkConf(false).set("spark.app.id", "test")
   conf.set("spark.kryoserializer.buffer", "1m")
   conf.set(
-    "spark.replication.topologyawareness.prioritizer",
+    "spark.storage.replication.policy",
     classOf[ObjectivesBasedReplicationPolicy].getName)
   conf.set(
     "spark.storage.replication.topologyMapper",
