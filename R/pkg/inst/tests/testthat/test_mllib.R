@@ -410,6 +410,21 @@ test_that("spark.mlp", {
   model <- spark.mlp(df, layers = c(4, 5, 4, 3), maxIter = 10, seed = 10)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 2, 1, 2, 2, 1, 0, 0, 1))
+
+  # test initialWeights
+  model <- spark.mlp(df, layers = c(4, 3), maxIter = 2, initialWeights =
+    c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1))
+
+  model <- spark.mlp(df, layers = c(4, 3), maxIter = 2, initialWeights =
+    c(0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 5.0, 5.0, 5.0, 5.0, 9.0, 9.0, 9.0, 9.0, 9.0))
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1))
+
+  model <- spark.mlp(df, layers = c(4, 3), maxIter = 2)
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 12), c(1, 1, 1, 1, 0, 1, 0, 2, 1, 0, 0, 1))
 })
 
 test_that("spark.naiveBayes", {
@@ -585,6 +600,61 @@ test_that("spark.isotonicRegression", {
   expect_equal(result, summary(model2))
 
   unlink(modelPath)
+})
+
+test_that("spark.logit", {
+  # test binary logistic regression
+  label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
+  feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
+  binary_data <- as.data.frame(cbind(label, feature))
+  binary_df <- createDataFrame(binary_data)
+
+  blr_model <- spark.logit(binary_df, label ~ feature, thresholds = 1.0)
+  blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
+  expect_equal(blr_predict$prediction, c(0, 0, 0, 0, 0))
+  blr_model1 <- spark.logit(binary_df, label ~ feature, thresholds = 0.0)
+  blr_predict1 <- collect(select(predict(blr_model1, binary_df), "prediction"))
+  expect_equal(blr_predict1$prediction, c(1, 1, 1, 1, 1))
+
+  # test summary of binary logistic regression
+  blr_summary <- summary(blr_model)
+  blr_fmeasure <- collect(select(blr_summary$fMeasureByThreshold, "threshold", "F-Measure"))
+  expect_equal(blr_fmeasure$threshold, c(0.8221347, 0.7884005, 0.6674709, 0.3785437, 0.3434487),
+               tolerance = 1e-4)
+  expect_equal(blr_fmeasure$"F-Measure", c(0.5000000, 0.8000000, 0.6666667, 0.8571429, 0.7500000),
+               tolerance = 1e-4)
+  blr_precision <- collect(select(blr_summary$precisionByThreshold, "threshold", "precision"))
+  expect_equal(blr_precision$precision, c(1.0000000, 1.0000000, 0.6666667, 0.7500000, 0.6000000),
+               tolerance = 1e-4)
+  blr_recall <- collect(select(blr_summary$recallByThreshold, "threshold", "recall"))
+  expect_equal(blr_recall$recall, c(0.3333333, 0.6666667, 0.6666667, 1.0000000, 1.0000000),
+               tolerance = 1e-4)
+
+  # test model save and read
+  modelPath <- tempfile(pattern = "spark-logisticRegression", fileext = ".tmp")
+  write.ml(blr_model, modelPath)
+  expect_error(write.ml(blr_model, modelPath))
+  write.ml(blr_model, modelPath, overwrite = TRUE)
+  blr_model2 <- read.ml(modelPath)
+  blr_predict2 <- collect(select(predict(blr_model2, binary_df), "prediction"))
+  expect_equal(blr_predict$prediction, blr_predict2$prediction)
+  expect_error(summary(blr_model2))
+  unlink(modelPath)
+
+  # test multinomial logistic regression
+  label <- c(0.0, 1.0, 2.0, 0.0, 0.0)
+  feature1 <- c(4.845940, 5.64480, 7.430381, 6.464263, 5.555667)
+  feature2 <- c(2.941319, 2.614812, 2.162451, 3.339474, 2.970987)
+  feature3 <- c(1.322733, 1.348044, 3.861237, 9.686976, 3.447130)
+  feature4 <- c(1.3246388, 0.5510444, 0.9225810, 1.2147881, 1.6020842)
+  data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
+  df <- createDataFrame(data)
+
+  model <- spark.logit(df, label ~., family = "multinomial", thresholds = c(0, 1, 1))
+  predict1 <- collect(select(predict(model, df), "prediction"))
+  expect_equal(predict1$prediction, c(0, 0, 0, 0, 0))
+  # Summary of multinomial logistic regression is not implemented yet
+  expect_error(summary(model))
 })
 
 test_that("spark.gaussianMixture", {
@@ -799,6 +869,74 @@ test_that("spark.kstest", {
   expect_equal(stats$p.value, rStats$p.value, tolerance = 1e-4)
   expect_equal(stats$statistic, unname(rStats$statistic), tolerance = 1e-4)
   expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
+})
+
+test_that("spark.randomForest Regression", {
+  data <- suppressWarnings(createDataFrame(longley))
+  model <- spark.randomForest(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
+                              numTrees = 1)
+
+  predictions <- collect(predict(model, data))
+  expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
+                                         63.221, 63.639, 64.989, 63.761,
+                                         66.019, 67.857, 68.169, 66.513,
+                                         68.655, 69.564, 69.331, 70.551),
+               tolerance = 1e-4)
+
+  stats <- summary(model)
+  expect_equal(stats$numTrees, 1)
+  expect_error(capture.output(stats), NA)
+  expect_true(length(capture.output(stats)) > 6)
+
+  model <- spark.randomForest(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
+                              numTrees = 20, seed = 123)
+  predictions <- collect(predict(model, data))
+  expect_equal(predictions$prediction, c(60.379, 61.096, 60.636, 62.258,
+                                         63.736, 64.296, 64.868, 64.300,
+                                         66.709, 67.697, 67.966, 67.252,
+                                         68.866, 69.593, 69.195, 69.658),
+               tolerance = 1e-4)
+  stats <- summary(model)
+  expect_equal(stats$numTrees, 20)
+
+  modelPath <- tempfile(pattern = "spark-randomForestRegression", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$formula, stats2$formula)
+  expect_equal(stats$numFeatures, stats2$numFeatures)
+  expect_equal(stats$features, stats2$features)
+  expect_equal(stats$featureImportances, stats2$featureImportances)
+  expect_equal(stats$numTrees, stats2$numTrees)
+  expect_equal(stats$treeWeights, stats2$treeWeights)
+
+  unlink(modelPath)
+})
+
+test_that("spark.randomForest Classification", {
+  data <- suppressWarnings(createDataFrame(iris))
+  model <- spark.randomForest(data, Species ~ Petal_Length + Petal_Width, "classification",
+                              maxDepth = 5, maxBins = 16)
+
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$numTrees, 20)
+  expect_error(capture.output(stats), NA)
+  expect_true(length(capture.output(stats)) > 6)
+
+  modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$depth, stats2$depth)
+  expect_equal(stats$numNodes, stats2$numNodes)
+  expect_equal(stats$numClasses, stats2$numClasses)
+
+  unlink(modelPath)
 })
 
 sparkR.session.stop()

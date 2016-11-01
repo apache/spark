@@ -212,7 +212,7 @@ test_that("createDataFrame uses files for large objects", {
   # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
   conf <- callJMethod(sparkSession, "conf")
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
-  df <- createDataFrame(iris)
+  df <- suppressWarnings(createDataFrame(iris))
 
   # Resetting the conf back to default value
   callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
@@ -388,6 +388,19 @@ test_that("create DataFrame with different data types", {
                                 c("d", "string"), c("e", "date"), c("f", "timestamp")))
   expect_equal(count(df), 1)
   expect_equal(collect(df), data.frame(l, stringsAsFactors = FALSE))
+})
+
+test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
+  df <- data.frame(
+    id = 1:2,
+    time = c(as.POSIXlt("2016-01-10"), NA),
+    date = c(as.Date("2016-10-01"), NA))
+
+  DF <- collect(createDataFrame(df))
+  expect_true(is.na(DF$date[2]))
+  expect_equal(DF$date[1], as.Date("2016-10-01"))
+  expect_true(is.na(DF$time[2]))
+  expect_equal(DF$time[1], as.POSIXlt("2016-01-10"))
 })
 
 test_that("create DataFrame with complex types", {
@@ -783,7 +796,7 @@ test_that("multiple pipeline transformations result in an RDD with the correct v
   expect_false(collectRDD(second)[[3]]$testCol)
 })
 
-test_that("cache(), persist(), and unpersist() on a DataFrame", {
+test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", {
   df <- read.json(jsonPath)
   expect_false(df@env$isCached)
   cache(df)
@@ -794,6 +807,9 @@ test_that("cache(), persist(), and unpersist() on a DataFrame", {
 
   persist(df, "MEMORY_AND_DISK")
   expect_true(df@env$isCached)
+
+  expect_equal(storageLevel(df),
+    "MEMORY_AND_DISK - StorageLevel(disk, memory, deserialized, 1 replicas)")
 
   unpersist(df)
   expect_false(df@env$isCached)
@@ -832,7 +848,7 @@ test_that("names() colnames() set the column names", {
   expect_equal(names(df)[1], "col3")
 
   expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
-               "Colum names cannot contain the '.' symbol.")
+               "Column names cannot contain the '.' symbol.")
   expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
   expect_error(colnames(df) <- c("a"),
                "Column names must have the same length as the number of columns in the dataset.")
@@ -1572,7 +1588,7 @@ test_that("filter() on a DataFrame", {
   #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint
 })
 
-test_that("join() and merge() on a DataFrame", {
+test_that("join(), crossJoin() and merge() on a DataFrame", {
   df <- read.json(jsonPath)
 
   mockLines2 <- c("{\"name\":\"Michael\", \"test\": \"yes\"}",
@@ -1583,7 +1599,14 @@ test_that("join() and merge() on a DataFrame", {
   writeLines(mockLines2, jsonPath2)
   df2 <- read.json(jsonPath2)
 
-  joined <- join(df, df2)
+  # inner join, not cartesian join
+  expect_equal(count(where(join(df, df2), df$name == df2$name)), 3)
+  # cartesian join
+  expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
+               paste0(".*(org.apache.spark.sql.AnalysisException: Detected cartesian product for",
+                      " INNER join between logical plans).*"))
+
+  joined <- crossJoin(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
   expect_equal(count(joined), 12)
   expect_equal(names(collect(joined)), c("age", "name", "name", "test"))

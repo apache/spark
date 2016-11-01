@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -31,7 +32,7 @@ import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.StaticSQLConf.SCHEMA_STRING_LENGTH_THRESHOLD
+import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -1320,8 +1321,34 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sharedState.externalCatalog.getTable("default", "t")
       }.getMessage
       assert(e.contains(s"Could not read schema from the hive metastore because it is corrupted"))
+
+      withDebugMode {
+        val tableMeta = sharedState.externalCatalog.getTable("default", "t")
+        assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
+        assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
+      }
     } finally {
       hiveClient.dropTable("default", "t", ignoreIfNotExists = true, purge = true)
+    }
+  }
+
+  test("should keep data source entries in table properties when debug mode is on") {
+    withDebugMode {
+      val newSession = sparkSession.newSession()
+      newSession.sql("CREATE TABLE abc(i int) USING json")
+      val tableMeta = newSession.sessionState.catalog.getTableMetadata(TableIdentifier("abc"))
+      assert(tableMeta.properties(DATASOURCE_SCHEMA_NUMPARTS).toInt == 1)
+      assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
+    }
+  }
+
+  private def withDebugMode(f: => Unit): Unit = {
+    val previousValue = sparkSession.sparkContext.conf.get(DEBUG_MODE)
+    try {
+      sparkSession.sparkContext.conf.set(DEBUG_MODE, true)
+      f
+    } finally {
+      sparkSession.sparkContext.conf.set(DEBUG_MODE, previousValue)
     }
   }
 }

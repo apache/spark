@@ -1155,11 +1155,6 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
 
     `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
     categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
-    It is possible that the number of buckets used will be less than this value, for example, if
-    there are too few distinct values of the input to create enough distinct quantiles. Note also
-    that NaN values are handled specially and placed into their own bucket. For example, if 4
-    buckets are used, then non-NaN data will be put into buckets(0-3), but NaNs will be counted in
-    a special bucket(4).
     The bin ranges are chosen using an approximate algorithm (see the documentation for
     :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
     The precision of the approximation can be controlled with the
@@ -2494,21 +2489,30 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     formula = Param(Params._dummy(), "formula", "R model formula",
                     typeConverter=TypeConverters.toString)
 
+    forceIndexLabel = Param(Params._dummy(), "forceIndexLabel",
+                            "Force to index label whether it is numeric or string",
+                            typeConverter=TypeConverters.toBoolean)
+
     @keyword_only
-    def __init__(self, formula=None, featuresCol="features", labelCol="label"):
+    def __init__(self, formula=None, featuresCol="features", labelCol="label",
+                 forceIndexLabel=False):
         """
-        __init__(self, formula=None, featuresCol="features", labelCol="label")
+        __init__(self, formula=None, featuresCol="features", labelCol="label", \
+                 forceIndexLabel=False)
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
+        self._setDefault(forceIndexLabel=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.5.0")
-    def setParams(self, formula=None, featuresCol="features", labelCol="label"):
+    def setParams(self, formula=None, featuresCol="features", labelCol="label",
+                  forceIndexLabel=False):
         """
-        setParams(self, formula=None, featuresCol="features", labelCol="label")
+        setParams(self, formula=None, featuresCol="features", labelCol="label", \
+                  forceIndexLabel=False)
         Sets params for RFormula.
         """
         kwargs = self.setParams._input_kwargs
@@ -2527,6 +2531,20 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         Gets the value of :py:attr:`formula`.
         """
         return self.getOrDefault(self.formula)
+
+    @since("2.1.0")
+    def setForceIndexLabel(self, value):
+        """
+        Sets the value of :py:attr:`forceIndexLabel`.
+        """
+        return self._set(forceIndexLabel=value)
+
+    @since("2.1.0")
+    def getForceIndexLabel(self):
+        """
+        Gets the value of :py:attr:`forceIndexLabel`.
+        """
+        return self.getOrDefault(self.forceIndexLabel)
 
     def _create_model(self, java_model):
         return RFormulaModel(java_model)
@@ -2569,9 +2587,9 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     >>> selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
     >>> model = selector.fit(df)
     >>> model.transform(df).head().selectedFeatures
-    DenseVector([1.0])
+    DenseVector([18.0])
     >>> model.selectedFeatures
-    [3]
+    [2]
     >>> chiSqSelectorPath = temp_path + "/chi-sq-selector"
     >>> selector.save(chiSqSelectorPath)
     >>> loadedSelector = ChiSqSelector.load(chiSqSelectorPath)
