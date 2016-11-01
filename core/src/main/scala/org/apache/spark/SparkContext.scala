@@ -1375,6 +1375,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
+   *
+   * @param name The name of accumulator.
    */
   def longAccumulator(name: String): LongAccumulator = {
     val acc = new LongAccumulator
@@ -1422,6 +1424,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
+   *
+   * @param name The name of accumulator.
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
@@ -1442,6 +1446,8 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
    * inputs by adding them into the list.
+   *
+   * @param name The name of accumulator.
    */
   def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
     val acc = new CollectionAccumulator[T]
