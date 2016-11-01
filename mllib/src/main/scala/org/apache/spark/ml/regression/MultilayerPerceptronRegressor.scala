@@ -175,12 +175,15 @@ private object RegressionLabelConverter {
    * Returns a vector of length 1 with the label in the 0th position
    *
    * @param labeledPoint labeled point
+   * @param min minimum label value in dataset
+   * @param max maximum label value in dataset
+   * @param standardize whether to standardize to between 0-1
    * @return pair of features and vector encoding of a label
    */
   def encodeLabeledPoint(labeledPoint: LabeledPoint, min: Double, max: Double,
-                         model: MultilayerPerceptronRegressor): (Vector, Vector) = {
+                         standardize: Boolean): (Vector, Vector) = {
     val output = Array.fill(1)(0.0)
-    if (model.getStandardizeLabels) {
+    if (standardize) {
       minimum = min
       maximum = max
       output(0) = (labeledPoint.label - min) / (max - min)
@@ -196,10 +199,11 @@ private object RegressionLabelConverter {
    * Returns the value of the 0th element of the output vector.
    *
    * @param output label encoded with a vector
+   * @param standardize whether to undo standardization
    * @return label
    */
-  def decodeLabel(output: Vector, model: MultilayerPerceptronRegressorModel): Double = {
-    if (model.getStandardizeLabels) {
+  def decodeLabel(output: Vector, standardize: Boolean): Double = {
+    if (standardize) {
       (output(0) * (maximum - minimum)) + minimum
     } else {
       output(0)
@@ -270,11 +274,11 @@ class MultilayerPerceptronRegressor @Since("2.0.0") (
         // Encode and scale labels to prepare for training.
         lpData.map(lp =>
           RegressionLabelConverter.encodeLabeledPoint(lp, minmax(1).asInstanceOf[Double],
-            minmax(0).asInstanceOf[Double], this))
+            minmax(0).asInstanceOf[Double], this.getStandardizeLabels))
       } else {
         // Encode labels to prepare for training.
         lpData.map(lp =>
-          RegressionLabelConverter.encodeLabeledPoint(lp, 0.0, 0.0, this))
+          RegressionLabelConverter.encodeLabeledPoint(lp, 0.0, 0.0, this.getStandardizeLabels))
       }
     }
     // Initialize the network architecture with the specified layer count and sizes.
@@ -358,7 +362,7 @@ class MultilayerPerceptronRegressorModel private[ml] (
    * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
   override def predict(features: Vector): Double = {
-    RegressionLabelConverter.decodeLabel(mlpModel.predict(features), this)
+    RegressionLabelConverter.decodeLabel(mlpModel.predict(features), this.getStandardizeLabels)
   }
 
   @Since("2.0.0")
