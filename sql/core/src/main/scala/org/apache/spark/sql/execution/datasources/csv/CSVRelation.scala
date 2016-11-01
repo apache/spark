@@ -171,25 +171,22 @@ object CSVRelation extends Logging {
 
 private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
-      stagingDir: String,
-      fileNamePrefix: String,
+      path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    new CsvOutputWriter(stagingDir, fileNamePrefix, dataSchema, context, params)
+    new CsvOutputWriter(path, dataSchema, context, params)
+  }
+
+  override def getFileExtension(context: TaskAttemptContext): String = {
+    ".csv" + TextOutputWriter.getCompressionExtension(context)
   }
 }
 
 private[csv] class CsvOutputWriter(
-    stagingDir: String,
-    fileNamePrefix: String,
+    path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
-
-  override val path: String = {
-    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
-    new Path(stagingDir, fileNamePrefix + ".csv" + compressionExtension).toString
-  }
 
   // create the Generator without separator inserted between 2 records
   private[this] val text = new Text()
