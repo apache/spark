@@ -90,7 +90,7 @@ statement
     | ALTER (TABLE | VIEW) tableIdentifier
         UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
     | ALTER (TABLE | VIEW) tableIdentifier
-        CHANGE (COLUMN)? changeColTypeList                             #changeColumns
+        CHANGE COLUMN? expandColTypeList                               #changeColumns
     | ALTER TABLE tableIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES tablePropertyList)?     #setTableSerDe
     | ALTER TABLE tableIdentifier (partitionSpec)?
@@ -580,6 +580,10 @@ intervalValue
     | STRING
     ;
 
+colIndex
+    : FIRST | AFTER identifier
+    ;
+
 dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
@@ -595,12 +599,12 @@ colType
     : identifier dataType (COMMENT STRING)?
     ;
 
-changeColTypeList
-    : changeColType (',' changeColType)*
+expandColTypeList
+    : expandColType (',' expandColType)*
     ;
 
-changeColType
-    : identifier colType (FIRST | AFTER identifier)?
+expandColType
+    : identifier colType colIndex?
     ;
 
 complexColTypeList

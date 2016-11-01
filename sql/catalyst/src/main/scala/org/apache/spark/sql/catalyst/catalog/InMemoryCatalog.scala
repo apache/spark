@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.io.IOException
 
-import org.apache.spark.sql.types.{StructField, StructType}
-
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -33,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * An in-memory (ephemeral) implementation of the system catalog.

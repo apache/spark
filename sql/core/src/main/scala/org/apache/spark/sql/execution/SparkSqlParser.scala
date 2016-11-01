@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation,
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, _}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -887,9 +887,20 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *   [, `col2` `col2` dataType "comment" (FIRST | AFTER `otherCol`), ...]
    * }}}
    */
-//  override def visitChangeColumns(ctx: ChangeColumnsContext): LogicalPlan = withOrigin(ctx) {
-//    AlterTableChangeColumnsCommand()
-//  }
+  override def visitChangeColumns(ctx: ChangeColumnsContext): LogicalPlan = withOrigin(ctx) {
+    val tableName = visitTableIdentifier(ctx.tableIdentifier)
+    val isView = ctx.VIEW != null
+
+    val columns = ctx.expandColTypeList.expandColType.asScala.map { col =>
+      if (col.colIndex != null) {
+        throw new AnalysisException(
+          s"Specifying column index in ALTER TABLE CHANGE COLUMN is not supported yet.")
+      }
+      col.identifier.getText -> visitColType(col.colType)
+    }.toMap
+
+    AlterTableChangeColumnsCommand(tableName, columns, isView)
+  }
 
   /**
    * Create location string.
