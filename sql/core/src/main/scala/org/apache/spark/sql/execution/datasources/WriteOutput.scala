@@ -133,7 +133,7 @@ object WriteOutput extends Logging {
               sparkAttemptNumber = taskContext.attemptNumber(),
               committer,
               iterator = iter)
-          })
+          }).flatten.distinct
 
         val commitMsgs = ret.map(_._1)
         val updatedPartitions = ret.flatMap(_._2).map(PartitioningUtils.parsePathFragment)
