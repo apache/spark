@@ -442,27 +442,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
-  test("left semi greater than predicate") {
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
-        Seq(Row(3, 1), Row(3, 2))
-      )
-    }
-  }
-
-  test("left semi greater than predicate and equal operator") {
-    checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2"),
-      Seq(Row(3, 1), Row(3, 2))
-    )
-
-    checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
-      Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
-    )
-  }
-
   test("agg") {
     checkAnswer(
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
@@ -718,17 +697,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |WHERE x.key = y.key""".stripMargin),
       testData.rdd.flatMap(
         row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
-  }
-
-  test("cartesian product join") {
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        testData3.join(testData3),
-        Row(1, null, 1, null) ::
-          Row(1, null, 2, 2) ::
-          Row(2, 2, 1, null) ::
-          Row(2, 2, 2, 2) :: Nil)
-    }
   }
 
   test("left outer join") {
@@ -1697,31 +1665,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       "org.apache.spark.sql.execution.datasources.jdbc"))
   }
 
-  test("SortMergeJoin returns wrong results when using UnsafeRows") {
-    // This test is for the fix of https://issues.apache.org/jira/browse/SPARK-10737.
-    // This bug will be triggered when Tungsten is enabled and there are multiple
-    // SortMergeJoin operators executed in the same task.
-    val confs = SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1" :: Nil
-    withSQLConf(confs: _*) {
-      val df1 = (1 to 50).map(i => (s"str_$i", i)).toDF("i", "j")
-      val df2 =
-        df1
-          .join(df1.select(df1("i")), "i")
-          .select(df1("i"), df1("j"))
-
-      val df3 = df2.withColumnRenamed("i", "i1").withColumnRenamed("j", "j1")
-      val df4 =
-        df2
-          .join(df3, df2("i") === df3("i1"))
-          .withColumn("diff", $"j" - $"j1")
-          .select(df2("i"), df2("j"), $"diff")
-
-      checkAnswer(
-        df4,
-        df1.withColumn("diff", lit(0)))
-    }
-  }
-
   test("SPARK-11303: filter should not be pushed down into sample") {
     val df = spark.range(100)
     List(true, false).foreach { withReplacement =>
@@ -2029,70 +1972,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.select(hash($"i", $"j")),
         sql("SELECT hash(i, j) from tbl")
       )
-    }
-  }
-
-  test("join with using clause") {
-    val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
-      ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")
-    val df2 = Seq(("r1c1", "r1c2", "t2r1c3"),
-      ("r2c1", "r2c2", "t2r2c3"), ("r3c1y", "r3c2", "t2r3c3")).toDF("c1", "c2", "c3")
-    val df3 = Seq((null, "r1c2", "t3r1c3"),
-      ("r2c1", "r2c2", "t3r2c3"), ("r3c1y", "r3c2", "t3r3c3")).toDF("c1", "c2", "c3")
-    withTempView("t1", "t2", "t3") {
-      df1.createOrReplaceTempView("t1")
-      df2.createOrReplaceTempView("t2")
-      df3.createOrReplaceTempView("t3")
-      // inner join with one using column
-      checkAnswer(
-        sql("SELECT * FROM t1 join t2 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") :: Nil)
-
-      // inner join with two using columns
-      checkAnswer(
-        sql("SELECT * FROM t1 join t2 using (c1, c2)"),
-        Row("r1c1", "r1c2", "t1r1c3", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "t2r2c3") :: Nil)
-
-      // Left outer join with one using column.
-      checkAnswer(
-        sql("SELECT * FROM t1 left join t2 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
-          Row("r3c1x", "r3c2", "t1r3c3", null, null) :: Nil)
-
-      // Right outer join with one using column.
-      checkAnswer(
-        sql("SELECT * FROM t1 right join t2 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
-          Row("r3c1y", null, null, "r3c2", "t2r3c3") :: Nil)
-
-      // Full outer join with one using column.
-      checkAnswer(
-        sql("SELECT * FROM t1 full outer join t2 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t2r2c3") ::
-          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
-          Row("r3c1y", null,
-            null, "r3c2", "t2r3c3") :: Nil)
-
-      // Full outer join with null value in join column.
-      checkAnswer(
-        sql("SELECT * FROM t1 full outer join t3 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", null, null) ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t3r2c3") ::
-          Row("r3c1x", "r3c2", "t1r3c3", null, null) ::
-          Row("r3c1y", null, null, "r3c2", "t3r3c3") ::
-          Row(null, null, null, "r1c2", "t3r1c3") :: Nil)
-
-      // Self join with using columns.
-      checkAnswer(
-        sql("SELECT * FROM t1 join t1 using (c1)"),
-        Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t1r1c3") ::
-          Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t1r2c3") ::
-          Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
 
