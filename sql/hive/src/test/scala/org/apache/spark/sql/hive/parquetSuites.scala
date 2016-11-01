@@ -32,22 +32,22 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
-case class ParquetData(intField: Int, stringField: String)
+case class ParquetData(intfield: Int, stringfield: String)
 // The data that also includes the partitioning key
-case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
+case class ParquetDataWithKey(p: Int, intfield: Int, stringfield: String)
 
 case class StructContainer(intStructField: Int, stringStructField: String)
 
 case class ParquetDataWithComplexTypes(
-    intField: Int,
-    stringField: String,
+    intfield: Int,
+    stringfield: String,
     structField: StructContainer,
     arrayField: Seq[Int])
 
 case class ParquetDataWithKeyAndComplexTypes(
     p: Int,
-    intField: Int,
-    stringField: String,
+    intfield: Int,
+    stringfield: String,
     structField: StructContainer,
     arrayField: Seq[Int])
 
@@ -72,8 +72,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     sql(s"""
       create external table partitioned_parquet
       (
-        intField INT,
-        stringField STRING
+        intfield INT,
+        stringfield STRING
       )
       PARTITIONED BY (p int)
       ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
@@ -86,8 +86,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     sql(s"""
       create external table partitioned_parquet_with_key
       (
-        intField INT,
-        stringField STRING
+        intfield INT,
+        stringfield STRING
       )
       PARTITIONED BY (p int)
       ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
@@ -100,8 +100,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     sql(s"""
       create external table normal_parquet
       (
-        intField INT,
-        stringField STRING
+        intfield INT,
+        stringfield STRING
       )
       ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
        STORED AS
@@ -113,8 +113,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     sql(s"""
       CREATE EXTERNAL TABLE partitioned_parquet_with_complextypes
       (
-        intField INT,
-        stringField STRING,
+        intfield INT,
+        stringfield STRING,
         structField STRUCT<intStructField: INT, stringStructField: STRING>,
         arrayField ARRAY<INT>
       )
@@ -129,8 +129,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     sql(s"""
       CREATE EXTERNAL TABLE partitioned_parquet_with_key_and_complextypes
       (
-        intField INT,
-        stringField STRING,
+        intfield INT,
+        stringfield STRING,
         structField STRUCT<intStructField: INT, stringStructField: STRING>,
         arrayField ARRAY<INT>
       )
@@ -146,8 +146,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       """
         |create table test_parquet
         |(
-        |  intField INT,
-        |  stringField STRING
+        |  intfield INT,
+        |  stringfield STRING
         |)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
         |STORED AS
@@ -205,7 +205,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   test("scan an empty parquet table with upper case") {
-    checkAnswer(sql("SELECT count(INTFIELD) FROM TEST_parquet"), Row(0))
+    checkAnswer(sql("SELECT count(intfield) FROM TEST_parquet"), Row(0))
   }
 
   test("insert into an empty parquet table") {
@@ -214,8 +214,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       """
         |create table test_insert_parquet
         |(
-        |  intField INT,
-        |  stringField STRING
+        |  intfield INT,
+        |  stringfield STRING
         |)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
         |STORED AS
@@ -226,13 +226,13 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     // Insert into am empty table.
     sql("insert into table test_insert_parquet select a, b from jt where jt.a > 5")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField < 8"),
+      sql(s"SELECT intfield, stringfield FROM test_insert_parquet WHERE intfield < 8"),
       Row(6, "str6") :: Row(7, "str7") :: Nil
     )
     // Insert overwrite.
     sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      sql(s"SELECT intfield, stringfield FROM test_insert_parquet WHERE intfield > 2"),
       Row(3, "str3") :: Row(4, "str4") :: Nil
     )
     dropTables("test_insert_parquet")
@@ -242,8 +242,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       """
         |create table test_insert_parquet
         |(
-        |  intField INT,
-        |  stringField STRING
+        |  intfield INT,
+        |  stringfield STRING
         |)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
         |STORED AS
@@ -253,13 +253,13 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     // Insert overwrite an empty table.
     sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      sql(s"SELECT intfield, stringfield FROM test_insert_parquet WHERE intfield > 2"),
       Row(3, "str3") :: Row(4, "str4") :: Nil
     )
     // Insert into the table.
     sql("insert into table test_insert_parquet select a, b from jt")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet"),
+      sql(s"SELECT intfield, stringfield FROM test_insert_parquet"),
       (1 to 10).map(i => Row(i, s"str$i")) ++ (1 to 4).map(i => Row(i, s"str$i"))
     )
     dropTables("test_insert_parquet")
@@ -297,7 +297,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         """
           |create table test_insert_parquet
           |(
-          |  intField INT
+          |  intfield INT
           |)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
           |STORED AS
@@ -315,7 +315,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       }
 
       checkAnswer(
-        sql("SELECT intField FROM test_insert_parquet WHERE test_insert_parquet.intField > 5"),
+        sql("SELECT intfield FROM test_insert_parquet WHERE test_insert_parquet.intfield > 5"),
         sql("SELECT a FROM jt WHERE jt.a > 5").collect()
       )
     }
@@ -468,8 +468,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       """
         |create table test_insert_parquet
         |(
-        |  intField INT,
-        |  stringField STRING
+        |  intfield INT,
+        |  stringfield STRING
         |)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
         |STORED AS
@@ -507,8 +507,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       """
         |create table test_parquet_partitioned_cache_test
         |(
-        |  intField INT,
-        |  stringField STRING
+        |  intfield INT,
+        |  stringfield STRING
         |)
         |PARTITIONED BY (`date` string)
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
@@ -541,7 +541,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     checkCached(tableIdentifier)
     // Make sure we can read the data.
     checkAnswer(
-      sql("select STRINGField, `date`, intField from test_parquet_partitioned_cache_test"),
+      sql("select stringfield, `date`, intfield from test_parquet_partitioned_cache_test"),
       sql(
         """
           |select b, '2015-04-01', a FROM jt
@@ -897,12 +897,12 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     test(s"ordering of the partitioning columns $table") {
       checkAnswer(
-        sql(s"SELECT p, stringField FROM $table WHERE p = 1"),
+        sql(s"SELECT p, stringfield FROM $table WHERE p = 1"),
         Seq.fill(10)(Row(1, "part-1"))
       )
 
       checkAnswer(
-        sql(s"SELECT stringField, p FROM $table WHERE p = 1"),
+        sql(s"SELECT stringfield, p FROM $table WHERE p = 1"),
         Seq.fill(10)(Row("part-1", 1))
       )
     }
@@ -925,7 +925,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     test(s"project partitioning and non-partitioning columns $table") {
       checkAnswer(
-        sql(s"SELECT stringField, p, count(intField) FROM $table GROUP BY p, stringField"),
+        sql(s"SELECT stringfield, p, count(intfield) FROM $table GROUP BY p, stringfield"),
         Row("part-1", 1, 10) ::
           Row("part-2", 2, 10) ::
           Row("part-3", 3, 10) ::
@@ -965,20 +965,20 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     test(s"non-partition predicates $table") {
       checkAnswer(
-        sql(s"SELECT COUNT(*) FROM $table WHERE intField IN (1,2,3)"),
+        sql(s"SELECT COUNT(*) FROM $table WHERE intfield IN (1,2,3)"),
         Row(30))
     }
 
     test(s"sum $table") {
       checkAnswer(
-        sql(s"SELECT SUM(intField) FROM $table WHERE intField IN (1,2,3) AND p = 1"),
+        sql(s"SELECT SUM(intfield) FROM $table WHERE intfield IN (1,2,3) AND p = 1"),
         Row(1 + 2 + 3))
     }
 
     test(s"hive udfs $table") {
       checkAnswer(
-        sql(s"SELECT concat(stringField, stringField) FROM $table"),
-        sql(s"SELECT stringField FROM $table").rdd.map {
+        sql(s"SELECT concat(stringfield, stringfield) FROM $table"),
+        sql(s"SELECT stringfield FROM $table").rdd.map {
           case Row(s: String) => Row(s + s)
         }.collect().toSeq)
     }

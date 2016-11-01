@@ -235,8 +235,9 @@ private[parquet] object ParquetFilters {
         createFilter(schema, pred).map(FilterApi.not)
 
       case sources.In(name, values) if dataTypeOf.contains(name) =>
+        val eq = makeEq.lift(dataTypeOf(name))
         values.flatMap { v =>
-          makeEq.lift(dataTypeOf(name)).map(_(name, v))
+          eq.map(_(name, v))
         }.reduceLeftOption(FilterApi.or)
 
       case _ => None
