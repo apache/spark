@@ -18,6 +18,13 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
+import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
+import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
+import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
+import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
+
+import com.google.common.collect.ImmutableList;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -30,17 +37,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import com.google.common.collect.ImmutableList;
-import org.apache.parquet.filter2.compat.RowGroupFilter;
-import scala.Option;
-
-import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
-import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
-import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
-import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
-import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -52,6 +48,7 @@ import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.column.values.rle.RunLengthBitPackingHybridDecoder;
 import org.apache.parquet.filter2.compat.FilterCompat;
+import org.apache.parquet.filter2.compat.RowGroupFilter;
 import org.apache.parquet.hadoop.BadConfigurationException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetInputFormat;
@@ -69,6 +66,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 import org.apache.spark.util.AccumulatorV2;
 import org.apache.spark.util.LongAccumulator;
+import scala.Option;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -114,6 +112,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
               filter,
               footer.getBlocks(),
               reader);
+      reader.close();
     } else {
       // otherwise we find the row groups that were selected on the client
       footer = readFooter(configuration, file, NO_FILTER);
