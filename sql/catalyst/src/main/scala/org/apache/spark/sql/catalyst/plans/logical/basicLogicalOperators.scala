@@ -349,7 +349,8 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
  * Options for writing new data into a table.
  *
  * @param enabled whether to overwrite existing data in the table.
- * @param specificPartition only data in the specified partition will be overwritten.
+ * @param specificPartition only data in the specified partition will be overwritten. The map is
+ *                          from partition keys to values (cast to string).
  */
 case class OverwriteOptions(
     enabled: Boolean,

@@ -182,7 +182,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       }
 
       val overwritePartitionPath = if (overwrite.specificPartition.isDefined &&
-          sparkSession.sessionState.conf.manageFilesourcePartitions &&
+          t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
           l.catalogTable.get.partitionProviderIsHive) {
         val partition = t.sparkSession.sessionState.catalog.getPartition(
           l.catalogTable.get.identifier, overwrite.specificPartition.get)
