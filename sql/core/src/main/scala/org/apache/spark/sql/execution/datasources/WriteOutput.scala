@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.{Date, UUID}
 
+import scala.collection.mutable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -29,6 +31,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
@@ -83,7 +86,7 @@ object WriteOutput extends Logging {
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
-      refreshFunction: () => Unit,
+      refreshFunction: (Seq[TablePartitionSpec]) => Unit,
       options: Map[String, String],
       isAppend: Boolean): Unit = {
 
@@ -121,7 +124,7 @@ object WriteOutput extends Logging {
       committer.setupJob(job)
 
       try {
-        val commitMsgs = sparkSession.sparkContext.runJob(queryExecution.toRdd,
+        val ret = sparkSession.sparkContext.runJob(queryExecution.toRdd,
           (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
             executeTask(
               description = description,
@@ -132,9 +135,12 @@ object WriteOutput extends Logging {
               iterator = iter)
           })
 
+        val commitMsgs = ret.map(_._1)
+        val updatedPartitions = ret.flatMap(_._2).map(PartitioningUtils.parsePathFragment)
+
         committer.commitJob(job, commitMsgs)
         logInfo(s"Job ${job.getJobID} committed.")
-        refreshFunction()
+        refreshFunction(updatedPartitions)
       } catch { case cause: Throwable =>
         logError(s"Aborting job ${job.getJobID}.", cause)
         committer.abortJob(job)
@@ -150,7 +156,7 @@ object WriteOutput extends Logging {
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
-      iterator: Iterator[InternalRow]): TaskCommitMessage = {
+      iterator: Iterator[InternalRow]): (TaskCommitMessage, Set[String]) = {
 
     val jobId = SparkHadoopWriter.createJobID(new Date, sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
@@ -181,9 +187,9 @@ object WriteOutput extends Logging {
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
-        writeTask.execute(iterator)
+        val outputPartitions = writeTask.execute(iterator)
         writeTask.releaseResources()
-        committer.commitTask(taskAttemptContext)
+        (committer.commitTask(taskAttemptContext), outputPartitions)
       })(catchBlock = {
         // If there is an error, release resource and then abort the task
         try {
@@ -205,13 +211,12 @@ object WriteOutput extends Logging {
    * automatically trigger task aborts.
    */
   private trait ExecuteWriteTask {
-    def execute(iterator: Iterator[InternalRow]): Unit
+    /**
+     * Writes data out to files, and then returns the list of partition strings written out.
+     * The list of partitions is sent back to the driver and used to update the catalog.
+     */
+    def execute(iterator: Iterator[InternalRow]): Set[String]
     def releaseResources(): Unit
-
-    final def filePrefix(split: Int, uuid: String, bucketId: Option[Int]): String = {
-      val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-      f"part-$split%05d-$uuid$bucketString"
-    }
   }
 
   /** Writes data to a single directory (used for non-dynamic-partition writes). */
@@ -234,11 +239,12 @@ object WriteOutput extends Logging {
       outputWriter
     }
 
-    override def execute(iter: Iterator[InternalRow]): Unit = {
+    override def execute(iter: Iterator[InternalRow]): Set[String] = {
       while (iter.hasNext) {
         val internalRow = iter.next()
         outputWriter.writeInternal(internalRow)
       }
+      Set.empty
     }
 
     override def releaseResources(): Unit = {
@@ -316,7 +322,7 @@ object WriteOutput extends Logging {
       newWriter
     }
 
-    override def execute(iter: Iterator[InternalRow]): Unit = {
+    override def execute(iter: Iterator[InternalRow]): Set[String] = {
       // We should first sort by partition columns, then bucket id, and finally sorting columns.
       val sortingExpressions: Seq[Expression] =
         description.partitionColumns ++ bucketIdExpression ++ sortColumns
@@ -364,6 +370,7 @@ object WriteOutput extends Logging {
 
       // If anything below fails, we should abort the task.
       var currentKey: UnsafeRow = null
+      val updatedPartitions = mutable.Set[String]()
       while (sortedIterator.next()) {
         val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
         if (currentKey != nextKey) {
@@ -375,6 +382,10 @@ object WriteOutput extends Logging {
           logDebug(s"Writing partition: $currentKey")
 
           currentWriter = newOutputWriter(currentKey, getPartitionString)
+          val partitionPath = getPartitionString(currentKey).getString(0)
+          if (partitionPath.nonEmpty) {
+            updatedPartitions.add(partitionPath)
+          }
         }
         currentWriter.writeInternal(sortedIterator.getValue)
       }
@@ -382,6 +393,7 @@ object WriteOutput extends Logging {
         currentWriter.close()
         currentWriter = null
       }
+      updatedPartitions.toSet
     }
 
     override def releaseResources(): Unit = {
