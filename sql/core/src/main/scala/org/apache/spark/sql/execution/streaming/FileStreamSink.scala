@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.{FileFormat, WriteOutput}
+import org.apache.spark.sql.execution.datasources.{FileCommitProtocol, FileFormat, WriteOutput}
 
 object FileStreamSink {
   // The name of the subdirectory that is used to store metadata about which files are valid.
@@ -53,8 +53,13 @@ class FileStreamSink(
     if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
-      val committer = new ManifestFileCommitProtocol(path)
-      committer.setupManifestOptions(fileLog, batchId)
+      val committer = FileCommitProtocol.instantiate(
+        sparkSession.sessionState.conf.streamingFileCommitProtocolClass, path, isAppend = false)
+      committer match {
+        case manifestCommitter: ManifestFileCommitProtocol =>
+          manifestCommitter.setupManifestOptions(fileLog, batchId)
+        case _ =>  // Do nothing
+      }
 
       // Get the actual partition columns as attributes after matching them by name with
       // the given columns names.
