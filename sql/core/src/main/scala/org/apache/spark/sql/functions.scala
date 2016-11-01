@@ -2883,10 +2883,10 @@ object functions {
    * (Scala-specific) Parses a column containing a JSON string into a [[StructType]] with the
    * specified schema. Returns `null`, in the case of an unparseable string.
    *
+   * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
-   * @param e a string column containing JSON data.
    *
    * @group collection_funcs
    * @since 2.1.0
@@ -2935,6 +2935,48 @@ object functions {
    */
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column =
     from_json(e, DataType.fromJson(schema).asInstanceOf[StructType], options)
+
+
+  /**
+   * (Scala-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a struct column.
+   * @param options options to control how the struct column is converted into a json string.
+   *                accepts the same options and the json data source.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column, options: Map[String, String]): Column = withExpr {
+    StructToJson(options, e.expr)
+  }
+
+  /**
+   * (Java-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a struct column.
+   * @param options options to control how the struct column is converted into a json string.
+   *                accepts the same options and the json data source.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column, options: java.util.Map[String, String]): Column =
+    to_json(e, options.asScala.toMap)
+
+  /**
+   * Converts a column containing a [[StructType]] into a JSON string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a struct column.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column): Column =
+    to_json(e, Map.empty[String, String])
 
   /**
    * Returns length of array or map.
