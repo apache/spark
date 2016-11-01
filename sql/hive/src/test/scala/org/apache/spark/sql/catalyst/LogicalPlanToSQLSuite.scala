@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, NoSuchFileException, Paths}
 
+import scala.io.Source
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.Column
@@ -109,12 +110,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         Files.write(path, answerText.getBytes(StandardCharsets.UTF_8))
       } else {
         val goldenFileName = s"sqlgen/$answerFile.sql"
-        val resourceFile = getClass.getClassLoader.getResource(goldenFileName)
-        if (resourceFile == null) {
+        val resourceStream = getClass.getClassLoader.getResourceAsStream(goldenFileName)
+        if (resourceStream == null) {
           throw new NoSuchFileException(goldenFileName)
         }
-        val path = resourceFile.getPath
-        val answerText = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8)
+        val answerText = try {
+          Source.fromInputStream(resourceStream).mkString
+        } finally {
+          resourceStream.close
+        }
         val sqls = answerText.split(separator)
         assert(sqls.length == 2, "Golden sql files should have a separator.")
         val expectedSQL = sqls(1).trim()
