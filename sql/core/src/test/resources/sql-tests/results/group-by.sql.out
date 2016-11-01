@@ -44,8 +44,8 @@ struct<foo:string,approx_count_distinct(int_col):bigint>
 
 
 -- !query 5
-select 'foo', max(struct(int_col)) from myview where int_col == 0 group by 1
+select 'foo', max(struct(int_col)) as agg_struct from myview where int_col == 0 group by 1
 -- !query 5 schema
-struct<foo:string,max(struct(int_col)):struct<int_col:int>>
+struct<foo:string,agg_struct:struct<int_col:int>>
 -- !query 5 output
 
