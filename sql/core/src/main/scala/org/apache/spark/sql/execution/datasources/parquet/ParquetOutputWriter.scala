@@ -89,7 +89,7 @@ private[parquet] class ParquetOutputWriterFactory(
    * Returns a [[OutputWriter]] that writes data to the give path without using
    * [[OutputCommitter]].
    */
-  override def newWriter(path1: String): OutputWriter = new OutputWriter {
+  override def newWriter(path: String): OutputWriter = new OutputWriter {
 
     // Create TaskAttemptContext that is used to pass on Configuration to the ParquetRecordWriter
     private val hadoopTaskAttemptId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
@@ -98,8 +98,6 @@ private[parquet] class ParquetOutputWriterFactory(
 
     // Instance of ParquetRecordWriter that does not use OutputCommitter
     private val recordWriter = createNoCommitterRecordWriter(path, hadoopAttemptContext)
-
-    override def path: String = path1
 
     override def write(row: Row): Unit = {
       throw new UnsupportedOperationException("call writeInternal")
@@ -127,26 +125,21 @@ private[parquet] class ParquetOutputWriterFactory(
   /** Disable the use of the older API. */
   override def newInstance(
       path: String,
-      fileNamePrefix: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
     throw new UnsupportedOperationException("this version of newInstance not supported for " +
         "ParquetOutputWriterFactory")
   }
+
+  override def getFileExtension(context: TaskAttemptContext): String = {
+    CodecConfig.from(context).getCodec.getExtension + ".parquet"
+  }
 }
 
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
-private[parquet] class ParquetOutputWriter(
-    stagingDir: String,
-    fileNamePrefix: String,
-    context: TaskAttemptContext)
+private[parquet] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
   extends OutputWriter {
-
-  override val path: String = {
-    val filename = fileNamePrefix + CodecConfig.from(context).getCodec.getExtension + ".parquet"
-    new Path(stagingDir, filename).toString
-  }
 
   private val recordWriter: RecordWriter[Void, InternalRow] = {
     new ParquetOutputFormat[InternalRow]() {

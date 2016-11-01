@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
@@ -40,18 +39,15 @@ class CommitFailureTestSource extends SimpleTextSource {
       dataSchema: StructType): OutputWriterFactory =
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new SimpleTextOutputWriter(stagingDir, fileNamePrefix, context) {
+        new SimpleTextOutputWriter(path, context) {
           var failed = false
           TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
             failed = true
             SimpleTextRelation.callbackCalled = true
           }
-
-          override val path: String = new Path(stagingDir, fileNamePrefix).toString
 
           override def write(row: Row): Unit = {
             if (SimpleTextRelation.failWriter) {
@@ -67,6 +63,8 @@ class CommitFailureTestSource extends SimpleTextSource {
           }
         }
       }
+
+      override def getFileExtension(context: TaskAttemptContext): String = ""
     }
 
   override def shortName(): String = "commit-failure-test"
