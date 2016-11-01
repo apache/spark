@@ -46,7 +46,6 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  * is not fully tested.
  */
 @ExtendedHiveTest
-@org.scalatest.Ignore
 class VersionsSuite extends SparkFunSuite with Logging {
 
   private val sparkConf = new SparkConf()

@@ -389,8 +389,22 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
-    val newTable = client.getTable(db, oldName)
-      .copy(identifier = TableIdentifier(newName, Some(db)))
+    val rawTable = client.getTable(db, oldName)
+
+    val tableProps = if (rawTable.tableType == MANAGED) {
+      // If it's a managed table and we are renaming it, then the TABLE_LOCATION property becomes
+      // inaccurate as Hive metastore will generate a new table location in the `locationUri` field.
+      // Here we remove the TABLE_LOCATION property, so that we can read the value of `locationUri`
+      // field and treat it as table location when we read this table later.
+      rawTable.properties - TABLE_LOCATION
+    } else {
+      rawTable.properties
+    }
+
+    val newTable = rawTable.copy(
+      identifier = TableIdentifier(newName, Some(db)),
+      properties = tableProps)
+
     client.alterTable(oldName, newTable)
   }
 
@@ -426,10 +440,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     if (DDLUtils.isDatasourceTable(withStatsProps)) {
       val oldTableDef = client.getTable(db, withStatsProps.identifier.table)
 
-      // Always update the location property w.r.t. the new table location.
-      val locationProp = tableDefinition.storage.locationUri.map { location =>
-        TABLE_LOCATION -> location
+      // Only update the location property if we already have it.
+      val locationProp = if (oldTableDef.properties.contains(TABLE_LOCATION)) {
+        tableDefinition.storage.locationUri.map(TABLE_LOCATION -> _)
+      } else {
+        None
       }
+
       // Only update the `locationUri` field if the location is really changed, because this table
       // may be not Hive-compatible and can not set the `locationUri` field. We should respect the
       // old `locationUri` even it's None.
