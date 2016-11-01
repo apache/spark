@@ -431,25 +431,37 @@ case class AlterTableDropPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
+    specs.flatMap(splitConjunctivePredicates).map {
+      case BinaryComparison(AttributeReference(key, _, _, _), _) =>
+        table.partitionColumnNames.find(resolver(_, key)).getOrElse {
+          throw new AnalysisException(
+            s"$key is not a valid partition column in table ${table.identifier.quotedString}.")
+        }
+    }
+
     if (specs.exists(hasComplexExpr)) {
-      catalog.dropPartitionsByFilter(
-        table.identifier, specs, ignoreIfNotExists = ifExists, purge = purge)
+      val partitions = catalog.listPartitionsByFilter(table.identifier, specs)
+      if (partitions.nonEmpty) {
+        catalog.dropPartitions(
+          table.identifier, partitions.map(_.spec), ignoreIfNotExists = ifExists, purge = purge)
+      } else if (!ifExists) {
+        throw new AnalysisException(specs.toString)
+      }
     } else {
-      val partitionSpec = specs.map { x =>
-        splitConjunctivePredicates(x)
+      val normalizedSpecs = specs.map { expr =>
+        val spec = splitConjunctivePredicates(expr)
           .map(_.asInstanceOf[BinaryComparison])
           .map(p => p.left.asInstanceOf[AttributeReference].name -> p.right.toString)
           .toMap
-      }
-      val normalizedSpecs = partitionSpec.map { spec =>
         PartitioningUtils.normalizePartitionSpec(
           spec,
           table.partitionColumnNames,
           table.identifier.quotedString,
-          sparkSession.sessionState.conf.resolver)
+          resolver)
       }
       catalog.dropPartitions(
         table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge)

@@ -413,17 +413,6 @@ class InMemoryCatalog(
     }
   }
 
-  override def dropPartitionsByFilter(
-      db: String,
-      table: String,
-      predicates: Seq[Expression],
-      ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = {
-    // TODO: Provide an implementation
-    throw new UnsupportedOperationException(
-      "dropPartitionsByFilter is not implemented for InMemoryCatalog")
-  }
-
   override def renamePartitions(
       db: String,
       table: String,

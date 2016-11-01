@@ -818,42 +818,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.dropPartitions(db, table, parts.map(lowerCasePartitionSpec), ignoreIfNotExists, purge)
   }
 
-  override def dropPartitionsByFilter(
-      db: String,
-      table: String,
-      predicates: Seq[Expression],
-      ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = withClient {
-    val rawTable = client.getTable(db, table)
-    val catalogTable = restoreTableMetadata(rawTable)
-    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
-    val nonPartitionPruningPredicates = predicates.filterNot {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-    }
-
-    if (nonPartitionPruningPredicates.nonEmpty) {
-      sys.error("Expected only partition pruning predicates: " +
-        predicates.reduceLeft(And))
-    }
-
-    val partitionSchema = catalogTable.partitionSchema
-
-    if (predicates.nonEmpty) {
-      // HiveShim does not have `dropPartitionsByFilter`, so getPartitionsByFilter is used here.
-      val clientPrunedPartitions = client.getPartitionsByFilter(rawTable, predicates).map { part =>
-        part.copy(spec = restorePartitionSpec(part.spec, catalogTable.partitionColumnNames))
-      }
-      val boundPredicate =
-        InterpretedPredicate.create(predicates.reduce(And).transform {
-          case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
-            BoundReference(index, partitionSchema(index).dataType, nullable = true)
-        })
-      val partitions = clientPrunedPartitions.filter(p => boundPredicate(p.toRow(partitionSchema)))
-      client.dropPartitions(db, table, partitions.map(_.spec), ignoreIfNotExists, purge)
-    }
-  }
-
   override def renamePartitions(
       db: String,
       table: String,

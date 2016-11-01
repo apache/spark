@@ -247,7 +247,7 @@ class HiveDDLSuite
           Row("country=US/quarter=3") ::
           Row("country=US/quarter=4") :: Nil)
 
-      sql("ALTER TABLE sales DROP PARTITION (quarter <= 2)")
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= '2')")
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") ::
           Row("country=KR/quarter=4") ::
@@ -268,7 +268,7 @@ class HiveDDLSuite
       val m2 = intercept[AnalysisException] {
         sql("ALTER TABLE sales DROP PARTITION (unknown < 'KR')")
       }.getMessage
-      assert(m2.contains("The spec (unknown) must be contained within the partition spec"))
+      assert(m2.contains("unknown is not a valid partition column in table"))
     }
   }
 

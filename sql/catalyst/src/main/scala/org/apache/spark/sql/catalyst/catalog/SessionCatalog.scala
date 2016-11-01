@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.StringUtils
 
@@ -686,23 +686,6 @@ class SessionCatalog(
   }
 
   /**
-   * Drop partitions from a table, assuming they exist.
-   * If no database is specified, assume the table is in the current database.
-   */
-  def dropPartitionsByFilter(
-      tableName: TableIdentifier,
-      specs: Seq[Expression],
-      ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = {
-    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
-    val table = formatTableName(tableName.table)
-    requireDbExists(db)
-    requireTableExists(TableIdentifier(table, Option(db)))
-    requirePartialMatchedPartitionFilter(specs, getTableMetadata(tableName))
-    externalCatalog.dropPartitionsByFilter(db, table, specs, ignoreIfNotExists, purge)
-  }
-
-  /**
    * Override the specs of one or many existing table partitions, assuming they exist.
    *
    * This assumes index i of `specs` corresponds to index i of `newSpecs`.
@@ -814,27 +797,6 @@ class SessionCatalog(
       if (!s.keys.forall(defined.contains)) {
         throw new AnalysisException(
           s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must be contained " +
-            s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
-            s"in table '${table.identifier}'")
-      }
-    }
-  }
-
-  /**
-   * Verify if the input partition filter partially matches the existing defined partition spec
-   * That is, the columns of partition filter should be part of the defined partition spec.
-   */
-  private def requirePartialMatchedPartitionFilter(
-      specs: Seq[Expression],
-      table: CatalogTable): Unit = {
-    val defined = table.partitionColumnNames
-    specs.foreach { s =>
-      val keys = s.collect {
-        case a: AttributeReference => a.name
-      }
-      if (!keys.forall(defined.contains)) {
-        throw new AnalysisException(
-          s"Partition spec is invalid. The spec (${keys.mkString(", ")}) must be contained " +
             s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
             s"in table '${table.identifier}'")
       }
