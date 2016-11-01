@@ -161,7 +161,7 @@ class DataFrameReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None):
         """
         Loads a JSON file (`JSON Lines text format or newline-delimited JSON
-        <[http://jsonlines.org/>`_) or an RDD of Strings storing JSON objects (one object per
+        <http://jsonlines.org/>`_) or an RDD of Strings storing JSON objects (one object per
         record) and returns the result as a :class`DataFrame`.
 
         If the ``schema`` parameter is not specified, this function goes
