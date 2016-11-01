@@ -386,15 +386,24 @@ class CatalogSuite
         createFunction("fn2", Some(db))
 
         // Find a temporary function
-        assert(spark.catalog.getFunction("fn1").name === "fn1")
+        val fn1 = spark.catalog.getFunction("fn1")
+        assert(fn1.name === "fn1")
+        assert(fn1.database === null)
+        assert(fn1.isTemporary)
 
         // Find a qualified function
-        assert(spark.catalog.getFunction(db, "fn2").name === "fn2")
+        val fn2 = spark.catalog.getFunction(db, "fn2")
+        assert(fn2.name === "fn2")
+        assert(fn2.database === db)
+        assert(!fn2.isTemporary)
 
         // Find an unqualified function using the current database
         intercept[AnalysisException](spark.catalog.getFunction("fn2"))
         spark.catalog.setCurrentDatabase(db)
-        assert(spark.catalog.getFunction("fn2").name === "fn2")
+        val unqualified = spark.catalog.getFunction("fn2")
+        assert(unqualified.name === "fn2")
+        assert(unqualified.database === db)
+        assert(!unqualified.isTemporary)
       }
     }
   }

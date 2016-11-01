@@ -19,23 +19,25 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.{Date, UUID}
 
+import scala.collection.mutable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat}
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SQLExecution, UnsafeKVExternalSorter}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.datasources.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
@@ -54,8 +56,7 @@ object WriteOutput extends Logging {
       val nonPartitionColumns: Seq[Attribute],
       val bucketSpec: Option[BucketSpec],
       val isAppend: Boolean,
-      val path: String,
-      val outputFormatClass: Class[_ <: OutputFormat[_, _]])
+      val path: String)
     extends Serializable {
 
     assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ nonPartitionColumns),
@@ -85,7 +86,7 @@ object WriteOutput extends Logging {
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
-      refreshFunction: () => Unit,
+      refreshFunction: (Seq[TablePartitionSpec]) => Unit,
       options: Map[String, String],
       isAppend: Boolean): Unit = {
 
@@ -111,31 +112,38 @@ object WriteOutput extends Logging {
       nonPartitionColumns = dataColumns,
       bucketSpec = bucketSpec,
       isAppend = isAppend,
-      path = outputPath.toString,
-      outputFormatClass = job.getOutputFormatClass)
+      path = outputPath.toString)
 
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       // This call shouldn't be put into the `try` block below because it only initializes and
       // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-      val committer = setupDriverCommitter(job, outputPath.toString, isAppend)
+      val committer = FileCommitProtocol.instantiate(
+        sparkSession.sessionState.conf.fileCommitProtocolClass,
+        outputPath.toString,
+        isAppend)
+      committer.setupJob(job)
 
       try {
-        sparkSession.sparkContext.runJob(queryExecution.toRdd,
+        val ret = sparkSession.sparkContext.runJob(queryExecution.toRdd,
           (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
             executeTask(
               description = description,
               sparkStageId = taskContext.stageId(),
               sparkPartitionId = taskContext.partitionId(),
               sparkAttemptNumber = taskContext.attemptNumber(),
+              committer,
               iterator = iter)
           })
 
-        committer.commitJob(job)
+        val commitMsgs = ret.map(_._1)
+        val updatedPartitions = ret.flatMap(_._2).distinct.map(PartitioningUtils.parsePathFragment)
+
+        committer.commitJob(job, commitMsgs)
         logInfo(s"Job ${job.getJobID} committed.")
-        refreshFunction()
+        refreshFunction(updatedPartitions)
       } catch { case cause: Throwable =>
         logError(s"Aborting job ${job.getJobID}.", cause)
-        committer.abortJob(job, JobStatus.State.FAILED)
+        committer.abortJob(job)
         throw new SparkException("Job aborted.", cause)
       }
     }
@@ -147,7 +155,8 @@ object WriteOutput extends Logging {
       sparkStageId: Int,
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
-      iterator: Iterator[InternalRow]): Unit = {
+      committer: FileCommitProtocol,
+      iterator: Iterator[InternalRow]): (TaskCommitMessage, Set[String]) = {
 
     val jobId = SparkHadoopWriter.createJobID(new Date, sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
@@ -166,32 +175,21 @@ object WriteOutput extends Logging {
       new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
     }
 
-    val committer = newOutputCommitter(
-      description.outputFormatClass, taskAttemptContext, description.path, description.isAppend)
     committer.setupTask(taskAttemptContext)
-
-    // Figure out where we need to write data to for staging.
-    // For FileOutputCommitter it has its own staging path called "work path".
-    val stagingPath = committer match {
-      case f: FileOutputCommitter => f.getWorkPath.toString
-      case _ => description.path
-    }
 
     val writeTask =
       if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
-        new SingleDirectoryWriteTask(description, taskAttemptContext, stagingPath)
+        new SingleDirectoryWriteTask(description, taskAttemptContext, committer)
       } else {
-        new DynamicPartitionWriteTask(description, taskAttemptContext, stagingPath)
+        new DynamicPartitionWriteTask(description, taskAttemptContext, committer)
       }
 
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-        // Execute the task to write rows out
-        writeTask.execute(iterator)
+        // Execute the task to write rows out and commit the task.
+        val outputPartitions = writeTask.execute(iterator)
         writeTask.releaseResources()
-
-        // Commit the task
-        SparkHadoopMapRedUtil.commitTask(committer, taskAttemptContext, jobId.getId, taskId.getId)
+        (committer.commitTask(taskAttemptContext), outputPartitions)
       })(catchBlock = {
         // If there is an error, release resource and then abort the task
         try {
@@ -213,38 +211,40 @@ object WriteOutput extends Logging {
    * automatically trigger task aborts.
    */
   private trait ExecuteWriteTask {
-    def execute(iterator: Iterator[InternalRow]): Unit
+    /**
+     * Writes data out to files, and then returns the list of partition strings written out.
+     * The list of partitions is sent back to the driver and used to update the catalog.
+     */
+    def execute(iterator: Iterator[InternalRow]): Set[String]
     def releaseResources(): Unit
-
-    final def filePrefix(split: Int, uuid: String, bucketId: Option[Int]): String = {
-      val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-      f"part-r-$split%05d-$uuid$bucketString"
-    }
   }
 
   /** Writes data to a single directory (used for non-dynamic-partition writes). */
   private class SingleDirectoryWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
-      stagingPath: String) extends ExecuteWriteTask {
+      committer: FileCommitProtocol) extends ExecuteWriteTask {
 
     private[this] var outputWriter: OutputWriter = {
-      val split = taskAttemptContext.getTaskAttemptID.getTaskID.getId
+      val tmpFilePath = committer.newTaskTempFile(
+        taskAttemptContext,
+        None,
+        description.outputWriterFactory.getFileExtension(taskAttemptContext))
 
       val outputWriter = description.outputWriterFactory.newInstance(
-        stagingDir = stagingPath,
-        fileNamePrefix = filePrefix(split, description.uuid, None),
+        path = tmpFilePath,
         dataSchema = description.nonPartitionColumns.toStructType,
         context = taskAttemptContext)
       outputWriter.initConverter(dataSchema = description.nonPartitionColumns.toStructType)
       outputWriter
     }
 
-    override def execute(iter: Iterator[InternalRow]): Unit = {
+    override def execute(iter: Iterator[InternalRow]): Set[String] = {
       while (iter.hasNext) {
         val internalRow = iter.next()
         outputWriter.writeInternal(internalRow)
       }
+      Set.empty
     }
 
     override def releaseResources(): Unit = {
@@ -262,7 +262,7 @@ object WriteOutput extends Logging {
   private class DynamicPartitionWriteTask(
       description: WriteJobDescription,
       taskAttemptContext: TaskAttemptContext,
-      stagingPath: String) extends ExecuteWriteTask {
+      committer: FileCommitProtocol) extends ExecuteWriteTask {
 
     // currentWriter is initialized whenever we see a new key
     private var currentWriter: OutputWriter = _
@@ -302,32 +302,27 @@ object WriteOutput extends Logging {
      * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
      */
     private def newOutputWriter(key: InternalRow, partString: UnsafeProjection): OutputWriter = {
-      val path =
-        if (description.partitionColumns.nonEmpty) {
-          val partitionPath = partString(key).getString(0)
-          new Path(stagingPath, partitionPath).toString
-        } else {
-          stagingPath
-        }
+      val partDir =
+        if (description.partitionColumns.isEmpty) None else Option(partString(key).getString(0))
 
       // If the bucket spec is defined, the bucket column is right after the partition columns
       val bucketId = if (description.bucketSpec.isDefined) {
-        Some(key.getInt(description.partitionColumns.length))
+        BucketingUtils.bucketIdToString(key.getInt(description.partitionColumns.length))
       } else {
-        None
+        ""
       }
+      val ext = bucketId + description.outputWriterFactory.getFileExtension(taskAttemptContext)
 
-      val split = taskAttemptContext.getTaskAttemptID.getTaskID.getId
+      val path = committer.newTaskTempFile(taskAttemptContext, partDir, ext)
       val newWriter = description.outputWriterFactory.newInstance(
-        stagingDir = path,
-        fileNamePrefix = filePrefix(split, description.uuid, bucketId),
+        path = path,
         dataSchema = description.nonPartitionColumns.toStructType,
         context = taskAttemptContext)
       newWriter.initConverter(description.nonPartitionColumns.toStructType)
       newWriter
     }
 
-    override def execute(iter: Iterator[InternalRow]): Unit = {
+    override def execute(iter: Iterator[InternalRow]): Set[String] = {
       // We should first sort by partition columns, then bucket id, and finally sorting columns.
       val sortingExpressions: Seq[Expression] =
         description.partitionColumns ++ bucketIdExpression ++ sortColumns
@@ -375,6 +370,7 @@ object WriteOutput extends Logging {
 
       // If anything below fails, we should abort the task.
       var currentKey: UnsafeRow = null
+      val updatedPartitions = mutable.Set[String]()
       while (sortedIterator.next()) {
         val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
         if (currentKey != nextKey) {
@@ -386,6 +382,10 @@ object WriteOutput extends Logging {
           logDebug(s"Writing partition: $currentKey")
 
           currentWriter = newOutputWriter(currentKey, getPartitionString)
+          val partitionPath = getPartitionString(currentKey).getString(0)
+          if (partitionPath.nonEmpty) {
+            updatedPartitions.add(partitionPath)
+          }
         }
         currentWriter.writeInternal(sortedIterator.getValue)
       }
@@ -393,83 +393,13 @@ object WriteOutput extends Logging {
         currentWriter.close()
         currentWriter = null
       }
+      updatedPartitions.toSet
     }
 
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
         currentWriter.close()
         currentWriter = null
-      }
-    }
-  }
-
-  private def setupDriverCommitter(job: Job, path: String, isAppend: Boolean): OutputCommitter = {
-    // Setup IDs
-    val jobId = SparkHadoopWriter.createJobID(new Date, 0)
-    val taskId = new TaskID(jobId, TaskType.MAP, 0)
-    val taskAttemptId = new TaskAttemptID(taskId, 0)
-
-    // Set up the configuration object
-    job.getConfiguration.set("mapred.job.id", jobId.toString)
-    job.getConfiguration.set("mapred.tip.id", taskAttemptId.getTaskID.toString)
-    job.getConfiguration.set("mapred.task.id", taskAttemptId.toString)
-    job.getConfiguration.setBoolean("mapred.task.is.map", true)
-    job.getConfiguration.setInt("mapred.task.partition", 0)
-
-    val taskAttemptContext = new TaskAttemptContextImpl(job.getConfiguration, taskAttemptId)
-    val outputCommitter = newOutputCommitter(
-      job.getOutputFormatClass, taskAttemptContext, path, isAppend)
-    outputCommitter.setupJob(job)
-    outputCommitter
-  }
-
-  private def newOutputCommitter(
-      outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      context: TaskAttemptContext,
-      path: String,
-      isAppend: Boolean): OutputCommitter = {
-    val defaultOutputCommitter = outputFormatClass.newInstance().getOutputCommitter(context)
-
-    if (isAppend) {
-      // If we are appending data to an existing dir, we will only use the output committer
-      // associated with the file output format since it is not safe to use a custom
-      // committer for appending. For example, in S3, direct parquet output committer may
-      // leave partial data in the destination dir when the appending job fails.
-      // See SPARK-8578 for more details
-      logInfo(
-        s"Using default output committer ${defaultOutputCommitter.getClass.getCanonicalName} " +
-          "for appending.")
-      defaultOutputCommitter
-    } else {
-      val configuration = context.getConfiguration
-      val clazz =
-        configuration.getClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
-
-      if (clazz != null) {
-        logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
-
-        // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
-        // has an associated output committer. To override this output committer,
-        // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
-        // If a data source needs to override the output committer, it needs to set the
-        // output committer in prepareForWrite method.
-        if (classOf[FileOutputCommitter].isAssignableFrom(clazz)) {
-          // The specified output committer is a FileOutputCommitter.
-          // So, we will use the FileOutputCommitter-specified constructor.
-          val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-          ctor.newInstance(new Path(path), context)
-        } else {
-          // The specified output committer is just an OutputCommitter.
-          // So, we will use the no-argument constructor.
-          val ctor = clazz.getDeclaredConstructor()
-          ctor.newInstance()
-        }
-      } else {
-        // If output committer class is not set, we will use the one associated with the
-        // file output format.
-        logInfo(
-          s"Using output committer class ${defaultOutputCommitter.getClass.getCanonicalName}")
-        defaultOutputCommitter
       }
     }
   }

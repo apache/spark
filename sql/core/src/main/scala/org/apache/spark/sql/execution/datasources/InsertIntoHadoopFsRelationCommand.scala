@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
@@ -40,16 +41,11 @@ case class InsertIntoHadoopFsRelationCommand(
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    refreshFunction: () => Unit,
+    refreshFunction: (Seq[TablePartitionSpec]) => Unit,
     options: Map[String, String],
     @transient query: LogicalPlan,
-    mode: SaveMode,
-    overwritePartitionPath: Option[Path])
+    mode: SaveMode)
   extends RunnableCommand {
-
-  if (overwritePartitionPath.isDefined) {
-    assert(mode == SaveMode.Overwrite)
-  }
 
   override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -65,11 +61,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = if (overwritePartitionPath.isDefined) {
-      overwritePartitionPath.get.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    } else {
-      outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    }
+    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
     val pathExists = fs.exists(qualifiedOutputPath)
     val doInsertion = (mode, pathExists) match {
@@ -98,11 +90,7 @@ case class InsertIntoHadoopFsRelationCommand(
         fileFormat,
         qualifiedOutputPath,
         hadoopConf,
-        if (overwritePartitionPath.isDefined) {
-          Nil  // write directly to only this partition directory
-        } else {
-          partitionColumns
-        },
+        partitionColumns,
         bucketSpec,
         refreshFunction,
         options,

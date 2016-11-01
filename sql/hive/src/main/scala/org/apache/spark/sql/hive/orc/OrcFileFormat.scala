@@ -83,11 +83,19 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(stagingDir, fileNamePrefix, dataSchema, context)
+        new OrcOutputWriter(path, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        val compressionExtension: String = {
+          val name = context.getConfiguration.get(OrcRelation.ORC_COMPRESSION)
+          OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
+        }
+
+        compressionExtension + ".orc"
       }
     }
   }
@@ -210,22 +218,10 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 }
 
 private[orc] class OrcOutputWriter(
-    stagingDir: String,
-    fileNamePrefix: String,
+    path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
-
-  override val path: String = {
-    val compressionExtension: String = {
-      val name = context.getConfiguration.get(OrcRelation.ORC_COMPRESSION)
-      OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
-    }
-    // It has the `.orc` extension at the end because (de)compression tools
-    // such as gunzip would not be able to decompress this as the compression
-    // is not applied on this whole file but on each "stream" in ORC format.
-    new Path(stagingDir, fileNamePrefix + compressionExtension + ".orc").toString
-  }
 
   private[this] val serializer = new OrcSerializer(dataSchema, context.getConfiguration)
 

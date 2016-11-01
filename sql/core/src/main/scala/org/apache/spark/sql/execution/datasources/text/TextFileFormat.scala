@@ -75,11 +75,14 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new TextOutputWriter(stagingDir, fileNamePrefix, dataSchema, context)
+        new TextOutputWriter(path, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".txt" + TextOutputWriter.getCompressionExtension(context)
       }
     }
   }
@@ -124,16 +127,10 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 }
 
 class TextOutputWriter(
-    stagingDir: String,
-    fileNamePrefix: String,
+    path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
-
-  override val path: String = {
-    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
-    new Path(stagingDir, fileNamePrefix + ".txt" + compressionExtension).toString
-  }
 
   private[this] val buffer = new Text()
 

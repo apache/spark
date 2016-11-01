@@ -71,7 +71,7 @@ abstract class Classifier[
    * and put it in an RDD with strong types.
    *
    * @param dataset  DataFrame with columns for labels ([[org.apache.spark.sql.types.NumericType]])
-   *                 and features ([[Vector]]). Labels are cast to [[DoubleType]].
+   *                 and features ([[Vector]]).
    * @param numClasses  Number of classes label can take.  Labels must be integers in the range
    *                    [0, numClasses).
    * @throws SparkException  if any label is not an integer >= 0
@@ -79,7 +79,7 @@ abstract class Classifier[
   protected def extractLabeledPoints(dataset: Dataset[_], numClasses: Int): RDD[LabeledPoint] = {
     require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
       s" $numClasses, but requires numClasses > 0.")
-    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+    dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
       case Row(label: Double, features: Vector) =>
         require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
           s" dataset with invalid label $label.  Labels must be integers in range" +

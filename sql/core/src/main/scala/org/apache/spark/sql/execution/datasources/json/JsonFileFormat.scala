@@ -83,11 +83,14 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(stagingDir, parsedOptions, fileNamePrefix, dataSchema, context)
+        new JsonOutputWriter(path, parsedOptions, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".json" + TextOutputWriter.getCompressionExtension(context)
       }
     }
   }
@@ -154,17 +157,11 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 }
 
 private[json] class JsonOutputWriter(
-    stagingDir: String,
+    path: String,
     options: JSONOptions,
-    fileNamePrefix: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
-
-  override val path: String = {
-    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
-    new Path(stagingDir, fileNamePrefix + ".json" + compressionExtension).toString
-  }
 
   private[this] val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
