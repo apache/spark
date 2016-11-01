@@ -41,16 +41,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 private[libsvm] class LibSVMOutputWriter(
-    stagingDir: String,
-    fileNamePrefix: String,
+    path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
-
-  override val path: String = {
-    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
-    new Path(stagingDir, fileNamePrefix + ".libsvm" + compressionExtension).toString
-  }
 
   private[this] val buffer = new Text()
 
