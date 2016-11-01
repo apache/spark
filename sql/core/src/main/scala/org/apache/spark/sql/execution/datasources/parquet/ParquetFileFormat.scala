@@ -33,6 +33,7 @@ import org.apache.parquet.{Log => ApacheParquetLog}
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
 import org.slf4j.bridge.SLF4JBridgeHandler
@@ -133,10 +134,13 @@ class ParquetFileFormat
     new OutputWriterFactory {
       override def newInstance(
           path: String,
-          fileNamePrefix: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new ParquetOutputWriter(path, fileNamePrefix, context)
+        new ParquetOutputWriter(path, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        CodecConfig.from(context).getCodec.getExtension + ".parquet"
       }
     }
   }
