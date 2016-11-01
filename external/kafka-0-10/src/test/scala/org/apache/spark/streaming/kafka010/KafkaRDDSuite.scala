@@ -60,7 +60,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     "key.deserializer" -> classOf[StringDeserializer],
     "value.deserializer" -> classOf[StringDeserializer],
     "group.id" -> s"test-consumer-${Random.nextInt}-${System.currentTimeMillis}"
-  )
+  ).asJava
 
   private val preferredHosts = LocationStrategies.PreferConsistent
 
@@ -147,7 +147,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("executor sorting") {
-    val kafkaParams = new ju.HashMap[String, Object](getKafkaParams().asJava)
+    val kafkaParams = new ju.HashMap[String, Object](getKafkaParams())
     kafkaParams.put("auto.offset.reset", "none")
     val rdd = new KafkaRDD[String, String](
       sc,

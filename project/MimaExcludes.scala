@@ -861,9 +861,6 @@ object MimaExcludes {
       // [SPARK-17365][Core] Remove/Kill multiple executors together to reduce RPC call time
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.SparkContext")
     ) ++ Seq(
-      // [Minor][Streaming][Kafka] Kafka010 .createRDD() scala API should expect scala Map
-      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.streaming.kafka010.KafkaUtils.createRDD")
-    ) ++ Seq(
       // [SPARK-12221] Add CPU time to metrics
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetrics.this"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this")

@@ -19,8 +19,6 @@ package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
-import scala.collection.JavaConverters._
-
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
@@ -58,11 +56,23 @@ object KafkaUtils extends Logging {
   @Experimental
   def createRDD[K, V](
       sc: SparkContext,
-      kafkaParams: collection.Map[String, Object],
+      kafkaParams: ju.Map[String, Object],
       offsetRanges: Array[OffsetRange],
       locationStrategy: LocationStrategy
     ): RDD[ConsumerRecord[K, V]] = {
-    createRDDInternal[K, V](sc, kafkaParams.asJava, offsetRanges, locationStrategy)
+    val preferredHosts = locationStrategy match {
+      case PreferBrokers =>
+        throw new AssertionError(
+          "If you want to prefer brokers, you must provide a mapping using PreferFixed " +
+          "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you.")
+      case PreferConsistent => ju.Collections.emptyMap[TopicPartition, String]()
+      case PreferFixed(hostMap) => hostMap
+    }
+    val kp = new ju.HashMap[String, Object](kafkaParams)
+    fixKafkaParams(kp)
+    val osr = offsetRanges.clone()
+
+    new KafkaRDD[K, V](sc, kp, osr, preferredHosts, true)
   }
 
   /**
@@ -90,28 +100,7 @@ object KafkaUtils extends Logging {
       locationStrategy: LocationStrategy
     ): JavaRDD[ConsumerRecord[K, V]] = {
 
-    new JavaRDD(createRDDInternal[K, V](jsc.sc, kafkaParams, offsetRanges, locationStrategy))
-  }
-
-  private def createRDDInternal[K, V](
-      sc: SparkContext,
-      kafkaParams: ju.Map[String, Object],
-      offsetRanges: Array[OffsetRange],
-      locationStrategy: LocationStrategy
-  ): RDD[ConsumerRecord[K, V]] = {
-    val preferredHosts = locationStrategy match {
-      case PreferBrokers =>
-        throw new AssertionError(
-          "If you want to prefer brokers, you must provide a mapping using PreferFixed " +
-            "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you.")
-      case PreferConsistent => ju.Collections.emptyMap[TopicPartition, String]()
-      case PreferFixed(hostMap) => hostMap
-    }
-    val kp = new ju.HashMap[String, Object](kafkaParams)
-    fixKafkaParams(kp)
-    val osr = offsetRanges.clone()
-
-    new KafkaRDD[K, V](sc, kp, osr, preferredHosts, true)
+    new JavaRDD(createRDD[K, V](jsc.sc, kafkaParams, offsetRanges, locationStrategy))
   }
 
   /**
