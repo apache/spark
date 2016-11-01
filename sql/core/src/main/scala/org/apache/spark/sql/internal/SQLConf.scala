@@ -521,9 +521,9 @@ object SQLConf {
 
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     SQLConfigBuilder("spark.sql.streaming.commitProtocolClass")
-        .internal()
-        .stringConf
-        .createWithDefault(classOf[HadoopCommitProtocolWrapper].getName)
+      .internal()
+      .stringConf
+      .createWithDefault(classOf[HadoopCommitProtocolWrapper].getName)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
