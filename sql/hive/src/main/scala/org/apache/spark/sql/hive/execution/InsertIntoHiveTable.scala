@@ -258,7 +258,7 @@ case class InsertIntoHiveTable(
             table.catalogTable.identifier.table,
             partitionSpec)
 
-        var doOverwrite = overwrite
+        var doHiveOverwrite = overwrite
 
         if (oldPart.isEmpty || !ifNotExists) {
           // SPARK-18107: Insert overwrite runs much slower than hive-client.
@@ -270,15 +270,12 @@ case class InsertIntoHiveTable(
               val partitionPath = new Path(uri)
               val fs = partitionPath.getFileSystem(hadoopConf)
               if (fs.exists(partitionPath)) {
-                val pathPermission = fs.getFileStatus(partitionPath).getPermission()
                 if (!fs.delete(partitionPath, true)) {
                   throw new RuntimeException(
                     "Cannot remove partition directory '" + partitionPath.toString)
-                } else {
-                  fs.mkdirs(partitionPath, pathPermission)
                 }
                 // Don't let Hive do overwrite operation since it is slower.
-                doOverwrite = false
+                doHiveOverwrite = false
               }
             }
           }
@@ -291,7 +288,7 @@ case class InsertIntoHiveTable(
             table.catalogTable.identifier.table,
             outputPath.toString,
             partitionSpec,
-            isOverwrite = doOverwrite,
+            isOverwrite = doHiveOverwrite,
             holdDDLTime = holdDDLTime,
             inheritTableSpecs = inheritTableSpecs)
         }
