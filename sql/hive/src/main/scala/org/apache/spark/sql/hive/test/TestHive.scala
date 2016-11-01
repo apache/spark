@@ -54,7 +54,9 @@ object TestHive
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
-        .set("spark.ui.enabled", "false")))
+        .set("spark.ui.enabled", "false")
+        .set(HiveUtils.HIVE_METASTORE_JARS, "maven")
+        .set(HiveUtils.HIVE_METASTORE_VERSION, "0.13")))
 
 
 /**

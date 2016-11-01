@@ -103,7 +103,7 @@ case class InsertIntoHiveTable(
     if (extURI.getScheme == "viewfs") {
       getExtTmpPathRelTo(path.getParent, hadoopConf)
     } else {
-      new Path(getExternalScratchDir(extURI, hadoopConf), "-ext-10000")
+      new Path(getExternalScratchDir(path.getParent.toUri, hadoopConf), "-ext-10000")
     }
   }
 
