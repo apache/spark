@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.sql.hive.HiveUDAFFunction.AggregationBufferSerDe
 import org.apache.spark.sql.types._
 
 
@@ -304,33 +303,41 @@ private[hive] case class HiveUDAFFunction(
     }
 
   @transient
-  private lazy val inspectors = children.map(toInspector).toArray
+  private lazy val inputInspectors = children.map(toInspector).toArray
 
   @transient
-  private lazy val function = {
-    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors, false, false)
-    resolver.getEvaluator(parameterInfo)
+  val parameterInfo = new SimpleGenericUDAFParameterInfo(inputInspectors, false, false)
+
+  @transient
+  private lazy val partial1ModeEvaluator = resolver.getEvaluator(parameterInfo)
+
+  @transient
+  private val partialResultInspector = partial1ModeEvaluator.init(
+    GenericUDAFEvaluator.Mode.PARTIAL1,
+    inputInspectors
+  )
+
+  @transient
+  private lazy val partial2ModeEvaluator = {
+    val evaluator = resolver.getEvaluator(parameterInfo)
+    evaluator.init(GenericUDAFEvaluator.Mode.PARTIAL2, Array(partialResultInspector))
+    evaluator
   }
+
+  @transient
+  private lazy val finalModeEvaluator = resolver.getEvaluator(parameterInfo)
+
+  @transient
+  private val returnInspector = finalModeEvaluator.init(
+    GenericUDAFEvaluator.Mode.FINAL,
+    Array(partialResultInspector)
+  )
 
   @transient
   private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
 
   @transient
-  private val returnInspector =
-    function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
-
-  @transient
-  private val partialResultInspector =
-    function.init(GenericUDAFEvaluator.Mode.PARTIAL1, inspectors)
-
-  @transient
   private lazy val partialResultDataType = inspectorToDataType(partialResultInspector)
-
-  @transient
-  private lazy val partialResultUnwrapper = unwrapperFor(partialResultInspector)
-
-  @transient
-  private lazy val partialResultWrapper = wrapperFor(partialResultInspector, partialResultDataType)
 
   @transient
   private lazy val resultUnwrapper = unwrapperFor(returnInspector)
@@ -342,9 +349,7 @@ private[hive] case class HiveUDAFFunction(
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
 
   @transient
-  private lazy val bufferSerDe: AggregationBufferSerDe =
-    new AggregationBufferSerDe(
-      function, partialResultDataType, partialResultUnwrapper, partialResultWrapper)
+  private lazy val bufferSerDe: AggregationBufferSerDe = new AggregationBufferSerDe
 
   // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
   // catalyst type checking framework.
@@ -363,20 +368,24 @@ private[hive] case class HiveUDAFFunction(
     s"$name($distinct${children.map(_.sql).mkString(", ")})"
   }
 
-  override def createAggregationBuffer(): AggregationBuffer = function.getNewAggregationBuffer
+  override def createAggregationBuffer(): AggregationBuffer =
+    partial1ModeEvaluator.getNewAggregationBuffer
 
   @transient
   private lazy val inputProjection = new InterpretedProjection(children)
 
   override def update(buffer: AggregationBuffer, input: InternalRow): Unit = {
-    function.iterate(buffer, wrap(inputProjection(input), wrappers, cached, inputDataTypes))
+    partial1ModeEvaluator.iterate(
+      buffer, wrap(inputProjection(input), wrappers, cached, inputDataTypes))
   }
 
   override def merge(buffer: AggregationBuffer, input: AggregationBuffer): Unit = {
-    function.merge(buffer, function.terminatePartial(input))
+    partial2ModeEvaluator.merge(buffer, partial1ModeEvaluator.terminatePartial(input))
   }
 
-  override def eval(buffer: AggregationBuffer): Any = resultUnwrapper(function.evaluate(buffer))
+  override def eval(buffer: AggregationBuffer): Any = {
+    resultUnwrapper(finalModeEvaluator.terminate(buffer))
+  }
 
   override def serialize(buffer: AggregationBuffer): Array[Byte] = {
     bufferSerDe.serialize(buffer)
@@ -385,15 +394,11 @@ private[hive] case class HiveUDAFFunction(
   override def deserialize(bytes: Array[Byte]): AggregationBuffer = {
     bufferSerDe.deserialize(bytes)
   }
-}
 
-private[hive] object HiveUDAFFunction {
-  class AggregationBufferSerDe(
-      function: GenericUDAFEvaluator,
-      partialResultDataType: DataType,
-      partialResultUnwrapper: Any => Any,
-      partialResultWrapper: Any => Any)
-    extends HiveInspectors {
+  private class AggregationBufferSerDe {
+    private val partialResultUnwrapper = unwrapperFor(partialResultInspector)
+
+    private val partialResultWrapper = wrapperFor(partialResultInspector, partialResultDataType)
 
     private val projection = UnsafeProjection.create(Array(partialResultDataType))
 
@@ -403,7 +408,7 @@ private[hive] object HiveUDAFFunction {
       // `GenericUDAFEvaluator.terminatePartial()` converts an `AggregationBuffer` into an object
       // that can be inspected by the `ObjectInspector` returned by `GenericUDAFEvaluator.init()`.
       // Then we can unwrap it to a Spark SQL value.
-      mutableRow.update(0, partialResultUnwrapper(function.terminatePartial(buffer)))
+      mutableRow.update(0, partialResultUnwrapper(partial1ModeEvaluator.terminatePartial(buffer)))
       val unsafeRow = projection(mutableRow)
       val bytes = ByteBuffer.allocate(unsafeRow.getSizeInBytes)
       unsafeRow.writeTo(bytes)
@@ -415,11 +420,11 @@ private[hive] object HiveUDAFFunction {
       // returned by `GenericUDAFEvaluator.terminatePartial()` back to an `AggregationBuffer`. The
       // workaround here is creating an initial `AggregationBuffer` first and then merge the
       // deserialized object into the buffer.
-      val buffer = function.getNewAggregationBuffer
+      val buffer = partial2ModeEvaluator.getNewAggregationBuffer
       val unsafeRow = new UnsafeRow(1)
       unsafeRow.pointTo(bytes, bytes.length)
       val partialResult = unsafeRow.get(0, partialResultDataType)
-      function.merge(buffer, partialResultWrapper(partialResult))
+      partial2ModeEvaluator.merge(buffer, partialResultWrapper(partialResult))
       buffer
     }
   }
