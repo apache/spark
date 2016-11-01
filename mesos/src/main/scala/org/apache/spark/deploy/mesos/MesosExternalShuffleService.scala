@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.ExternalShuffleService
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
@@ -114,7 +115,7 @@ private[mesos] class MesosExternalShuffleService(conf: SparkConf, securityManage
 
   protected override def newShuffleBlockHandler(
       conf: TransportConf): ExternalShuffleBlockHandler = {
-    val cleanerIntervalS = this.conf.getTimeAsSeconds("spark.shuffle.cleaner.interval", "30s")
+    val cleanerIntervalS = this.conf.get(SHUFFLE_CLEANER_INTERVAL_S)
     new MesosExternalShuffleBlockHandler(conf, cleanerIntervalS)
   }
 }
