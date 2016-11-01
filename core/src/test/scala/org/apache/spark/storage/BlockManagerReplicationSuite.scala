@@ -547,12 +547,11 @@ class BlockManagerBasicStrategyReplicationSuite extends BlockManagerReplicationB
   val conf: SparkConf = new SparkConf(false).set("spark.app.id", "test")
   conf.set("spark.kryoserializer.buffer", "1m")
   conf.set(
-    "spark.replication.topologyawareness.prioritizer",
-    classOf[BasicBlockReplicationPrioritization].getName)
+    "spark.storage.replication.policy",
+    classOf[BasicBlockReplicationPolicy].getName)
   conf.set(
-    "spark.replication.topologyawareness.topologyMapper",
+    "spark.storage.replication.topologyMapper",
     classOf[DummyTopologyMapper].getName)
-
 }
 
 class BlockManagerPrioritizerReplicationSuite extends BlockManagerReplicationBehavior {
@@ -560,9 +559,9 @@ class BlockManagerPrioritizerReplicationSuite extends BlockManagerReplicationBeh
   conf.set("spark.kryoserializer.buffer", "1m")
   conf.set(
     "spark.replication.topologyawareness.prioritizer",
-    "org.apache.spark.storage.PrioritizationWithObjectives")
+    classOf[ObjectivesBasedReplicationPolicy].getName)
   conf.set(
-    "spark.replication.topologyawareness.topologyMapper",
-    "org.apache.spark.storage.DummyTopologyMapper"
+    "spark.storage.replication.topologyMapper",
+    classOf[DummyTopologyMapper].getName
   )
 }
