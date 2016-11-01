@@ -432,15 +432,15 @@ class ParquetFileFormat
       filters: Seq[Filter],
       schema: StructType,
       conf: Configuration,
-      allFiles: Array[String],
+      allFiles: Seq[FileStatus],
       root: Path,
       partitions: Seq[PartitionDirectory]): Seq[PartitionDirectory] = {
     // Read the "_metadata" file if available, contains all block headers. On S3 better to grab
     // all of the footers in a batch rather than having to read every single file just to get its
     // footer.
-    allFiles.map(new Path(_)).find(_.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
-      .map { path =>
-        val metadata = getOrReadMetadata(conf, path)
+    allFiles.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
+      .map { stat =>
+        val metadata = getOrReadMetadata(conf, stat)
         partitions.map { partition =>
           filterByMetadata(filters, schema, conf, root, metadata, partition)
         }.filterNot(_.files.isEmpty)
@@ -470,10 +470,10 @@ class ParquetFileFormat
     }.getOrElse(partition)
   }
 
-  private def getOrReadMetadata(conf: Configuration, path: Path): ParquetMetadata = {
+  private def getOrReadMetadata(conf: Configuration, stat: FileStatus): ParquetMetadata = {
     if (cachedMetadata == null) {
       logInfo("Reading summary metadata into cache in ParquetFileFormat")
-      cachedMetadata = ParquetFileReader.readFooter(conf, path, ParquetMetadataConverter.NO_FILTER)
+      cachedMetadata = ParquetFileReader.readFooter(conf, stat, ParquetMetadataConverter.NO_FILTER)
     } else {
       logInfo("Using cached summary metadata")
     }

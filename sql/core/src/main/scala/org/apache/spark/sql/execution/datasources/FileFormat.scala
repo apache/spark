@@ -87,7 +87,7 @@ trait FileFormat {
       filters: Seq[Filter],
       schema: StructType,
       conf: Configuration,
-      allFiles: Array[String],
+      allFiles: Seq[FileStatus],
       root: Path,
       partitions: Seq[PartitionDirectory]): Seq[PartitionDirectory] = {
     partitions
