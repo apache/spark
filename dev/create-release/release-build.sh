@@ -171,7 +171,7 @@ if [[ "$1" == "package" ]]; then
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
 
     echo "Creating distribution"
-    ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz $FLAGS \
+    ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --pip $FLAGS \
       -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
     cd ..
 
