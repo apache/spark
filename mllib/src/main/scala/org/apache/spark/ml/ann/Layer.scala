@@ -464,7 +464,7 @@ private[ml] object FeedForwardTopology {
         if (i == layerSizes.length - 2) {
           new LinearLayerWithSquaredError()
         } else {
-          new FunctionalLayer(new TanhFunction())
+          new FunctionalLayer(new SigmoidFunction())
         }
     }
     FeedForwardTopology(layers)
