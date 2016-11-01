@@ -239,26 +239,26 @@ class HiveDDLSuite
       sql("ALTER TABLE sales DROP PARTITION (country < 'KR')")
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=1") ::
-          Row("country=KR/quarter=2") ::
-          Row("country=KR/quarter=3") ::
-          Row("country=KR/quarter=4") ::
-          Row("country=US/quarter=1") ::
-          Row("country=US/quarter=2") ::
-          Row("country=US/quarter=3") ::
-          Row("country=US/quarter=4") :: Nil)
+        Row("country=KR/quarter=2") ::
+        Row("country=KR/quarter=3") ::
+        Row("country=KR/quarter=4") ::
+        Row("country=US/quarter=1") ::
+        Row("country=US/quarter=2") ::
+        Row("country=US/quarter=3") ::
+        Row("country=US/quarter=4") :: Nil)
 
       sql("ALTER TABLE sales DROP PARTITION (quarter <= '2')")
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") ::
-          Row("country=KR/quarter=4") ::
-          Row("country=US/quarter=3") ::
-          Row("country=US/quarter=4") :: Nil)
+        Row("country=KR/quarter=4") ::
+        Row("country=US/quarter=3") ::
+        Row("country=US/quarter=4") :: Nil)
 
       sql("ALTER TABLE sales DROP PARTITION (country='KR', quarter='4')")
       sql("ALTER TABLE sales DROP PARTITION (country='US', quarter='3')")
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") ::
-          Row("country=US/quarter=4") :: Nil)
+        Row("country=US/quarter=4") :: Nil)
 
       val m = intercept[AnalysisException] {
         sql("ALTER TABLE sales DROP PARTITION (unknown = 'KR')")
