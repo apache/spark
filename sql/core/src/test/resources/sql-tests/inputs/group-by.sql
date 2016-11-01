@@ -12,14 +12,17 @@ SELECT a, COUNT(b) FROM testData GROUP BY a;
 SELECT a, COUNT(b) FROM testData GROUP BY b;
 SELECT COUNT(a), COUNT(b) FROM testData GROUP BY a;
 
--- Whole stage code generation.
-SELECT 'foo' FROM testData WHERE a = 0 GROUP BY a;
+-- Aggregate grouped by literals.
+SELECT 'foo', COUNT(a) FROM testData GROUP BY 1;
 
--- Hash aggregate.
-SELECT 'foo', APPROX_COUNT_DISTINCT(a) FROM testData WHERE a = 0 GROUP BY a;
+-- Aggregate grouped by literals (whole stage code generation).
+SELECT 'foo' FROM testData WHERE a = 0 GROUP BY 1;
 
--- Sort aggregate.
-SELECT 'foo', MAX(STRUCT(a)) FROM testData WHERE a = 0 GROUP BY a;
+-- Aggregate grouped by literals (hash aggregate).
+SELECT 'foo', APPROX_COUNT_DISTINCT(a) FROM testData WHERE a = 0 GROUP BY 1;
+
+-- Aggregate grouped by literals (sort aggregate).
+SELECT 'foo', MAX(STRUCT(a)) FROM testData WHERE a = 0 GROUP BY 1;
 
 -- Aggregate with complex GroupBy expressions.
 SELECT a + b, COUNT(b) FROM testData GROUP BY a + b;
