@@ -35,9 +35,7 @@ import org.apache.spark.sql.execution.datasources.FileCommitProtocol.TaskCommitM
  * @param path path to write the final output to.
  */
 class ManifestFileCommitProtocol(path: String)
-  extends FileCommitProtocol
-  with Serializable
-  with Logging {
+  extends FileCommitProtocol with Serializable with Logging {
 
   // Track the list of files added by a task, only used on the executors.
   @transient private var addedFiles: ArrayBuffer[String] = _
