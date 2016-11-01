@@ -89,7 +89,7 @@ case class InsertIntoHadoopFsRelationCommand(
         outputPath.toString,
         isAppend)
 
-      WriteOutput.write(
+      FileFormatWriter.write(
         sparkSession = sparkSession,
         plan = query,
         fileFormat = fileFormat,

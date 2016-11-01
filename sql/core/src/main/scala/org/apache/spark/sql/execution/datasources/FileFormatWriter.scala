@@ -43,8 +43,8 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 
-/** A helper object for writing data out to a location. */
-object WriteOutput extends Logging {
+/** A helper object for writing FileFormat data out to a location. */
+object FileFormatWriter extends Logging {
 
   /** A shared job description for all the write tasks. */
   private class WriteJobDescription(

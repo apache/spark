@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.{FileCommitProtocol, FileFormat, WriteOutput}
+import org.apache.spark.sql.execution.datasources.{FileCommitProtocol, FileFormat, FileFormatWriter}
 
 object FileStreamSink {
   // The name of the subdirectory that is used to store metadata about which files are valid.
@@ -70,7 +70,7 @@ class FileStreamSink(
         }
       }
 
-      WriteOutput.write(
+      FileFormatWriter.write(
         sparkSession = sparkSession,
         plan = data.logicalPlan,
         fileFormat = fileFormat,
