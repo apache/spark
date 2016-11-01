@@ -288,6 +288,16 @@ private[ann] class SigmoidFunction extends ActivationFunction {
 }
 
 /**
+ * Implements Linear activation function
+ */
+private[ann] class LinearFunction extends ActivationFunction {
+
+  override def eval: (Double) => Double = x => x
+
+  override def derivative: (Double) => Double = z => 1
+}
+
+/**
  * Functional layer properties, y = f(x)
  *
  * @param activationFunction activation function
@@ -454,7 +464,7 @@ private[ml] object FeedForwardTopology {
         if (i == layerSizes.length - 2) {
           new LinearLayerWithSquaredError()
         } else {
-          new FunctionalLayer(new SigmoidFunction())
+          new FunctionalLayer(new TanhFunction())
         }
     }
     FeedForwardTopology(layers)
