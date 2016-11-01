@@ -153,6 +153,18 @@ sealed trait Matrix extends Serializable {
    */
   @Since("2.0.0")
   def numActives: Int
+
+  /**
+    * Converts this matrix to a sparse matrix.
+    */
+  @Since("2.1.0")
+  def toSparse: SparseMatrix
+
+  /**
+    * Converts this matrix to a dense matrix.
+    */
+  @Since("2.1.0")
+  def toDense: DenseMatrix
 }
 
 /**
@@ -282,12 +294,15 @@ class DenseMatrix @Since("2.0.0") (
 
   override def numActives: Int = values.length
 
+  @Since("2.1.0")
+  override def toDense: DenseMatrix = this
+
   /**
    * Generate a `SparseMatrix` from the given `DenseMatrix`. The new matrix will have isTransposed
    * set to false.
    */
   @Since("2.0.0")
-  def toSparse: SparseMatrix = {
+  override def toSparse: SparseMatrix = {
     val spVals: MArrayBuilder[Double] = new MArrayBuilder.ofDouble
     val colPtrs: Array[Int] = new Array[Int](numCols + 1)
     val rowIndices: MArrayBuilder[Int] = new MArrayBuilder.ofInt
@@ -587,6 +602,9 @@ class SparseMatrix @Since("2.0.0") (
   def toDense: DenseMatrix = {
     new DenseMatrix(numRows, numCols, toArray)
   }
+
+  @Since("2.1.0")
+  def toSparse: SparseMatrix = this
 
   override def numNonzeros: Int = values.count(_ != 0)
 
