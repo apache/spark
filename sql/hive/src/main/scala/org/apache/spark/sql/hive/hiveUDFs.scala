@@ -316,17 +316,12 @@ private[hive] case class HiveUDAFFunction(
   private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
 
   @transient
-  private lazy val returnInspector =
+  private val returnInspector =
     function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
 
   @transient
-  private lazy val partialResultInspector =
+  private val partialResultInspector =
     function.init(GenericUDAFEvaluator.Mode.PARTIAL1, inspectors)
-
-  // The following two lines initializes `function: GenericUDAFEvaluator` eagerly. These two fields
-  // are declared as `@transient lazy val` only for the purpose of serialization.
-  returnInspector
-  partialResultInspector
 
   @transient
   private lazy val partialResultDataType = inspectorToDataType(partialResultInspector)
