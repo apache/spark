@@ -136,7 +136,7 @@ object WriteOutput extends Logging {
           })
 
         val commitMsgs = ret.map(_._1)
-        val updatedPartitions = ret.flatMap(_._2).map(PartitioningUtils.parsePathFragment)
+        val updatedPartitions = ret.flatMap(_._2).distinct.map(PartitioningUtils.parsePathFragment)
 
         committer.commitJob(job, commitMsgs)
         logInfo(s"Job ${job.getJobID} committed.")
