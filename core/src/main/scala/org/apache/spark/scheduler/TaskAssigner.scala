@@ -133,8 +133,9 @@ object TaskAssigner extends Logging {
     val className = {
       val name = assignerMap.get(assignerName.toLowerCase())
       name.getOrElse {
-        logWarning(s"$assignerName cannot be constructed, fallback to default $roundrobin.")
-        roundrobin
+        throw new SparkException(s"Task Assigner $assignerName is not available. " +
+          s"Please choose roundrobin, packed, or balanced.  roundrobin is used by default")
+
       }
     }
     // The className is valid. No need to catch exceptions.
