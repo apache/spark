@@ -226,7 +226,7 @@ object WriteOutput extends Logging {
       committer: FileCommitProtocol) extends ExecuteWriteTask {
 
     private[this] var outputWriter: OutputWriter = {
-      val tmpFilePath = committer.addTaskTempFile(
+      val tmpFilePath = committer.newTaskTempFile(
         taskAttemptContext,
         None,
         description.outputWriterFactory.getFileExtension(taskAttemptContext))
@@ -313,7 +313,7 @@ object WriteOutput extends Logging {
       }
       val ext = bucketId + description.outputWriterFactory.getFileExtension(taskAttemptContext)
 
-      val path = committer.addTaskTempFile(taskAttemptContext, partDir, ext)
+      val path = committer.newTaskTempFile(taskAttemptContext, partDir, ext)
       val newWriter = description.outputWriterFactory.newInstance(
         path = path,
         dataSchema = description.nonPartitionColumns.toStructType,

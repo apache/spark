@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.execution.datasources.MapReduceFileCommitterProtocol
+import org.apache.spark.sql.execution.datasources.HadoopCommitProtocolWrapper
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -384,7 +384,7 @@ object SQLConf {
     SQLConfigBuilder("spark.sql.sources.commitProtocolClass")
       .internal()
       .stringConf
-      .createWithDefault(classOf[MapReduceFileCommitterProtocol].getName)
+      .createWithDefault(classOf[HadoopCommitProtocolWrapper].getName)
 
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     SQLConfigBuilder("spark.sql.sources.parallelPartitionDiscovery.threshold")
@@ -523,7 +523,7 @@ object SQLConf {
     SQLConfigBuilder("spark.sql.streaming.commitProtocolClass")
         .internal()
         .stringConf
-        .createWithDefault(classOf[MapReduceFileCommitterProtocol].getName)
+        .createWithDefault(classOf[HadoopCommitProtocolWrapper].getName)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()

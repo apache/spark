@@ -62,7 +62,8 @@ object FileCommitProtocol {
 
 
 /**
- * An interface to define how a Spark job commits its outputs. Implementations must be serializable.
+ * An interface to define how a Spark job commits its outputs. Implementations must be serializable,
+ * as the committer instance instantiated on the driver will be used for tasks on executors.
  *
  * The proper call sequence is:
  *
@@ -103,6 +104,9 @@ abstract class FileCommitProtocol {
    * Notifies the commit protocol to add a new file, and gets back the full path that should be
    * used. Must be called on the executors when running tasks.
    *
+   * Note that the returned temp file may have an arbitrary path. The commit protocol only
+   * promises that the file will be at the location specified by the arguments after job commit.
+   *
    * A full file path consists of the following parts:
    *  1. the base path
    *  2. some sub-directory within the base path, used to specify partitioning
@@ -113,7 +117,7 @@ abstract class FileCommitProtocol {
    * The "dir" parameter specifies 2, and "ext" parameter specifies both 4 and 5, and the rest
    * are left to the commit protocol implementation to decide.
    */
-  def addTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
+  def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
 
   /**
    * Commits a task after the writes succeed. Must be called on the executors when running tasks.
@@ -122,6 +126,9 @@ abstract class FileCommitProtocol {
 
   /**
    * Aborts a task after the writes have failed. Must be called on the executors when running tasks.
+   *
+   * Calling this function is a best-effort attempt, because it is possible that the executor
+   * just crashes (or killed) before it can call abort.
    */
   def abortTask(taskContext: TaskAttemptContext): Unit
 }
@@ -133,7 +140,7 @@ abstract class FileCommitProtocol {
  *
  * Unlike Hadoop's OutputCommitter, this implementation is serializable.
  */
-class MapReduceFileCommitterProtocol(path: String, isAppend: Boolean)
+class HadoopCommitProtocolWrapper(path: String, isAppend: Boolean)
   extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
@@ -181,7 +188,7 @@ class MapReduceFileCommitterProtocol(path: String, isAppend: Boolean)
     logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
   }
 
-  override def addTaskTempFile(
+  override def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
     // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
