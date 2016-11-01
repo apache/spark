@@ -601,15 +601,16 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
               !tryDirectSql =>
             logWarning("Caught Hive MetaException attempting to get partition metadata by " +
               "filter from Hive. Falling back to fetching all partition metadata, which will " +
-              "degrade performance. Consider modifying your Hive metastore configuration to " +
-              s"set ${tryDirectSqlConfVar.varname} to true.", ex)
+              "degrade performance. Modifying your Hive metastore configuration to set " +
+              s"${tryDirectSqlConfVar.varname} to true may resolve this problem.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
               tryDirectSql =>
             throw new RuntimeException("Caught Hive MetaException attempting to get partition " +
-              "metadata by filter from Hive. Set the Spark configuration setting " +
-              s"${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false and report a bug: " +
+              "metadata by filter from Hive. You can set the Spark configuration setting " +
+              s"${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false to work around this " +
+              "problem, however this will result in degraded performance. Please report a bug: " +
               "https://issues.apache.org/jira/browse/SPARK", ex)
         }
       }
