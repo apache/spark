@@ -52,7 +52,14 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
       case e: StreamingQueryListener.Event =>
-        postToAll(e)
+        // SPARK-18144: we broadcast QueryStartedEvent to all listeners attached to this bus
+        // synchronously and to listeners attached to LiveListenerBus asynchronously. Therefore,
+        // we need to ignore QueryStartedEvent if this method is called within SparkListenerBus
+        // thread
+        if (Thread.currentThread().getName != "SparkListenerBus" ||
+          !e.isInstanceOf[QueryStartedEvent]) {
+          postToAll(e)
+        }
       case _ =>
     }
   }
