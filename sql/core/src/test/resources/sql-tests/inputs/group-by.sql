@@ -14,4 +14,4 @@ select 'foo' from myview where int_col == 0 group by 1;
 select 'foo', approx_count_distinct(int_col) from myview where int_col == 0 group by 1;
 
 -- group-by should not produce any rows (sort aggregate).
-select 'foo', max(struct(int_col)) as agg_struct from myview where int_col == 0 group by 1;
+select 'foo', max(struct(int_col)) from myview where int_col == 0 group by 1;
