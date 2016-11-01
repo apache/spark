@@ -214,7 +214,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   def visitPartitionFilterSpec(ctx: PartitionSpecContext): Expression = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
-      val name = pVal.identifier.getText.toLowerCase
+      val name = pVal.identifier.getText
       val operator = Option(pVal.comparisonOperator).map(_.getText)
       if (operator.isDefined) {
         val left = AttributeReference(name, DataTypes.StringType)()
