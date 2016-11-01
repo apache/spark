@@ -120,8 +120,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     roundrobin(taskScheduler)
   }
 
-  test("Invalid - SparkException is thrown") {
-    intercept[SparkException] { setupScheduler("spark.scheduler.taskAssigner" -> "invalid")}
+  test("Invalid - Throws SparkException") {
+    intercept[SparkException] { setupScheduler("spark.scheduler.taskAssigner" -> "invalid") }
   }
 
   test("Balanced - Assigner balances the tasks to the worker with more free cores") {

@@ -286,7 +286,7 @@ private[spark] class TaskSchedulerImpl(
   /**
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a roundrobin, packed or
-   * balanced way based on the configured TaskAssigner
+   * balanced way based on the configured TaskAssigner.
    */
   def resourceOffers(offers: IndexedSeq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     // Mark each slave as alive and remember its hostname
