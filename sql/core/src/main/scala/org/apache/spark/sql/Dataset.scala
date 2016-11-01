@@ -2631,8 +2631,9 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
-    val rowSchema = this.schema
-    val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
+    val rowSchema = schema
+    import sparkSession.implicits.newStringEncoder
+    mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
       val gen = new JacksonGenerator(rowSchema, writer)
@@ -2640,7 +2641,7 @@ class Dataset[T] private[sql](
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          gen.write(iter.next())
+          gen.write(exprEnc.toRow(iter.next()))
           gen.flush()
 
           val json = writer.toString
@@ -2654,8 +2655,6 @@ class Dataset[T] private[sql](
         }
       }
     }
-    import sparkSession.implicits.newStringEncoder
-    sparkSession.createDataset(rdd)
   }
 
   /**

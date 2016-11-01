@@ -156,6 +156,16 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
 }
 
+/**
+ * Implementation of OutputWriter for Json file format. Uses [[JacksonGenerator]]
+ * to do json conversion.
+ *
+ * @param path output location for the job
+ * @param options json generator options
+ * @param bucketId bucket for this partition
+ * @param dataSchema JacksonGenerator factory
+ * @param context hadoop task context
+ */
 private[json] class JsonOutputWriter(
     path: String,
     options: JSONOptions,
