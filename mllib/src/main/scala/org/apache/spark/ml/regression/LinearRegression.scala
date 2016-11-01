@@ -205,7 +205,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(params : _*)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, solver, tol,
+      elasticNetParam, fitIntercept, maxIter, regParam, standardization)
     instr.logNumFeatures(numFeatures)
 
     if (($(solver) == "auto" &&

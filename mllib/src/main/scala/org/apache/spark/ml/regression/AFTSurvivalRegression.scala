@@ -228,7 +228,8 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val numFeatures = featuresStd.size
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(params : _*)
+    instr.logParams(labelCol, featuresCol, censorCol, predictionCol, quantilesCol,
+      fitIntercept, maxIter, tol)
     instr.logNumFeatures(numFeatures)
 
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
@@ -280,9 +281,10 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val coefficients = Vectors.dense(rawCoefficients)
     val intercept = parameters(1)
     val scale = math.exp(parameters(0))
-    val model = new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
+    val model = copyValues(new AFTSurvivalRegressionModel(uid, coefficients,
+      intercept, scale).setParent(this))
     instr.logSuccess(model)
-    copyValues(model.setParent(this))
+    model
   }
 
   @Since("1.6.0")

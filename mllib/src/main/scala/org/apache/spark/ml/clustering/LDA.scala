@@ -890,7 +890,9 @@ class LDA @Since("1.6.0") (
     transformSchema(dataset.schema, logging = true)
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(params : _*)
+    instr.logParams(featuresCol, topicDistributionCol, k, maxIter, subsamplingRate,
+      checkpointInterval, keepLastCheckpoint, optimizeDocConcentration, topicConcentration,
+      learningDecay, optimizer, learningOffset, seed)
 
     val oldLDA = new OldLDA()
       .setK($(k))
@@ -911,7 +913,7 @@ class LDA @Since("1.6.0") (
     }
 
     val model = copyValues(newModel).setParent(this)
-    instr.logSuccess(newModel)
+    instr.logSuccess(model)
     model
   }
 

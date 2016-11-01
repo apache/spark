@@ -148,7 +148,8 @@ class NaiveBayes @Since("1.5.0") (
     }
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(params : _*)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
+      probabilityCol, modelType, smoothing, thresholds)
 
     val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
     instr.logNumFeatures(numFeatures)
@@ -204,7 +205,6 @@ class NaiveBayes @Since("1.5.0") (
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
     val model = new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
-
     instr.logSuccess(model)
     model
   }

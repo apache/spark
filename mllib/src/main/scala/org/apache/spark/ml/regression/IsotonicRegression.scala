@@ -172,7 +172,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(params : _*)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, featureIndex, isotonic)
     instr.logNumFeatures(1)
 
     val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonic))

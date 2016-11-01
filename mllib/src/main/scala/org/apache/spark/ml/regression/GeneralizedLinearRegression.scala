@@ -252,7 +252,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(params : _*)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, linkPredictionCol,
+      family, solver, fitIntercept, link, maxIter, regParam, tol)
     instr.logNumFeatures(numFeatures)
 
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {
@@ -278,6 +279,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
           .setParent(this))
       val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
         wlsModel.diagInvAtWA.toArray, 1, getSolver)
+      instr.logSuccess(model)
       return model.setSummary(Some(trainingSummary))
     }
 
