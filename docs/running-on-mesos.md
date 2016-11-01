@@ -506,8 +506,13 @@ See the [configuration page](configuration.html) for information on Spark config
     since this configuration is just a upper limit and not a guaranteed amount.
   </td>
 </tr>
-
-
+<tr>
+  <td><code>spark.mesos.fetcherCache.enable</code></td>
+  <td><code>false</code></td>
+  <td>
+    If set to `true`, all URIs (example: `spark.executor.uri`, `spark.mesos.uris`) will be cached by the [Mesos fetcher cache](http://mesos.apache.org/documentation/latest/fetcher/)
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging
