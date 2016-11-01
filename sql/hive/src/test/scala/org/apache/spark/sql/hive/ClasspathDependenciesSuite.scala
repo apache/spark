@@ -80,8 +80,4 @@ class ClasspathDependenciesSuite extends SparkFunSuite {
     assertClassNotFound("org.apache.hive.com.esotericsoftware.shaded." + STD_INSTANTIATOR)
   }
 
-  test("parquet-hadoop-bundle") {
-    assertLoads("parquet.hadoop.ParquetOutputFormat")
-    assertLoads("parquet.hadoop.ParquetInputFormat")
-  }
 }

@@ -37,7 +37,7 @@
   <dependencies>
     <!-- Added for Hive Parquet SerDe -->
     <dependency>
-      <groupId>com.twitter</groupId>
+      <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-hadoop-bundle</artifactId>
     </dependency>
     <dependency>

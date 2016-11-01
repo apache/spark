@@ -110,11 +110,6 @@
       <artifactId>scopt_${scala.binary.version}</artifactId>
       <version>3.3.0</version>
     </dependency>
-    <dependency>
-      <groupId>com.twitter</groupId>
-      <artifactId>parquet-hadoop-bundle</artifactId>
-      <scope>provided</scope>
-    </dependency>
   </dependencies>
 
   <build>
