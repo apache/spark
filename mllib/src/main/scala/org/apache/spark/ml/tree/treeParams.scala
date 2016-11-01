@@ -518,9 +518,6 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
    *
    * @group expertParam
    */
-  @deprecated(
-      "Control over impurity will be removed, as it is an implementation detail of GBTs",
-      "2.0.2")
   override val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${GBTClassifierParams.supportedImpurities.mkString(", ")}",
@@ -595,9 +592,6 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
    *
    * @group expertParam
    */
-  @deprecated(
-    "Control over impurity will be removed, as it is an implementation detail of GBTs",
-    "2.0.2")
   override val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${GBTRegressorParams.supportedImpurities.mkString(", ")}",
