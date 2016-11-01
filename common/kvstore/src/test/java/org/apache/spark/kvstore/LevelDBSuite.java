@@ -175,24 +175,35 @@ public class LevelDBSuite {
     t2.id = "2";
     t2.values = Arrays.asList("value1", "value2");
 
+    ArrayKeyIndexType t3 = new ArrayKeyIndexType();
+    t3.key = new int[] { 42, 84 };
+    t3.id = new String[] { "id1", "id2" };
+
     db.write(t1);
     db.write(t2);
+    db.write(t3);
 
     assertEquals(t1, db.read(t1.getClass(), t1.key));
     assertEquals(t2, db.read(t2.getClass(), t2.key));
+    assertEquals(t3, db.read(t3.getClass(), t3.key));
 
     // There should be one "id" index with a single entry for each type.
     assertEquals(1, countIndexEntries(t1.getClass(), "id", t1.id));
     assertEquals(1, countIndexEntries(t2.getClass(), "id", t2.id));
+    assertEquals(1, countIndexEntries(t3.getClass(), "id", t3.id));
 
     // Delete the first entry; this should not affect the entries for the second type.
     db.delete(t1.getClass(), t1.key);
     assertEquals(0, countKeys(t1.getClass()));
     assertEquals(1, countIndexEntries(t2.getClass(), "id", t2.id));
+    assertEquals(1, countIndexEntries(t3.getClass(), "id", t3.id));
 
-    // Delete the remaining entry, make sure all data is gone.
+    // Delete the remaining entries, make sure all data is gone.
     db.delete(t2.getClass(), t2.key);
     assertEquals(0, countKeys(t2.getClass()));
+
+    db.delete(t3.getClass(), t3.key);
+    assertEquals(0, countKeys(t3.getClass()));
   }
 
   @Test
@@ -274,6 +285,30 @@ public class LevelDBSuite {
     @Override
     public int hashCode() {
       return id.hashCode();
+    }
+
+  }
+
+  public static class ArrayKeyIndexType {
+
+    @KVIndex
+    public int[] key;
+
+    @KVIndex("id")
+    public String[] id;
+
+    @Override
+    public boolean equals(Object o) {
+      if (o instanceof ArrayKeyIndexType) {
+        ArrayKeyIndexType other = (ArrayKeyIndexType) o;
+        return Arrays.equals(key, other.key) && Arrays.equals(id, other.id);
+      }
+      return false;
+    }
+
+    @Override
+    public int hashCode() {
+      return key.hashCode();
     }
 
   }

@@ -123,6 +123,18 @@ public class LevelDBTypeInfoSuite {
     assertEquals(LevelDBTypeInfo.ENTRY_PREFIX + "true", idx.toKey(true));
   }
 
+  @Test
+  public void testArrayIndices() throws Exception {
+    LevelDBTypeInfo<?>.Index idx = newTypeInfo(CustomType1.class).indices().iterator().next();
+
+    assertBefore(idx.toKey(new String[] { "str1" }), idx.toKey(new String[] { "str2" }));
+    assertBefore(idx.toKey(new String[] { "str1", "str2" }),
+      idx.toKey(new String[] { "str1", "str3" }));
+
+    assertBefore(idx.toKey(new int[] { 1 }), idx.toKey(new int[] { 2 }));
+    assertBefore(idx.toKey(new int[] { 1, 2 }), idx.toKey(new int[] { 1, 3 }));
+  }
+
   private LevelDBTypeInfo<?> newTypeInfo(Class<?> type) throws Exception {
     return new LevelDBTypeInfo<>(null, type);
   }

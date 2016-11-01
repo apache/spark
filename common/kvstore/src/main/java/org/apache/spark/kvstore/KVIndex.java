@@ -42,7 +42,8 @@ import java.lang.annotation.Target;
  * </p>
  *
  * <p>
- * Indices are restricted to String, and integral types (byte, short, int, long, boolean).
+ * Indices are restricted to String, integral types (byte, short, int, long, boolean), and arrays
+ * of those values.
  * </p>
  */
 @Retention(RetentionPolicy.RUNTIME)

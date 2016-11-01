@@ -17,6 +17,7 @@
 
 package org.apache.spark.kvstore;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.io.ByteArrayOutputStream;
@@ -283,6 +284,8 @@ class LevelDBTypeInfo<T> {
      * encoded value would look like "*~~~~~~~123"). For positive values, similarly, a value that
      * is "lower than 0" (".") is used for padding. The fill characters were chosen for readability
      * when looking at the encoded keys.
+     *
+     * Arrays are encoded by encoding each element separately, separated by KEY_SEPARATOR.
      */
     @VisibleForTesting
     String toKey(Object value) {
@@ -292,6 +295,15 @@ class LevelDBTypeInfo<T> {
         sb.append(value);
       } else if (value instanceof Boolean) {
         sb.append(((Boolean) value).toString().toLowerCase());
+      } else if (value.getClass().isArray()) {
+        int length = Array.getLength(value);
+        for (int i = 0; i < length; i++) {
+          sb.append(toKey(Array.get(value, i)));
+          sb.append(KEY_SEPARATOR);
+        }
+        if (length > 0) {
+          sb.setLength(sb.length() - 1);
+        }
       } else {
         int encodedLen;
 
