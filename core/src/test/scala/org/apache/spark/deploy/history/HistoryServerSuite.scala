@@ -310,7 +310,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         }
 
         val proxyidx = sb.indexOf(uiRoot)
-        sb.delete(proxyidx, proxyidx+uiRoot.length).toString
+        sb.delete(proxyidx, proxyidx + uiRoot.length).toString
       }
     }
 
