@@ -171,6 +171,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/timeline-view.js")}></script>
     <script src={prependBaseUri("/static/log-view.js")}></script>
     <script src={prependBaseUri("/static/webui.js")}></script>
+    <script type="text/javascript">var uiRoot={Unparsed(s""""${UIUtils.uiRoot}"""")}</script>
   }
 
   def vizHeaderNodes: Seq[Node] = {
