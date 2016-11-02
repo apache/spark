@@ -69,7 +69,9 @@ private[ml] trait PredictorParams extends Params
 /**
  * :: DeveloperApi ::
  * Abstraction for prediction problems (regression and classification). It accepts all NumericType
- * labels and will automatically cast it to DoubleType in `fit()`.
+ * labels and will automatically cast it to DoubleType in [[fit()]]. If this predictor support
+ * weighting, it accepts all NumericType weights. And if the weightCol is available (defined and
+ * non-empty), the weights will also be automatically cast to DoubleType in [[fit()]].
  *
  * @tparam FeaturesType  Type of features.
  *                       E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
