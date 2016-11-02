@@ -38,7 +38,7 @@ case class OffsetSeq(offsets: Seq[Option[Offset]]) {
   }
 
   override def toString: String =
-    offsets.map(_.map(_.toString).getOrElse("-")).mkString("[", ", ", "]")
+    offsets.map(_.map(_.json).getOrElse("-")).mkString("[", ", ", "]")
 }
 
 object OffsetSeq {

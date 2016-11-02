@@ -683,7 +683,7 @@ class StreamExecution(
     val sourceStatuses = sources.map { s =>
       SourceStatus(
         s.toString,
-        localAvailableOffsets.get(s).map(_.toString).getOrElse("-"), // TODO: use json if available
+        localAvailableOffsets.get(s).map(_.json).getOrElse("-"),
         streamMetrics.currentSourceInputRate(s),
         streamMetrics.currentSourceProcessingRate(s),
         streamMetrics.currentSourceTriggerDetails(s))

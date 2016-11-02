@@ -26,8 +26,6 @@ case class LongOffset(offset: Long) extends Offset {
 
   def +(increment: Long): LongOffset = new LongOffset(offset + increment)
   def -(decrement: Long): LongOffset = new LongOffset(offset - decrement)
-
-  override def toString: String = s"#$offset"
 }
 
 object LongOffset {
@@ -42,8 +40,9 @@ object LongOffset {
    * Convert generic Offset to LongOffset if possible.
    * @return converted LongOffset
    */
-  def convert(offset: Offset): LongOffset = offset match {
-    case lo: LongOffset => lo
-    case so: SerializedOffset => LongOffset(so)
+  def convert(offset: Offset): Option[LongOffset] = offset match {
+    case lo: LongOffset => Some(lo)
+    case so: SerializedOffset => Some(LongOffset(so))
+    case _ => None
   }
 }

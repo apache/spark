@@ -24,7 +24,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
     assert(StreamingQueryStatus.testStatus.sourceStatuses(0).toString ===
       """
         |Status of source MySource1
-        |    Available offset: #0
+        |    Available offset: 0
         |    Input rate: 15.5 rows/sec
         |    Processing rate: 23.5 rows/sec
         |    Trigger details:
@@ -36,7 +36,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
     assert(StreamingQueryStatus.testStatus.sinkStatus.toString ===
       """
         |Status of sink MySink
-        |    Committed offsets: [#1, -]
+        |    Committed offsets: [1, -]
       """.stripMargin.trim, "SinkStatus.toString does not match")
 
     assert(StreamingQueryStatus.testStatus.toString ===
@@ -56,7 +56,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
         |        triggerId: 5
         |    Source statuses [1 source]:
         |        Source 1 - MySource1
-        |            Available offset: #0
+        |            Available offset: 0
         |            Input rate: 15.5 rows/sec
         |            Processing rate: 23.5 rows/sec
         |            Trigger details:
@@ -64,7 +64,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
         |                latency.getOffset.source: 10
         |                latency.getBatch.source: 20
         |    Sink status - MySink
-        |        Committed offsets: [#1, -]
+        |        Committed offsets: [1, -]
       """.stripMargin.trim, "StreamingQueryStatus.toString does not match")
 
   }
@@ -72,10 +72,10 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
   test("json") {
     assert(StreamingQueryStatus.testStatus.json ===
       """
-        |{"sourceStatuses":[{"description":"MySource1","offsetDesc":"#0","inputRate":15.5,
+        |{"sourceStatuses":[{"description":"MySource1","offsetDesc":"0","inputRate":15.5,
         |"processingRate":23.5,"triggerDetails":{"numRows.input.source":"100",
         |"latency.getOffset.source":"10","latency.getBatch.source":"20"}}],
-        |"sinkStatus":{"description":"MySink","offsetDesc":"[#1, -]"}}
+        |"sinkStatus":{"description":"MySink","offsetDesc":"[1, -]"}}
       """.stripMargin.replace("\n", "").trim)
   }
 
@@ -86,7 +86,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
           |{
           |  "sourceStatuses" : [ {
           |    "description" : "MySource1",
-          |    "offsetDesc" : "#0",
+          |    "offsetDesc" : "0",
           |    "inputRate" : 15.5,
           |    "processingRate" : 23.5,
           |    "triggerDetails" : {
@@ -97,7 +97,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
           |  } ],
           |  "sinkStatus" : {
           |    "description" : "MySink",
-          |    "offsetDesc" : "[#1, -]"
+          |    "offsetDesc" : "[1, -]"
           |  }
           |}
         """.stripMargin.trim)

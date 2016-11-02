@@ -25,11 +25,31 @@ import scala.io.{Source => IOSource}
 
 import org.apache.spark.sql.SparkSession
 
+/**
+ * This class is used to log offsets to persistent files in HDFS.
+ * Each file corresponds to a specific batch of offsets. The file
+ * format contain a version string in the first line, followed
+ * by a the JSON string representation of the offsets separated
+ * by a newline character. If a source offset is missing, then
+ * that line will contain a string value defined in the
+ * SERIALIZED_VOID_OFFSET variable in [[OffsetSeqLog]] companion object.
+ * For instance, when dealine wiht [[LongOffset]] types:
+ *   v1   // version 1
+ *   {0}  // LongOffset 0
+ *   {3}  // LongOffset 3
+ *   -    // No offset for this source i.e., an invalid JSON string
+ *   {2}  // LongOffset 2
+ *   ...
+ */
 class OffsetSeqLog(sparkSession: SparkSession, path: String)
   extends HDFSMetadataLog[OffsetSeq](sparkSession, path) {
 
   override protected def deserialize(in: InputStream): OffsetSeq = {
     // called inside a try-finally where the underlying stream is closed in the caller
+    def parseOffset(value: String): Offset = value match {
+      case OffsetSeqLog.SERIALIZED_VOID_OFFSET => null
+      case json => SerializedOffset(json)
+    }
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
@@ -38,19 +58,23 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
     if (version != OffsetSeqLog.VERSION) {
       throw new IllegalStateException(s"Unknown log version: ${version}")
     }
-    OffsetSeq.fill(lines.map(offset => SerializedOffset(offset)).toArray: _*)
+    OffsetSeq.fill(lines.map(parseOffset).toArray: _*)
   }
 
   override protected def serialize(metadata: OffsetSeq, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
     out.write(OffsetSeqLog.VERSION.getBytes(UTF_8))
-    metadata.offsets.map(_.map(_.json)).flatten.foreach { offset =>
+    metadata.offsets.map(_.map(_.json)).foreach { offset =>
       out.write('\n')
-      out.write(offset.getBytes(UTF_8))
+      offset match {
+        case Some(json: String) => out.write(json.getBytes(UTF_8))
+        case None => out.write(OffsetSeqLog.SERIALIZED_VOID_OFFSET.getBytes(UTF_8))
+      }
     }
   }
 }
 
 object OffsetSeqLog {
   private val VERSION = "v1"
+  private val SERIALIZED_VOID_OFFSET = "-"
 }

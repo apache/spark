@@ -29,10 +29,6 @@ private[kafka010]
 case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends Offset {
 
   override val json = JsonUtils.partitionOffsets(partitionToOffsets)
-
-  override def toString(): String = {
-    partitionToOffsets.toSeq.sortBy(_._1.toString).mkString("[", ", ", "]")
-  }
 }
 
 /** Companion object of the [[KafkaSourceOffset]] */

@@ -140,7 +140,7 @@ private[sql] object StreamingQueryStatus {
       sourceStatuses = Array(
         SourceStatus(
           desc = "MySource1",
-          offsetDesc = LongOffset(0).toString,
+          offsetDesc = LongOffset(0).json,
           inputRate = 15.5,
           processingRate = 23.5,
           triggerDetails = Map(

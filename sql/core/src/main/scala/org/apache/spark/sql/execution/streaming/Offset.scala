@@ -26,8 +26,22 @@ package org.apache.spark.sql.execution.streaming
 abstract class Offset {
 
   /**
+   * Equality based on JSON string representation.
+   */
+  override final def equals(obj: Any): Boolean = obj match {
+    case o: Offset => this.json == o.json
+    case _ => false
+  }
+
+  override def hashCode(): Int = this.json.hashCode
+
+  override def toString(): String = this.json.toString
+
+  /**
    * A JSON-serialized representation of an Offset that is
    * used for saving offsets to the offset log.
+   * Note: We assume that equivalent/equal offsets serialize to
+   * identical JSON strings.
    *
    * @return JSON string encoding
    */
