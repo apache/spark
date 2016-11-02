@@ -51,6 +51,9 @@ private[ml] trait PredictorParams extends Params
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
       SchemaUtils.checkNumericType(schema, $(labelCol))
+
+      // If the params supports weights and the weightCol is available,
+      // the datatype of weightCol must be numeric.
       this match {
         case p: Params with HasWeightCol =>
           if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
