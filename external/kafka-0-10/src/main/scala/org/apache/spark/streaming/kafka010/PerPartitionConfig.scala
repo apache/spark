@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Experimental
  * because they need tweaking on a per-partition basis,
  */
 @Experimental
-trait PerPartitionConfig {
+trait PerPartitionConfig extends Serializable {
   /**
    *  Maximum rate (number of records per second) at which data will be read
    *  from each Kafka partition.
@@ -40,7 +40,7 @@ trait PerPartitionConfig {
  * Default per-partition configuration
  */
 private class DefaultPerPartitionConfig(conf: SparkConf)
-    extends PerPartitionConfig with Serializable {
+    extends PerPartitionConfig {
   val maxRate = conf.getInt("spark.streaming.kafka.maxRatePerPartition", 0)
 
   def maxRatePerPartition(topicPartition: TopicPartition): Int = maxRate
