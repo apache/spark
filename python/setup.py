@@ -23,6 +23,11 @@ import sys
 from setuptools import setup, find_packages
 from shutil import copyfile, copytree, rmtree
 
+if sys.version_info < (2, 7):
+    print("Python versions prior to 2.7 are not supported for pip installed PySpark.",
+          file=sys.stderr)
+    exit(-1)
+
 try:
     exec(open('pyspark/version.py').read())
 except IOError:
@@ -44,11 +49,6 @@ SCRIPTS_PATH = "%s/bin" % SPARK_HOME
 SCRIPTS_TARGET = "%s/bin" % TEMP_PATH
 JARS_TARGET = "%s/jars" % TEMP_PATH
 EXAMPLES_TARGET = "%s/examples" % TEMP_PATH
-
-if sys.version_info < (2, 7):
-    print("Python versions prior to 2.7 are not supported for pip installed PySpark.",
-          file=sys.stderr)
-    exit(-1)
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 # This is important because we only want to build the symlink farm while under Spark otherwise we
