@@ -395,8 +395,6 @@ trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
   override final def children: Seq[SparkPlan] = child :: Nil
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 trait BinaryExecNode extends SparkPlan {

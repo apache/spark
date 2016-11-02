@@ -1059,9 +1059,11 @@ private[spark] class Client(
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
+            cleanupStagingDir(appId)
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
           case NonFatal(e) =>
             logError(s"Failed to contact YARN for application $appId.", e)
+            // Don't necessarily clean up staging dir because status is unknown
             return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
         }
       val state = report.getYarnApplicationState
@@ -1179,7 +1181,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.3-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.4-src.zip")
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())

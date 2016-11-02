@@ -1103,11 +1103,16 @@ for more details on the API.
 
 `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
 categorical features. The number of bins is set by the `numBuckets` parameter. It is possible
-that the number of buckets used will be less than this value, for example, if there are too few
-distinct values of the input to create enough distinct quantiles. Note also that NaN values are
-handled specially and placed into their own bucket. For example, if 4 buckets are used, then
-non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
-The bin ranges are chosen using an approximate algorithm (see the documentation for
+that the number of buckets used will be smaller than this value, for example, if there are too few
+distinct values of the input to create enough distinct quantiles.
+
+NaN values: Note also that QuantileDiscretizer
+will raise an error when it finds NaN values in the dataset, but the user can also choose to either
+keep or remove NaN values within the dataset by setting `handleInvalid`. If the user chooses to keep
+NaN values, they will be handled specially and placed into their own bucket, for example, if 4 buckets
+are used, then non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
+
+Algorithm: The bin ranges are chosen using an approximate algorithm (see the documentation for
 [approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions) for a
 detailed description). The precision of the approximation can be controlled with the
 `relativeError` parameter. When set to zero, exact quantiles are calculated
@@ -1333,14 +1338,14 @@ for more details on the API.
 `ChiSqSelector` stands for Chi-Squared feature selection. It operates on labeled data with
 categorical features. ChiSqSelector uses the
 [Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
-features to choose. It supports three selection methods: `KBest`, `Percentile` and `FPR`:
+features to choose. It supports three selection methods: `numTopFeatures`, `percentile`, `fpr`:
 
-* `KBest` chooses the `k` top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
-* `Percentile` is similar to `KBest` but chooses a fraction of all features instead of a fixed number.
-* `FPR` chooses all features whose false positive rate meets some threshold.
+* `numTopFeatures` chooses a fixed number of top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
+* `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
+* `fpr` chooses all features whose p-value is below a threshold, thus controlling the false positive rate of selection.
 
-By default, the selection method is `KBest`, the default number of top features is 50. User can use
-`setNumTopFeatures`, `setPercentile` and `setAlpha` to set different selection methods.
+By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
+The user can choose a selection method using `setSelectorType`.
 
 **Examples**
 

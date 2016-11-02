@@ -26,15 +26,16 @@ import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, Inte
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.command.{DDLUtils, ExecutedCommandExec}
+import org.apache.spark.sql.execution.command.{AlterTableAddPartitionCommand, DDLUtils, ExecutedCommandExec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -179,15 +180,30 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
           "Cannot overwrite a path that is also being read from.")
       }
 
-      InsertIntoHadoopFsRelationCommand(
+      def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
+        if (l.catalogTable.isDefined &&
+            l.catalogTable.get.partitionColumnNames.nonEmpty &&
+            l.catalogTable.get.partitionProviderIsHive) {
+          val metastoreUpdater = AlterTableAddPartitionCommand(
+            l.catalogTable.get.identifier,
+            updatedPartitions.map(p => (p, None)),
+            ifNotExists = true)
+          metastoreUpdater.run(t.sparkSession)
+        }
+        t.location.refresh()
+      }
+
+      val insertCmd = InsertIntoHadoopFsRelationCommand(
         outputPath,
         query.resolve(t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver),
         t.bucketSpec,
         t.fileFormat,
-        () => t.location.refresh(),
+        refreshPartitionsCallback,
         t.options,
         query,
         mode)
+
+      insertCmd
   }
 }
 

@@ -215,13 +215,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Substring(bytes, 2, 2), Array[Byte](2, 3))
     checkEvaluation(Substring(bytes, 3, 2), Array[Byte](3, 4))
     checkEvaluation(Substring(bytes, 4, 2), Array[Byte](4))
-    checkEvaluation(Substring(bytes, 8, 2), Array[Byte]())
+    checkEvaluation(Substring(bytes, 8, 2), Array.empty[Byte])
     checkEvaluation(Substring(bytes, -1, 2), Array[Byte](4))
     checkEvaluation(Substring(bytes, -2, 2), Array[Byte](3, 4))
     checkEvaluation(Substring(bytes, -3, 2), Array[Byte](2, 3))
     checkEvaluation(Substring(bytes, -4, 2), Array[Byte](1, 2))
     checkEvaluation(Substring(bytes, -5, 2), Array[Byte](1))
-    checkEvaluation(Substring(bytes, -8, 2), Array[Byte]())
+    checkEvaluation(Substring(bytes, -8, 2), Array.empty[Byte])
   }
 
   test("string substring_index function") {
@@ -275,7 +275,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Base64(UnBase64(a)), "AQIDBA==", create_row("AQIDBA=="))
 
     checkEvaluation(Base64(b), "AQIDBA==", create_row(bytes))
-    checkEvaluation(Base64(b), "", create_row(Array[Byte]()))
+    checkEvaluation(Base64(b), "", create_row(Array.empty[Byte]))
     checkEvaluation(Base64(b), null, create_row(null))
     checkEvaluation(Base64(Literal.create(null, BinaryType)), null, create_row("abdef"))
 
@@ -526,13 +526,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
     checkEvaluation(Length(Literal("a花花c")), 4, create_row(string))
     // scalastyle:on
-    checkEvaluation(Length(Literal(bytes)), 5, create_row(Array[Byte]()))
+    checkEvaluation(Length(Literal(bytes)), 5, create_row(Array.empty[Byte]))
 
     checkEvaluation(Length(a), 5, create_row(string))
     checkEvaluation(Length(b), 5, create_row(bytes))
 
     checkEvaluation(Length(a), 0, create_row(""))
-    checkEvaluation(Length(b), 0, create_row(Array[Byte]()))
+    checkEvaluation(Length(b), 0, create_row(Array.empty[Byte]))
 
     checkEvaluation(Length(a), null, create_row(null))
     checkEvaluation(Length(b), null, create_row(null))

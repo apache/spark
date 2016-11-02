@@ -76,9 +76,14 @@ object HiveCatalogMetrics extends Source {
   val METRIC_PARTITIONS_FETCHED = metricRegistry.counter(MetricRegistry.name("partitionsFetched"))
 
   /**
-   * Tracks the total number of files discovered off of the filesystem by ListingFileCatalog.
+   * Tracks the total number of files discovered off of the filesystem by InMemoryFileIndex.
    */
   val METRIC_FILES_DISCOVERED = metricRegistry.counter(MetricRegistry.name("filesDiscovered"))
+
+  /**
+   * Tracks the total number of files served from the file status cache instead of discovered.
+   */
+  val METRIC_FILE_CACHE_HITS = metricRegistry.counter(MetricRegistry.name("fileCacheHits"))
 
   /**
    * Resets the values of all metrics to zero. This is useful in tests.
@@ -86,9 +91,11 @@ object HiveCatalogMetrics extends Source {
   def reset(): Unit = {
     METRIC_PARTITIONS_FETCHED.dec(METRIC_PARTITIONS_FETCHED.getCount())
     METRIC_FILES_DISCOVERED.dec(METRIC_FILES_DISCOVERED.getCount())
+    METRIC_FILE_CACHE_HITS.dec(METRIC_FILE_CACHE_HITS.getCount())
   }
 
   // clients can use these to avoid classloader issues with the codahale classes
   def incrementFetchedPartitions(n: Int): Unit = METRIC_PARTITIONS_FETCHED.inc(n)
   def incrementFilesDiscovered(n: Int): Unit = METRIC_FILES_DISCOVERED.inc(n)
+  def incrementFileCacheHits(n: Int): Unit = METRIC_FILE_CACHE_HITS.inc(n)
 }

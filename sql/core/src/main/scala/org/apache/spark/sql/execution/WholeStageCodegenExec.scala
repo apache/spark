@@ -218,7 +218,9 @@ trait CodegenSupport extends SparkPlan {
 case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def doExecute(): RDD[InternalRow] = {
@@ -292,7 +294,9 @@ object WholeStageCodegenExec {
 case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
+
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override lazy val metrics = Map(

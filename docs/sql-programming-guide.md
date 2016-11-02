@@ -316,7 +316,7 @@ Serializable and has getters and setters for all of its fields.
 
 Spark SQL can convert an RDD of Row objects to a DataFrame, inferring the datatypes. Rows are constructed by passing a list of
 key/value pairs as kwargs to the Row class. The keys of this list define the column names of the table,
-and the types are inferred by sampling the whole datase, similar to the inference that is performed on JSON files.
+and the types are inferred by sampling the whole dataset, similar to the inference that is performed on JSON files.
 
 {% include_example schema_inferring python/sql/basic.py %}
 </div>
@@ -832,8 +832,9 @@ This conversion can be done using `SparkSession.read.json()` on either an RDD of
 or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. As a consequence,
-a regular multi-line JSON file will most often fail.
+line must contain a separate, self-contained valid JSON object. For more information, please see
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
+consequence, a regular multi-line JSON file will most often fail.
 
 {% include_example json_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -844,8 +845,9 @@ This conversion can be done using `SparkSession.read().json()` on either an RDD 
 or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. As a consequence,
-a regular multi-line JSON file will most often fail.
+line must contain a separate, self-contained valid JSON object. For more information, please see
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
+consequence, a regular multi-line JSON file will most often fail.
 
 {% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
@@ -855,8 +857,9 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using `SparkSession.read.json` on a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. As a consequence,
-a regular multi-line JSON file will most often fail.
+line must contain a separate, self-contained valid JSON object. For more information, please see
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
+consequence, a regular multi-line JSON file will most often fail.
 
 {% include_example json_dataset python/sql/datasource.py %}
 </div>
@@ -867,8 +870,9 @@ the `read.json()` function, which loads data from a directory of JSON files wher
 files is a JSON object.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
-line must contain a separate, self-contained valid JSON object. As a consequence,
-a regular multi-line JSON file will most often fail.
+line must contain a separate, self-contained valid JSON object. For more information, please see
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
+consequence, a regular multi-line JSON file will most often fail.
 
 {% include_example json_dataset r/RSparkSQLExample.R %}
 
@@ -904,50 +908,27 @@ access data stored in Hive.
 Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (for security configuration),
 and `hdfs-site.xml` (for HDFS configuration) file in `conf/`.
 
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
-
 When working with Hive, one must instantiate `SparkSession` with Hive support, including
 connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
 Users who do not have an existing Hive deployment can still enable Hive support. When not configured
 by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
 creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
-`spark-warehouse` in the current directory that the spark application is started. Note that
+`spark-warehouse` in the current directory that the Spark application is started. Note that
 the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
 Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
-You may need to grant write privilege to the user who starts the spark application.
+You may need to grant write privilege to the user who starts the Spark application.
 
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
 {% include_example spark_hive scala/org/apache/spark/examples/sql/hive/SparkHiveExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-
-When working with Hive, one must instantiate `SparkSession` with Hive support, including
-connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
-Users who do not have an existing Hive deployment can still enable Hive support. When not configured
-by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
-creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
-`spark-warehouse` in the current directory that the spark application is started. Note that
-the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
-Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
-You may need to grant write privilege to the user who starts the spark application.
-
 {% include_example spark_hive java/org/apache/spark/examples/sql/hive/JavaSparkHiveExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
-
-When working with Hive, one must instantiate `SparkSession` with Hive support, including
-connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
-Users who do not have an existing Hive deployment can still enable Hive support. When not configured
-by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
-creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
-`spark-warehouse` in the current directory that the spark application is started. Note that
-the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
-Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
-You may need to grant write privilege to the user who starts the spark application.
-
 {% include_example spark_hive python/sql/hive.py %}
 </div>
 

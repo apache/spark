@@ -98,9 +98,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.partitionSpec == null &&
-      ctx.identifier != null &&
-      ctx.identifier.getText.toLowerCase == "noscan") {
+    if (ctx.partitionSpec != null) {
+      logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")
+    }
+    if (ctx.identifier != null) {
+      if (ctx.identifier.getText.toLowerCase != "noscan") {
+        throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+      }
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier))
     } else if (ctx.identifierSeq() == null) {
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier), noscan = false)
@@ -168,17 +172,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
-    val table = visitTableIdentifier(ctx.tableIdentifier)
-
-    val lookupTable = Option(ctx.db) match {
-      case None => table
-      case Some(db) if table.database.exists(_ != db) =>
-        operationNotAllowed(
-          s"SHOW COLUMNS with conflicting databases: '$db' != '${table.database.get}'",
-          ctx)
-      case Some(db) => TableIdentifier(table.identifier, Some(db.getText))
-    }
-    ShowColumnsCommand(lookupTable)
+    ShowColumnsCommand(Option(ctx.db).map(_.getText), visitTableIdentifier(ctx.tableIdentifier))
   }
 
   /**
