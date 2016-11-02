@@ -424,7 +424,7 @@ case class AlterTableDropPartitionCommand(
     purge: Boolean)
   extends RunnableCommand with PredicateHelper {
 
-  private def hasComplexExpr(expr: Expression): Boolean = {
+  private def hasNonEqualToComparison(expr: Expression): Boolean = {
     expr.find(e => e.isInstanceOf[BinaryComparison] && !e.isInstanceOf[EqualTo]).isDefined
   }
 
@@ -435,21 +435,22 @@ case class AlterTableDropPartitionCommand(
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
-    specs.flatMap(splitConjunctivePredicates).map {
-      case BinaryComparison(AttributeReference(key, _, _, _), _) =>
-        table.partitionColumnNames.find(resolver(_, key)).getOrElse {
-          throw new AnalysisException(
-            s"$key is not a valid partition column in table ${table.identifier.quotedString}.")
+    specs.foreach { expr =>
+      expr.references.foreach { attr =>
+        if (!table.partitionColumnNames.exists(resolver(_, attr.name))) {
+          throw new AnalysisException(s"${attr.name} is not a valid partition column " +
+            s"in table ${table.identifier.quotedString}.")
         }
+      }
     }
 
-    if (specs.exists(hasComplexExpr)) {
+    if (specs.exists(hasNonEqualToComparison)) {
       val partitions = catalog.listPartitionsByFilter(table.identifier, specs)
       if (partitions.nonEmpty) {
         catalog.dropPartitions(
           table.identifier, partitions.map(_.spec), ignoreIfNotExists = ifExists, purge = purge)
       } else if (!ifExists) {
-        throw new AnalysisException(specs.toString)
+        throw new AnalysisException(s"There is no partition for ${specs}.")
       }
     } else {
       val normalizedSpecs = specs.map { expr =>

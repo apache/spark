@@ -259,6 +259,12 @@ class HiveDDLSuite
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") ::
         Row("country=US/quarter=4") :: Nil)
+    }
+  }
+
+  test("SPARK-17732: Error handlnig for drop partitions by filter") {
+    withTable("sales") {
+      sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
 
       val m = intercept[AnalysisException] {
         sql("ALTER TABLE sales DROP PARTITION (unknown = 'KR')")
@@ -269,6 +275,11 @@ class HiveDDLSuite
         sql("ALTER TABLE sales DROP PARTITION (unknown < 'KR')")
       }.getMessage
       assert(m2.contains("unknown is not a valid partition column in table"))
+
+      val m3 = intercept[AnalysisException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown <=> 'KR')")
+      }.getMessage
+      assert(m3.contains("'<=>' operator is not allowed in partition specification"))
     }
   }
 
@@ -279,7 +290,7 @@ class HiveDDLSuite
       val m = intercept[ParseException] {
         sql("ALTER TABLE sales ADD PARTITION (country='US', quarter<'1')")
       }.getMessage()
-      assert(m.contains("Only '=' partition specification is allowed"))
+      assert(m.contains("Only '=' operator is allowed for this partition specification"))
     }
   }
 

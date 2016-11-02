@@ -198,7 +198,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       val name = pVal.identifier.getText
       val operator = Option(pVal.comparisonOperator).map(_.getText)
       validate(operator.isEmpty || operator.get.equals("="),
-        "Only '=' partition specification is allowed.", ctx)
+        "Only '=' operator is allowed for this partition specification.", ctx)
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
     }
@@ -216,6 +216,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText
       val operator = Option(pVal.comparisonOperator).map(_.getText)
+      validate(operator.nonEmpty && !operator.get.equals("<=>"),
+        "'<=>' operator is not allowed in partition specification.", ctx)
       if (operator.isDefined) {
         val left = AttributeReference(name, DataTypes.StringType)()
         val right = expression(pVal.constant)
