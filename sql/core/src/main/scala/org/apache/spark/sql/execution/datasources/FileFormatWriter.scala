@@ -43,8 +43,8 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 
-/** A helper object for writing data out to a location. */
-object WriteOutput extends Logging {
+/** A helper object for writing FileFormat data out to a location. */
+object FileFormatWriter extends Logging {
 
   /** A shared job description for all the write tasks. */
   private class WriteJobDescription(
@@ -55,7 +55,6 @@ object WriteOutput extends Logging {
       val partitionColumns: Seq[Attribute],
       val nonPartitionColumns: Seq[Attribute],
       val bucketSpec: Option[BucketSpec],
-      val isAppend: Boolean,
       val path: String)
     extends Serializable {
 
@@ -82,18 +81,18 @@ object WriteOutput extends Logging {
       sparkSession: SparkSession,
       plan: LogicalPlan,
       fileFormat: FileFormat,
-      outputPath: Path,
+      committer: FileCommitProtocol,
+      outputPath: String,
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       refreshFunction: (Seq[TablePartitionSpec]) => Unit,
-      options: Map[String, String],
-      isAppend: Boolean): Unit = {
+      options: Map[String, String]): Unit = {
 
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
     job.setOutputValueClass(classOf[InternalRow])
-    FileOutputFormat.setOutputPath(job, outputPath)
+    FileOutputFormat.setOutputPath(job, new Path(outputPath))
 
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = plan.output.filterNot(partitionSet.contains)
@@ -111,16 +110,11 @@ object WriteOutput extends Logging {
       partitionColumns = partitionColumns,
       nonPartitionColumns = dataColumns,
       bucketSpec = bucketSpec,
-      isAppend = isAppend,
-      path = outputPath.toString)
+      path = outputPath)
 
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       // This call shouldn't be put into the `try` block below because it only initializes and
       // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-      val committer = FileCommitProtocol.instantiate(
-        sparkSession.sessionState.conf.fileCommitProtocolClass,
-        outputPath.toString,
-        isAppend)
       committer.setupJob(job)
 
       try {

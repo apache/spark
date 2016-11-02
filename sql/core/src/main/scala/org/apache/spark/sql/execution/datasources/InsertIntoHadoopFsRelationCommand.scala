@@ -84,17 +84,22 @@ case class InsertIntoHadoopFsRelationCommand(
     val isAppend = pathExists && (mode == SaveMode.Append)
 
     if (doInsertion) {
-      WriteOutput.write(
-        sparkSession,
-        query,
-        fileFormat,
-        qualifiedOutputPath,
-        hadoopConf,
-        partitionColumns,
-        bucketSpec,
-        refreshFunction,
-        options,
+      val committer = FileCommitProtocol.instantiate(
+        sparkSession.sessionState.conf.fileCommitProtocolClass,
+        outputPath.toString,
         isAppend)
+
+      FileFormatWriter.write(
+        sparkSession = sparkSession,
+        plan = query,
+        fileFormat = fileFormat,
+        committer = committer,
+        outputPath = qualifiedOutputPath.toString,
+        hadoopConf = hadoopConf,
+        partitionColumns = partitionColumns,
+        bucketSpec = bucketSpec,
+        refreshFunction = refreshFunction,
+        options = options)
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }

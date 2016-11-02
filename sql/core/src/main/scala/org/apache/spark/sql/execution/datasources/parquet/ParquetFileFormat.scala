@@ -415,17 +415,6 @@ class ParquetFileFormat
       }
     }
   }
-
-  override def buildWriter(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      options: Map[String, String]): OutputWriterFactory = {
-    new ParquetOutputWriterFactory(
-      sqlContext.conf,
-      dataSchema,
-      sqlContext.sessionState.newHadoopConf(),
-      options)
-  }
 }
 
 object ParquetFileFormat extends Logging {
