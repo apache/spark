@@ -42,6 +42,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
+
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
 case class Nested3(f3: Int)
