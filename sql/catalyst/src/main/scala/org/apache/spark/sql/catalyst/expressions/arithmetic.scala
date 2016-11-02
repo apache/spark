@@ -208,20 +208,12 @@ case class Multiply(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
-@ExpressionDescription(
-  usage = "a _FUNC_ b - Divides a by b.",
-  extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
-case class Divide(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
-
-  override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
-
-  override def symbol: String = "/"
-  override def decimalMethod: String = "$div"
+abstract class DivideBase extends BinaryArithmetic with NullIntolerant {
   override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
+    case i: IntegralType => i.integral.asInstanceOf[Integral[Any]].quot
   }
 
   override def eval(input: InternalRow): Any = {
@@ -251,10 +243,11 @@ case class Divide(left: Expression, right: Expression)
     }
     val javaType = ctx.javaType(dataType)
     val divide = if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval1.value}.$decimalMethod(${eval2.value})"
+      s"${eval1.value}.$$div(${eval2.value})"
     } else {
-      s"($javaType)(${eval1.value} $symbol ${eval2.value})"
+      s"($javaType)(${eval1.value} / ${eval2.value})"
     }
+
     if (!left.nullable && !right.nullable) {
       ev.copy(code = s"""
         ${eval2.code}
@@ -283,6 +276,26 @@ case class Divide(left: Expression, right: Expression)
         }""")
     }
   }
+}
+
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Fraction Division a by b.",
+  extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
+case class Divide(left: Expression, right: Expression) extends DivideBase {
+
+  override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
+
+  override def symbol: String = "/"
+}
+
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Divides a by b.",
+  extended = "> SELECT 3 _FUNC_ 2;\n 1")
+case class IntegralDivide(left: Expression, right: Expression) extends DivideBase {
+
+  override def inputType: AbstractDataType = IntegralType
+
+  override def symbol: String = "div"
 }
 
 @ExpressionDescription(
