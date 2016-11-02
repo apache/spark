@@ -1579,16 +1579,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
           checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
         } finally {
+          // scalastyle:off println
           Utils.classForName("org.apache.derby.jdbc.EmbeddedDriver")
           val dir = new File("../../assembly/metastore_db")
+          println("connecting to: " + dir.getCanonicalPath)
           val conn = DriverManager.getConnection("jdbc:derby:" + dir.getCanonicalPath)
           var query = conn.createStatement
           var rs = query.executeQuery("select * from partitions")
-          // scalastyle:off println
+          println("metastore partition table contents:")
           while (rs.next()) {
             println(rs.getString(1) + " " + rs.getString(2) + " " + rs.getString(3) + " " +
               rs.getString(4) + " " + rs.getString(5) + " " + rs.getString(6))
           }
+          println("metastore partition key val contents:")
           query = conn.createStatement
           rs = query.executeQuery("select * from partition_key_vals")
           while (rs.next()) {
@@ -1598,11 +1601,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
       }
     }
-    try {
-      runOnce()
-    } catch {
-      case t: Throwable =>
-    }
+    runOnce()
   }
 
   test("SPARK-11453: append data to partitioned table") {
