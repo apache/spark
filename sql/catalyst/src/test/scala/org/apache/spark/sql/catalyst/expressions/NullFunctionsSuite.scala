@@ -91,13 +91,13 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val stringLit = Literal.create("c", StringType)
     val nullLit = Literal.create(null, NullType)
 
-    assert(Nvl(intLit, doubleLit).replaceForTypeCoercion().dataType == DoubleType)
-    assert(Nvl(intLit, stringLit).replaceForTypeCoercion().dataType == StringType)
-    assert(Nvl(stringLit, doubleLit).replaceForTypeCoercion().dataType == StringType)
+    assert(new Nvl(intLit, doubleLit).child.dataType == DoubleType)
+    assert(new Nvl(intLit, stringLit).child.dataType == StringType)
+    assert(new Nvl(stringLit, doubleLit).child.dataType == StringType)
 
-    assert(Nvl(nullLit, intLit).replaceForTypeCoercion().dataType == IntegerType)
-    assert(Nvl(doubleLit, nullLit).replaceForTypeCoercion().dataType == DoubleType)
-    assert(Nvl(nullLit, stringLit).replaceForTypeCoercion().dataType == StringType)
+    assert(new Nvl(nullLit, intLit).child.dataType == IntegerType)
+    assert(new Nvl(doubleLit, nullLit).child.dataType == DoubleType)
+    assert(new Nvl(nullLit, stringLit).child.dataType == StringType)
   }
 
   test("AtLeastNNonNulls") {
