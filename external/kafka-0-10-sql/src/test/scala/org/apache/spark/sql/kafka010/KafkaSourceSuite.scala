@@ -141,14 +141,13 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUtils.sendMessages(topic, (10 to 20).map(_.toString).toArray, Some(1))
     testUtils.sendMessages(topic, Array("1"), Some(2))
 
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("maxOffsetsPerTrigger", 10)
-      .option("subscribe", topic)
-      .option("startingOffsets", "earliest")
+    val reader = testUtils.reader(
+      spark,
+      ("kafka.metadata.max.age.ms", "1"),
+      ("maxOffsetsPerTrigger", "10"),
+      ("subscribe", topic),
+      ("startingOffsets", "earliest")
+    )
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
@@ -205,12 +204,11 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUtils.createTopic(newTopic(), partitions = 5)
     testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)
 
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("subscribePattern", s"topic-.*")
+    val reader = testUtils.reader(
+      spark,
+      ("kafka.metadata.max.age.ms", "1"),
+      ("subscribePattern", s"topic-.*")
+    )
 
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -279,13 +277,12 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUtils.sendMessages(topic, Array("-1"))
     require(testUtils.getLatestOffsets(Set(topic)).size === 5)
 
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("subscribePattern", s"$topicPrefix-.*")
-      .option("failOnDataLoss", "false")
+    val reader = testUtils.reader(
+      spark,
+      ("kafka.metadata.max.age.ms", "1"),
+      ("subscribePattern", s"$topicPrefix-.*"),
+      ("failOnDataLoss", "false")
+    )
 
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -309,10 +306,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
   test("bad source options") {
     def testBadOptions(options: (String, String)*)(expectedMsgs: String*): Unit = {
       val ex = intercept[IllegalArgumentException] {
-        val reader = spark
-          .readStream
-          .format("kafka")
-        options.foreach { case (k, v) => reader.option(k, v) }
+        val reader = testUtils.reader(
+          spark,
+          options: _*
+        )
         reader.load()
       }
       expectedMsgs.foreach { m =>
@@ -368,12 +365,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUtils.sendMessages(topic, Array("-1"))
     require(testUtils.getLatestOffsets(Set(topic)).size === 5)
 
-    val kafka = spark
-      .readStream
-      .format("kafka")
-      .option("subscribe", topic)
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .load()
+    val kafka = testUtils.reader(
+      spark,
+      ("subscribe", topic)
+    ).load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
 
@@ -418,13 +413,13 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUtils.sendMessages(topic, Array(20, 21, 22).map(_.toString), Some(4))
     require(testUtils.getLatestOffsets(Set(topic)).size === 5)
 
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("startingOffsets", startingOffsets)
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-    options.foreach { case (k, v) => reader.option(k, v) }
+    val reader = testUtils.reader(
+      spark,
+      (options ++ Array(
+        ("startingOffsets", startingOffsets),
+        ("kafka.metadata.max.age.ms", "1")
+      )): _*
+    )
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
@@ -450,13 +445,13 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUtils.sendMessages(topic, Array("-1"))
     require(testUtils.getLatestOffsets(Set(topic)).size === 5)
 
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("startingOffsets", s"latest")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-    options.foreach { case (k, v) => reader.option(k, v) }
+    val reader = testUtils.reader(
+      spark,
+      (options ++ Array(
+        ("startingOffsets", s"latest"),
+        ("kafka.metadata.max.age.ms", "1")
+      )): _*
+    )
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
@@ -500,6 +495,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .option("startingOffsets", s"earliest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafkaConsumer.pollTimeoutMs", 10 * 1000)
     options.foreach { case (k, v) => reader.option(k, v) }
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -557,6 +553,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
         .option("kafka.metadata.max.age.ms", "1")
         .option("subscribePattern", "stress.*")
         .option("failOnDataLoss", "false")
+        .option("kafkaConsumer.pollTimeoutMs", 10 * 1000)
         .load()
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
         .as[(String, String)]
