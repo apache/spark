@@ -1343,7 +1343,8 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
    *                     same RDD/partition. This adds some additional overhead for tracking and
-   *                     is an experimental feature.
+   *                     is an experimental feature. Data Propert accumulators are not currently
+   *                     supported in Datasets.
    */
   @Experimental
   def register(acc: AccumulatorV2[_, _], dataProperty: Boolean): Unit = {
@@ -1356,7 +1357,8 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
    *                     same RDD/partition. This adds some additional overhead for tracking and
-   *                     is an experimental feature.
+   *                     is an experimental feature. Data Propert accumulators are not currently
+   *                     supported in Datasets.
    * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   @Experimental
@@ -1389,7 +1391,8 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
    *                     same RDD/partition. This adds some additional overhead for tracking and
-   *                     is an experimental feature.
+   *                     is an experimental feature. Data Propert accumulators are not currently
+   *                     supported in Datasets.
    */
   @Experimental
   def longAccumulator(dataProperty: Boolean): LongAccumulator = {
@@ -1403,7 +1406,8 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
    *                     same RDD/partition. This adds some additional overhead for tracking and
-   *                     is an experimental feature.
+   *                     is an experimental feature. Data Propert accumulators are not currently
+   *                     supported in Datasets.
    * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   @Experimental

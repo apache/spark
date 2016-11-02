@@ -1529,6 +1529,8 @@ data.map(g)
 
 Spark's new experimental data property accumulators also only have updates performed inside of actions, but also keep track of where the update is coming from so that multiple actions will not trigger double counting. This experimental API is currently only available in Scala, to create a data property accumulator simply specify `dataProperty = true` as the last parameter in your `accumulator` call.
 
+**NOTE:** At present data property accumulators are not supported with Datasets.
+
 # Deploying to a Cluster
 
 The [application submission guide](submitting-applications.html) describes how to submit applications to a cluster.

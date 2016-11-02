@@ -43,7 +43,8 @@ import org.apache.spark.scheduler.AccumulableInfo
  *                     RDD/Partition/Shuffle combination. This prevents double counting on
  *                     reevaluation. Partial evaluation of a partition will not increment a data
  *                     property accumulator. Data property accumulators are currently experimental
- *                     and the behaviour may change in future versions.
+ *                     and the behaviour may change in future versions. Data Propert accumulators
+ *                     are not currently supported in Datasets.
  *
  */
 private[spark] case class AccumulatorMetadata(
