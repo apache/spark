@@ -42,9 +42,11 @@ import org.apache.spark.annotation.Private
  */
 @Private
 class OpenHashSet[@specialized(Long, Int) T: ClassTag](
-    initialCapacity: Int,
+    var initialCapacity: Int,
     loadFactor: Double)
   extends Serializable {
+
+  if (initialCapacity == 0) initialCapacity = 1
 
   require(initialCapacity <= OpenHashSet.MAX_CAPACITY,
     s"Can't make capacity bigger than ${OpenHashSet.MAX_CAPACITY} elements")
