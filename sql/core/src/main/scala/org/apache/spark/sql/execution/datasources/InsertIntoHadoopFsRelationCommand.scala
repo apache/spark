@@ -21,6 +21,7 @@ import java.io.IOException
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec

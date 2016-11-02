@@ -25,8 +25,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.FileCommitProtocol
-import org.apache.spark.sql.execution.datasources.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 
 /**
  * A [[FileCommitProtocol]] that tracks the list of valid files in a manifest file, used in
