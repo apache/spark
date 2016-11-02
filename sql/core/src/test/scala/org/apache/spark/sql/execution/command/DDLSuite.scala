@@ -1595,6 +1595,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("CREATE DATABASE temp")
     sql("USE temp")
     sql("DROP DATABASE temp")
+    val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t (a INT, b INT)")
+      }.getMessage
+    assert(e.contains("Database 'temp' not found"))
   }
 
   test("drop default database") {
