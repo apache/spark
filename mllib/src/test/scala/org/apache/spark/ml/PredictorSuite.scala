@@ -31,7 +31,7 @@ class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import PredictorSuite._
 
-  test("should support all NumericType labels and weights and not support other types") {
+  test("should support all NumericType labels and weights, and not support other types") {
     val df = spark.createDataFrame(Seq(
       (0, 1, Vectors.dense(0, 2, 3)),
       (1, 2, Vectors.dense(0, 3, 9)),
