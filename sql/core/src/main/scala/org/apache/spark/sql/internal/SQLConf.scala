@@ -31,6 +31,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.execution.datasources.HadoopCommitProtocolWrapper
+import org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -523,7 +524,7 @@ object SQLConf {
     SQLConfigBuilder("spark.sql.streaming.commitProtocolClass")
       .internal()
       .stringConf
-      .createWithDefault(classOf[HadoopCommitProtocolWrapper].getName)
+      .createWithDefault(classOf[ManifestFileCommitProtocol].getName)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
