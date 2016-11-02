@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
@@ -40,7 +41,7 @@ case class InsertIntoHadoopFsRelationCommand(
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    refreshFunction: () => Unit,
+    refreshFunction: (Seq[TablePartitionSpec]) => Unit,
     options: Map[String, String],
     @transient query: LogicalPlan,
     mode: SaveMode)
@@ -83,17 +84,22 @@ case class InsertIntoHadoopFsRelationCommand(
     val isAppend = pathExists && (mode == SaveMode.Append)
 
     if (doInsertion) {
-      WriteOutput.write(
-        sparkSession,
-        query,
-        fileFormat,
-        qualifiedOutputPath,
-        hadoopConf,
-        partitionColumns,
-        bucketSpec,
-        refreshFunction,
-        options,
+      val committer = FileCommitProtocol.instantiate(
+        sparkSession.sessionState.conf.fileCommitProtocolClass,
+        outputPath.toString,
         isAppend)
+
+      FileFormatWriter.write(
+        sparkSession = sparkSession,
+        plan = query,
+        fileFormat = fileFormat,
+        committer = committer,
+        outputPath = qualifiedOutputPath.toString,
+        hadoopConf = hadoopConf,
+        partitionColumns = partitionColumns,
+        bucketSpec = bucketSpec,
+        refreshFunction = refreshFunction,
+        options = options)
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }

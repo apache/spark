@@ -767,7 +767,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.kryo.referenceTracking</code></td>
-  <td>true (false when using Spark SQL Thrift Server)</td>
+  <td>true</td>
   <td>
     Whether to track references to the same object when serializing data with Kryo, which is
     necessary if your object graphs have loops and useful for efficiency if they contain multiple
@@ -838,8 +838,7 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.serializer</code></td>
   <td>
-    org.apache.spark.serializer.<br />JavaSerializer (org.apache.spark.serializer.<br />
-    KryoSerializer when using Spark SQL Thrift Server)
+    org.apache.spark.serializer.<br />JavaSerializer
   </td>
   <td>
     Class to use for serializing objects that will be sent over the network or need to be cached
@@ -1890,6 +1889,21 @@ showDF(properties, numRows = 200, truncate = FALSE)
     <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.backendConnectionTimeout</code></td>
+  <td>6000</td>
+  <td>
+    Connection timeout set by R process on its connection to RBackend in seconds.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.r.heartBeatInterval</code></td>
+  <td>100</td>
+  <td>
+    Interval for heartbeats sents from SparkR backend to R process to prevent connection timeout.
+  </td>
+</tr>
+
 </table>
 
 #### Deploy

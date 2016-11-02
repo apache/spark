@@ -94,7 +94,7 @@ case class DataSource(
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      val fileCatalog = new ListingFileCatalog(sparkSession, globbedPaths, options, None)
+      val fileCatalog = new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
       val partitionSchema = fileCatalog.partitionSpec().partitionColumns
       val inferred = format.inferSchema(
         sparkSession,
@@ -184,7 +184,7 @@ case class DataSource(
       case s: StreamSinkProvider =>
         s.createSink(sparkSession.sqlContext, options, partitionColumns, outputMode)
 
-      case parquet: parquet.ParquetFileFormat =>
+      case fileFormat: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
@@ -193,7 +193,7 @@ case class DataSource(
           throw new IllegalArgumentException(
             s"Data source $className does not support $outputMode output mode")
         }
-        new FileStreamSink(sparkSession, path, parquet, partitionColumns, options)
+        new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, options)
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -256,7 +256,7 @@ case class DataSource(
       case (format: FileFormat, _)
           if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val fileCatalog = new MetadataLogFileCatalog(sparkSession, basePath)
+        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
@@ -309,12 +309,12 @@ case class DataSource(
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.partitionProviderIsHive) {
-          new TableFileCatalog(
+          new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L))
         } else {
-          new ListingFileCatalog(
+          new InMemoryFileIndex(
             sparkSession, globbedPaths, options, partitionSchema)
         }
 
@@ -325,7 +325,7 @@ case class DataSource(
           format.inferSchema(
             sparkSession,
             caseInsensitiveOptions,
-            fileCatalog.asInstanceOf[ListingFileCatalog].allFiles())
+            fileCatalog.asInstanceOf[InMemoryFileIndex].allFiles())
         }.getOrElse {
           throw new AnalysisException(
             s"Unable to infer schema for $format at ${allPaths.take(2).mkString(",")}. " +
@@ -409,7 +409,7 @@ case class DataSource(
           val plan = data.logicalPlan
           plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
             throw new AnalysisException(
-              s"Unable to resolve ${name} given [${plan.output.map(_.name).mkString(", ")}]")
+              s"Unable to resolve $name given [${plan.output.map(_.name).mkString(", ")}]")
           }.asInstanceOf[Attribute]
         }
         // For partitioned relation r, r.schema's column ordering can be different from the column
@@ -421,7 +421,7 @@ case class DataSource(
             columns,
             bucketSpec,
             format,
-            () => Unit, // No existing table needs to be refreshed.
+            _ => Unit, // No existing table needs to be refreshed.
             options,
             data.logicalPlan,
             mode)
@@ -476,8 +476,8 @@ object DataSource {
     "org.apache.spark.Logging")
 
   /** Given a provider name, look up the data source class definition. */
-  def lookupDataSource(provider0: String): Class[_] = {
-    val provider = backwardCompatibilityMap.getOrElse(provider0, provider0)
+  def lookupDataSource(provider: String): Class[_] = {
+    val provider = backwardCompatibilityMap.getOrElse(provider, provider)
     val provider2 = s"$provider.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)

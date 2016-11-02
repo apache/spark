@@ -133,11 +133,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   private def makeFunction(funcIdent: FunctionIdentifier): Function = {
     val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
     new Function(
-      name = funcIdent.identifier,
-      database = funcIdent.database.orNull,
+      name = metadata.getName,
+      database = metadata.getDb,
       description = null, // for now, this is always undefined
       className = metadata.getClassName,
-      isTemporary = funcIdent.database.isEmpty)
+      isTemporary = metadata.getDb == null)
   }
 
   /**
