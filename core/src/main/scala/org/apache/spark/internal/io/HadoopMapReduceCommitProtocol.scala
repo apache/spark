@@ -94,7 +94,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   }
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
-    setupCommitter(taskContext)
+    committer = setupCommitter(taskContext)
     committer.setupTask(taskContext)
   }
 
