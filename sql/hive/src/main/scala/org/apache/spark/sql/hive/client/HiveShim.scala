@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType, NoSuchObjectException, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegralType, StringType}
 import org.apache.spark.util.Utils
 
@@ -586,17 +587,31 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
+        val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
+        val tryDirectSql =
+          hive.getConf.getBoolean(tryDirectSqlConfVar.varname, tryDirectSqlConfVar.defaultBoolVal)
         try {
+          // Hive may throw an exception when calling this method in some circumstances, such as
+          // when filtering on a non-string partition column when the hive config key
+          // hive.metastore.try.direct.sql is false
           getPartitionsByFilterMethod.invoke(hive, table, filter)
             .asInstanceOf[JArrayList[Partition]]
         } catch {
-          case e: InvocationTargetException =>
-            // SPARK-18167 retry to investigate the flaky test. This should be reverted before
-            // the release is cut.
-            val retry = Try(getPartitionsByFilterMethod.invoke(hive, table, filter))
-            logError("getPartitionsByFilter failed, retry success = " + retry.isSuccess)
-            logError("all partitions: " + getAllPartitions(hive, table))
-            throw e
+          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
+              !tryDirectSql =>
+            logWarning("Caught Hive MetaException attempting to get partition metadata by " +
+              "filter from Hive. Falling back to fetching all partition metadata, which will " +
+              "degrade performance. Modifying your Hive metastore configuration to set " +
+              s"${tryDirectSqlConfVar.varname} to true may resolve this problem.", ex)
+            // HiveShim clients are expected to handle a superset of the requested partitions
+            getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
+              tryDirectSql =>
+            throw new RuntimeException("Caught Hive MetaException attempting to get partition " +
+              "metadata by filter from Hive. You can set the Spark configuration setting " +
+              s"${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false to work around this " +
+              "problem, however this will result in degraded performance. Please report a bug: " +
+              "https://issues.apache.org/jira/browse/SPARK", ex)
         }
       }
 
