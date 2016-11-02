@@ -28,8 +28,9 @@ Spark runs on Java 7+, Python 2.6+/3.4+ and R 3.1+. For the Scala API, Spark {{s
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).
 
-Note that support for Java 7, Python 2.6, Scala 2.10 and version of Hadoop before 2.6 are 
-deprecated as of Spark 2.1.0, and may be removed in Spark 2.2.0.
+Note that support for Java 7 and Python 2.6 are deprecated as of Spark 2.0.0, and support for 
+Scala 2.10 and version of Hadoop before 2.6 are deprecated as of Spark 2.1.0, and may be 
+removed in Spark 2.2.0.
 
 # Running the Examples and Shell
 
