@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io._
+import java.nio.charset.StandardCharsets
 import java.util.{ConcurrentModificationException, EnumSet, UUID}
 
 import scala.reflect.ClassTag
@@ -97,7 +98,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 
   protected def deserialize(in: InputStream): T = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    val reader = new InputStreamReader(in)
+    val reader = new InputStreamReader(in, StandardCharsets.UTF_8)
     Serialization.read[T](reader)
   }
 

@@ -26,9 +26,11 @@ package org.apache.spark.sql.execution.streaming
 abstract class Offset {
 
   /**
-   * Equality based on JSON string representation.
+   * Equality based on JSON string representation. We leverage the
+   * JSON representation for normalization between the Offset's
+   * in memory and on disk representations.
    */
-  override final def equals(obj: Any): Boolean = obj match {
+  override def equals(obj: Any): Boolean = obj match {
     case o: Offset => this.json == o.json
     case _ => false
   }
