@@ -53,11 +53,10 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
     event match {
       case e: StreamingQueryListener.Event =>
         // SPARK-18144: we broadcast QueryStartedEvent to all listeners attached to this bus
-        // synchronously and to listeners attached to LiveListenerBus asynchronously. Therefore,
+        // synchronously and the ones attached to LiveListenerBus asynchronously. Therefore,
         // we need to ignore QueryStartedEvent if this method is called within SparkListenerBus
         // thread
-        if (Thread.currentThread().getName != "SparkListenerBus" ||
-          !e.isInstanceOf[QueryStartedEvent]) {
+        if (!LiveListenerBus.withinListenerThread.value || !e.isInstanceOf[QueryStartedEvent]) {
           postToAll(e)
         }
       case _ =>
