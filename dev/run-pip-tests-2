@@ -39,39 +39,56 @@ if [ -d ~/.cache/pip/wheels/ ]; then
   rm -rf ~/.cache/pip/wheels/
 fi
 
-# Create a temp directory for us to work in and save its name to a file for cleanup
-echo "Constucting virtual env for testing"
-mktemp -d > ./virtual_env_temp_dir
-VIRTUALENV_BASE=`cat ./virtual_env_temp_dir`
-echo "Using $VIRTUALENV_BASE for virtualenv"
-virtualenv $VIRTUALENV_BASE
-source $VIRTUALENV_BASE/bin/activate
-# Upgrade pip
-pip install --upgrade pip
-
-echo "Creating pip installable source dist"
-cd python
-python setup.py sdist
-
-
-echo "Installing dist into virtual env"
-cd dist
-# Verify that the dist directory only contains one thing to install
-sdists=(*.tar.gz)
-if [ ${#sdists[@]} -ne 1 ]; then
-  echo "Unexpected number of targets found in dist directory - please cleanup existing sdists first."
-  exit -1
+# Figure out which Python execs we should test pip installation with
+PYTHON_EXECS=()
+if hash python 2>/dev/null; then
+  # We do this since we are testing with virtualenv and the default virtual env python
+  # is in /usr/bin/python
+  PYTHON_EXECS+=('python')
 fi
-# Do the actual installation
-pip install --upgrade --force-reinstall *.tar.gz
+if hash python3 2>/dev/null; then
+  PYTHON_EXECS+=('python3')
+fi
 
-cd /
+for python in $PYTHON_EXECS; do
+  echo "Testing pip installation with python $python"
+  # Create a temp directory for us to work in and save its name to a file for cleanup
+  echo "Constucting virtual env for testing"
+  mktemp -d > ./virtual_env_temp_dir
+  VIRTUALENV_BASE=`cat ./virtual_env_temp_dir`
+  echo "Using $VIRTUALENV_BASE for virtualenv"
+  virtualenv --python=$python $VIRTUALENV_BASE
+  source $VIRTUALENV_BASE/bin/activate
+  # Upgrade pip
+  pip install --upgrade pip
 
-echo "Run basic sanity check on pip installed version with spark-submit"
-spark-submit $FWDIR/dev/pip-sanity-check.py
-echo "Run basic sanity check with import based"
-python $FWDIR/dev/pip-sanity-check.py
-echo "Run the tests for context.py"
-python $FWDIR/python/pyspark/context.py
+  echo "Creating pip installable source dist"
+  cd $FWDIR/python
+  $python setup.py sdist
+
+
+  echo "Installing dist into virtual env"
+  cd dist
+  # Verify that the dist directory only contains one thing to install
+  sdists=(*.tar.gz)
+  if [ ${#sdists[@]} -ne 1 ]; then
+    echo "Unexpected number of targets found in dist directory - please cleanup existing sdists first."
+    exit -1
+  fi
+  # Do the actual installation
+  pip install --upgrade --force-reinstall *.tar.gz
+
+  cd /
+
+  echo "Run basic sanity check on pip installed version with spark-submit"
+  spark-submit $FWDIR/dev/pip-sanity-check.py
+  echo "Run basic sanity check with import based"
+  python $FWDIR/dev/pip-sanity-check.py
+  echo "Run the tests for context.py"
+  python $FWDIR/python/pyspark/context.py
+
+  cd $FWDIR
+
+done
 
 exit 0
