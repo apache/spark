@@ -34,7 +34,7 @@ import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
  *
  * @param path path to write the final output to.
  */
-class ManifestFileCommitProtocol(path: String)
+class ManifestFileCommitProtocol(jobId: String, path: String)
   extends FileCommitProtocol with Serializable with Logging {
 
   // Track the list of files added by a task, only used on the executors.

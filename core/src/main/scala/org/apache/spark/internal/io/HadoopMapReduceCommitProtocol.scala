@@ -17,7 +17,7 @@
 
 package org.apache.spark.internal.io
 
-import java.util.{Date, UUID}
+import java.util.Date
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -34,7 +34,7 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  *
  * Unlike Hadoop's OutputCommitter, this implementation is serializable.
  */
-class HadoopMapReduceCommitProtocol(path: String)
+class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   extends FileCommitProtocol with Serializable with Logging {
 
   import FileCommitProtocol._
@@ -42,20 +42,17 @@ class HadoopMapReduceCommitProtocol(path: String)
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
   @transient private var committer: OutputCommitter = _
 
-  /** UUID used to identify the job in file name. */
-  private val uuid: String = UUID.randomUUID().toString
-
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     context.getOutputFormatClass.newInstance().getOutputCommitter(context)
   }
 
   override def newTaskTempFile(
-    taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
+      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
     // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
     val split = taskContext.getTaskAttemptID.getTaskID.getId
-    val filename = f"part-$split%05d-$uuid$ext"
+    val filename = f"part-$split%05d-$jobId$ext"
 
     taskContext.getJobID
 

@@ -27,7 +27,9 @@ import org.apache.spark.util.Utils
  *
  * 1. Implementations must be serializable, as the committer instance instantiated on the driver
  *    will be used for tasks on executors.
- * 2. A committer should not be reused across multiple Spark jobs.
+ * 2. Implementations should have a constructor with either 2 or 3 arguments:
+ *    (jobId: String, path: String) or (jobId: String, path: String, isAppend: Boolean).
+ * 3. A committer should not be reused across multiple Spark jobs.
  *
  * The proper call sequence is:
  *
@@ -106,19 +108,20 @@ object FileCommitProtocol {
   /**
    * Instantiates a FileCommitProtocol using the given className.
    */
-  def instantiate(className: String, outputPath: String, isAppend: Boolean): FileCommitProtocol = {
+  def instantiate(className: String, jobId: String, outputPath: String, isAppend: Boolean)
+    : FileCommitProtocol = {
     try {
       val clazz = Utils.classForName(className).asInstanceOf[Class[FileCommitProtocol]]
 
       // First try the one with argument (outputPath: String, isAppend: Boolean).
       // If that doesn't exist, try the one with (outputPath: String).
       try {
-        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[Boolean])
-        ctor.newInstance(outputPath, isAppend.asInstanceOf[java.lang.Boolean])
+        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
+        ctor.newInstance(jobId, outputPath, isAppend.asInstanceOf[java.lang.Boolean])
       } catch {
         case _: NoSuchMethodException =>
           val ctor = clazz.getDeclaredConstructor(classOf[String])
-          ctor.newInstance(outputPath)
+          ctor.newInstance(jobId, outputPath)
       }
     } catch {
       case e: ClassNotFoundException =>
