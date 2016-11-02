@@ -1568,29 +1568,32 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-10562: partition by column with mixed case name") {
     def runOnce() {
       withTable("tbl10562") {
-        val df = Seq(2012 -> "a").toDF("Year", "val")
-        df.write.partitionBy("Year").saveAsTable("tbl10562")
-        checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
-        checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
-        checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
-        checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
-        checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
-        Utils.classForName("org.apache.derby.jdbc.EmbeddedDriver")
-        val dir = new File("../../assembly/metastore_db")
-        val conn = DriverManager.getConnection("jdbc:derby:" + dir.getCanonicalPath)
-        var query = conn.createStatement
-        var rs = query.executeQuery("select * from partitions")
-        // scalastyle:off println
-        while (rs.next()) {
-          println(rs.getString(1) + " " + rs.getString(2) + " " + rs.getString(3) + " " +
-            rs.getString(4) + " " + rs.getString(5) + " " + rs.getString(6))
+        try {
+          val df = Seq(2012 -> "a").toDF("Year", "val")
+          df.write.partitionBy("Year").saveAsTable("tbl10562")
+          checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
+          checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
+          checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
+          checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
+          checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
+        } finally {
+          Utils.classForName("org.apache.derby.jdbc.EmbeddedDriver")
+          val dir = new File("../../assembly/metastore_db")
+          val conn = DriverManager.getConnection("jdbc:derby:" + dir.getCanonicalPath)
+          var query = conn.createStatement
+          var rs = query.executeQuery("select * from partitions")
+          // scalastyle:off println
+          while (rs.next()) {
+            println(rs.getString(1) + " " + rs.getString(2) + " " + rs.getString(3) + " " +
+              rs.getString(4) + " " + rs.getString(5) + " " + rs.getString(6))
+          }
+          query = conn.createStatement
+          rs = query.executeQuery("select * from partition_key_vals")
+          while (rs.next()) {
+            println(rs.getString(1) + " " + rs.getString(2) + " " + rs.getString(3))
+          }
+          // scalastyle:on println
         }
-        query = conn.createStatement
-        rs = query.executeQuery("select * from partition_key_vals")
-        while (rs.next()) {
-          println(rs.getString(1) + " " + rs.getString(2) + " " + rs.getString(3))
-        }
-        // scalastyle:on println
       }
     }
     try {
