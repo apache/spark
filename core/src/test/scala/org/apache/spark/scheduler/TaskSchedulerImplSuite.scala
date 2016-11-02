@@ -80,7 +80,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     setupHelper()
   }
 
-  def setupSchedulerWithMockTsm(): TaskSchedulerImpl = {
+  def setupSchedulerWithMockTaskSetBlacklist(): TaskSchedulerImpl = {
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     conf.set(config.BLACKLIST_ENABLED, true)
     sc = new SparkContext(conf)
@@ -88,6 +88,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4)) {
         override def createTaskSetManager(taskSet: TaskSet, maxFailures: Int): TaskSetManager = {
           val tsm = super.createTaskSetManager(taskSet, maxFailures)
+          // we need to create a spied tsm just so we can set the TaskSetBlacklist
           val tsmSpy = spy(tsm)
           val taskSetBlacklist = mock[TaskSetBlacklist]
           when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(taskSetBlacklist))
@@ -317,7 +318,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   test("scheduled tasks obey task and stage blacklists") {
-    taskScheduler = setupSchedulerWithMockTsm()
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
     (0 to 2).foreach { stageId =>
       val taskSet = FakeTask.createTaskSet(numTasks = 2, stageId = stageId, stageAttemptId = 0)
       taskScheduler.submitTasks(taskSet)
@@ -333,8 +334,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Setup our mock blacklist:
     // * stage 0 is blacklisted on node "host1"
     // * stage 1 is blacklisted on executor "executor3"
-    // * stage 0, part 0 is blacklisted on executor 0
-    // Setup some defaults, then override them with particulars.
+    // * stage 0, partition 0 is blacklisted on executor 0
+    // Setup some defaults (nothing is blacklisted), then override them with particulars.
     // (Later stubs take precedence over earlier ones.)
     stageToMockTaskSetBlacklist.values.foreach { taskSetBlacklist =>
       when(taskSetBlacklist.isNodeBlacklistedForTaskSet(anyString())).thenReturn(false)
@@ -349,22 +350,30 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       .thenReturn(true)
 
     val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
+    // Whenever we schedule a task, we must consult the node and executor blacklist.  (The test
+    // doesn't check exactly what checks are made the offers get shuffled.)
     (0 to 2).foreach { stageId =>
       verify(stageToMockTaskSetBlacklist(stageId), atLeast(1))
         .isNodeBlacklistedForTaskSet(anyString())
+      verify(stageToMockTaskSetBlacklist(stageId), atLeast(1))
+        .isExecutorBlacklistedForTaskSet(anyString())
     }
+
+    // When an executor or node is blacklisted, we want to make sure that we don't try scheduling
+    // each pending task, one by one, to discover they are all blacklisted.  This is important for
+    // performance -- if we did check each task one-by-one, then responding to a resource offer
+    // (which is usually O(1)-ish) would become O(numPendingTasks), which would slow down
+    // scheduler throughput and slow down scheduling even on healthy executors.
+    // Here, we check a proxy for the runtime -- we make sure the scheduling is short-circuited
+    // at the node or executor blacklist, so we never check the per-task blacklist.
     for {
       exec <- Seq("executor1", "executor2")
       part <- 0 to 1
     } {
-      // The node blacklist should ensure we never check the task blacklist.  This is important
-      // for performance, otherwise we end up changing an O(1) operation into a
-      // O(numPendingTasks) one.
+      // stage 0 is blacklisted on the host for these executors
       verify(stageToMockTaskSetBlacklist(0), never).isExecutorBlacklistedForTask(exec, part)
     }
-
-    // Similarly, the executor blacklist for an entire stage should prevent us from ever checking
-    // the blacklist for specific parts in a stage.
+    // stage 0 is blacklisted for executor3
     (0 to 1).foreach { part =>
       verify(stageToMockTaskSetBlacklist(1), never).isExecutorBlacklistedForTask("executor3", part)
     }
@@ -375,8 +384,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       firstTaskAttempts.filter{_.name.contains(s"stage $stageId")}
     }
     tasksForStage(0).foreach { task =>
-      // exec 1 & 2 blacklisted for node
-      // exec 0 blacklisted just for part 0
+      // executors 1 & 2 blacklisted for node
+      // executor 0 blacklisted just for partition 0
       if (task.index == 0) {
         assert(task.executorId === "executor3")
       } else {
@@ -384,12 +393,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       }
     }
     tasksForStage(1).foreach { task =>
-      // exec 3 blacklisted
+      // executor 3 blacklisted
       assert("executor3" != task.executorId)
     }
     // no restrictions on stage 2
 
-    // Have all tasksets finish (stages 0 & 1 successfully, 2 unsuccessfully).
+    // Finally, just make sure that we can still complete tasks as usual with blacklisting
+    // in effect.  Finish each of the tasksets -- taskset 0 & 1 complete successfully, taskset 2
+    // fails.
     (0 to 2).foreach { stageId =>
       val tasks = tasksForStage(stageId)
       val tsm = taskScheduler.taskSetManagerForAttempt(stageId, 0).get
@@ -421,6 +432,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
           tsm.handleSuccessfulTask(task.taskId, result)
         }
       }
+      assert(tsm.isZombie)
     }
   }
 
@@ -555,7 +567,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     "or killed tasks") {
     // Setup a taskset, and fail some tasks for a fetch failure, preemption, denied commit,
     // and killed task.
-    taskScheduler = setupSchedulerWithMockTsm()
+    taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
     val stage0 = FakeTask.createTaskSet(numTasks = 4, stageId = 0, stageAttemptId = 0)
     taskScheduler.submitTasks(stage0)
     val taskDescs = taskScheduler.resourceOffers(
