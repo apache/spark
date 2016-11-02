@@ -1566,6 +1566,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-10562: partition by column with mixed case name") {
+    // Print out env info for debugging. TODO(ekl) revert this once we deflake this test.
+    logError("all confs: " + spark.sqlContext.getAllConfs)
     def runOnce() {
       withTable("tbl10562") {
         val df = Seq(2012 -> "a").toDF("Year", "val")

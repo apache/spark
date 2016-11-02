@@ -593,6 +593,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           case e: InvocationTargetException =>
             // SPARK-18167 retry to investigate the flaky test. This should be reverted before
             // the release is cut.
+            logError("Hive conf: " + hive.getConf().getAllProperties())
             val retry = Try(getPartitionsByFilterMethod.invoke(hive, table, filter))
             logError("getPartitionsByFilter failed, retry success = " + retry.isSuccess)
             logError("all partitions: " + getAllPartitions(hive, table))
