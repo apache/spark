@@ -474,7 +474,7 @@ private[ml] object MetaAlgorithmReadWrite {
       case ovr: OneVsRest => Array(ovr.getClassifier)
       case ovrModel: OneVsRestModel => Array(ovrModel.getClassifier) ++ ovrModel.models
       case rformModel: RFormulaModel => Array(rformModel.pipelineModel)
-      case _: Params => Array()
+      case _: Params => Array.empty[Params]
     }
     val subStageMaps = subStages.flatMap(getUidMapImpl)
     List((instance.uid, instance)) ++ subStageMaps

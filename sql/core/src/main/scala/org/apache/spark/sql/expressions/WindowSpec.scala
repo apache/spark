@@ -17,23 +17,22 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{catalyst, Column}
+import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
- * :: Experimental ::
  * A window specification that defines the partitioning, ordering, and frame boundaries.
  *
  * Use the static methods in [[Window]] to create a [[WindowSpec]].
  *
  * @since 1.4.0
  */
-@Experimental
+@InterfaceStability.Stable
 class WindowSpec private[sql](
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frame: catalyst.expressions.WindowFrame) {
+    frame: WindowFrame) {
 
   /**
    * Defines the partitioning columns in a [[WindowSpec]].
@@ -86,6 +85,10 @@ class WindowSpec private[sql](
    * "current row", while "-1" means the row before the current row, and "5" means the fifth row
    * after the current row.
    *
+   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
+   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * values directly.
+   *
    * A row based boundary is based on the position of the row within the partition.
    * An offset indicates the number of rows above or below the current row, the frame for the
    * current row starts or ends. For instance, given a row based sliding frame with a lower bound
@@ -112,10 +115,10 @@ class WindowSpec private[sql](
    *   +---+--------+---+
    * }}}
    *
-   * @param start boundary start, inclusive.
-   *              The frame is unbounded if this is the minimum long value.
-   * @param end boundary end, inclusive.
-   *            The frame is unbounded if this is the maximum long value.
+   * @param start boundary start, inclusive. The frame is unbounded if this is
+   *              the minimum long value ([[Window.unboundedPreceding]]).
+   * @param end boundary end, inclusive. The frame is unbounded if this is the
+   *            maximum long value  ([[Window.unboundedFollowing]]).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rowsBetween.
@@ -129,6 +132,10 @@ class WindowSpec private[sql](
    * Both `start` and `end` are relative from the current row. For example, "0" means "current row",
    * while "-1" means one off before the current row, and "5" means the five off after the
    * current row.
+   *
+   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
+   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * values directly.
    *
    * A range based boundary is based on the actual value of the ORDER BY
    * expression(s). An offset is used to alter the value of the ORDER BY expression, for
@@ -159,10 +166,10 @@ class WindowSpec private[sql](
    *   +---+--------+---+
    * }}}
    *
-   * @param start boundary start, inclusive.
-   *              The frame is unbounded if this is the minimum long value.
-   * @param end boundary end, inclusive.
-   *            The frame is unbounded if this is the maximum long value.
+   * @param start boundary start, inclusive. The frame is unbounded if this is
+   *              the minimum long value ([[Window.unboundedPreceding]]).
+   * @param end boundary end, inclusive. The frame is unbounded if this is the
+   *            maximum long value  ([[Window.unboundedFollowing]]).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rangeBetween.

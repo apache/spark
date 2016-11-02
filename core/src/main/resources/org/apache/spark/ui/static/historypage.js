@@ -133,6 +133,7 @@ $(document).ready(function() {
                         {name: 'sixth', type: "title-numeric"},
                         {name: 'seventh'},
                         {name: 'eighth'},
+                        {name: 'ninth'},
                     ],
                     "autoWidth": false,
                     "order": [[ 4, "desc" ]]

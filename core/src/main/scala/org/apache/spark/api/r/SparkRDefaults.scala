@@ -15,23 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.api.r
 
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.QueryTest
+private[spark] object SparkRDefaults {
 
-class HiveDataFrameSuite extends QueryTest with TestHiveSingleton {
-  test("table name with schema") {
-    // regression test for SPARK-11778
-    spark.sql("create schema usrdb")
-    spark.sql("create table usrdb.test(c int)")
-    spark.read.table("usrdb.test")
-    spark.sql("drop table usrdb.test")
-    spark.sql("drop schema usrdb")
-  }
+  // Default value for spark.r.backendConnectionTimeout config
+  val DEFAULT_CONNECTION_TIMEOUT: Int = 6000
 
-  test("SPARK-15887: hive-site.xml should be loaded") {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-    assert(hiveClient.getConf("hive.in.test", "") == "true")
-  }
+  // Default value for spark.r.heartBeatInterval config
+  val DEFAULT_HEARTBEAT_INTERVAL: Int = 100
+
+  // Default value for spark.r.numRBackendThreads config
+  val DEFAULT_NUM_RBACKEND_THREADS = 2
 }

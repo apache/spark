@@ -21,7 +21,7 @@ import java.io.{File, PrintWriter}
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, StatisticsTest}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.execution.command.{AnalyzeTableCommand, DDLUtils}
@@ -310,38 +310,49 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     }
   }
 
-  test("test table-level statistics for data source table created in HiveExternalCatalog") {
-    val parquetTable = "parquetTable"
-    withTable(parquetTable) {
-      sql(s"CREATE TABLE $parquetTable (key STRING, value STRING) USING PARQUET")
-      val catalogTable = spark.sessionState.catalog.getTableMetadata(TableIdentifier(parquetTable))
-      assert(DDLUtils.isDatasourceTable(catalogTable))
+  private def testUpdatingTableStats(tableDescription: String, createTableCmd: String): Unit = {
+    test("test table-level statistics for " + tableDescription) {
+      val parquetTable = "parquetTable"
+      withTable(parquetTable) {
+        sql(createTableCmd)
+        val catalogTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(parquetTable))
+        assert(DDLUtils.isDatasourceTable(catalogTable))
 
-      sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
-      checkTableStats(
-        parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
+        sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+        checkTableStats(
+          parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
 
-      // noscan won't count the number of rows
-      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      val fetchedStats1 = checkTableStats(
-        parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
+        // noscan won't count the number of rows
+        sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
+        val fetchedStats1 = checkTableStats(
+          parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
 
-      sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
-      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      val fetchedStats2 = checkTableStats(
-        parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
-      assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
+        sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+        sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
+        val fetchedStats2 = checkTableStats(
+          parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
+        assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
 
-      // without noscan, we count the number of rows
-      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-      val fetchedStats3 = checkTableStats(
-        parquetTable,
-        isDataSourceTable = true,
-        hasSizeInBytes = true,
-        expectedRowCounts = Some(1000))
-      assert(fetchedStats3.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
+        // without noscan, we count the number of rows
+        sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
+        val fetchedStats3 = checkTableStats(
+          parquetTable,
+          isDataSourceTable = true,
+          hasSizeInBytes = true,
+          expectedRowCounts = Some(1000))
+        assert(fetchedStats3.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
+      }
     }
   }
+
+  testUpdatingTableStats(
+    "data source table created in HiveExternalCatalog",
+    "CREATE TABLE parquetTable (key STRING, value STRING) USING PARQUET")
+
+  testUpdatingTableStats(
+    "partitioned data source table",
+    "CREATE TABLE parquetTable (key STRING, value STRING) USING PARQUET PARTITIONED BY (key)")
 
   test("statistics collection of a table with zero column") {
     val table_no_cols = "table_no_cols"
@@ -358,51 +369,185 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     }
   }
 
-  test("generate column-level statistics and load them from hive metastore") {
+  private def getStatsBeforeAfterUpdate(isAnalyzeColumns: Boolean): (Statistics, Statistics) = {
+    val tableName = "tbl"
+    var statsBeforeUpdate: Statistics = null
+    var statsAfterUpdate: Statistics = null
+    withTable(tableName) {
+      val tableIndent = TableIdentifier(tableName, Some("default"))
+      val catalog = spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
+      sql(s"CREATE TABLE $tableName (key int) USING PARQUET")
+      sql(s"INSERT INTO $tableName SELECT 1")
+      if (isAnalyzeColumns) {
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS key")
+      } else {
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
+      }
+      // Table lookup will make the table cached.
+      catalog.lookupRelation(tableIndent)
+      statsBeforeUpdate = catalog.getCachedDataSourceTable(tableIndent)
+        .asInstanceOf[LogicalRelation].catalogTable.get.stats.get
+
+      sql(s"INSERT INTO $tableName SELECT 2")
+      if (isAnalyzeColumns) {
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS key")
+      } else {
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
+      }
+      catalog.lookupRelation(tableIndent)
+      statsAfterUpdate = catalog.getCachedDataSourceTable(tableIndent)
+        .asInstanceOf[LogicalRelation].catalogTable.get.stats.get
+    }
+    (statsBeforeUpdate, statsAfterUpdate)
+  }
+
+  test("test refreshing table stats of cached data source table by `ANALYZE TABLE` statement") {
+    val (statsBeforeUpdate, statsAfterUpdate) = getStatsBeforeAfterUpdate(isAnalyzeColumns = false)
+
+    assert(statsBeforeUpdate.sizeInBytes > 0)
+    assert(statsBeforeUpdate.rowCount == Some(1))
+
+    assert(statsAfterUpdate.sizeInBytes > statsBeforeUpdate.sizeInBytes)
+    assert(statsAfterUpdate.rowCount == Some(2))
+  }
+
+  test("test refreshing column stats of cached data source table by `ANALYZE TABLE` statement") {
+    val (statsBeforeUpdate, statsAfterUpdate) = getStatsBeforeAfterUpdate(isAnalyzeColumns = true)
+
+    assert(statsBeforeUpdate.sizeInBytes > 0)
+    assert(statsBeforeUpdate.rowCount == Some(1))
+    StatisticsTest.checkColStat(
+      dataType = IntegerType,
+      colStat = statsBeforeUpdate.colStats("key"),
+      expectedColStat = ColumnStat(InternalRow(0L, 1, 1, 1L)),
+      rsd = spark.sessionState.conf.ndvMaxError)
+
+    assert(statsAfterUpdate.sizeInBytes > statsBeforeUpdate.sizeInBytes)
+    assert(statsAfterUpdate.rowCount == Some(2))
+    StatisticsTest.checkColStat(
+      dataType = IntegerType,
+      colStat = statsAfterUpdate.colStats("key"),
+      expectedColStat = ColumnStat(InternalRow(0L, 2, 1, 2L)),
+      rsd = spark.sessionState.conf.ndvMaxError)
+  }
+
+  private lazy val (testDataFrame, expectedColStatsSeq) = {
     import testImplicits._
 
     val intSeq = Seq(1, 2)
     val stringSeq = Seq("a", "bb")
+    val binarySeq = Seq("a", "bb").map(_.getBytes)
     val booleanSeq = Seq(true, false)
-
     val data = intSeq.indices.map { i =>
-      (intSeq(i), stringSeq(i), booleanSeq(i))
+      (intSeq(i), stringSeq(i), binarySeq(i), booleanSeq(i))
     }
-    val tableName = "table"
-    withTable(tableName) {
-      val df = data.toDF("c1", "c2", "c3")
-      df.write.format("parquet").saveAsTable(tableName)
-      val expectedColStatsSeq = df.schema.map { f =>
-        val colStat = f.dataType match {
-          case IntegerType =>
-            ColumnStat(InternalRow(0L, intSeq.max, intSeq.min, intSeq.distinct.length.toLong))
-          case StringType =>
-            ColumnStat(InternalRow(0L, stringSeq.map(_.length).sum / stringSeq.length.toDouble,
-              stringSeq.map(_.length).max.toLong, stringSeq.distinct.length.toLong))
-          case BooleanType =>
-            ColumnStat(InternalRow(0L, booleanSeq.count(_.equals(true)).toLong,
-              booleanSeq.count(_.equals(false)).toLong))
-        }
-        (f, colStat)
+    val df: DataFrame = data.toDF("c1", "c2", "c3", "c4")
+    val expectedColStatsSeq: Seq[(StructField, ColumnStat)] = df.schema.map { f =>
+      val colStat = f.dataType match {
+        case IntegerType =>
+          ColumnStat(InternalRow(0L, intSeq.max, intSeq.min, intSeq.distinct.length.toLong))
+        case StringType =>
+          ColumnStat(InternalRow(0L, stringSeq.map(_.length).sum / stringSeq.length.toDouble,
+            stringSeq.map(_.length).max.toInt, stringSeq.distinct.length.toLong))
+        case BinaryType =>
+          ColumnStat(InternalRow(0L, binarySeq.map(_.length).sum / binarySeq.length.toDouble,
+            binarySeq.map(_.length).max.toInt))
+        case BooleanType =>
+          ColumnStat(InternalRow(0L, booleanSeq.count(_.equals(true)).toLong,
+            booleanSeq.count(_.equals(false)).toLong))
       }
+      (f, colStat)
+    }
+    (df, expectedColStatsSeq)
+  }
 
-      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1, c2, c3")
-      val readback = spark.table(tableName)
-      val relations = readback.queryExecution.analyzed.collect { case rel: LogicalRelation =>
-        val columnStats = rel.catalogTable.get.stats.get.colStats
-        expectedColStatsSeq.foreach { case (field, expectedColStat) =>
-          assert(columnStats.contains(field.name))
-          val colStat = columnStats(field.name)
-          StatisticsTest.checkColStat(
-            dataType = field.dataType,
-            colStat = colStat,
-            expectedColStat = expectedColStat,
-            rsd = spark.sessionState.conf.ndvMaxError)
-        }
-        rel
-      }
-      assert(relations.size == 1)
+  private def checkColStats(
+      tableName: String,
+      isDataSourceTable: Boolean,
+      expectedColStatsSeq: Seq[(StructField, ColumnStat)]): Unit = {
+    val readback = spark.table(tableName)
+    val stats = readback.queryExecution.analyzed.collect {
+      case rel: MetastoreRelation =>
+        assert(!isDataSourceTable, "Expected a Hive serde table, but got a data source table")
+        rel.catalogTable.stats.get
+      case rel: LogicalRelation =>
+        assert(isDataSourceTable, "Expected a data source table, but got a Hive serde table")
+        rel.catalogTable.get.stats.get
     }
+    assert(stats.length == 1)
+    val columnStats = stats.head.colStats
+    assert(columnStats.size == expectedColStatsSeq.length)
+    expectedColStatsSeq.foreach { case (field, expectedColStat) =>
+      StatisticsTest.checkColStat(
+        dataType = field.dataType,
+        colStat = columnStats(field.name),
+        expectedColStat = expectedColStat,
+        rsd = spark.sessionState.conf.ndvMaxError)
+    }
+  }
+
+  test("generate and load column-level stats for data source table") {
+    val dsTable = "dsTable"
+    withTable(dsTable) {
+      testDataFrame.write.format("parquet").saveAsTable(dsTable)
+      sql(s"ANALYZE TABLE $dsTable COMPUTE STATISTICS FOR COLUMNS c1, c2, c3, c4")
+      checkColStats(dsTable, isDataSourceTable = true, expectedColStatsSeq)
+    }
+  }
+
+  test("generate and load column-level stats for hive serde table") {
+    val hTable = "hTable"
+    val tmp = "tmp"
+    withTable(hTable, tmp) {
+      testDataFrame.write.format("parquet").saveAsTable(tmp)
+      sql(s"CREATE TABLE $hTable (c1 int, c2 string, c3 binary, c4 boolean) STORED AS TEXTFILE")
+      sql(s"INSERT INTO $hTable SELECT * FROM $tmp")
+      sql(s"ANALYZE TABLE $hTable COMPUTE STATISTICS FOR COLUMNS c1, c2, c3, c4")
+      checkColStats(hTable, isDataSourceTable = false, expectedColStatsSeq)
+    }
+  }
+
+  // When caseSensitive is on, for columns with only case difference, they are different columns
+  // and we should generate column stats for all of them.
+  private def checkCaseSensitiveColStats(columnName: String): Unit = {
+    val tableName = "tbl"
+    withTable(tableName) {
+      val column1 = columnName.toLowerCase
+      val column2 = columnName.toUpperCase
+      withSQLConf("spark.sql.caseSensitive" -> "true") {
+        sql(s"CREATE TABLE $tableName (`$column1` int, `$column2` double) USING PARQUET")
+        sql(s"INSERT INTO $tableName SELECT 1, 3.0")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS `$column1`, `$column2`")
+        val readback = spark.table(tableName)
+        val relations = readback.queryExecution.analyzed.collect { case rel: LogicalRelation =>
+          val columnStats = rel.catalogTable.get.stats.get.colStats
+          assert(columnStats.size == 2)
+          StatisticsTest.checkColStat(
+            dataType = IntegerType,
+            colStat = columnStats(column1),
+            expectedColStat = ColumnStat(InternalRow(0L, 1, 1, 1L)),
+            rsd = spark.sessionState.conf.ndvMaxError)
+          StatisticsTest.checkColStat(
+            dataType = DoubleType,
+            colStat = columnStats(column2),
+            expectedColStat = ColumnStat(InternalRow(0L, 3.0d, 3.0d, 1L)),
+            rsd = spark.sessionState.conf.ndvMaxError)
+          rel
+        }
+        assert(relations.size == 1)
+      }
+    }
+  }
+
+  test("check column statistics for case sensitive column names") {
+    checkCaseSensitiveColStats(columnName = "c1")
+  }
+
+  test("check column statistics for case sensitive non-ascii column names") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkCaseSensitiveColStats(columnName = "列c")
+    // scalastyle:on
   }
 
   test("estimates the size of a test MetastoreRelation") {

@@ -24,13 +24,14 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+
 
 object TextSocketSource {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
@@ -53,8 +54,18 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   @GuardedBy("this")
   private var readThread: Thread = null
 
+  /**
+   * All batches from `lastCommittedOffset + 1` to `currentOffset`, inclusive.
+   * Stored in a ListBuffer to facilitate removing committed batches.
+   */
   @GuardedBy("this")
-  private var lines = new ArrayBuffer[(String, Timestamp)]
+  protected val batches = new ListBuffer[(String, Timestamp)]
+
+  @GuardedBy("this")
+  protected var currentOffset: LongOffset = new LongOffset(-1)
+
+  @GuardedBy("this")
+  protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
 
   initialize()
 
@@ -74,10 +85,12 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
               return
             }
             TextSocketSource.this.synchronized {
-              lines += ((line,
+              val newData = (line,
                 Timestamp.valueOf(
                   TextSocketSource.DATE_FORMAT.format(Calendar.getInstance().getTime()))
-                ))
+                )
+              currentOffset = currentOffset + 1
+              batches.append(newData)
             }
           }
         } catch {
@@ -92,21 +105,54 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   override def schema: StructType = if (includeTimestamp) TextSocketSource.SCHEMA_TIMESTAMP
   else TextSocketSource.SCHEMA_REGULAR
 
-  /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = synchronized {
-    if (lines.isEmpty) None else Some(LongOffset(lines.size - 1))
+    if (currentOffset.offset == -1) {
+      None
+    } else {
+      Some(currentOffset)
+    }
   }
 
   /** Returns the data that is between the offsets (`start`, `end`]. */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = synchronized {
-    val startIdx = start.map(_.asInstanceOf[LongOffset].offset.toInt + 1).getOrElse(0)
-    val endIdx = end.asInstanceOf[LongOffset].offset.toInt + 1
-    val data = synchronized { lines.slice(startIdx, endIdx) }
+    val startOrdinal =
+      start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
+    val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
+
+    // Internal buffer only holds the batches after lastOffsetCommitted
+    val rawList = synchronized {
+      val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
+      val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
+      batches.slice(sliceStart, sliceEnd)
+    }
+
     import sqlContext.implicits._
+    val rawBatch = sqlContext.createDataset(rawList)
+
+    // Underlying MemoryStream has schema (String, Timestamp); strip out the timestamp
+    // if requested.
     if (includeTimestamp) {
-      data.toDF("value", "timestamp")
+      rawBatch.toDF("value", "timestamp")
     } else {
-      data.map(_._1).toDF("value")
+      // Strip out timestamp
+      rawBatch.select("_1").toDF("value")
+    }
+  }
+
+  override def commit(end: Offset): Unit = synchronized {
+    if (end.isInstanceOf[LongOffset]) {
+      val newOffset = end.asInstanceOf[LongOffset]
+      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
+
+      if (offsetDiff < 0) {
+        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
+      }
+
+      batches.trimStart(offsetDiff)
+      lastOffsetCommitted = newOffset
+    } else {
+      sys.error(s"TextSocketStream.commit() received an offset ($end) that did not " +
+        s"originate with an instance of this class")
     }
   }
 
@@ -141,7 +187,7 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
       providerName: String,
       parameters: Map[String, String]): (String, StructType) = {
     logWarning("The socket source should not be used for production applications! " +
-      "It does not support recovery and stores state indefinitely.")
+      "It does not support recovery.")
     if (!parameters.contains("host")) {
       throw new AnalysisException("Set a host to read from with option(\"host\", ...).")
     }

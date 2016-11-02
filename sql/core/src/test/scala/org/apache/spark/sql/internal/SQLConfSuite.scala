@@ -23,6 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.util.Utils
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -214,12 +215,15 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("default value of WAREHOUSE_PATH") {
+
     val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
     try {
       // to get the default value, always unset it
       spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      assert(spark.sessionState.conf.warehousePath
-        === new Path(s"${System.getProperty("user.dir")}/spark-warehouse").toString)
+      // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
+      // In our comparison, strip trailing slash off of both sides, to account for such cases
+      assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
+        .sessionState.conf.warehousePath.stripSuffix("/"))
     } finally {
       sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
     }
@@ -254,18 +258,21 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("global SQL conf comes from SparkConf") {
-    val newSession = SparkSession.builder()
-      .config(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000")
-      .getOrCreate()
-
-    assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD.key) == "2000")
-    checkAnswer(
-      newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
-      Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
+  test("static SQL conf comes from SparkConf") {
+    val previousValue = sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
+    try {
+      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, 2000)
+      val newSession = new SparkSession(sparkContext)
+      assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 2000)
+      checkAnswer(
+        newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
+        Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
+    } finally {
+      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, previousValue)
+    }
   }
 
-  test("cannot set/unset global SQL conf") {
+  test("cannot set/unset static SQL conf") {
     val e1 = intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
     assert(e1.message.contains("Cannot modify the value of a static config"))
     val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))

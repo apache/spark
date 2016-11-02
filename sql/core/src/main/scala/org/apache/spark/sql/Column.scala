@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -118,6 +118,9 @@ class TypedColumn[-T, U](
  *   $"a" === $"b"
  * }}}
  *
+ * Note that the internal Catalyst expression can be accessed via "expr", but this method is for
+ * debugging purposes only and can change in any future Spark releases.
+ *
  * @groupname java_expr_ops Java-specific expression operators
  * @groupname expr_ops Expression operators
  * @groupname df_ops DataFrame functions
@@ -126,7 +129,7 @@ class TypedColumn[-T, U](
  * @since 1.3.0
  */
 @InterfaceStability.Stable
-class Column(protected[sql] val expr: Expression) extends Logging {
+class Column(val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
@@ -1181,13 +1184,11 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
 
 /**
- * :: Experimental ::
  * A convenient class used for constructing schema.
  *
  * @since 1.3.0
  */
-@Experimental
-@InterfaceStability.Evolving
+@InterfaceStability.Stable
 class ColumnName(name: String) extends Column(name) {
 
   /**
