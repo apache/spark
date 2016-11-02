@@ -137,7 +137,7 @@ object ColumnStatStruct {
   private def numTrues(e: Expression): Expression = Sum(If(e, one, zero))
   private def numFalses(e: Expression): Expression = Sum(If(Not(e), one, zero))
 
-  private def getStruct(exprs: Seq[Expression]): CreateStruct = {
+  private def getStruct(exprs: Seq[Expression]): CreateNamedStruct = {
     CreateStruct(exprs.map { expr: Expression =>
       expr.transformUp {
         case af: AggregateFunction => af.toAggregateExpression()
@@ -168,7 +168,7 @@ object ColumnStatStruct {
     }
   }
 
-  def apply(attr: Attribute, relativeSD: Double): CreateStruct = attr.dataType match {
+  def apply(attr: Attribute, relativeSD: Double): CreateNamedStruct = attr.dataType match {
     // Use aggregate functions to compute statistics we need.
     case _: NumericType | TimestampType | DateType => getStruct(numericColumnStat(attr, relativeSD))
     case StringType => getStruct(stringColumnStat(attr, relativeSD))

@@ -186,6 +186,9 @@ class Column(val expr: Expression) extends Logging {
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
 
+    // Wait until the struct is resolved. This will generate a nicer looking alias.
+    case struct: CreateNamedStructLike => UnresolvedAlias(struct)
+
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
 
