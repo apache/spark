@@ -1331,7 +1331,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Register the given accumulator with given name. Note that accumulators must be registered
    * before use, or it will throw exception.
    *
-   * @param name The name of accumulator.
+   * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   def register(acc: AccumulatorV2[_, _], name: String): Unit = {
     acc.register(this, name = Some(name))
@@ -1357,7 +1357,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
    *                     same RDD/partition. This adds some additional overhead for tracking and
    *                     is an experimental feature.
-   * @param name The name of accumulator.
+   * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   @Experimental
   def register(acc: AccumulatorV2[_, _], dataProperty: Boolean, name: String): Unit = {
@@ -1376,7 +1376,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
    *
-   * @param name The name of accumulator.
+   * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   def longAccumulator(name: String): LongAccumulator = {
     val acc = new LongAccumulator
@@ -1404,7 +1404,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
    *                     same RDD/partition. This adds some additional overhead for tracking and
    *                     is an experimental feature.
-   * @param name The name of accumulator.
+   * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   @Experimental
   def longAccumulator(dataProperty: Boolean, name: String): LongAccumulator = {
@@ -1425,7 +1425,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
    *
-   * @param name The name of accumulator.
+   * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
@@ -1447,7 +1447,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
    * inputs by adding them into the list.
    *
-   * @param name The name of accumulator.
+   * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
     val acc = new CollectionAccumulator[T]
