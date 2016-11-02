@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import java.text.NumberFormat
+import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -51,12 +52,13 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
     SimpleTextRelation.lastHadoopConf = Option(job.getConfiguration)
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new SimpleTextOutputWriter(stagingDir, fileNamePrefix, context)
+        new SimpleTextOutputWriter(path, context)
       }
+
+      override def getFileExtension(context: TaskAttemptContext): String = ""
     }
   }
 
@@ -120,14 +122,11 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
   }
 }
 
-class SimpleTextOutputWriter(
-    stagingDir: String, fileNamePrefix: String, context: TaskAttemptContext)
+class SimpleTextOutputWriter(path: String, context: TaskAttemptContext)
   extends OutputWriter {
 
-  override val path: String = new Path(stagingDir, fileNamePrefix).toString
-
   private val recordWriter: RecordWriter[NullWritable, Text] =
-    new AppendingTextOutputFormat(new Path(stagingDir), fileNamePrefix).getRecordWriter(context)
+    new AppendingTextOutputFormat(path).getRecordWriter(context)
 
   override def write(row: Row): Unit = {
     val serialized = row.toSeq.map { v =>
@@ -141,15 +140,14 @@ class SimpleTextOutputWriter(
   }
 }
 
-class AppendingTextOutputFormat(stagingDir: Path, fileNamePrefix: String)
-  extends TextOutputFormat[NullWritable, Text] {
+class AppendingTextOutputFormat(path: String) extends TextOutputFormat[NullWritable, Text] {
 
-  val numberFormat = NumberFormat.getInstance()
+  val numberFormat = NumberFormat.getInstance(Locale.US)
   numberFormat.setMinimumIntegerDigits(5)
   numberFormat.setGroupingUsed(false)
 
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-    new Path(stagingDir, fileNamePrefix)
+    new Path(path)
   }
 }
 

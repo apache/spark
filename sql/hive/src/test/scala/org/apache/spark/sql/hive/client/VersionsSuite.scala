@@ -23,9 +23,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
-import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -48,46 +47,19 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
-  private val sparkConf = new SparkConf()
-
-  // In order to speed up test execution during development or in Jenkins, you can specify the path
-  // of an existing Ivy cache:
-  private val ivyPath: Option[String] = {
-    sys.env.get("SPARK_VERSIONS_SUITE_IVY_PATH").orElse(
-      Some(new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath))
-  }
-
-  private def buildConf() = {
-    lazy val warehousePath = Utils.createTempDir()
-    lazy val metastorePath = Utils.createTempDir()
-    metastorePath.delete()
-    Map(
-      "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$metastorePath;create=true",
-      "hive.metastore.warehouse.dir" -> warehousePath.toString)
-  }
+  private val clientBuilder = new HiveClientBuilder
+  import clientBuilder.buildClient
 
   test("success sanity check") {
-    val badClient = IsolatedClientLoader.forVersion(
-      hiveMetastoreVersion = HiveUtils.hiveExecutionVersion,
-      hadoopVersion = VersionInfo.getVersion,
-      sparkConf = sparkConf,
-      hadoopConf = new Configuration(),
-      config = buildConf(),
-      ivyPath = ivyPath).createClient()
+    val badClient = buildClient(HiveUtils.hiveExecutionVersion, new Configuration())
     val db = new CatalogDatabase("default", "desc", "loc", Map())
     badClient.createDatabase(db, ignoreIfExists = true)
   }
 
   test("hadoop configuration preserved") {
-    val hadoopConf = new Configuration();
+    val hadoopConf = new Configuration()
     hadoopConf.set("test", "success")
-    val client = IsolatedClientLoader.forVersion(
-      hiveMetastoreVersion = HiveUtils.hiveExecutionVersion,
-      hadoopVersion = VersionInfo.getVersion,
-      sparkConf = sparkConf,
-      hadoopConf = hadoopConf,
-      config = buildConf(),
-      ivyPath = ivyPath).createClient()
+    val client = buildClient(HiveUtils.hiveExecutionVersion, hadoopConf)
     assert("success" === client.getConf("test", null))
   }
 
@@ -109,15 +81,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   // TODO: currently only works on mysql where we manually create the schema...
   ignore("failure sanity check") {
     val e = intercept[Throwable] {
-      val badClient = quietly {
-        IsolatedClientLoader.forVersion(
-          hiveMetastoreVersion = "13",
-          hadoopVersion = VersionInfo.getVersion,
-          sparkConf = sparkConf,
-          hadoopConf = new Configuration(),
-          config = buildConf(),
-          ivyPath = ivyPath).createClient()
-      }
+      val badClient = quietly { buildClient("13", new Configuration()) }
     }
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
@@ -130,16 +94,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: create client") {
       client = null
       System.gc() // Hack to avoid SEGV on some JVM versions.
-      val hadoopConf = new Configuration();
+      val hadoopConf = new Configuration()
       hadoopConf.set("test", "success")
-      client =
-        IsolatedClientLoader.forVersion(
-          hiveMetastoreVersion = version,
-          hadoopVersion = VersionInfo.getVersion,
-          sparkConf = sparkConf,
-          hadoopConf = hadoopConf,
-          config = buildConf(),
-          ivyPath = ivyPath).createClient()
+      client = buildClient(version, hadoopConf)
     }
 
     def table(database: String, tableName: String): CatalogTable = {
@@ -287,15 +244,19 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key1 INT, key2 INT)")
     }
 
+    val testPartitionCount = 2
+
     test(s"$version: createPartitions") {
-      val partition1 = CatalogTablePartition(Map("key1" -> "1", "key2" -> "1"), storageFormat)
-      val partition2 = CatalogTablePartition(Map("key1" -> "1", "key2" -> "2"), storageFormat)
+      val partitions = (1 to testPartitionCount).map { key2 =>
+        CatalogTablePartition(Map("key1" -> "1", "key2" -> key2.toString), storageFormat)
+      }
       client.createPartitions(
-        "default", "src_part", Seq(partition1, partition2), ignoreIfExists = true)
+        "default", "src_part", partitions, ignoreIfExists = true)
     }
 
     test(s"$version: getPartitions(catalogTable)") {
-      assert(2 == client.getPartitions(client.getTable("default", "src_part")).size)
+      assert(testPartitionCount ==
+        client.getPartitions(client.getTable("default", "src_part")).size)
     }
 
     test(s"$version: getPartitionsByFilter") {
@@ -306,6 +267,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // Hive 0.12 doesn't support getPartitionsByFilter, it ignores the filter condition.
       if (version != "0.12") {
         assert(result.size == 1)
+      } else {
+        assert(result.size == testPartitionCount)
       }
     }
 
@@ -327,7 +290,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: getPartitions(db: String, table: String)") {
-      assert(2 == client.getPartitions("default", "src_part", None).size)
+      assert(testPartitionCount == client.getPartitions("default", "src_part", None).size)
     }
 
     test(s"$version: loadPartition") {
