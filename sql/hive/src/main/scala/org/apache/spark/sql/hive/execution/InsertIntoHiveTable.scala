@@ -247,6 +247,9 @@ case class InsertIntoHiveTable(
         var doHiveOverwrite = overwrite
         if (overwrite) {
           val fs = outputPath.getFileSystem(hadoopConf)
+          // Extracts the partition paths from output path.
+          // E.g., if the dynamic partition columns are "a" and "b", we would get the paths like
+          // "/output/a=1/b=2", "/output/a=2/b=3".
           val partitionPaths =
             HiveStatsUtils.getFileStatusRecurse(outputPath, numDynamicPartitions, fs)
               .map(_.getPath())
@@ -259,8 +262,11 @@ case class InsertIntoHiveTable(
 
           val schema = partitionSpecInOutputPath.partitionColumns
           val columnNames = schema.fieldNames
+
           partitionSpecInOutputPath.partitions.flatMap { partition =>
+            // Construct partition spec from parsed dynamic partition column names and values.
             val spec = columnNames.zip(partition.values.toSeq(schema).map(_.toString)).toMap
+            // Using static partition spec and dynamic partition spec to get partition metadata.
             externalCatalog.getPartitionOption(
               table.catalogTable.database,
               table.catalogTable.identifier.table,
