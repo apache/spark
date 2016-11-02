@@ -905,7 +905,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
   public void reset() {
     numKeys = 0;
     numValues = 0;
-    longArray.zeroOut();
     freeArray(longArray);
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
