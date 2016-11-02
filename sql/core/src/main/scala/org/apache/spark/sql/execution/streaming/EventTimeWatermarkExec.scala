@@ -26,9 +26,9 @@ import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.AccumulatorV2
 
+/** Tracks the maximum positive long seen. */
 class MaxLong(protected var currentValue: Long = 0)
-  extends AccumulatorV2[Long, Long]
-  with Serializable {
+  extends AccumulatorV2[Long, Long] {
 
   override def isZero: Boolean = value == 0
   override def value: Long = currentValue

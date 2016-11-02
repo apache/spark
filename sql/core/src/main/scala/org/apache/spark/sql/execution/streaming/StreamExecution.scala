@@ -450,10 +450,13 @@ class StreamExecution(
     }.headOption.foreach { newWatermark =>
       if (newWatermark > currentEventTimeWatermark) {
         logInfo(s"Updating eventTime watermark to: $newWatermark ms")
-        streamMetrics.reportTriggerDetail(EVENT_TIME_WATERMARK, newWatermark)
         currentEventTimeWatermark = newWatermark
       } else {
         logTrace(s"Event time didn't move: $newWatermark < $currentEventTimeWatermark")
+      }
+
+      if (newWatermark != 0) {
+        streamMetrics.reportTriggerDetail(EVENT_TIME_WATERMARK, newWatermark)
       }
     }
 

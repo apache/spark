@@ -40,6 +40,16 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
     assert(e.getMessage contains "badColumn")
   }
 
+  test("error on wrong type") {
+    val inputData = MemoryStream[Int].toDF()
+    val e = intercept[AnalysisException] {
+      inputData.withWatermark("value", "1 minute")
+    }
+    assert(e.getMessage contains "value")
+    assert(e.getMessage contains "int")
+  }
+
+
   test("watermark metric") {
     val inputData = MemoryStream[Int]
 
@@ -129,7 +139,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       CheckAnswer((10, 3)),
       AddData(inputData, 10),     // 10 is later than 15 second watermark
       CheckAnswer((10, 3)),
-      AddData(inputData, 25),     // 10 is later than 15 second watermark
+      AddData(inputData, 25),
       CheckAnswer((10, 3))        // Should not emit an incorrect partial result.
     )
   }
