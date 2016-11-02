@@ -46,7 +46,8 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(
           table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
-        InsertIntoHiveTable(table, partition, planLater(child), overwrite, ifNotExists) :: Nil
+        InsertIntoHiveTable(
+          table, partition, planLater(child), overwrite.enabled, ifNotExists) :: Nil
 
       case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get == "hive" =>
         val newTableDesc = if (tableDesc.storage.serde.isEmpty) {
