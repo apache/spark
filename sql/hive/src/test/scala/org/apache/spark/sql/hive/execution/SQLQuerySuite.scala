@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.{File, PrintWriter}
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
+import java.sql.{Date, DriverManager, Timestamp}
 
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
@@ -40,6 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
