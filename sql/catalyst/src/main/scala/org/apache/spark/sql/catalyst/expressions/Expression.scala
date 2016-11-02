@@ -232,7 +232,8 @@ trait Unevaluable extends Expression {
  *
  * A RuntimeReplaceable should have the original parameters along with a "child" expression in the
  * case class constructor, and define a normal constructor that accepts only the original
- * parameters. For an example, see [[Nvl]].
+ * parameters. For an example, see [[Nvl]]. To make sure the explain plan and expression SQL
+ * works correctly, the implementation should also override flatArguments method and sql method.
  */
 trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override def nullable: Boolean = child.nullable
