@@ -39,7 +39,6 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.StorageLevel._
 import org.apache.spark.util.Utils
 
-
 trait BlockManagerReplicationBehavior extends SparkFunSuite
   with Matchers
   with BeforeAndAfter
