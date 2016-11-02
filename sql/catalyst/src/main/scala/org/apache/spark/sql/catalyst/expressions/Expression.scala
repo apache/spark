@@ -275,6 +275,10 @@ trait Nondeterministic extends Expression {
   @transient
   private[this] var initialized = false
 
+  /**
+   * Initializes internal states given the current partition index and mark this as initialized.
+   * Subclasses should override [[initializeInternal()]].
+   */
   final def initialize(partitionIndex: Int): Unit = {
     initializeInternal(partitionIndex)
     initialized = true
@@ -282,6 +286,11 @@ trait Nondeterministic extends Expression {
 
   protected def initializeInternal(partitionIndex: Int): Unit
 
+  /**
+   * @inheritdoc
+   * Throws an exception if [[initialize()]] is not called yet.
+   * Subclasses should override [[evalInternal()]].
+   */
   final override def eval(input: InternalRow = null): Any = {
     require(initialized,
       s"Nondeterministic expression ${this.getClass.getName} should be initialized before eval.")
