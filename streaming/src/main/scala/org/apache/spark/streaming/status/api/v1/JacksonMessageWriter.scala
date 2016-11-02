@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api.v1
+package org.apache.spark.streaming.status.api.v1
 
 import java.io.OutputStream
 import java.lang.annotation.Annotation
@@ -68,7 +68,7 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
       multivaluedMap: MultivaluedMap[String, AnyRef],
       outputStream: OutputStream): Unit = {
     t match {
-      case ErrorWrapper(err) => outputStream.write(err.getBytes("utf-8"))
+      //case ErrorWrapper(err) => outputStream.write(err.getBytes("utf-8"))
       case _ => mapper.writeValue(outputStream, t)
     }
   }
