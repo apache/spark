@@ -31,7 +31,7 @@ class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import PredictorSuite._
 
-  test("should support all NumericType labels and not support other types") {
+  test("should support all NumericType labels and weights and not support other types") {
     val df = spark.createDataFrame(Seq(
       (0, 1, Vectors.dense(0, 2, 3)),
       (1, 2, Vectors.dense(0, 3, 9)),
@@ -41,7 +41,7 @@ class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
 
-    val predictor = new MockPredictor()
+    val predictor = new MockPredictor().setWeightCol("weight")
 
     types.foreach { t =>
       predictor.fit(df.select(col("label").cast(t), col("weight").cast(t), col("features")))
@@ -63,6 +63,8 @@ object PredictorSuite {
     extends Predictor[Vector, MockPredictor, MockPredictionModel] with HasWeightCol {
 
     def this() = this(Identifiable.randomUID("mockpredictor"))
+
+    def setWeightCol(value: String): this.type = set(weightCol, value)
 
     override def train(dataset: Dataset[_]): MockPredictionModel = {
       require(dataset.schema("label").dataType == DoubleType)

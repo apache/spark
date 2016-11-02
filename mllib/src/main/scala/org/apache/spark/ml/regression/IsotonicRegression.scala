@@ -109,7 +109,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
     if (fitting) {
       SchemaUtils.checkNumericType(schema, $(labelCol))
       if (hasWeightCol) {
-        SchemaUtils.checkColumnType(schema, $(weightCol), DoubleType)
+        SchemaUtils.checkNumericType(schema, $(weightCol))
       } else {
         logInfo("The weight column is not defined. Treat all instance weights as 1.0.")
       }
