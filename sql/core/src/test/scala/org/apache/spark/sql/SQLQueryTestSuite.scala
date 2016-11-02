@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
-import org.apache.spark.sql.execution.command.ShowColumnsCommand
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -215,7 +214,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     try {
       val df = session.sql(sql)
       val schema = df.schema
-      val answer = df.queryExecution.hiveResultString()
+      // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
+      val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x"))
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)

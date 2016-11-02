@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -345,18 +346,32 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override lazy val statistics: Statistics = super.statistics.copy(isBroadcastable = true)
 }
 
+/**
+ * Options for writing new data into a table.
+ *
+ * @param enabled whether to overwrite existing data in the table.
+ * @param specificPartition only data in the specified partition will be overwritten.
+ */
+case class OverwriteOptions(
+    enabled: Boolean,
+    specificPartition: Option[CatalogTypes.TablePartitionSpec] = None) {
+  if (specificPartition.isDefined) {
+    assert(enabled, "Overwrite must be enabled when specifying a partition to overwrite.")
+  }
+}
+
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
     child: LogicalPlan,
-    overwrite: Boolean,
+    overwrite: OverwriteOptions,
     ifNotExists: Boolean)
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
 
-  assert(overwrite || !ifNotExists)
+  assert(overwrite.enabled || !ifNotExists)
   assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
 
   override lazy val resolved: Boolean = childrenResolved && table.resolved
