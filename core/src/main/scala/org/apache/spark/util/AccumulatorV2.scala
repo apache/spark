@@ -238,12 +238,19 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
   }
 
   final private[spark] def dataPropertyMerge(other: AccumulatorV2[IN, OUT]) = {
-    val term = other.pending.filter{case (k, v) => other.completed.contains(k)}
-    term.map {
+    // Apply all foreach partitions regardless - they can only be fully evaluated
+    val unprocessed = other.pending.filter{
+      case (ForeachOutputId(), v) => mergeImpl(v); false
+      case _ => true
+    }
+    val term = unprocessed.filter{case (k, v) => other.completed.contains(k)}
+    term.flatMap {
       case (RDDOutputId(rddId, splitId), v) =>
-        (rddProcessed, rddId, splitId, v)
+        Some((rddProcessed, rddId, splitId, v))
       case (ShuffleMapOutputId(shuffleWriteId, splitId), v) =>
-        (shuffleProcessed, shuffleWriteId, splitId, v)
+        Some((shuffleProcessed, shuffleWriteId, splitId, v))
+      case _ => // We won't ever hit this case but avoid compiler warnings
+        None
     }.foreach {
       case (processed, id, splitId, v) =>
       val splits = processed.getOrElseUpdate(id, new mutable.BitSet())

@@ -1942,7 +1942,21 @@ class SparkContext(config: SparkConf) extends Logging {
       throw new IllegalStateException("SparkContext has been shutdown")
     }
     val callSite = getCallSite
-    val cleanedFunc = clean(func)
+    // Wrap the provided function to handle the case func operates on data property
+    // accumulators (e.g. inside of `foreach`).
+    val wrappedFunc = {(context: TaskContext, itr: Iterator[T]) =>
+      if (context.taskMetrics.hasDataPropertyAccumulators()) {
+        val outputId = ForeachOutputId()
+        context.setRDDPartitionInfo(outputId)
+        val wrappedItr = itr.map{x =>
+          context.setRDDPartitionInfo(outputId)
+        }
+        func(context, itr)
+      } else {
+        func(context, itr)
+      }
+    }
+    val cleanedFunc = clean(wrappedFunc)
     logInfo("Starting job: " + callSite.shortForm)
     if (conf.getBoolean("spark.logLineage", false)) {
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)

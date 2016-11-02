@@ -49,6 +49,18 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     acc.value should be (210)
   }
 
+  test("simple foreach") {
+    sc = new SparkContext("local[2]", "test")
+    val acc = sc.longAccumulator(dataProperty = true)
+
+    val a = sc.parallelize(1 to 20)
+    val b = a.foreach{x => acc.add(x); x}
+    acc.value should be (210)
+    val c = a.map{x => acc.add(x); x}
+    c.foreach{x => acc.add(x)}
+    acc.value should be (3 * 210)
+  }
+
   test("adding only the first element per partition should work even if partition is empty") {
     sc = new SparkContext("local[2]", "test")
     val acc = sc.longAccumulator(dataProperty = true)
