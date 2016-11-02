@@ -1595,7 +1595,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           // scalastyle:on println
         }
       }
-
     }
     try {
       runOnce()
