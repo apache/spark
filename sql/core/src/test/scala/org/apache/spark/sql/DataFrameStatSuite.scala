@@ -152,6 +152,19 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("approximate quantile, multiple records with the minimum value in a partition") {
+    val data = Seq(1, 1, 2, 1, 1, 3, 1, 1, 4, 1, 1, 5)
+    val df = spark.sparkContext.makeRDD(data, 4).toDF("col")
+    val epsilons = List(0.1, 0.05, 0.001)
+    val quantile = 0.5
+    val expected = 1
+    for (epsilon <- epsilons) {
+      val Array(answer) = df.stat.approxQuantile("col", Array(quantile), epsilon)
+      val error = 2 * data.length * epsilon
+      assert(math.abs(answer - expected) < error)
+    }
+  }
+
   test("crosstab") {
     val rng = new Random()
     val data = Seq.tabulate(25)(i => (rng.nextInt(5), rng.nextInt(10)))
