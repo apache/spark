@@ -477,34 +477,34 @@ object DataSource {
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider: String): Class[_] = {
-    val provider = backwardCompatibilityMap.getOrElse(provider, provider)
-    val provider2 = s"$provider.DefaultSource"
+    val provider1 = backwardCompatibilityMap.getOrElse(provider, provider)
+    val provider2 = s"$provider1.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
     try {
-      serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider)).toList match {
+      serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider1)).toList match {
         // the provider format did not match any given registered aliases
         case Nil =>
           try {
-            Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
+            Try(loader.loadClass(provider1)).orElse(Try(loader.loadClass(provider2))) match {
               case Success(dataSource) =>
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
-                if (provider.toLowerCase == "orc" ||
-                  provider.startsWith("org.apache.spark.sql.hive.orc")) {
+                if (provider1.toLowerCase == "orc" ||
+                  provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw new AnalysisException(
                     "The ORC data source must be used with Hive support enabled")
-                } else if (provider.toLowerCase == "avro" ||
-                  provider == "com.databricks.spark.avro") {
+                } else if (provider1.toLowerCase == "avro" ||
+                  provider1 == "com.databricks.spark.avro") {
                   throw new AnalysisException(
-                    s"Failed to find data source: ${provider.toLowerCase}. Please find an Avro " +
+                    s"Failed to find data source: ${provider1.toLowerCase}. Please find an Avro " +
                       "package at " +
                       "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects")
                 } else {
                   throw new ClassNotFoundException(
-                    s"Failed to find data source: $provider. Please find packages at " +
+                    s"Failed to find data source: $provider1. Please find packages at " +
                       "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects",
                     error)
                 }
@@ -525,7 +525,7 @@ object DataSource {
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input
-          sys.error(s"Multiple sources found for $provider " +
+          sys.error(s"Multiple sources found for $provider1 " +
             s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
             "please specify the fully qualified class name.")
       }

@@ -21,16 +21,19 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, Metadata, MetadataBuilder, StructType}
 
-class TestOptionsSource extends RelationProvider with CreatableRelationProvider {
+class TestOptionsSource extends SchemaRelationProvider with CreatableRelationProvider {
 
+  // This is used in the read path.
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation = {
+      parameters: Map[String, String],
+      schema: StructType): BaseRelation = {
     new TestOptionsRelation(parameters)(sqlContext.sparkSession)
   }
 
+  // This is used in the write path.
   override def createRelation(
       sqlContext: SQLContext,
       mode: SaveMode,
@@ -45,7 +48,16 @@ class TestOptionsRelation(val options: Map[String, String])(@transient val sessi
 
   override def sqlContext: SQLContext = session.sqlContext
 
-  override def schema: StructType = new StructType().add("i", "int")
+  def pathOption: Option[String] = options.get("path")
+
+  // We can't get the relation directly for write path, here we put the path option in schema
+  // metadata, so that we can test it later.
+  override def schema: StructType = {
+    val metadataWithPath = pathOption.map {
+      path => new MetadataBuilder().putString("path", path).build()
+    }
+    new StructType().add("i", IntegerType, true, metadataWithPath.getOrElse(Metadata.empty))
+  }
 }
 
 class PathOptionSuite extends DataSourceTest with SharedSQLContext {
@@ -56,7 +68,8 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
         s"""
            |CREATE TABLE src(i int)
            |USING ${classOf[TestOptionsSource].getCanonicalName}
-           |OPTIONS (PATH '/tmp/path')""".stripMargin)
+           |OPTIONS (PATH '/tmp/path')
+        """.stripMargin)
       assert(getPathOption("src") == Some("/tmp/path"))
     }
 
@@ -64,6 +77,32 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
     withTable("src") {
       sql(s"CREATE TABLE src(i int) USING ${classOf[TestOptionsSource].getCanonicalName}")
       assert(getPathOption("src") == Some(defaultTablePath("src")))
+    }
+  }
+
+  test("path option also exist for write path") {
+    withTable("src") {
+      withTempPath { path =>
+        sql(
+          s"""
+            |CREATE TABLE src
+            |USING ${classOf[TestOptionsSource].getCanonicalName}
+            |OPTIONS (PATH '${path.getAbsolutePath}')
+            |AS SELECT 1
+          """.stripMargin)
+        assert(spark.table("src").schema.head.metadata.getString("path") == path.getAbsolutePath)
+      }
+    }
+
+    // should exist even path option is not specified when creating table
+    withTable("src") {
+      sql(
+        s"""
+           |CREATE TABLE src
+           |USING ${classOf[TestOptionsSource].getCanonicalName}
+           |AS SELECT 1
+          """.stripMargin)
+      assert(spark.table("src").schema.head.metadata.getString("path") == defaultTablePath("src"))
     }
   }
 
@@ -87,7 +126,7 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
 
   private def getPathOption(tableName: String): Option[String] = {
     spark.table(tableName).queryExecution.analyzed.collect {
-      case LogicalRelation(r: TestOptionsRelation, _, _) => r.options.get("path")
+      case LogicalRelation(r: TestOptionsRelation, _, _) => r.pathOption
     }.head
   }
 
