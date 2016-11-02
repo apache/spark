@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -43,6 +44,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, TimestampType), null)
     checkEvaluation(Literal.create(null, CalendarIntervalType), null)
     checkEvaluation(Literal.create(null, ArrayType(ByteType, true)), null)
+    checkEvaluation(Literal.create(null, ArrayType(StringType, true)), null)
     checkEvaluation(Literal.create(null, MapType(StringType, IntegerType)), null)
     checkEvaluation(Literal.create(null, StructType(Seq.empty)), null)
   }
@@ -122,5 +124,28 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // TODO(davies): add tests for ArrayType, MapType and StructType
+  test("array") {
+    def checkArrayLiteral(a: Array[_], elementType: DataType): Unit = {
+      val toCatalyst = (a: Array[_], elementType: DataType) => {
+        CatalystTypeConverters.createToCatalystConverter(ArrayType(elementType))(a)
+      }
+      checkEvaluation(Literal(a), toCatalyst(a, elementType))
+    }
+    checkArrayLiteral(Array(1, 2, 3), IntegerType)
+    checkArrayLiteral(Array("a", "b", "c"), StringType)
+    checkArrayLiteral(Array(1.0, 4.0), DoubleType)
+    checkArrayLiteral(Array(CalendarInterval.MICROS_PER_DAY, CalendarInterval.MICROS_PER_HOUR),
+      CalendarIntervalType)
+  }
+
+  test("unsupported types (map and struct) in literals") {
+    def checkUnsupportedTypeInLiteral(v: Any): Unit = {
+      val errMsgMap = intercept[RuntimeException] {
+        Literal(v)
+      }
+      assert(errMsgMap.getMessage.startsWith("Unsupported literal type"))
+    }
+    checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2))
+    checkUnsupportedTypeInLiteral(("mike", 29, 1.0))
+  }
 }
