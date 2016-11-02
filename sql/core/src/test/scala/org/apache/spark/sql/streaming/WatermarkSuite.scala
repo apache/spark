@@ -158,4 +158,24 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       CheckAnswer((10, 4), (25, 3))
     )
   }
+
+  test("group by on raw timestamp") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+        .withColumn("eventTime", $"value".cast("timestamp"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy($"eventTime")
+        .agg(count("*") as 'count)
+        .select($"eventTime".cast("long").as[Long], $"count".as[Long])
+
+    testStream(windowedAggregation)(
+      AddData(inputData, 10),
+      CheckAnswer(),
+      AddData(inputData, 25), // Advance watermark to 15 seconds
+      CheckAnswer(),
+      AddData(inputData, 25), // Evict items less than previous watermark.
+      CheckAnswer((10, 1))
+    )
+  }
 }

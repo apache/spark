@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
 
 
 /** Used to identify the state store for a given operator. */
@@ -152,10 +153,18 @@ case class StateStoreSaveExec(
 
             val watermarkAttribute =
               keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey)).get
+            // If we are evicting based on a window, use the end of the window.  Otherwise just
+            // use the attribute itself.
             val evictionExpression =
-              LessThanOrEqual(
-                GetStructField(watermarkAttribute, 1),
-                Literal(eventTimeWatermark.get * 1000))
+              if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
+                LessThanOrEqual(
+                  GetStructField(watermarkAttribute, 1),
+                  Literal(eventTimeWatermark.get * 1000))
+              } else {
+                LessThanOrEqual(
+                  watermarkAttribute,
+                  Literal(eventTimeWatermark.get * 1000))
+              }
 
             logInfo(s"Filtering state store on: $evictionExpression")
             val predicate = newPredicate(evictionExpression, keyExpressions)
@@ -170,7 +179,6 @@ case class StateStoreSaveExec(
             }
 
           // Update and output modified rows from the StateStore.
-          // TODO: Does not evict yet...
           case Some(Update) =>
             new Iterator[InternalRow] {
               private[this] val baseIterator = iter

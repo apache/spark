@@ -23,7 +23,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 object EventTimeWatermark {
   /** The [[org.apache.spark.sql.types.Metadata]] key used to hold the eventTime watermark delay. */
-  val delayKey = "spark.watermarkDelay"
+  val delayKey = "spark.watermarkDelayMs"
 }
 
 /**
