@@ -51,6 +51,13 @@ private[ml] trait PredictorParams extends Params
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
       SchemaUtils.checkNumericType(schema, $(labelCol))
+      this match {
+        case p: Params with HasWeightCol =>
+          if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
+            SchemaUtils.checkNumericType(schema, $(p.weightCol))
+          }
+        case _ =>
+      }
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
@@ -91,7 +98,20 @@ abstract class Predictor[
 
     // Cast LabelCol to DoubleType and keep the metadata.
     val labelMeta = dataset.schema($(labelCol)).metadata
-    val casted = dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
+    val labelCasted = dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
+
+    // If the predictor supports weights and the weightCol is available,
+    // cast WeightCol to DoubleType and keep the metadata.
+    val casted = this match {
+      case p: Predictor[_, _, _] with HasWeightCol =>
+        if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
+          val weightMeta = dataset.schema($(p.weightCol)).metadata
+          labelCasted.withColumn($(p.weightCol), col($(p.weightCol)).cast(DoubleType), weightMeta)
+        } else {
+          labelCasted
+        }
+      case _ => labelCasted
+    }
 
     copyValues(train(casted).setParent(this))
   }

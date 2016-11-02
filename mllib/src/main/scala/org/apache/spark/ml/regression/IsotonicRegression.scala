@@ -87,7 +87,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
       col($(featuresCol))
     }
     val w = if (hasWeightCol) {
-      col($(weightCol))
+      col($(weightCol)).cast(DoubleType)
     } else {
       lit(1.0)
     }

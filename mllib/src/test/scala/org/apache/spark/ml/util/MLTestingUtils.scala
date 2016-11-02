@@ -47,18 +47,49 @@ object MLTestingUtils extends SparkFunSuite {
     } else {
       genRegressionDFWithNumericLabelCol(spark)
     }
-    val expected = estimator.fit(dfs(DoubleType))
-    val actuals = dfs.keys.filter(_ != DoubleType).map(t => estimator.fit(dfs(t)))
+
+    val expected = estimator match {
+      case weighted: Estimator[M] with HasWeightCol =>
+        weighted.set(weighted.weightCol, "weight")
+        weighted.fit(dfs(DoubleType))
+      case _: Estimator[M] => estimator.fit(dfs(DoubleType))
+      case _ => throw new Exception()
+    }
+
+    val actuals = dfs.keys.filter(_ != DoubleType).map { t =>
+      estimator match {
+        case weighted: Estimator[M] with HasWeightCol =>
+          weighted.set(weighted.weightCol, "weight")
+          weighted.fit(dfs(t))
+        case _: Estimator[M] => estimator.fit(dfs(t))
+        case _ => throw new Exception()
+      }
+    }
+
     actuals.foreach(actual => check(expected, actual))
 
     val dfWithStringLabels = spark.createDataFrame(Seq(
-      ("0", Vectors.dense(0, 2, 3), 0.0)
-    )).toDF("label", "features", "censor")
+      ("0", 1, Vectors.dense(0, 2, 3), 0.0)
+    )).toDF("label", "weight", "features", "censor")
     val thrown = intercept[IllegalArgumentException] {
       estimator.fit(dfWithStringLabels)
     }
     assert(thrown.getMessage.contains(
       "Column label must be of type NumericType but was actually of type StringType"))
+
+    estimator match {
+      case weighted: Estimator[M] with HasWeightCol =>
+        val dfWithStringWeights = spark.createDataFrame(Seq(
+          (0, "1", Vectors.dense(0, 2, 3), 0.0)
+        )).toDF("label", "weight", "features", "censor")
+        weighted.set(weighted.weightCol, "weight")
+        val thrown = intercept[IllegalArgumentException] {
+          weighted.fit(dfWithStringWeights)
+        }
+        assert(thrown.getMessage.contains(
+          "Column weight must be of type NumericType but was actually of type StringType"))
+      case _ =>
+    }
   }
 
   def checkNumericTypesALS(
@@ -75,7 +106,7 @@ object MLTestingUtils extends SparkFunSuite {
     actuals.foreach { case (t, actual) => check2(expected, actual, dfs(t)) }
 
     val baseDF = dfs(baseType)
-    val others = baseDF.columns.toSeq.diff(Seq(column)).map(col(_))
+    val others = baseDF.columns.toSeq.diff(Seq(column)).map(col)
     val cols = Seq(col(column).cast(StringType)) ++ others
     val strDF = baseDF.select(cols: _*)
     val thrown = intercept[IllegalArgumentException] {
@@ -104,7 +135,8 @@ object MLTestingUtils extends SparkFunSuite {
   def genClassifDFWithNumericLabelCol(
       spark: SparkSession,
       labelColName: String = "label",
-      featuresColName: String = "features"): Map[NumericType, DataFrame] = {
+      featuresColName: String = "features",
+      weightColName: String = "weight"): Map[NumericType, DataFrame] = {
     val df = spark.createDataFrame(Seq(
       (0, Vectors.dense(0, 2, 3)),
       (1, Vectors.dense(0, 3, 1)),
@@ -118,12 +150,14 @@ object MLTestingUtils extends SparkFunSuite {
     types.map { t =>
         val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
         t -> TreeTests.setMetadata(castDF, 2, labelColName, featuresColName)
+          .withColumn(weightColName, ceil(rand(seed = 42) * 10).cast(t))
       }.toMap
   }
 
   def genRegressionDFWithNumericLabelCol(
       spark: SparkSession,
       labelColName: String = "label",
+      weightColName: String = "weight",
       featuresColName: String = "features",
       censorColName: String = "censor"): Map[NumericType, DataFrame] = {
     val df = spark.createDataFrame(Seq(
@@ -137,10 +171,11 @@ object MLTestingUtils extends SparkFunSuite {
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
     types.map { t =>
-        val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
-        t -> TreeTests.setMetadata(castDF, 0, labelColName, featuresColName)
-          .withColumn(censorColName, lit(0.0))
-      }.toMap
+      val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
+      t -> TreeTests.setMetadata(castDF, 0, labelColName, featuresColName)
+        .withColumn(censorColName, lit(0.0))
+        .withColumn(weightColName, ceil(rand(seed = 42) * 10).cast(t))
+    }.toMap
   }
 
   def genRatingsDFWithNumericCols(
