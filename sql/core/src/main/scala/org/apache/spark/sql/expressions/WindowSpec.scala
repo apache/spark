@@ -95,7 +95,7 @@ class WindowSpec private[sql](
    * {{{
    *   import org.apache.spark.sql.expressions.Window
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")).toDF("id", "category")
-   *   df.withColumn("sum", sum('id) over Window.partitionBy('category).orderBy('id).rowsBetween(0,1)).show
+   *   df.withColumn("sum", sum('id) over Window.partitionBy('category).orderBy('id).rowsBetween(0,1)).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|
@@ -139,7 +139,7 @@ class WindowSpec private[sql](
    * {{{
    *   import org.apache.spark.sql.expressions.Window
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")).toDF("id", "category")
-   *   df.withColumn("sum", sum('id) over Window.partitionBy('category).orderBy('id).rangeBetween(0,1)).show
+   *   df.withColumn("sum", sum('id) over Window.partitionBy('category).orderBy('id).rangeBetween(0,1)).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|
