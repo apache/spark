@@ -74,10 +74,10 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
   /** Iterate through the data in a given order. For this class this is not really destructive. */
   override def partitionedDestructiveSortedIterator(keyComparator: Option[Comparator[K]])
     : Iterator[((Int, K), V)] = {
-    val comparator : Comparator[(Int, K)] = 
+    val comparator : Comparator[(Int, K)] =
       if (keyComparator.isEmpty) {
         partitionComparator
-    } else
+    } else {
       new Comparator[(Int, K)] {
         override def compare(a: (Int, K), b: (Int, K)): Int = {
           val partitionDiff = a._1 - b._1
@@ -87,6 +87,7 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
               keyComparator.get.compare(a._2, b._2)
             }
         }
+      }
     }
     new Sorter(new KVArraySortDataFormat[(Int, K), AnyRef]).sort(data, 0, curSize, comparator)
     iterator
