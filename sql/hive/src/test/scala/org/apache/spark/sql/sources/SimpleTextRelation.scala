@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import java.text.NumberFormat
+import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -141,7 +142,7 @@ class SimpleTextOutputWriter(path: String, context: TaskAttemptContext)
 
 class AppendingTextOutputFormat(path: String) extends TextOutputFormat[NullWritable, Text] {
 
-  val numberFormat = NumberFormat.getInstance()
+  val numberFormat = NumberFormat.getInstance(Locale.US)
   numberFormat.setMinimumIntegerDigits(5)
   numberFormat.setGroupingUsed(false)
 

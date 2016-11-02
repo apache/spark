@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -68,8 +68,8 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(d2.toString === d1.toString)
     }
 
-    val df1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-    val df2 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z")
+    val df1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+    val df2 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.US)
 
     checkFromToJavaDate(new Date(100))
 

@@ -21,7 +21,7 @@ import java.io.IOException
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
-import java.util.{Arrays, Comparator, Date}
+import java.util.{Arrays, Comparator, Date, Locale}
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -357,7 +357,7 @@ class SparkHadoopUtil extends Logging {
    * @return a printable string value.
    */
   private[spark] def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
-    val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+    val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.US)
     val buffer = new StringBuilder(128)
     buffer.append(token.toString)
     try {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.text.NumberFormat
-import java.util.Date
+import java.util.{Date, Locale}
 
 import scala.collection.JavaConverters._
 
@@ -95,7 +95,7 @@ private[hive] class SparkHiveWriterContainer(
   }
 
   protected def getOutputName: String = {
-    val numberFormat = NumberFormat.getInstance()
+    val numberFormat = NumberFormat.getInstance(Locale.US)
     numberFormat.setMinimumIntegerDigits(5)
     numberFormat.setGroupingUsed(false)
     val extension = Utilities.getFileExtension(conf.value, fileSinkConf.getCompressed, outputFormat)

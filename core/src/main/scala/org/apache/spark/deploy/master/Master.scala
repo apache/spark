@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -51,7 +51,8 @@ private[deploy] class Master(
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss") // For application IDs
+  // For application IDs
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
 
   private val WORKER_TIMEOUT_MS = conf.getLong("spark.worker.timeout", 60) * 1000
   private val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)

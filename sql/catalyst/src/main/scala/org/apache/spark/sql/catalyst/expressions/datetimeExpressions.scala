@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.SimpleDateFormat
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 
 import scala.util.Try
 
@@ -331,7 +331,7 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val sdf = new SimpleDateFormat(format.toString)
+    val sdf = new SimpleDateFormat(format.toString, Locale.US)
     UTF8String.fromString(sdf.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
@@ -400,7 +400,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: SimpleDateFormat =
-    Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
+    Try(new SimpleDateFormat(constFormat.toString, Locale.US)).getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
@@ -425,7 +425,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
             null
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
-            Try(new SimpleDateFormat(formatString).parse(
+            Try(new SimpleDateFormat(formatString, Locale.US).parse(
               t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
           }
       }
@@ -520,7 +520,7 @@ case class FromUnixTime(sec: Expression, format: Expression)
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: SimpleDateFormat =
-    Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
+    Try(new SimpleDateFormat(constFormat.toString, Locale.US)).getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val time = left.eval(input)
@@ -539,9 +539,10 @@ case class FromUnixTime(sec: Expression, format: Expression)
         if (f == null) {
           null
         } else {
-          Try(UTF8String.fromString(new SimpleDateFormat(
-            f.asInstanceOf[UTF8String].toString).format(new java.util.Date(
-              time.asInstanceOf[Long] * 1000L)))).getOrElse(null)
+          Try(
+            UTF8String.fromString(new SimpleDateFormat(f.toString, Locale.US).
+              format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
+          ).getOrElse(null)
         }
       }
     }

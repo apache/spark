@@ -20,9 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
-import java.util.{Date, Random}
-
-import scala.collection.JavaConverters._
+import java.util.{Date, Locale, Random}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -60,9 +58,8 @@ case class InsertIntoHiveTable(
 
   private def executionId: String = {
     val rand: Random = new Random
-    val format: SimpleDateFormat = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS")
-    val executionId: String = "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
-    return executionId
+    val format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
+    "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
   }
 
   private def getStagingDir(inputPath: Path, hadoopConf: Configuration): Path = {

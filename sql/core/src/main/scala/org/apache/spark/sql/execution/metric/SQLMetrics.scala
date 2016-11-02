@@ -102,7 +102,7 @@ object SQLMetrics {
    */
   def stringValue(metricsType: String, values: Seq[Long]): String = {
     if (metricsType == SUM_METRIC) {
-      val numberFormat = NumberFormat.getIntegerInstance(Locale.ENGLISH)
+      val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
     } else {
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {

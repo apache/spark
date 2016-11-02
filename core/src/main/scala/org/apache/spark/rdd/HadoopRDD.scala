@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.io.IOException
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, Locale}
 
 import scala.collection.immutable.Map
 import scala.reflect.ClassTag
@@ -243,7 +243,8 @@ class HadoopRDD[K, V](
 
       var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
-      HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmmss").format(createTime),
+      HadoopRDD.addLocalConfiguration(
+        new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(createTime),
         context.stageId, theSplit.index, context.attemptNumber, jobConf)
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
