@@ -1297,7 +1297,7 @@ abstract class RDD[T: ClassTag](
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
-    val scaleUpFactor = Math.max(conf.getInt("spark.rdd.limit.scaleUpFactor", 4), 2)
+    val scaleUpFactor = math.max(conf.getInt("spark.rdd.limit.scaleUpFactor", 4), 2)
     if (num == 0) {
       new Array[T](0)
     } else {
@@ -1316,8 +1316,8 @@ abstract class RDD[T: ClassTag](
             numPartsToTry = partsScanned * scaleUpFactor
           } else {
             // the left side of max is >=1 whenever partsScanned >= 2
-            numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
-            numPartsToTry = Math.min(numPartsToTry, partsScanned * scaleUpFactor)
+            numPartsToTry = math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
+            numPartsToTry = math.min(numPartsToTry, partsScanned * scaleUpFactor)
           }
         }
 

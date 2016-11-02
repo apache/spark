@@ -320,7 +320,7 @@ object PartitioningAwareFileIndex extends Logging {
 
     // Set the number of parallelism to prevent following file listing from generating many tasks
     // in case of large #defaultParallelism.
-    val numParallelism = Math.min(paths.size, 10000)
+    val numParallelism = math.min(paths.size, 10000)
 
     val statusMap = sparkContext
       .parallelize(serializedPaths, numParallelism)

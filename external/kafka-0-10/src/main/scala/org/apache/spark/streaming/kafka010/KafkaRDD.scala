@@ -111,7 +111,7 @@ private[spark] class KafkaRDD[K, V](
     val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
       val remain = num - result.values.sum
       if (remain > 0) {
-        val taken = Math.min(remain, part.count)
+        val taken = math.min(remain, part.count)
         result + (part.index -> taken.toInt)
       } else {
         result

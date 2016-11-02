@@ -63,7 +63,7 @@ private[spark] class FixedLengthBinaryRecordReader
   override def getProgress: Float = {
     splitStart match {
       case x if x == splitEnd => 0.0.toFloat
-      case _ => Math.min(
+      case _ => math.min(
         ((currentPosition - splitStart) / (splitEnd - splitStart)).toFloat, 1.0
       ).toFloat
     }

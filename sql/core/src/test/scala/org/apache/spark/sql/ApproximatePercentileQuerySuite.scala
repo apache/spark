@@ -86,7 +86,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
       val errors = accuracies.map { accuracy =>
         val df = spark.sql(s"SELECT percentile_approx(col, 0.25, $accuracy) FROM $table")
         val approximatePercentile = df.collect().head.getDouble(0)
-        val error = Math.abs(approximatePercentile - expectedPercentile)
+        val error = math.abs(approximatePercentile - expectedPercentile)
         error
       }
 

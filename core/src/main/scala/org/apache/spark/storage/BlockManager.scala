@@ -382,7 +382,7 @@ private[spark] class BlockManager(
       status: BlockStatus,
       droppedMemorySize: Long = 0L): Boolean = {
     val storageLevel = status.storageLevel
-    val inMemSize = Math.max(status.memSize, droppedMemorySize)
+    val inMemSize = math.max(status.memSize, droppedMemorySize)
     val onDiskSize = status.diskSize
     master.updateBlockInfo(blockManagerId, blockId, storageLevel, inMemSize, onDiskSize)
   }

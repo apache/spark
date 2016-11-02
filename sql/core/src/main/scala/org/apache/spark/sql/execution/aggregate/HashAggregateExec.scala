@@ -344,7 +344,7 @@ case class HashAggregateExec(
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
     val sorterMemory = Option(sorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-    val maxMemory = Math.max(mapMemory, sorterMemory)
+    val maxMemory = math.max(mapMemory, sorterMemory)
     val metrics = TaskContext.get().taskMetrics()
     peakMemory.add(maxMemory)
     metrics.incPeakExecutionMemory(maxMemory)

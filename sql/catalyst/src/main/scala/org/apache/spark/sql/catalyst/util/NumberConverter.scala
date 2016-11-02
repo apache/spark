@@ -120,8 +120,8 @@ object NumberConverter {
    */
   def convert(n: Array[Byte], fromBase: Int, toBase: Int ): UTF8String = {
     if (fromBase < Character.MIN_RADIX || fromBase > Character.MAX_RADIX
-        || Math.abs(toBase) < Character.MIN_RADIX
-        || Math.abs(toBase) > Character.MAX_RADIX) {
+        || math.abs(toBase) < Character.MIN_RADIX
+        || math.abs(toBase) > Character.MAX_RADIX) {
       return null
     }
 
@@ -153,14 +153,14 @@ object NumberConverter {
       v = -v
       negative = true
     }
-    decode(v, Math.abs(toBase), temp)
+    decode(v, math.abs(toBase), temp)
 
     // Find the first non-zero digit or the last digits if all are zero.
     val firstNonZeroPos = {
       val firstNonZero = temp.indexWhere( _ != 0)
       if (firstNonZero != -1) firstNonZero else temp.length - 1
     }
-    byte2char(Math.abs(toBase), firstNonZeroPos, temp)
+    byte2char(math.abs(toBase), firstNonZeroPos, temp)
 
     var resultStartPos = firstNonZeroPos
     if (negative && toBase < 0) {

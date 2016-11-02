@@ -595,9 +595,9 @@ private[parquet] object ParquetSchemaConverter {
 
   // Max precision of a decimal value stored in `numBytes` bytes
   def maxPrecisionForBytes(numBytes: Int): Int = {
-    Math.round(                               // convert double to long
-      Math.floor(Math.log10(                  // number of base-10 digits
-        Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
+    math.round(                               // convert double to long
+      math.floor(math.log10(                  // number of base-10 digits
+        math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
       .asInstanceOf[Int]
   }
 }

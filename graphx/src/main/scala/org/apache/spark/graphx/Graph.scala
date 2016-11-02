@@ -162,7 +162,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * {{{
    * val rawGraph: Graph[(), ()] = Graph.textFile("hdfs://file")
    * val root = 42
-   * var bfsGraph = rawGraph.mapVertices[Int]((vid, data) => if (vid == root) 0 else Math.MaxValue)
+   * var bfsGraph = rawGraph.mapVertices[Int]((vid, data) => if (vid == root) 0 else Int.MaxValue)
    * }}}
    *
    */

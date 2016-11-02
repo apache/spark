@@ -106,7 +106,7 @@ object RandomDataGenerator {
       } else {
         // Struct
         // TODO: do empty structs make sense?
-        val n = Math.max(rand.nextInt(numFields), 1)
+        val n = math.max(rand.nextInt(numFields), 1)
         val nested = randomNestedSchema(rand, n, acceptedTypes)
         fields += new StructField("col_" + i, nested, rand.nextBoolean())
         numFields -= n

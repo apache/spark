@@ -91,7 +91,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Number of threads used to replay event logs.
   private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_REPLAY_THREADS,
-    Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
+    math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 
   private val logDir = conf.getOption("spark.history.fs.logDirectory")
     .map { d => Utils.resolveURI(d).toString }

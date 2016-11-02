@@ -150,6 +150,13 @@ This file is divided into 3 sections:
       // scalastyle:on println]]></customMessage>
   </check>
 
+  <!-- As of SPARK-18222, use scala.math instead of java.lang.Math -->
+  <check customId="scalamath" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">^Math$</parameter></parameters>
+    <customMessage>Use Scala Math classes (package scala.math.*) instead
+      of Java Lang Math (package java.lang.Math.*)</customMessage>
+  </check>
+
   <check customId="visiblefortesting" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">@VisibleForTesting</parameter></parameters>
     <customMessage><![CDATA[

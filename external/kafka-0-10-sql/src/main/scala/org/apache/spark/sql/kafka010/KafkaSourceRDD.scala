@@ -95,7 +95,7 @@ private[kafka010] class KafkaSourceRDD(
     val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
       val remain = num - result.values.sum
       if (remain > 0) {
-        val taken = Math.min(remain, part.offsetRange.size)
+        val taken = math.min(remain, part.offsetRange.size)
         result + (part.index -> taken.toInt)
       } else {
         result

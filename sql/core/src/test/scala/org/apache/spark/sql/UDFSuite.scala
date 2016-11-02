@@ -93,7 +93,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("ZeroArgument UDF") {
-    spark.udf.register("random0", () => { Math.random()})
+    spark.udf.register("random0", () => { math.random})
     assert(sql("SELECT random0()").head().getDouble(0) >= 0.0)
   }
 

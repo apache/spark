@@ -415,7 +415,7 @@ class TungstenAggregationIterator(
       if (!hasNext) {
         val mapMemory = hashMap.getPeakMemoryUsedBytes
         val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-        val maxMemory = Math.max(mapMemory, sorterMemory)
+        val maxMemory = math.max(mapMemory, sorterMemory)
         val metrics = TaskContext.get().taskMetrics()
         peakMemory += maxMemory
         spillSize += metrics.memoryBytesSpilled - spillSizeBefore

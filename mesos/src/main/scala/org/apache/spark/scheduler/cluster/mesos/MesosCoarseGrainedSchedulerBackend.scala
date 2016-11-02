@@ -402,8 +402,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           launchTasks = true
           val taskId = newMesosTaskId()
           val offerCPUs = getResource(resources, "cpus").toInt
-          val taskGPUs = Math.min(
-            Math.max(0, maxGpus - totalGpusAcquired), getResource(resources, "gpus").toInt)
+          val taskGPUs = math.min(
+            math.max(0, maxGpus - totalGpusAcquired), getResource(resources, "gpus").toInt)
 
           val taskCPUs = executorCores(offerCPUs)
           val taskMemory = executorMemory(sc)

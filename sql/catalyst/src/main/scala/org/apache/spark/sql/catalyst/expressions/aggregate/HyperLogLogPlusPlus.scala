@@ -90,7 +90,7 @@ case class HyperLogLogPlusPlus(
    * lower than the requested error. Use the <code>trueRsd</code> method to get the actual RSD
    * value.
    */
-  private[this] val p = Math.ceil(2.0d * Math.log(1.106d / relativeSD) / Math.log(2.0d)).toInt
+  private[this] val p = math.ceil(2.0d * math.log(1.106d / relativeSD) / math.log(2.0d)).toInt
 
   require(p >= 4, "HLL++ requires at least 4 bits for addressing. " +
     "Use a lower error, at most 27%.")
@@ -210,7 +210,7 @@ case class HyperLogLogPlusPlus(
       var i = 0
       var mask = REGISTER_WORD_MASK
       while (idx < m && i < REGISTERS_PER_WORD) {
-        word |= Math.max(word1 & mask, word2 & mask)
+        word |= math.max(word1 & mask, word2 & mask)
         mask <<= REGISTER_SIZE
         i += 1
         idx += 1
@@ -305,7 +305,7 @@ case class HyperLogLogPlusPlus(
     // Estimate the cardinality.
     val estimate = if (V > 0) {
       // Use linear counting for small cardinality estimates.
-      val H = m * Math.log(m / V)
+      val H = m * math.log(m / V)
       if (H <= THRESHOLDS(p - 4)) {
         H
       } else {
@@ -316,7 +316,7 @@ case class HyperLogLogPlusPlus(
     }
 
     // Round to the nearest long value.
-    Math.round(estimate)
+    math.round(estimate)
   }
 
   /**

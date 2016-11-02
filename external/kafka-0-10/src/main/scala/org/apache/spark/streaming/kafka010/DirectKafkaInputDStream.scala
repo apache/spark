@@ -139,14 +139,14 @@ private[spark] class DirectKafkaInputDStream[K, V](
     val effectiveRateLimitPerPartition = estimatedRateLimit.filter(_ > 0) match {
       case Some(rate) =>
         val lagPerPartition = offsets.map { case (tp, offset) =>
-          tp -> Math.max(offset - currentOffsets(tp), 0)
+          tp -> math.max(offset - currentOffsets(tp), 0)
         }
         val totalLag = lagPerPartition.values.sum
 
         lagPerPartition.map { case (tp, lag) =>
-          val backpressureRate = Math.round(lag / totalLag.toFloat * rate)
+          val backpressureRate = math.round(lag / totalLag.toFloat * rate)
           tp -> (if (maxRateLimitPerPartition > 0) {
-            Math.min(backpressureRate, maxRateLimitPerPartition)} else backpressureRate)
+            math.min(backpressureRate, maxRateLimitPerPartition)} else backpressureRate)
         }
       case None => offsets.map { case (tp, offset) => tp -> maxRateLimitPerPartition }
     }
@@ -171,7 +171,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
       // position should be minimum offset per topicpartition
       msgs.asScala.foldLeft(Map[TopicPartition, Long]()) { (acc, m) =>
         val tp = new TopicPartition(m.topic, m.partition)
-        val off = acc.get(tp).map(o => Math.min(o, m.offset)).getOrElse(m.offset)
+        val off = acc.get(tp).map(o => math.min(o, m.offset)).getOrElse(m.offset)
         acc + (tp -> off)
       }.foreach { case (tp, off) =>
           logInfo(s"poll(0) returned messages, seeking $tp to $off to compensate")
@@ -206,7 +206,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     maxMessagesPerPartition(offsets).map { mmp =>
       mmp.map { case (tp, messages) =>
           val uo = offsets(tp)
-          tp -> Math.min(currentOffsets(tp) + messages, uo)
+          tp -> math.min(currentOffsets(tp) + messages, uo)
       }
     }.getOrElse(offsets)
   }
@@ -286,7 +286,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     while (null != osr) {
       val tp = osr.topicPartition
       val x = m.get(tp)
-      val offset = if (null == x) { osr.untilOffset } else { Math.max(x.offset, osr.untilOffset) }
+      val offset = if (null == x) { osr.untilOffset } else { math.max(x.offset, osr.untilOffset) }
       m.put(tp, new OffsetAndMetadata(offset))
       osr = commitQueue.poll()
     }

@@ -92,10 +92,10 @@ object DateTimeUtils {
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisUtc: Long): SQLDate = {
-    // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
+    // SPARK-6785: use math.floor so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
     val millisLocal = millisUtc + threadLocalLocalTimeZone.get().getOffset(millisUtc)
-    Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+    math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
 
   // reverse of millisToDays
@@ -864,7 +864,7 @@ object DateTimeUtils {
       if (guess != offset) {
         // fallback to do the reverse lookup using java.sql.Timestamp
         // this should only happen near the start or end of DST
-        val days = Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+        val days = math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
         val year = getYear(days)
         val month = getMonth(days)
         val day = getDayOfMonth(days)

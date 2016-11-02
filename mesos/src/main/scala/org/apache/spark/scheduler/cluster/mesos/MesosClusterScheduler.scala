@@ -673,7 +673,7 @@ private[spark] class MesosClusterScheduler(
           state.finishDate = Some(new Date())
           val retryState: Option[MesosClusterRetryState] = state.driverDescription.retryState
           val (retries, waitTimeSec) = retryState
-            .map { rs => (rs.retries + 1, Math.min(maxRetryWaitTime, rs.waitTime * 2)) }
+            .map { rs => (rs.retries + 1, math.min(maxRetryWaitTime, rs.waitTime * 2)) }
             .getOrElse{ (1, 1) }
           val nextRetry = new Date(new Date().getTime + waitTimeSec * 1000L)
 
