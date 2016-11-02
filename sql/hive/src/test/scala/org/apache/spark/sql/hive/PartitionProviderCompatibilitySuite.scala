@@ -134,4 +134,56 @@ class PartitionProviderCompatibilitySuite
       }
     }
   }
+
+  test("insert overwrite partition of legacy datasource table overwrites entire table") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedDatasourceTable("test", dir)
+          spark.sql(
+            """insert overwrite table test
+              |partition (partCol=1)
+              |select * from range(100)""".stripMargin)
+          assert(spark.sql("select * from test").count() == 100)
+
+          // Dynamic partitions case
+          spark.sql("insert overwrite table test select id, id from range(10)".stripMargin)
+          assert(spark.sql("select * from test").count() == 10)
+        }
+      }
+    }
+  }
+
+  test("insert overwrite partition of new datasource table overwrites just partition") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          setupPartitionedDatasourceTable("test", dir)
+          sql("msck repair table test")
+          spark.sql(
+            """insert overwrite table test
+              |partition (partCol=1)
+              |select * from range(100)""".stripMargin)
+          assert(spark.sql("select * from test").count() == 104)
+
+          // Test overwriting a partition that has a custom location
+          withTempDir { dir2 =>
+            sql(
+              s"""alter table test partition (partCol=1)
+                |set location '${dir2.getAbsolutePath}'""".stripMargin)
+            assert(sql("select * from test").count() == 4)
+            sql(
+              """insert overwrite table test
+                |partition (partCol=1)
+                |select * from range(30)""".stripMargin)
+            sql(
+              """insert overwrite table test
+                |partition (partCol=1)
+                |select * from range(20)""".stripMargin)
+            assert(sql("select * from test").count() == 24)
+          }
+        }
+      }
+    }
+  }
 }

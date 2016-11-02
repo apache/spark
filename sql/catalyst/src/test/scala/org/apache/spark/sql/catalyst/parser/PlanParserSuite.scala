@@ -180,7 +180,16 @@ class PlanParserSuite extends PlanTest {
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(table("s"), partition, plan, overwrite, ifNotExists)
+      InsertIntoTable(
+        table("s"), partition, plan,
+        OverwriteOptions(
+          overwrite,
+          if (overwrite && partition.nonEmpty) {
+            Some(partition.map(kv => (kv._1, kv._2.get)))
+          } else {
+            None
+          }),
+        ifNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
@@ -196,9 +205,9 @@ class PlanParserSuite extends PlanTest {
     val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
       InsertIntoTable(
-        table("s"), Map.empty, plan.limit(1), overwrite = false, ifNotExists = false).union(
+        table("s"), Map.empty, plan.limit(1), OverwriteOptions(false), ifNotExists = false).union(
         InsertIntoTable(
-          table("u"), Map.empty, plan2, overwrite = false, ifNotExists = false)))
+          table("u"), Map.empty, plan2, OverwriteOptions(false), ifNotExists = false)))
   }
 
   test ("insert with if not exists") {

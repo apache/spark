@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -174,14 +176,32 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.rootPaths
       }.flatten
 
-      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
-      if (overwrite && inputPaths.contains(outputPath)) {
+      val mode = if (overwrite.enabled) SaveMode.Overwrite else SaveMode.Append
+      if (overwrite.enabled && inputPaths.contains(outputPath)) {
         throw new AnalysisException(
           "Cannot overwrite a path that is also being read from.")
       }
 
+      val overwritingSinglePartition = (overwrite.specificPartition.isDefined &&
+        t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
+        l.catalogTable.get.partitionProviderIsHive)
+
+      val effectiveOutputPath = if (overwritingSinglePartition) {
+        val partition = t.sparkSession.sessionState.catalog.getPartition(
+          l.catalogTable.get.identifier, overwrite.specificPartition.get)
+        new Path(partition.storage.locationUri.get)
+      } else {
+        outputPath
+      }
+
+      val effectivePartitionSchema = if (overwritingSinglePartition) {
+        Nil
+      } else {
+        query.resolve(t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
+      }
+
       def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
-        if (l.catalogTable.isDefined &&
+        if (l.catalogTable.isDefined && updatedPartitions.nonEmpty &&
             l.catalogTable.get.partitionColumnNames.nonEmpty &&
             l.catalogTable.get.partitionProviderIsHive) {
           val metastoreUpdater = AlterTableAddPartitionCommand(
@@ -194,8 +214,8 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       }
 
       val insertCmd = InsertIntoHadoopFsRelationCommand(
-        outputPath,
-        query.resolve(t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver),
+        effectiveOutputPath,
+        effectivePartitionSchema,
         t.bucketSpec,
         t.fileFormat,
         refreshPartitionsCallback,

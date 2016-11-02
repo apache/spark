@@ -67,7 +67,10 @@ class CatalogFileIndex(
       val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
         table.identifier, filters)
       val partitions = selectedPartitions.map { p =>
-        PartitionPath(p.toRow(partitionSchema), p.storage.locationUri.get)
+        val path = new Path(p.storage.locationUri.get)
+        val fs = path.getFileSystem(hadoopConf)
+        PartitionPath(
+          p.toRow(partitionSchema), path.makeQualified(fs.getUri, fs.getWorkingDirectory))
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       new PrunedInMemoryFileIndex(
