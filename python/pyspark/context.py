@@ -188,7 +188,7 @@ class SparkContext(object):
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
-        if sys.version_info < (2,7):
+        if sys.version_info < (2, 7):
             warnings.warn("Support for Python 2.6 is deprecated as of Spark 2.0.0")
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
