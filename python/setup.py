@@ -99,7 +99,7 @@ try:
 
     # Scripts directive requires a list of each script path and does not take wild cards.
     script_names = os.listdir(SCRIPTS_TARGET)
-    scripts = map(lambda script: os.path.join(SCRIPTS_TARGET, script), script_names)
+    scripts = list(map(lambda script: os.path.join(SCRIPTS_TARGET, script), script_names))
     # We add find_spark_home.py to the bin directory we install so that pip installed PySpark
     # will search for SPARK_HOME with Python.
     scripts.append("pyspark/find_spark_home.py")
