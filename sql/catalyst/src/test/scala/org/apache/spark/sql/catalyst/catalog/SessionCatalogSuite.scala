@@ -132,6 +132,9 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.setCurrentDatabase("db1")
     assert(catalog.getCurrentDatabase == "db1")
     catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = true)
+    intercept[NoSuchDatabaseException] {
+      catalog.createTable(newTable("tbl1", "db1"), ignoreIfExists = false)
+    }
     catalog.setCurrentDatabase("default")
     assert(catalog.getCurrentDatabase == "default")
     intercept[AnalysisException] {
