@@ -102,7 +102,7 @@ case class CartesianProductExec(
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {
         val boundCondition = newPredicate(condition.get, left.output ++ right.output)
-        boundCondition.initializeStatesForPartition(index)
+        boundCondition.initialize(index)
         val joined = new JoinedRow
 
         iter.filter { r =>

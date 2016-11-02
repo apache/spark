@@ -96,7 +96,7 @@ case class GenerateExec(
     val numOutputRows = longMetric("numOutputRows")
     rows.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(output, output)
-      proj.initializeStatesForPartition(index)
+      proj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         proj(r)

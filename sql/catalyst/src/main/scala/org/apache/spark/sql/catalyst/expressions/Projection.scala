@@ -23,6 +23,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
+ *
  * @param expressions a sequence of expressions that determine the value of each column of the
  *                    output row.
  */
@@ -30,9 +31,9 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
-  override def initializeStatesForPartition(partitionIndex: Int): Unit = {
+  override def initialize(partitionIndex: Int): Unit = {
     expressions.foreach(_.foreach {
-      case n: Nondeterministic => n.initializeStatesForPartition(partitionIndex)
+      case n: Nondeterministic => n.initialize(partitionIndex)
       case _ =>
     })
   }
@@ -56,6 +57,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
 /**
  * A [[MutableProjection]] that is calculated by calling `eval` on each of the specified
  * expressions.
+ *
  * @param expressions a sequence of expressions that determine the value of each column of the
  *                    output row.
  */
@@ -65,9 +67,9 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
 
   private[this] val buffer = new Array[Any](expressions.size)
 
-  override def initializeStatesForPartition(partitionIndex: Int): Unit = {
+  override def initialize(partitionIndex: Int): Unit = {
     expressions.foreach(_.foreach {
-      case n: Nondeterministic => n.initializeStatesForPartition(partitionIndex)
+      case n: Nondeterministic => n.initialize(partitionIndex)
       case _ =>
     })
   }

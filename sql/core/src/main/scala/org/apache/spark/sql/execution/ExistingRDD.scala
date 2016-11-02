@@ -192,7 +192,7 @@ case class RDDScanExec(
     val numOutputRows = longMetric("numOutputRows")
     rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(schema)
-      proj.initializeStatesForPartition(index)
+      proj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         proj(r)

@@ -50,7 +50,7 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
 
   @transient private[this] var partitionMask: Long = _
 
-  override protected def initializeStatesForPartitionInternal(partitionIndex: Int): Unit = {
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
     count = 0L
     partitionMask = partitionIndex.toLong << 33
   }

@@ -73,7 +73,7 @@ case class RowDataSourceScanExec(
     } else {
       rdd.mapPartitionsWithIndexInternal { (index, iter) =>
         val proj = UnsafeProjection.create(schema)
-        proj.initializeStatesForPartition(index)
+        proj.initialize(index)
         iter.map(proj)
       }
     }
@@ -287,7 +287,7 @@ case class FileSourceScanExec(
         if (needsUnsafeRowConversion) {
           scan.mapPartitionsWithIndexInternal { (index, iter) =>
             val proj = UnsafeProjection.create(schema)
-            proj.initializeStatesForPartition(index)
+            proj.initialize(index)
             iter.map(proj)
           }
         } else {

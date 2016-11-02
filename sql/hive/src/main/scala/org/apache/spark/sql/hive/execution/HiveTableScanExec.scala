@@ -156,7 +156,7 @@ case class HiveTableScanExec(
     val outputSchema = schema
     rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(outputSchema)
-      proj.initializeStatesForPartition(index)
+      proj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         proj(r)

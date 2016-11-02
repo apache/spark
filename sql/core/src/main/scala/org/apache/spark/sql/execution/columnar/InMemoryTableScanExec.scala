@@ -136,7 +136,7 @@ case class InMemoryTableScanExec(
       val partitionFilter = newPredicate(
         partitionFilters.reduceOption(And).getOrElse(Literal(true)),
         schema)
-      partitionFilter.initializeStatesForPartition(index)
+      partitionFilter.initialize(index)
 
       // Find the ordinals and data types of the requested columns.
       val (requestedColumnIndices, requestedColumnDataTypes) =

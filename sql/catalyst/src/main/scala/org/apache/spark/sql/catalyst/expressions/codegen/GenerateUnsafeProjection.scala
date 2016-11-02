@@ -380,7 +380,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           ${ctx.initMutableStates()}
         }
 
-        public void initializeStatesForPartition(int partitionIndex) {
+        public void initialize(int partitionIndex) {
           ${ctx.initPartition()}
         }
 

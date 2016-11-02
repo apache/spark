@@ -111,7 +111,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           ${ctx.initMutableStates()}
         }
 
-        public void initializeStatesForPartition(int partitionIndex) {
+        public void initialize(int partitionIndex) {
           ${ctx.initPartition()}
         }
 

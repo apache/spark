@@ -38,7 +38,7 @@ trait CodegenFallback extends Expression {
         ctx.addPartitionInitializationStatement(
           s"""
              |((Nondeterministic) references[$childIndex])
-             |  .initializeStatesForPartition(partitionIndex);
+             |  .initialize(partitionIndex);
           """.stripMargin)
       case _ =>
     }

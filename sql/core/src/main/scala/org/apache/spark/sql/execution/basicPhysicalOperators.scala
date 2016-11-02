@@ -73,7 +73,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val project = UnsafeProjection.create(projectList, child.output,
         subexpressionEliminationEnabled)
-      project.initializeStatesForPartition(index)
+      project.initialize(index)
       iter.map(project)
     }
   }
@@ -208,7 +208,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val predicate = newPredicate(condition, child.output)
-      predicate.initializeStatesForPartition(0)
+      predicate.initialize(0)
       iter.filter { row =>
         val r = predicate.eval(row)
         if (r) numOutputRows += 1

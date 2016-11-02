@@ -37,7 +37,7 @@ case class SparkPartitionID() extends LeafExpression with Nondeterministic {
 
   override val prettyName = "SPARK_PARTITION_ID"
 
-  override protected def initializeStatesForPartitionInternal(partitionIndex: Int): Unit = {
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
     partitionId = partitionIndex
   }
 

@@ -71,7 +71,7 @@ package object expressions  {
      * This is used by non-deterministic expressions to set initial states.
      * The default implementation does nothing.
      */
-    def initializeStatesForPartition(partitionIndex: Int): Unit = {}
+    def initialize(partitionIndex: Int): Unit = {}
   }
 
   /**

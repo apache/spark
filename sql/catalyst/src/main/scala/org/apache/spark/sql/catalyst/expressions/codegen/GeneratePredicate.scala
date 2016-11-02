@@ -31,7 +31,7 @@ abstract class Predicate {
    * This is used by non-deterministic expressions to set initial states.
    * The default implementation does nothing.
    */
-  def initializeStatesForPartition(partitionIndex: Int): Unit = {}
+  def initialize(partitionIndex: Int): Unit = {}
 }
 
 /**
@@ -62,7 +62,7 @@ object GeneratePredicate extends CodeGenerator[Expression, Predicate] {
           ${ctx.initMutableStates()}
         }
 
-        public void initializeStatesForPartition(int partitionIndex) {
+        public void initialize(int partitionIndex) {
           ${ctx.initPartition()}
         }
 
