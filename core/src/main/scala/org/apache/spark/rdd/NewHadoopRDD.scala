@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.io.IOException
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, Locale}
 
 import scala.reflect.ClassTag
 
@@ -79,7 +79,7 @@ class NewHadoopRDD[K, V](
   // private val serializableConf = new SerializableWritable(_conf)
 
   private val jobTrackerId: String = {
-    val formatter = new SimpleDateFormat("yyyyMMddHHmmss")
+    val formatter = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
     formatter.format(new Date())
   }
 
