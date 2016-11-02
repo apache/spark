@@ -189,7 +189,7 @@ object MLTestingUtils extends SparkFunSuite {
       (4, 50, 5.0)
     )).toDF("user", "item", "rating")
 
-    val others = df.columns.toSeq.diff(Seq(column)).map(col(_))
+    val others = df.columns.toSeq.diff(Seq(column)).map(col)
     val types: Seq[NumericType] =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
     types.map { t =>
