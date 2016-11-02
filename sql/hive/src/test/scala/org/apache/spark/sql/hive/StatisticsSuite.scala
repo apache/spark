@@ -114,7 +114,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       }
     } finally {
       spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, enableFallBackToHdfsForStats)
-      sql("DROP TABLE csv_table ")
+      sql("DROP TABLE IF EXISTS csv_table")
     }
   }
 

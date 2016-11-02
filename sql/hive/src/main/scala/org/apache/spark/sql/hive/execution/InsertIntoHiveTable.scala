@@ -306,6 +306,8 @@ case class InsertIntoHiveTable(
     sqlContext.sharedState.cacheManager.invalidateCache(table)
     sqlContext.sessionState.catalog.refreshTable(table.catalogTable.identifier)
 
+    tmpLocation.getFileSystem(hadoopConf).delete(tmpLocation.getParent, true)
+
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which
     // does not return anything for insert operations.

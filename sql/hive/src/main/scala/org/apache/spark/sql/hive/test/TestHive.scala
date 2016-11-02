@@ -425,11 +425,18 @@ private[hive] class TestHiveSparkSession(
       }
 
       sharedState.cacheManager.clearCache()
-      loadedTables.clear()
       sessionState.catalog.clearTempTables()
       sessionState.catalog.invalidateCache()
 
-      sessionState.metadataHive.reset()
+      for {
+        db <- sharedState.externalCatalog.listDatabases()
+        table <- sharedState.externalCatalog.listTables(db)
+      } {
+        if (db == "default" && testTables.keySet.contains(table)) {
+        } else {
+          sharedState.externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = false)
+        }
+      }
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
