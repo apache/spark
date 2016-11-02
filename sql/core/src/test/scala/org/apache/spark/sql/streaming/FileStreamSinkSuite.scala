@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{MemoryStream, MetadataLogFileIndex}
@@ -142,42 +142,38 @@ class FileStreamSinkSuite extends StreamTest {
     }
   }
 
-  test("FileStreamSink - supported formats") {
-    def testFormat(format: Option[String]): Unit = {
-      val inputData = MemoryStream[Int]
-      val ds = inputData.toDS()
-
-      val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-      val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
-
-      var query: StreamingQuery = null
-
-      try {
-        val writer =
-          ds.map(i => (i, i * 1000))
-            .toDF("id", "value")
-            .writeStream
-        if (format.nonEmpty) {
-          writer.format(format.get)
-        }
-        query = writer
-            .option("checkpointLocation", checkpointDir)
-            .start(outputDir)
-      } finally {
-        if (query != null) {
-          query.stop()
-        }
-      }
-    }
-
+  test("FileStreamSink - parquet") {
     testFormat(None) // should not throw error as default format parquet when not specified
     testFormat(Some("parquet"))
-    val e = intercept[UnsupportedOperationException] {
-      testFormat(Some("text"))
-    }
-    Seq("text", "not support", "stream").foreach { s =>
-      assert(e.getMessage.contains(s))
-    }
   }
 
+  test("FileStreamSink - text") {
+    testFormat(Some("text"))
+  }
+
+  test("FileStreamSink - json") {
+    testFormat(Some("text"))
+  }
+
+  def testFormat(format: Option[String]): Unit = {
+    val inputData = MemoryStream[Int]
+    val ds = inputData.toDS()
+
+    val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+    val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+
+    var query: StreamingQuery = null
+
+    try {
+      val writer = ds.map(i => (i, i * 1000)).toDF("id", "value").writeStream
+      if (format.nonEmpty) {
+        writer.format(format.get)
+      }
+      query = writer.option("checkpointLocation", checkpointDir).start(outputDir)
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
+  }
 }
