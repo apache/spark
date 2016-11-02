@@ -88,7 +88,10 @@ private[kafka010] case class KafkaSource(
 
   private val sc = sqlContext.sparkContext
 
-  private val pollTimeoutMs = sourceOptions.getOrElse("kafkaConsumer.pollTimeoutMs", "512").toLong
+  private val pollTimeoutMs = sourceOptions.getOrElse(
+    "kafkaConsumer.pollTimeoutMs",
+    (sc.conf.getTimeAsSeconds("spark.network.timeout", "120s") * 1000).toString
+  ).toLong
 
   private val maxOffsetFetchAttempts =
     sourceOptions.getOrElse("fetchOffset.numRetries", "3").toInt
