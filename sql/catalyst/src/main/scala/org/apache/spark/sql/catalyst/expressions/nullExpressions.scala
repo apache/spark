@@ -93,6 +93,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 }
 
+
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
   extended = """

@@ -121,7 +121,7 @@ case class MapValues(child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(array[, ascendingOrder]) - Sorts the input array in ascending / descending order according to the natural ordering of the array elements.",
+  usage = "_FUNC_(array[, ascendingOrder]) - Sorts the input array in ascending or descending order according to the natural ordering of the array elements.",
   extended = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), true);
