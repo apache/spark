@@ -115,7 +115,7 @@ class RandomSamplerSuite extends SparkFunSuite with Matchers {
     assert(n > 0)
     assert(cdf1(n-1) == 1.0)
     assert(cdf2(n-1) == 1.0)
-    cdf1.zip(cdf2).map { x => Math.abs(x._1 - x._2) }.max
+    cdf1.zip(cdf2).map { x => math.abs(x._1 - x._2) }.max
   }
 
   // Returns the median KS 'D' statistic between two samples, over (m) sampling trials

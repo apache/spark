@@ -584,7 +584,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     val p = new Partitioner {
       def numPartitions: Int = 2
 
-      def getPartition(key: Any): Int = Math.abs(key.hashCode() % 2)
+      def getPartition(key: Any): Int = math.abs(key.hashCode() % 2)
     }
     val shuffled = pairs.partitionBy(p)
 

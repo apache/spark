@@ -344,7 +344,7 @@ private[spark] object GradientBoostedTrees extends Logging {
           validationInput, validatePredError, baseLearnerWeights(m), baseLearners(m), loss)
         validatePredErrorCheckpointer.update(validatePredError)
         val currentValidateError = validatePredError.values.mean()
-        if (bestValidateError - currentValidateError < validationTol * Math.max(
+        if (bestValidateError - currentValidateError < validationTol * math.max(
           currentValidateError, 0.01)) {
           doneLearning = true
         } else if (currentValidateError < bestValidateError) {

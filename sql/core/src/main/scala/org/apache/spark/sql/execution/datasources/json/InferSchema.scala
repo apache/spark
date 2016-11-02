@@ -154,15 +154,15 @@ private[sql] object InferSchema {
           // when we see a Java BigInteger, we use DecimalType.
           case BIG_INTEGER | BIG_DECIMAL =>
             val v = parser.getDecimalValue
-            if (Math.max(v.precision(), v.scale()) <= DecimalType.MAX_PRECISION) {
-              DecimalType(Math.max(v.precision(), v.scale()), v.scale())
+            if (math.max(v.precision(), v.scale()) <= DecimalType.MAX_PRECISION) {
+              DecimalType(math.max(v.precision(), v.scale()), v.scale())
             } else {
               DoubleType
             }
           case FLOAT | DOUBLE if configOptions.prefersDecimal =>
             val v = parser.getDecimalValue
-            if (Math.max(v.precision(), v.scale()) <= DecimalType.MAX_PRECISION) {
-              DecimalType(Math.max(v.precision(), v.scale()), v.scale())
+            if (math.max(v.precision(), v.scale()) <= DecimalType.MAX_PRECISION) {
+              DecimalType(math.max(v.precision(), v.scale()), v.scale())
             } else {
               DoubleType
             }

@@ -77,7 +77,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
 
   test("compare") {
     forAll { (s1: String, s2: String) =>
-      assert(Math.signum(toUTF8(s1).compareTo(toUTF8(s2))) === Math.signum(s1.compareTo(s2)))
+      assert(math.signum(toUTF8(s1).compareTo(toUTF8(s2))) === math.signum(s1.compareTo(s2)))
     }
   }
 

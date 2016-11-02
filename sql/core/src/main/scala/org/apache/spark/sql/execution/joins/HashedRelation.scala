@@ -670,7 +670,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     var offset: Long = Platform.LONG_ARRAY_OFFSET
     val end = len * 8L + Platform.LONG_ARRAY_OFFSET
     while (offset < end) {
-      val size = Math.min(buffer.length, (end - offset).toInt)
+      val size = math.min(buffer.length, (end - offset).toInt)
       Platform.copyMemory(arr, offset, buffer, Platform.BYTE_ARRAY_OFFSET, size)
       writeBuffer(buffer, 0, size)
       offset += size
@@ -710,7 +710,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     var offset: Long = Platform.LONG_ARRAY_OFFSET
     val end = length * 8L + Platform.LONG_ARRAY_OFFSET
     while (offset < end) {
-      val size = Math.min(buffer.length, (end - offset).toInt)
+      val size = math.min(buffer.length, (end - offset).toInt)
       readBuffer(buffer, 0, size)
       Platform.copyMemory(buffer, Platform.BYTE_ARRAY_OFFSET, array, offset, size)
       offset += size

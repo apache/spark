@@ -174,10 +174,10 @@ private[kafka010] case class KafkaSource(
             val prorate = limit * (size / total)
             logDebug(s"rateLimit $tp prorated amount is $prorate")
             // Don't completely starve small topicpartitions
-            val off = begin + (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
+            val off = begin + (if (prorate < 1) math.ceil(prorate) else math.floor(prorate)).toLong
             logDebug(s"rateLimit $tp new offset is $off")
             // Paranoia, make sure not to return an offset that's past end
-            Math.min(end, off)
+            math.min(end, off)
           }.getOrElse(end)
       }
     }

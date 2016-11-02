@@ -318,13 +318,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         // If we didn't find any rows after the previous iteration, quadruple and retry.
         // Otherwise, interpolate the number of partitions we need to try, but overestimate
         // it by 50%. We also cap the estimation in the end.
-        val limitScaleUpFactor = Math.max(sqlContext.conf.limitScaleUpFactor, 2)
+        val limitScaleUpFactor = math.max(sqlContext.conf.limitScaleUpFactor, 2)
         if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
           // the left side of max is >=1 whenever partsScanned >= 2
-          numPartsToTry = Math.max((1.5 * n * partsScanned / buf.size).toInt - partsScanned, 1)
-          numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
+          numPartsToTry = math.max((1.5 * n * partsScanned / buf.size).toInt - partsScanned, 1)
+          numPartsToTry = math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
         }
       }
 

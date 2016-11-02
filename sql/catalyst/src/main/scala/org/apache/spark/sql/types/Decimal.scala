@@ -328,7 +328,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def + (that: Decimal): Decimal = {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
-      Decimal(longVal + that.longVal, Math.max(precision, that.precision), scale)
+      Decimal(longVal + that.longVal, math.max(precision, that.precision), scale)
     } else {
       Decimal(toBigDecimal + that.toBigDecimal)
     }
@@ -336,7 +336,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def - (that: Decimal): Decimal = {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
-      Decimal(longVal - that.longVal, Math.max(precision, that.precision), scale)
+      Decimal(longVal - that.longVal, math.max(precision, that.precision), scale)
     } else {
       Decimal(toBigDecimal - that.toBigDecimal)
     }

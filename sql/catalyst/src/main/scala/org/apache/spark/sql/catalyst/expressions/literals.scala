@@ -45,10 +45,10 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case d: BigDecimal => Literal(Decimal(d), DecimalType(math.max(d.precision, d.scale), d.scale))
     case d: java.math.BigDecimal =>
-      Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
-    case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
+      Literal(Decimal(d), DecimalType(math.max(d.precision, d.scale), d.scale()))
+    case d: Decimal => Literal(d, DecimalType(math.max(d.precision, d.scale), d.scale))
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)

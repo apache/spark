@@ -105,7 +105,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
     val seq = (0 until 4).map(_ => proj(makeRandomRow(columnType)).copy())
     val totalSize = seq.map(_.getSizeInBytes).sum
-    val bufferSize = Math.max(DEFAULT_BUFFER_SIZE, totalSize)
+    val bufferSize = math.max(DEFAULT_BUFFER_SIZE, totalSize)
 
     test(s"$columnType append/extract") {
       val buffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.nativeOrder())

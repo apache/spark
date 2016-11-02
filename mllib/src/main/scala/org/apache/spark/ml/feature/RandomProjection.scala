@@ -77,7 +77,7 @@ class RandomProjectionModel private[ml] (
   override protected[ml] val hashFunction: (Vector) => Vector = {
     key: Vector => {
       val hashValues: Array[Double] = randUnitVectors.map({
-        randUnitVector => Math.floor(BLAS.dot(key, randUnitVector) / $(bucketLength))
+        randUnitVector => math.floor(BLAS.dot(key, randUnitVector) / $(bucketLength))
       })
       Vectors.dense(hashValues)
     }
@@ -85,7 +85,7 @@ class RandomProjectionModel private[ml] (
 
   @Since("2.1.0")
   override protected[ml] def keyDistance(x: Vector, y: Vector): Double = {
-    Math.sqrt(Vectors.sqdist(x, y))
+    math.sqrt(Vectors.sqdist(x, y))
   }
 
   @Since("2.1.0")

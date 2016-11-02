@@ -144,7 +144,7 @@ private[spark] object SerDe {
       if (java.lang.Double.isNaN(seconds)) {
         null
       } else {
-        val sec = Math.floor(seconds).toLong
+        val sec = math.floor(seconds).toLong
         val t = new Timestamp(sec * 1000L)
         t.setNanos(((seconds - sec) * 1e9).toInt)
         t

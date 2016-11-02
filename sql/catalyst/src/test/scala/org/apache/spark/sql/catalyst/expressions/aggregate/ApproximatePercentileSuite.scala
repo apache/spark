@@ -129,7 +129,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         val error = count / accuracy
         val percentiles = arrayData.toDoubleArray()
         assert(percentiles.zip(expectedPercentiles)
-          .forall(pair => Math.abs(pair._1 - pair._2) < error))
+          .forall(pair => math.abs(pair._1 - pair._2) < error))
     }
   }
 
@@ -162,7 +162,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
     agg.initialize(mutableAggBuffer)
     agg.merge(mutableAggBuffer, inputAggBuffer)
     val expectedPercentile = dataCount * percentage
-    assert(Math.abs(agg.eval(mutableAggBuffer).asInstanceOf[Double] - expectedPercentile) < 0.1)
+    assert(math.abs(agg.eval(mutableAggBuffer).asInstanceOf[Double] - expectedPercentile) < 0.1)
   }
 
   test("class ApproximatePercentile, sql string") {

@@ -108,7 +108,7 @@ case class Stack(children: Seq[Expression])
     extends Expression with Generator with CodegenFallback {
 
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
-  private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
+  private lazy val numFields = math.ceil((children.length - 1.0) / numRows).toInt
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {

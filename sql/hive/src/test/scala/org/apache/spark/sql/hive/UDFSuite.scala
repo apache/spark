@@ -64,8 +64,8 @@ class UDFSuite
   }
 
   test("UDF case insensitive") {
-    spark.udf.register("random0", () => { Math.random() })
-    spark.udf.register("RANDOM1", () => { Math.random() })
+    spark.udf.register("random0", () => { math.random() })
+    spark.udf.register("RANDOM1", () => { math.random() })
     spark.udf.register("strlenScala", (_: String).length + (_: Int))
     assert(sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
     assert(sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
