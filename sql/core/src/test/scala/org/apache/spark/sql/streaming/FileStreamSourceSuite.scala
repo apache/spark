@@ -102,12 +102,6 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
     }
   }
 
-  case class DeleteFile(file: File) extends ExternalAction {
-    def runAction(): Unit = {
-      Utils.deleteRecursively(file)
-    }
-  }
-
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   def createFileStream(
       format: String,
@@ -664,7 +658,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     def createFile(content: String, src: File, tmp: File): Unit = {
       val tempFile = Utils.tempFileWith(new File(tmp, "text"))
       val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
+      require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
+      require(src.mkdirs(), s"Cannot create $src")
+      require(src.isDirectory(), s"$src is not a directory")
       require(stringToFile(tempFile, content).renameTo(finalFile))
     }
 
@@ -694,10 +690,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           // Append to same partition=bar sub dir
           AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar")),
-
-          // Delete the two partition dirs
-          DeleteFile(partitionFooSubDir),
-          DeleteFile(partitionBarSubDir),
 
           AddTextFileData("{'value': 'keep6'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"),
@@ -877,7 +869,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val numFiles = 10000
 
     // This is to avoid running a spark job to list of files in parallel
-    // by the ListingFileCatalog.
+    // by the InMemoryFileIndex.
     spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
 
     withTempDirs { case (root, tmp) =>

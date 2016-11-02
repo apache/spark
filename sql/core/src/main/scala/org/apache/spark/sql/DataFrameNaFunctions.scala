@@ -21,20 +21,18 @@ import java.{lang => jl}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 
 /**
- * :: Experimental ::
  * Functionality for working with missing data in [[DataFrame]]s.
  *
  * @since 1.3.1
  */
-@Experimental
-@InterfaceStability.Evolving
+@InterfaceStability.Stable
 final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**

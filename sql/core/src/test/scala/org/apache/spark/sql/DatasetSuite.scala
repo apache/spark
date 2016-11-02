@@ -22,8 +22,11 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
@@ -334,6 +337,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDatasetUnorderly(
       agged,
       "a", "30", "b", "3", "c", "1")
+  }
+
+  test("groupBy function, mapValues, flatMap") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val keyValue = ds.groupByKey(_._1).mapValues(_._2)
+    val agged = keyValue.mapGroups { case (g, iter) => (g, iter.sum) }
+    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+
+    val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
+    val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
+    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, reduce") {
@@ -907,6 +921,71 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       df.withColumn("b", expr("0")).as[ClassData]
         .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+  }
+
+  Seq(true, false).foreach { eager =>
+    def testCheckpointing(testName: String)(f: => Unit): Unit = {
+      test(s"Dataset.checkpoint() - $testName (eager = $eager)") {
+        withTempDir { dir =>
+          val originalCheckpointDir = spark.sparkContext.checkpointDir
+
+          try {
+            spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
+            f
+          } finally {
+            // Since the original checkpointDir can be None, we need
+            // to set the variable directly.
+            spark.sparkContext.checkpointDir = originalCheckpointDir
+          }
+        }
+      }
+    }
+
+    testCheckpointing("basic") {
+      val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
+      val cp = ds.checkpoint(eager)
+
+      val logicalRDD = cp.logicalPlan match {
+        case plan: LogicalRDD => plan
+        case _ =>
+          val treeString = cp.logicalPlan.treeString(verbose = true)
+          fail(s"Expecting a LogicalRDD, but got\n$treeString")
+      }
+
+      val dsPhysicalPlan = ds.queryExecution.executedPlan
+      val cpPhysicalPlan = cp.queryExecution.executedPlan
+
+      assertResult(dsPhysicalPlan.outputPartitioning) { logicalRDD.outputPartitioning }
+      assertResult(dsPhysicalPlan.outputOrdering) { logicalRDD.outputOrdering }
+
+      assertResult(dsPhysicalPlan.outputPartitioning) { cpPhysicalPlan.outputPartitioning }
+      assertResult(dsPhysicalPlan.outputOrdering) { cpPhysicalPlan.outputOrdering }
+
+      // For a lazy checkpoint() call, the first check also materializes the checkpoint.
+      checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
+
+      // Reads back from checkpointed data and check again.
+      checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
+    }
+
+    testCheckpointing("should preserve partitioning information") {
+      val ds = spark.range(10).repartition('id % 2)
+      val cp = ds.checkpoint(eager)
+
+      val agg = cp.groupBy('id % 2).agg(count('id))
+
+      agg.queryExecution.executedPlan.collectFirst {
+        case ShuffleExchange(_, _: RDDScanExec, _) =>
+        case BroadcastExchangeExec(_, _: RDDScanExec) =>
+      }.foreach { _ =>
+        fail(
+          "No Exchange should be inserted above RDDScanExec since the checkpointed Dataset " +
+            "preserves partitioning information:\n\n" + agg.queryExecution
+        )
+      }
+
+      checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
+    }
   }
 }
 

@@ -67,7 +67,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     dataSource match {
       case fs: HadoopFsRelation =>
-        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.paths.isEmpty) {
+        if (table.tableType == CatalogTableType.EXTERNAL && fs.location.rootPaths.isEmpty) {
           throw new AnalysisException(
             "Cannot create a file-based external data source table without path")
         }
@@ -94,10 +94,16 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     val newTable = table.copy(
       storage = table.storage.copy(properties = optionsWithPath),
       schema = dataSource.schema,
-      partitionColumnNames = partitionColumnNames)
+      partitionColumnNames = partitionColumnNames,
+      // If metastore partition management for file source tables is enabled, we start off with
+      // partition provider hive, but no partitions in the metastore. The user has to call
+      // `msck repair table` to populate the table partitions.
+      partitionProviderIsHive = partitionColumnNames.nonEmpty &&
+        sparkSession.sessionState.conf.manageFilesourcePartitions)
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+
     Seq.empty[Row]
   }
 }
@@ -230,6 +236,15 @@ case class CreateDataSourceTableAsSelectCommand(
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
       sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+    }
+
+    result match {
+      case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
+          sparkSession.sqlContext.conf.manageFilesourcePartitions =>
+        // Need to recover partitions into the metastore so our saved data is visible.
+        sparkSession.sessionState.executePlan(
+          AlterTableRecoverPartitionsCommand(table.identifier)).toRdd
+      case _ =>
     }
 
     // Refresh the cache of the table in the catalog.

@@ -73,6 +73,9 @@ class StreamExecution(
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
    * input source.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
    */
   @volatile
   var committedOffsets = new StreamProgress
@@ -80,6 +83,9 @@ class StreamExecution(
   /**
    * Tracks the offsets that are available to be processed, but have not yet be committed to the
    * sink.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
    */
   @volatile
   private var availableOffsets = new StreamProgress
@@ -165,7 +171,7 @@ class StreamExecution(
     new Path(new Path(checkpointRoot), name).toUri.toString
 
   /**
-   * Starts the execution. This returns only after the thread has started and [[QueryStarted]] event
+   * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
    * has been posted to all the listeners.
    */
   def start(): Unit = {
@@ -177,9 +183,10 @@ class StreamExecution(
   /**
    * Repeatedly attempts to run batches as data arrives.
    *
-   * Note that this method ensures that [[QueryStarted]] and [[QueryTerminated]] events are posted
-   * such that listeners are guaranteed to get a start event before a termination. Furthermore, this
-   * method also ensures that [[QueryStarted]] event is posted before the `start()` method returns.
+   * Note that this method ensures that [[QueryStartedEvent]] and [[QueryTerminatedEvent]] are
+   * posted such that listeners are guaranteed to get a start event before a termination.
+   * Furthermore, this method also ensures that [[QueryStartedEvent]] event is posted before the
+   * `start()` method returns.
    */
   private def runBatches(): Unit = {
     try {
@@ -190,7 +197,7 @@ class StreamExecution(
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
       updateStatus()
-      postEvent(new QueryStarted(currentStatus)) // Assumption: Does not throw exception.
+      postEvent(new QueryStartedEvent(currentStatus)) // Assumption: Does not throw exception.
 
       // Unblock starting thread
       startLatch.countDown()
@@ -232,7 +239,7 @@ class StreamExecution(
         // Update metrics and notify others
         streamMetrics.reportTriggerFinished()
         updateStatus()
-        postEvent(new QueryProgress(currentStatus))
+        postEvent(new QueryProgressEvent(currentStatus))
         isTerminated
       })
     } catch {
@@ -260,7 +267,7 @@ class StreamExecution(
       // Notify others
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
       postEvent(
-        new QueryTerminated(currentStatus, exception.map(_.cause).map(Utils.exceptionString)))
+        new QueryTerminatedEvent(currentStatus, exception.map(_.cause).map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
   }
@@ -336,17 +343,27 @@ class StreamExecution(
     }
     if (hasNewData) {
       reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
-        assert(
-          offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
+        assert(offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
         logInfo(s"Committed offsets for batch $currentBatchId.")
 
+        // NOTE: The following code is correct because runBatches() processes exactly one
+        // batch at a time. If we add pipeline parallelism (multiple batches in flight at
+        // the same time), this cleanup logic will need to change.
+
+        // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
+        // sources to discard data from the previous batch.
+        val prevBatchOff = offsetLog.get(currentBatchId - 1)
+        if (prevBatchOff.isDefined) {
+          prevBatchOff.get.toStreamProgress(sources).foreach {
+            case (src, off) => src.commit(off)
+          }
+        }
+
         // Now that we have logged the new batch, no further processing will happen for
-        // the previous batch, and it is safe to discard the old metadata.
-        // Note that purge is exclusive, i.e. it purges everything before currentBatchId.
-        // NOTE: If StreamExecution implements pipeline parallelism (multiple batches in
-        // flight at the same time), this cleanup logic will need to change.
-        offsetLog.purge(currentBatchId)
+        // the batch before the previous batch, and it is safe to discard the old metadata.
+        // Note that purge is exclusive, i.e. it purges everything before the target ID.
+        offsetLog.purge(currentBatchId - 1)
       }
     } else {
       awaitBatchLock.lock()
@@ -454,7 +471,7 @@ class StreamExecution(
 
   /**
    * Blocks the current thread until processing for data from the given `source` has reached at
-   * least the given `Offset`. This method is indented for use primarily when writing tests.
+   * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
   private[sql] def awaitOffset(source: Source, newOffset: Offset): Unit = {
     def notDone = {

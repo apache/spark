@@ -15,20 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.api.r
 
-import org.apache.spark.SparkFunSuite
+private[spark] object SparkRDefaults {
 
-class ListingFileCatalogSuite extends SparkFunSuite {
+  // Default value for spark.r.backendConnectionTimeout config
+  val DEFAULT_CONNECTION_TIMEOUT: Int = 6000
 
-  test("file filtering") {
-    assert(!ListingFileCatalog.shouldFilterOut("abcd"))
-    assert(ListingFileCatalog.shouldFilterOut(".ab"))
-    assert(ListingFileCatalog.shouldFilterOut("_cd"))
+  // Default value for spark.r.heartBeatInterval config
+  val DEFAULT_HEARTBEAT_INTERVAL: Int = 100
 
-    assert(!ListingFileCatalog.shouldFilterOut("_metadata"))
-    assert(!ListingFileCatalog.shouldFilterOut("_common_metadata"))
-    assert(ListingFileCatalog.shouldFilterOut("_ab_metadata"))
-    assert(ListingFileCatalog.shouldFilterOut("_cd_common_metadata"))
-  }
+  // Default value for spark.r.numRBackendThreads config
+  val DEFAULT_NUM_RBACKEND_THREADS = 2
 }

@@ -15,23 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.kafka010
 
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.QueryTest
+import org.apache.kafka.common.TopicPartition
 
-class HiveDataFrameSuite extends QueryTest with TestHiveSingleton {
-  test("table name with schema") {
-    // regression test for SPARK-11778
-    spark.sql("create schema usrdb")
-    spark.sql("create table usrdb.test(c int)")
-    spark.read.table("usrdb.test")
-    spark.sql("drop table usrdb.test")
-    spark.sql("drop schema usrdb")
-  }
+/*
+ * Values that can be specified for config startingOffsets
+ */
+private[kafka010] sealed trait StartingOffsets
 
-  test("SPARK-15887: hive-site.xml should be loaded") {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-    assert(hiveClient.getConf("hive.in.test", "") == "true")
-  }
-}
+private[kafka010] case object EarliestOffsets extends StartingOffsets
+
+private[kafka010] case object LatestOffsets extends StartingOffsets
+
+private[kafka010] case class SpecificOffsets(
+  partitionOffsets: Map[TopicPartition, Long]) extends StartingOffsets
