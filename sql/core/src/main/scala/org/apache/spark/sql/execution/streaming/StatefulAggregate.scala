@@ -168,7 +168,7 @@ case class StateStoreSaveExec(
 
             logInfo(s"Filtering state store on: $evictionExpression")
             val predicate = newPredicate(evictionExpression, keyExpressions)
-            store.remove(predicate)
+            store.remove(predicate.eval)
 
             store.commit()
 
