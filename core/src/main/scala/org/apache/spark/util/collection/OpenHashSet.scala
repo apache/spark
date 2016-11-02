@@ -42,15 +42,13 @@ import org.apache.spark.annotation.Private
  */
 @Private
 class OpenHashSet[@specialized(Long, Int) T: ClassTag](
-    var initialCapacity: Int,
+    initialCapacity: Int,
     loadFactor: Double)
   extends Serializable {
 
-  if (initialCapacity == 0) initialCapacity = 1
-
   require(initialCapacity <= OpenHashSet.MAX_CAPACITY,
     s"Can't make capacity bigger than ${OpenHashSet.MAX_CAPACITY} elements")
-  require(initialCapacity >= 1, "Invalid initial capacity")
+  require(initialCapacity >= 0, "Invalid initial capacity")
   require(loadFactor < 1.0, "Load factor must be less than 1.0")
   require(loadFactor > 0.0, "Load factor must be greater than 0.0")
 
@@ -273,7 +271,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   private def hashcode(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
 
   private def nextPowerOf2(n: Int): Int = {
-    val highBit = Integer.highestOneBit(n)
+    val highBit = Integer.highestOneBit(if (n == 0) 1 else n)
     if (highBit == n) n else highBit << 1
   }
 }
