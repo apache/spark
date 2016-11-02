@@ -425,22 +425,27 @@ class BlockMatrix @Since("1.3.0") (
    */
   private[distributed] def simulateMultiply(
       other: BlockMatrix,
-      partitioner: GridPartitioner): (BlockDestinations, BlockDestinations) = {
-    val leftMatrix = blockInfo.keys.collect() // blockInfo should already be cached
-    val rightMatrix = other.blocks.keys.collect()
+      partitioner: GridPartitioner,
+      midDimSplitNum: Int): (BlockDestinations, BlockDestinations) = {
+    val leftMatrix = blockInfo.keys.collect()
+    val rightMatrix = other.blockInfo.keys.collect()
 
     val rightCounterpartsHelper = rightMatrix.groupBy(_._1).mapValues(_.map(_._2))
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
       val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array.empty[Int])
       val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b)))
-      ((rowIndex, colIndex), partitions.toSet)
+      val midDimSplitIndex = colIndex % midDimSplitNum
+      ((rowIndex, colIndex),
+        partitions.toSet.map((pid: Int) => pid * midDimSplitNum + midDimSplitIndex))
     }.toMap
 
     val leftCounterpartsHelper = leftMatrix.groupBy(_._2).mapValues(_.map(_._1))
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
       val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array.empty[Int])
       val partitions = leftCounterparts.map(b => partitioner.getPartition((b, colIndex)))
-      ((rowIndex, colIndex), partitions.toSet)
+      val midDimSplitIndex = rowIndex % midDimSplitNum
+      ((rowIndex, colIndex),
+        partitions.toSet.map((pid: Int) => pid * midDimSplitNum + midDimSplitIndex))
     }.toMap
 
     (leftDestinations, rightDestinations)
@@ -458,7 +463,11 @@ class BlockMatrix @Since("1.3.0") (
    * with each other.
    */
   @Since("1.3.0")
-  def multiply(other: BlockMatrix): BlockMatrix = {
+  def multiply(
+      other: BlockMatrix,
+      shufflePartitioner: GridPartitioner,
+      midDimPartNum: Int,
+      resultPartitioner: GridPartitioner): BlockMatrix = {
     require(numCols() == other.numRows(), "The number of columns of A and the number of rows " +
       s"of B must be equal. A.numCols: ${numCols()}, B.numRows: ${other.numRows()}. If you " +
       "think they should be equal, try setting the dimensions of A and B explicitly while " +
@@ -466,7 +475,8 @@ class BlockMatrix @Since("1.3.0") (
     if (colsPerBlock == other.rowsPerBlock) {
       val resultPartitioner = GridPartitioner(numRowBlocks, other.numColBlocks,
         math.max(blocks.partitions.length, other.blocks.partitions.length))
-      val (leftDestinations, rightDestinations) = simulateMultiply(other, resultPartitioner)
+      val (leftDestinations, rightDestinations)
+        = simulateMultiply(other, shufflePartitioner, midDimPartNum)
       // Each block of A must be multiplied with the corresponding blocks in the columns of B.
       val flatA = blocks.flatMap { case ((blockRowIndex, blockColIndex), block) =>
         val destinations = leftDestinations.getOrElse((blockRowIndex, blockColIndex), Set.empty)
@@ -477,7 +487,11 @@ class BlockMatrix @Since("1.3.0") (
         val destinations = rightDestinations.getOrElse((blockRowIndex, blockColIndex), Set.empty)
         destinations.map(j => (j, (blockRowIndex, blockColIndex, block)))
       }
-      val newBlocks = flatA.cogroup(flatB, resultPartitioner).flatMap { case (pId, (a, b)) =>
+      val coGroupPartNum = shufflePartitioner.numPartitions * midDimPartNum
+      val newBlocks = flatA.cogroup(flatB, new Partitioner {
+        override def numPartitions: Int = coGroupPartNum
+        override def getPartition(key: Any): Int = key.asInstanceOf[Int]
+      }).flatMap { case (pId, (a, b)) =>
         a.flatMap { case (leftRowIndex, leftColIndex, leftBlock) =>
           b.filter(_._1 == leftColIndex).map { case (rightRowIndex, rightColIndex, rightBlock) =>
             val C = rightBlock match {
@@ -496,5 +510,32 @@ class BlockMatrix @Since("1.3.0") (
       throw new SparkException("colsPerBlock of A doesn't match rowsPerBlock of B. " +
         s"A.colsPerBlock: $colsPerBlock, B.rowsPerBlock: ${other.rowsPerBlock}")
     }
+  }
+
+  @Since("2.1.0")
+  def multiply(other: BlockMatrix): BlockMatrix = {
+    val resultPartitioner = GridPartitioner(numRowBlocks, other.numColBlocks,
+      math.max(blocks.partitions.length, other.blocks.partitions.length))
+    multiply(other, resultPartitioner, 1, resultPartitioner)
+  }
+
+  @Since("2.1.0")
+  def multiply(
+                other: BlockMatrix,
+                suggestedShuffleRowPartitions: Int,
+                suggestedShuffleColPartitions: Int,
+                midDimSplitNum: Int,
+                suggestedResulRowPartitions: Int,
+                suggestedResulColPartitions: Int): BlockMatrix = {
+
+    val shufflePartitioner = GridPartitioner(numRowBlocks, other.numColBlocks,
+      math.round(math.max(numRows().toFloat / suggestedShuffleRowPartitions, 1.0)).toInt,
+      math.round(math.max(numCols().toFloat / suggestedShuffleColPartitions, 1.0)).toInt)
+
+    val resultPartitioner = GridPartitioner(numRowBlocks, other.numColBlocks,
+      math.round(math.max(numRows().toFloat / suggestedResulRowPartitions, 1.0)).toInt,
+      math.round(math.max(numCols().toFloat / suggestedResulColPartitions, 1.0)).toInt)
+
+    multiply(other, shufflePartitioner, midDimSplitNum, resultPartitioner)
   }
 }
