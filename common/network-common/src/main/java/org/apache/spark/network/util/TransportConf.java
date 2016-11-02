@@ -18,6 +18,7 @@
 package org.apache.spark.network.util;
 
 import com.google.common.primitives.Ints;
+import org.apache.commons.crypto.cipher.CryptoCipherFactory;
 
 /**
  * A central location that tracks all the settings we expose to users.
@@ -180,6 +181,14 @@ public class TransportConf {
    */
   public boolean aesEncryptionEnabled() {
     return conf.getBoolean("spark.authenticate.encryption.aes.enabled", false);
+  }
+
+  /**
+   * The implementation class for crypto cipher
+   */
+  public String aesCipherClass() {
+    return conf.get("spark.authenticate.encryption.aes.cipher.class",
+      CryptoCipherFactory.CipherProvider.OPENSSL.getClassName());
   }
 
   /**

@@ -115,7 +115,7 @@ public class AesCipher {
    */
   public static AesConfigMessage createConfigMessage(TransportConf conf) {
     int keySize = conf.aesCipherKeySize();
-    Properties properties = new Properties();
+    Properties properties = getProperties(conf);
 
     try {
       int paramLen = CryptoCipherFactory.getCryptoCipher(AesCipher.TRANSFORM, properties)
@@ -138,6 +138,12 @@ public class AesCipher {
     }
   }
 
+  private static Properties getProperties(TransportConf conf) {
+    Properties props = new Properties();
+    props.setProperty(CryptoCipherFactory.CLASSES_KEY, conf.aesCipherClass());
+    return props;
+  }
+
   private static class AesEncryptHandler extends ChannelOutboundHandlerAdapter {
     private final ByteArrayWritableChannel byteChannel;
     private final CryptoOutputStream cos;
@@ -150,7 +156,7 @@ public class AesCipher {
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
-      ctx.write(new EncryptMessage(cos, msg, byteChannel), promise);
+      ctx.write(new EncryptedMessage(cos, msg, byteChannel), promise);
     }
 
     @Override
@@ -177,14 +183,10 @@ public class AesCipher {
       ByteBuf in = (ByteBuf) data;
       byteChannel.feedData(in);
 
-      int i;
-      byte[] decryptedData = new byte[byteChannel.length()];
+      byte[] decryptedData = new byte[byteChannel.readableBytes()];
       int offset = 0;
-      while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > 0) {
-        offset += i;
-        if (offset >= decryptedData.length) {
-          break;
-        }
+      while (offset < decryptedData.length) {
+        offset += cis.read(decryptedData, offset, decryptedData.length - offset);
       }
 
       ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, decryptedData.length));
@@ -200,9 +202,7 @@ public class AesCipher {
     }
   }
 
-  private static class EncryptMessage extends AbstractReferenceCounted implements FileRegion {
-    private static final Logger logger = LoggerFactory.getLogger(EncryptMessage.class);
-
+  private static class EncryptedMessage extends AbstractReferenceCounted implements FileRegion {
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
@@ -217,7 +217,7 @@ public class AesCipher {
 
     private ByteBuffer currentEncrypted;
 
-    EncryptMessage(CryptoOutputStream cos, Object msg, ByteArrayWritableChannel ch) {
+    EncryptedMessage(CryptoOutputStream cos, Object msg, ByteArrayWritableChannel ch) {
       Preconditions.checkArgument(msg instanceof ByteBuf || msg instanceof FileRegion,
         "Unrecognized message type: %s", msg.getClass().getName());
       this.isByteBuf = msg instanceof ByteBuf;
