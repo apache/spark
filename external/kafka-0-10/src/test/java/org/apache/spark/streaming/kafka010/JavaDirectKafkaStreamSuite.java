@@ -47,7 +47,9 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     kafkaTestUtils = new KafkaTestUtils();
     kafkaTestUtils.setup();
     SparkConf sparkConf = new SparkConf()
-      .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
+      .setMaster("local[4]")
+      .setAppName(this.getClass().getSimpleName())
+      .set("spark.streaming.kafka.consumer.poll.ms", Integer.toString(10 * 1000));
     ssc = new JavaStreamingContext(sparkConf, Durations.milliseconds(200));
   }
 

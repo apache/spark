@@ -52,6 +52,7 @@ class DirectKafkaStreamSuite
   val sparkConf = new SparkConf()
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
+    .set("spark.streaming.kafka.consumer.poll.ms", (10 * 1000).toString)
 
   private var sc: SparkContext = _
   private var ssc: StreamingContext = _
