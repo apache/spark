@@ -18,13 +18,12 @@ package org.apache.spark.ml.fpm
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.fpm.{FPGrowth => MLlibFPGrowth, FPGrowthModel => MLlibFPGrowthModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class AssociationRulesSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
-  test("association rules using String type") {
 
+  test("association rules using String type") {
     val freqItems = spark.createDataFrame(Seq(
       (Array("a", "b"), 3L),
       (Array("a"), 3L),
@@ -33,7 +32,6 @@ class AssociationRulesSuite
 
     val associationRules = new AssociationRules()
       .setMinConfidence(0.8)
-      .setMinSupport(0.3)
       .setItemsCol("items")
       .setFreqCol("freq")
     val rules = associationRules.run(freqItems)
@@ -44,6 +42,5 @@ class AssociationRulesSuite
     ).toDF("antecedent", "consequent", "confidence")
     assert(rules.sort("antecedent").rdd.collect() ===
       expectedRules.sort("antecedent").rdd.collect())
-
   }
 }
