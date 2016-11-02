@@ -284,7 +284,6 @@ trait CreateNamedStructLike extends Expression {
  *
  * @param children Seq(name1, val1, name2, val2, ...)
  */
-
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
