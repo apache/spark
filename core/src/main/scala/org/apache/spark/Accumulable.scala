@@ -108,7 +108,7 @@ class Accumulable[R, T] private (
   def merge(term: R) { newAcc._value = param.addInPlace(newAcc._value, term) }
 
   /**
-   * Access the accumulator's current value; only allowed on driver.
+   * Access the accumulator's current value; only allowed on the driver.
    */
   def value: R = {
     if (newAcc.isAtDriverSide) {
@@ -130,8 +130,7 @@ class Accumulable[R, T] private (
   def localValue: R = newAcc.value
 
   /**
-   * Set the accumulator's value; only allowed on driver and only for non-data property
-   * accumulators.
+   * Set the accumulator's value; only allowed on the driver.
    */
   def value_= (newValue: R) {
     if (newAcc.isAtDriverSide) {
