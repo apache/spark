@@ -54,8 +54,6 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     val split = taskContext.getTaskAttemptID.getTaskID.getId
     val filename = f"part-$split%05d-$jobId$ext"
 
-    taskContext.getJobID
-
     val stagingDir: String = committer match {
       // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter => Option(f.getWorkPath.toString).getOrElse(path)
