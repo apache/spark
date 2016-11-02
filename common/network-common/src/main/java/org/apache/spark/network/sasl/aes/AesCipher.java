@@ -83,7 +83,7 @@ public class AesCipher {
    * @return Return output crypto stream for encryption.
    * @throws IOException
    */
-  public CryptoOutputStream createOutputStream(WritableByteChannel ch) throws IOException {
+  private CryptoOutputStream createOutputStream(WritableByteChannel ch) throws IOException {
     return new CryptoOutputStream(TRANSFORM, properties, ch, outKeySpec, outIvSpec);
   }
 
@@ -93,7 +93,7 @@ public class AesCipher {
    * @return Return input crypto stream for decryption.
    * @throws IOException
    */
-  public CryptoInputStream createInputStream(ReadableByteChannel ch) throws IOException {
+  private CryptoInputStream createInputStream(ReadableByteChannel ch) throws IOException {
     return new CryptoInputStream(TRANSFORM, properties, ch, inKeySpec, inIvSpec);
   }
 
