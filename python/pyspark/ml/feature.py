@@ -2606,42 +2606,43 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
 
     selectorType = Param(Params._dummy(), "selectorType",
                          "The selector type of the ChisqSelector. " +
-                         "Supported options: kbest (default), percentile and fpr.",
+                         "Supported options: numTopFeatures (default), percentile and fpr.",
                          typeConverter=TypeConverters.toString)
 
     numTopFeatures = \
         Param(Params._dummy(), "numTopFeatures",
-              "Number of features that selector will select, ordered by statistics value " +
-              "descending. If the number of features is < numTopFeatures, then this will select " +
+              "Number of features that selector will select, ordered by ascending p-value. " +
+              "If the number of features is < numTopFeatures, then this will select " +
               "all features.", typeConverter=TypeConverters.toInt)
 
     percentile = Param(Params._dummy(), "percentile", "Percentile of features that selector " +
-                       "will select, ordered by statistics value descending.",
+                       "will select, ordered by ascending p-value.",
                        typeConverter=TypeConverters.toFloat)
 
-    alpha = Param(Params._dummy(), "alpha", "The highest p-value for features to be kept.",
-                  typeConverter=TypeConverters.toFloat)
+    fpr = Param(Params._dummy(), "fpr", "The highest p-value for features to be kept.",
+                typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                 labelCol="label", selectorType="kbest", percentile=0.1, alpha=0.05):
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
         """
         __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                 labelCol="label", selectorType="kbest", percentile=0.1, alpha=0.05)
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05)
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        self._setDefault(numTopFeatures=50, selectorType="kbest", percentile=0.1, alpha=0.05)
+        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
+                         fpr=0.05)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels", selectorType="kbest", percentile=0.1, alpha=0.05):
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
         """
         setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectorType="kbest", percentile=0.1, alpha=0.05)
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05)
         Sets params for this ChiSqSelector.
         """
         kwargs = self.setParams._input_kwargs
@@ -2665,7 +2666,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     def setNumTopFeatures(self, value):
         """
         Sets the value of :py:attr:`numTopFeatures`.
-        Only applicable when selectorType = "kbest".
+        Only applicable when selectorType = "numTopFeatures".
         """
         return self._set(numTopFeatures=value)
 
@@ -2692,19 +2693,19 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         return self.getOrDefault(self.percentile)
 
     @since("2.1.0")
-    def setAlpha(self, value):
+    def setFpr(self, value):
         """
-        Sets the value of :py:attr:`alpha`.
+        Sets the value of :py:attr:`fpr`.
         Only applicable when selectorType = "fpr".
         """
-        return self._set(alpha=value)
+        return self._set(fpr=value)
 
     @since("2.1.0")
-    def getAlpha(self):
+    def getFpr(self):
         """
-        Gets the value of alpha or its default value.
+        Gets the value of fpr or its default value.
         """
-        return self.getOrDefault(self.alpha)
+        return self.getOrDefault(self.fpr)
 
     def _create_model(self, java_model):
         return ChiSqSelectorModel(java_model)
