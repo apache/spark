@@ -158,7 +158,7 @@ trait CheckAnalysis extends PredicateHelper {
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
               case s: StructType
-                if s.find(_.name == "start").map(_.dataType).contains(TimestampType) =>
+                if s.find(_.name == "end").map(_.dataType) == Some(TimestampType) =>
               case _: TimestampType =>
               case _ =>
                 failAnalysis(
