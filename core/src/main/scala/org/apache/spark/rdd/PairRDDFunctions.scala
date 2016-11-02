@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
-import java.util.{Date, HashMap => JHashMap}
+import java.util.{Date, HashMap => JHashMap, Locale}
 
 import scala.collection.{mutable, Map}
 import scala.collection.JavaConverters._
@@ -1079,7 +1079,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
     val hadoopConf = conf
     val job = NewAPIHadoopJob.getInstance(hadoopConf)
-    val formatter = new SimpleDateFormat("yyyyMMddHHmmss")
+    val formatter = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
     val jobConfiguration = job.getConfiguration

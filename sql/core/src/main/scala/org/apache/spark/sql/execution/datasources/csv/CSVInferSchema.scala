@@ -247,7 +247,7 @@ private[csv] object CSVTypeCast {
             case options.positiveInf => Float.PositiveInfinity
             case _ =>
               Try(datum.toFloat)
-                .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+                .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).floatValue())
           }
         case _: DoubleType =>
           datum match {
@@ -256,7 +256,7 @@ private[csv] object CSVTypeCast {
             case options.positiveInf => Double.PositiveInfinity
             case _ =>
               Try(datum.toDouble)
-                .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+                .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).doubleValue())
           }
         case _: BooleanType => datum.toBoolean
         case dt: DecimalType =>
