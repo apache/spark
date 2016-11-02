@@ -501,6 +501,7 @@ object TypeCoercion {
       // from the list. So we need to make sure the return type is deterministic and
       // compatible with every child column.
       case c @ Coalesce(es) if !haveSameType(es) =>
+        println("coming into cs" + c)
         val types = es.map(_.dataType)
         findWiderCommonType(types) match {
           case Some(finalDataType) => Coalesce(es.map(Cast(_, finalDataType)))

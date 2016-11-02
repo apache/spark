@@ -116,8 +116,8 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
 
 @ExpressionDescription(usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
 case class Nvl(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
-  def this(left: Expression, right: Expression) = {
 
+  def this(left: Expression, right: Expression) = {
     this(left, right, Coalesce(Seq(left, right)))
   }
 
