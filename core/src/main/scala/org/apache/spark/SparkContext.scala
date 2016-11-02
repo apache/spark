@@ -1705,29 +1705,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         key = uri.getScheme match {
           // A JAR file which exists only on the driver node
           case null | "file" =>
-            if (master == "yarn" && deployMode == "cluster") {
-              // In order for this to work in yarn cluster mode the user must specify the
-              // --addJars option to the client to upload the file into the distributed cache
-              // of the AM to make it show up in the current working directory.
-              val fileName = new Path(uri.getPath).getName()
-              try {
-                env.rpcEnv.fileServer.addJar(new File(fileName))
-              } catch {
-                case e: Exception =>
-                  // For now just log an error but allow to go through so spark examples work.
-                  // The spark examples don't really need the jar distributed since its also
-                  // the app jar.
-                  logError("Error adding jar (" + e + "), was the --addJars option used?")
-                  null
-              }
-            } else {
-              try {
-                env.rpcEnv.fileServer.addJar(new File(uri.getPath))
-              } catch {
-                case exc: FileNotFoundException =>
-                  logError(s"Jar not found at $path")
-                  null
-              }
+            try {
+              env.rpcEnv.fileServer.addJar(new File(uri.getPath))
+            } catch {
+              case exc: FileNotFoundException =>
+                logError(s"Jar not found at $path")
+                null
             }
           // A JAR file which exists locally on every worker node
           case "local" =>
