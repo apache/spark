@@ -350,7 +350,7 @@ read.json.default <- function(path, ...) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "json", paths)
+  sdf <- handledCallJMethod(read, "json", paths)
   dataFrame(sdf)
 }
 
@@ -422,7 +422,7 @@ read.orc <- function(path, ...) {
   path <- suppressWarnings(normalizePath(path))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "orc", path)
+  sdf <- handledCallJMethod(read, "orc", path)
   dataFrame(sdf)
 }
 
@@ -444,7 +444,7 @@ read.parquet.default <- function(path, ...) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "parquet", paths)
+  sdf <- handledCallJMethod(read, "parquet", paths)
   dataFrame(sdf)
 }
 
@@ -496,7 +496,7 @@ read.text.default <- function(path, ...) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   read <- callJMethod(read, "options", options)
-  sdf <- callJMethod(read, "text", paths)
+  sdf <- handledCallJMethod(read, "text", paths)
   dataFrame(sdf)
 }
 
@@ -914,12 +914,13 @@ read.jdbc <- function(url, tableName,
     } else {
       numPartitions <- numToInt(numPartitions)
     }
-    sdf <- callJMethod(read, "jdbc", url, tableName, as.character(partitionColumn),
-                       numToInt(lowerBound), numToInt(upperBound), numPartitions, jprops)
+    sdf <- handledCallJMethod(read, "jdbc", url, tableName, as.character(partitionColumn),
+                              numToInt(lowerBound), numToInt(upperBound), numPartitions, jprops)
   } else if (length(predicates) > 0) {
-    sdf <- callJMethod(read, "jdbc", url, tableName, as.list(as.character(predicates)), jprops)
+    sdf <- handledCallJMethod(read, "jdbc", url, tableName, as.list(as.character(predicates)),
+                              jprops)
   } else {
-    sdf <- callJMethod(read, "jdbc", url, tableName, jprops)
+    sdf <- handledCallJMethod(read, "jdbc", url, tableName, jprops)
   }
   dataFrame(sdf)
 }
