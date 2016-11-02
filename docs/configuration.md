@@ -1450,6 +1450,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.authenticate.encryption.aes.cipher.class</code></td>
+  <td>org.apache.commons.crypto.cipher.OpenSslCipher</td>
+  <td>
+    Specify the underlying implementation class of crypto cipher. In order to use
+    OpenSslCipher users should install openssl. Currently, there are two cipher classes
+    available in Commons Crypto library:
+        org.apache.commons.crypto.cipher.OpenSslCipher
+        org.apache.commons.crypto.cipher.JceCipher
+  </td>
+</tr>
+<tr>
   <td><code>spark.core.connection.ack.wait.timeout</code></td>
   <td>60s</td>
   <td>

@@ -27,7 +27,7 @@ import io.netty.buffer.ByteBuf;
 public class ByteArrayReadableChannel implements ReadableByteChannel {
   private final LinkedList<ByteBuf> buffers = new LinkedList<>();
 
-  public int length() {
+  public int readableBytes() {
     if (!buffers.isEmpty()) {
       return buffers.getFirst().readableBytes();
     } else {

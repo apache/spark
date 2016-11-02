@@ -115,7 +115,7 @@ public class AesCipher {
    */
   public static AesConfigMessage createConfigMessage(TransportConf conf) {
     int keySize = conf.aesCipherKeySize();
-    Properties properties = new Properties();
+    Properties properties = getProperties(conf);
 
     try {
       int paramLen = CryptoCipherFactory.getCryptoCipher(AesCipher.TRANSFORM, properties)
@@ -136,6 +136,12 @@ public class AesCipher {
       logger.error("AES config error", e);
       throw Throwables.propagate(e);
     }
+  }
+
+  private static Properties getProperties(TransportConf conf) {
+    Properties props = new Properties();
+    props.setProperty(CryptoCipherFactory.CLASSES_KEY, conf.aesCipherClass());
+    return props;
   }
 
   private static class AesEncryptHandler extends ChannelOutboundHandlerAdapter {
@@ -177,14 +183,10 @@ public class AesCipher {
       ByteBuf in = (ByteBuf) data;
       byteChannel.feedData(in);
 
-      int i;
-      byte[] decryptedData = new byte[byteChannel.length()];
+      byte[] decryptedData = new byte[byteChannel.readableBytes()];
       int offset = 0;
-      while ((i = cis.read(decryptedData, offset, decryptedData.length - offset)) > 0) {
-        offset += i;
-        if (offset >= decryptedData.length) {
-          break;
-        }
+      while (offset < decryptedData.length) {
+        offset += cis.read(decryptedData, offset, decryptedData.length - offset);
       }
 
       ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, decryptedData.length));
