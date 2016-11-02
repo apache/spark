@@ -229,7 +229,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(labelCol, featuresCol, censorCol, predictionCol, quantilesCol,
-      fitIntercept, maxIter, tol)
+                    fitIntercept, maxIter, tol)
     instr.logNumFeatures(numFeatures)
 
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
