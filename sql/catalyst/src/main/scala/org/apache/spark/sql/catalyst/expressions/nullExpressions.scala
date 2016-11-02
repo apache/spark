@@ -89,78 +89,53 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
 
 @ExpressionDescription(usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
-case class IfNull(left: Expression, right: Expression) extends RuntimeReplaceable {
-  override def children: Seq[Expression] = Seq(left, right)
+case class IfNull(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
 
-  override def replaceForEvaluation(): Expression = Coalesce(Seq(left, right))
-
-  override def replaceForTypeCoercion(): Expression = {
-    if (left.dataType != right.dataType) {
-      TypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
-        copy(left = Cast(left, dtype), right = Cast(right, dtype))
-      }.getOrElse(this)
-    } else {
-      this
-    }
+  def this(left: Expression, right: Expression) = {
+    this(left, right, Coalesce(Seq(left, right)))
   }
+
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
 
 @ExpressionDescription(usage = "_FUNC_(a,b) - Returns null if a equals to b, or a otherwise.")
-case class NullIf(left: Expression, right: Expression) extends RuntimeReplaceable {
-  override def children: Seq[Expression] = Seq(left, right)
+case class NullIf(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
 
-  override def replaceForEvaluation(): Expression = {
-    If(EqualTo(left, right), Literal.create(null, left.dataType), left)
+  def this(left: Expression, right: Expression) = {
+    this(left, right, If(EqualTo(left, right), Literal.create(null, left.dataType), left))
   }
 
-  override def replaceForTypeCoercion(): Expression = {
-    if (left.dataType != right.dataType) {
-      TypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
-        copy(left = Cast(left, dtype), right = Cast(right, dtype))
-      }.getOrElse(this)
-    } else {
-      this
-    }
-  }
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
 
 @ExpressionDescription(usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
-case class Nvl(left: Expression, right: Expression) extends RuntimeReplaceable {
-  override def children: Seq[Expression] = Seq(left, right)
+case class Nvl(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
 
-  override def replaceForEvaluation(): Expression = Coalesce(Seq(left, right))
-
-  override def replaceForTypeCoercion(): Expression = {
-    if (left.dataType != right.dataType) {
-      TypeCoercion.findTightestCommonTypeToString(left.dataType, right.dataType).map { dtype =>
-        copy(left = Cast(left, dtype), right = Cast(right, dtype))
-      }.getOrElse(this)
-    } else {
-      this
-    }
+  def this(left: Expression, right: Expression) = {
+    this(left, right, Coalesce(Seq(left, right)))
   }
+
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
 
 @ExpressionDescription(usage = "_FUNC_(a,b,c) - Returns b if a is not null, or c otherwise.")
-case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression)
+case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: Expression)
   extends RuntimeReplaceable {
 
-  override def replaceForEvaluation(): Expression = If(IsNotNull(expr1), expr2, expr3)
-
-  override def children: Seq[Expression] = Seq(expr1, expr2, expr3)
-
-  override def replaceForTypeCoercion(): Expression = {
-    if (expr2.dataType != expr3.dataType) {
-      TypeCoercion.findTightestCommonTypeOfTwo(expr2.dataType, expr3.dataType).map { dtype =>
-        copy(expr2 = Cast(expr2, dtype), expr3 = Cast(expr3, dtype))
-      }.getOrElse(this)
-    } else {
-      this
-    }
+  def this(expr1: Expression, expr2: Expression, expr3: Expression) = {
+    this(expr1, expr2, expr3, If(IsNotNull(expr1), expr2, expr3))
   }
+
+  override def flatArguments: Iterator[Any] = Iterator(expr1, expr2, expr3)
+  override def sql: String = s"$prettyName(${expr1.sql}, ${expr2.sql}, ${expr3.sql})"
 }
 
 

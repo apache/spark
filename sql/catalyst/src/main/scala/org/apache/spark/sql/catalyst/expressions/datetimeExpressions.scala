@@ -488,8 +488,6 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
           }""")
     }
   }
-
-  override def prettyName: String = "unix_time"
 }
 
 /**

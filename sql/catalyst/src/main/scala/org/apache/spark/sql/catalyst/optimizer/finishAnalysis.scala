@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case e: RuntimeReplaceable => e.replaced
+    case e: RuntimeReplaceable => e.child
   }
 }
 
