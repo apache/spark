@@ -544,7 +544,7 @@ class Dataset[T] private[sql](
    *    using output modes that do not allow updates.
    *  - To minimize the amount of state that we need to keep for on-going aggregations.
    *
-   *  The current event time is computed by looking at the `MAX(eventTime)` seen in an epoch across
+   *  The current watermark is computed by looking at the `MAX(eventTime)` seen across
    *  all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
    *  of coordinating this value across partitions, the actual watermark used is only guaranteed
    *  to be at least `delayThreshold` behind the actual event time.  In some cases we may still
