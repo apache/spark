@@ -1415,7 +1415,7 @@ case class Sentences(
       val locale = if (languageStr != null && countryStr != null) {
         new Locale(languageStr.toString, countryStr.toString)
       } else {
-        Locale.getDefault
+        Locale.US
       }
       getSentences(string.asInstanceOf[UTF8String].toString, locale)
     }
