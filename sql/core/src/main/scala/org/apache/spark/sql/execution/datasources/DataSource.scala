@@ -29,7 +29,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -37,7 +36,6 @@ import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
@@ -292,7 +290,7 @@ case class DataSource(
       case s: StreamSinkProvider =>
         s.createSink(sparkSession.sqlContext, options, partitionColumns, outputMode)
 
-      case parquet: parquet.ParquetFileFormat =>
+      case fileFormat: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
@@ -301,7 +299,7 @@ case class DataSource(
           throw new IllegalArgumentException(
             s"Data source $className does not support $outputMode output mode")
         }
-        new FileStreamSink(sparkSession, path, parquet, partitionColumns, options)
+        new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, options)
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -516,7 +514,7 @@ case class DataSource(
           val plan = data.logicalPlan
           plan.resolve(name :: Nil, data.sparkSession.sessionState.analyzer.resolver).getOrElse {
             throw new AnalysisException(
-              s"Unable to resolve ${name} given [${plan.output.map(_.name).mkString(", ")}]")
+              s"Unable to resolve $name given [${plan.output.map(_.name).mkString(", ")}]")
           }.asInstanceOf[Attribute]
         }
         // For partitioned relation r, r.schema's column ordering can be different from the column
