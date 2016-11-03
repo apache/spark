@@ -64,7 +64,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     5, 5, 5, 5,
     6, 6};
 
-  private static boolean isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
+  private static final boolean isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
 
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
@@ -325,7 +325,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
     for (int i = 0; i < numBytes; i++) {
       byte b = getByte(i);
       if (numBytesForFirstByte(b) != 1) {
@@ -355,7 +354,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
     for (int i = 0; i < numBytes; i++) {
       byte b = getByte(i);
       if (numBytesForFirstByte(b) != 1) {
@@ -399,7 +397,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         }
         bytes[i] = (byte) upper;
       } else {
-        bytes[i] = b;
+        int lower = Character.toLowerCase((int) b);
+        if (lower > 127) {
+          // fallback
+          return toTitleCaseSlow();
+        }
+        bytes[i] = (byte) lower;
       }
     }
     return fromBytes(bytes);
