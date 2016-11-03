@@ -76,7 +76,8 @@ case class InsertIntoHiveTable(
 
   def output: Seq[Attribute] = Seq.empty
 
-  val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+  val hadoopConf = sessionState.newHadoopConf()
+  val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
 
   private def executionId: String = {
     val rand: Random = new Random
@@ -163,7 +164,6 @@ case class InsertIntoHiveTable(
     // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
     val tableLocation = table.hiveQlTable.getDataLocation
-    val hadoopConf = sessionState.newHadoopConf()
     val tmpLocation = getExternalTmpPath(tableLocation, hadoopConf)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
     val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
