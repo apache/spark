@@ -386,8 +386,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def saveTableIntoHive(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
-    // If this is an external table...
-    if (tableDefinition.tableType == EXTERNAL &&
+    // If this is an external data source table...
+    if (tableDefinition.provider.get != "hive" && tableDefinition.tableType == EXTERNAL &&
       // ... that is not persisted as Hive compatible format (external tables in Hive compatible
       // format always set `locationUri` to the actual data location and should NOT be hacked as
       // following.)
