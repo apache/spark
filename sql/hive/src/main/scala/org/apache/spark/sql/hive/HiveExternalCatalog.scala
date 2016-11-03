@@ -205,6 +205,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       //         it to Hive. If it fails, treat it as not hive compatible and go back to 2.1
       val tableProperties = tableMetaToTableProps(tableDefinition)
 
+      // Ideally we should not create a managed table with location, but Hive serde table can
+      // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
+      // to create the table directory and write out data before we create this table, to avoid
+      // exposing a partial written table.
       val needDefaultTableLocation = tableDefinition.tableType == MANAGED &&
         tableDefinition.storage.locationUri.isEmpty
       val tableLocation = if (needDefaultTableLocation) {
@@ -611,7 +615,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // path option in storage properties, to avoid exposing this concept externally.
     val storageWithLocation = {
       val tableLocation = getLocationFromStorageProps(table)
-      updateLocationInStorageProps(table, None).copy(locationUri = tableLocation)
+      // We pass None as `newPath` here, to remove the path option in storage properties.
+      updateLocationInStorageProps(table, newPath = None).copy(locationUri = tableLocation)
     }
     table.copy(
       provider = Some(provider),
