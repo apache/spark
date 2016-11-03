@@ -21,15 +21,12 @@ import java.io.CharArrayWriter
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
-import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
+import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
@@ -58,10 +55,10 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       val jsonFiles = files.filterNot { status =>
         val name = status.getPath.getName
         (name.startsWith("_") && !name.contains("=")) || name.startsWith(".")
-      }.toArray
+      }.map(_.getPath.toString).toArray
 
       val jsonSchema = InferSchema.infer(
-        createBaseRdd(sparkSession, jsonFiles),
+        sparkSession.read.textFile(jsonFiles: _*),
         columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
@@ -117,25 +114,6 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       val parser = new JacksonParser(requiredSchema, columnNameOfCorruptRecord, parsedOptions)
       lines.flatMap(parser.parse)
     }
-  }
-
-  private def createBaseRdd(
-      sparkSession: SparkSession,
-      inputPaths: Seq[FileStatus]): RDD[String] = {
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
-    val conf = job.getConfiguration
-
-    val paths = inputPaths.map(_.getPath)
-
-    if (paths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, paths: _*)
-    }
-
-    sparkSession.sparkContext.hadoopRDD(
-      conf.asInstanceOf[JobConf],
-      classOf[TextInputFormat],
-      classOf[LongWritable],
-      classOf[Text]).map(_._2.toString) // get the text line
   }
 
   /** Constraints to be imposed on schema to be stored. */
