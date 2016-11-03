@@ -42,12 +42,16 @@ object DateTimeUtils {
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
-  final val SECONDS_PER_DAY = 60 * 60 * 24L
-  final val MICROS_PER_SECOND = 1000L * 1000L
-  final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
-  final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
 
-  final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
+  final val SECONDS_PER_DAY = 60 * 60 * 24L
+
+  final val MILLIS_PER_SECOND = 1000L
+  final val MILLIS_PER_MINUTE = 60L * MILLIS_PER_SECOND
+  final val MILLIS_PER_HOUR = 60L * 60L * MILLIS_PER_SECOND
+  final val MILLIS_PER_DAY = SECONDS_PER_DAY * MILLIS_PER_SECOND
+
+  final val MICROS_PER_SECOND = MILLIS_PER_SECOND * 1000L
+  final val MICROS_PER_DAY = SECONDS_PER_DAY * MICROS_PER_SECOND
 
   // number of days in 400 years
   final val daysIn400Years: Int = 146097
@@ -748,6 +752,14 @@ object DateTimeUtils {
   }
 
   /**
+   * Add timestamp and days interval.
+   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
+   */
+  def timestampAddDays(start: SQLTimestamp, days: Int): SQLTimestamp = {
+    start + days * MICROS_PER_DAY
+  }
+
+  /**
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
    * microseconds since 1.1.1970.
    *
@@ -817,13 +829,29 @@ object DateTimeUtils {
 
   private val TRUNC_TO_YEAR = 1
   private val TRUNC_TO_MONTH = 2
+  private val TRUNC_TO_DAY = 3
+  private val TRUNC_TO_HOUR = 4
+  private val TRUNC_TO_MINUTE = 5
+  private val TRUNC_TO_SECOND = 6
   private val TRUNC_INVALID = -1
+
+  /**
+   * Returns the trunc timestamp from original timestamp and trunc level.
+   * Trunc level should be generated using `parseTruncLevel()`, should only be 1 - 6.
+   */
+  def truncateInstant(ts: SQLTimestamp, level: Int): SQLTimestamp = {
+    if (level == TRUNC_TO_YEAR || level == TRUNC_TO_MONTH) {
+      daysToMillis(truncateInstant(millisToDays(ts / 1000L), level)) * 1000L
+    } else {
+      truncateTime(ts, level)
+    }
+  }
 
   /**
    * Returns the trunc date from original date and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should only be 1 or 2.
    */
-  def truncDate(d: SQLDate, level: Int): SQLDate = {
+  def truncateInstant(d: SQLDate, level: Int): SQLDate = {
     if (level == TRUNC_TO_YEAR) {
       d - DateTimeUtils.getDayInYear(d) + 1
     } else if (level == TRUNC_TO_MONTH) {
@@ -834,8 +862,28 @@ object DateTimeUtils {
     }
   }
 
+  private def truncateTime(ts: SQLTimestamp, level: Int): SQLTimestamp = {
+    val unitInMillis = level match {
+      case TRUNC_TO_DAY => MILLIS_PER_DAY
+      case TRUNC_TO_HOUR => MILLIS_PER_HOUR
+      case TRUNC_TO_MINUTE => MILLIS_PER_MINUTE
+      case TRUNC_TO_SECOND => MILLIS_PER_SECOND
+      case _ =>
+        // caller make sure that this should never be reached
+        sys.error(s"Invalid trunc level: $level")
+    }
+
+    val millisUtc = ts / 1000L
+    val millisLocal = millisUtc + threadLocalLocalTimeZone.get().getOffset(millisUtc)
+    val truncatedMillisLocal = millisLocal - millisLocal % unitInMillis
+    val offset = getOffsetFromLocalMillis(truncatedMillisLocal, threadLocalLocalTimeZone.get())
+    val truncatedMillis = truncatedMillisLocal - offset
+    truncatedMillis * 1000L
+  }
+
   /**
-   * Returns the truncate level, could be TRUNC_YEAR, TRUNC_MONTH, or TRUNC_INVALID,
+   * Returns the truncate level, could be TRUNC_YEAR, TRUNC_MONTH, TRUNC_TO_DAY, TRUNC_TO_HOUR,
+   * TRUNC_TO_MINUTE, TRUNC_TO_SECOND or TRUNC_INVALID.
    * TRUNC_INVALID means unsupported truncate level.
    */
   def parseTruncLevel(format: UTF8String): Int = {
@@ -845,6 +893,10 @@ object DateTimeUtils {
       format.toString.toUpperCase match {
         case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
         case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
+        case "DAY" | "DD" => TRUNC_TO_DAY
+        case "HOUR" | "HH" => TRUNC_TO_HOUR
+        case "MI" => TRUNC_TO_MINUTE
+        case "SEC" | "SS" => TRUNC_TO_SECOND
         case _ => TRUNC_INVALID
       }
     }

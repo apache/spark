@@ -213,21 +213,23 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("date_add") {
     checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1)),
+      AddDays(Literal(Date.valueOf("2016-02-28")), Literal(1)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
     checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(-365)),
+      AddDays(Literal(Date.valueOf("2016-02-28")), Literal(-365)),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
-    checkEvaluation(DateAdd(Literal.create(null, DateType), Literal(1)), null)
-    checkEvaluation(DateAdd(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
+    checkEvaluation(AddDays(Literal.create(null, DateType), Literal(1)), null)
+    checkEvaluation(AddDays(Literal(Date.valueOf("2016-02-28")), Literal.create(null, IntegerType)),
       null)
-    checkEvaluation(DateAdd(Literal.create(null, DateType), Literal.create(null, IntegerType)),
+    checkEvaluation(AddDays(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
     checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 49627)
+      AddDays(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 49627)
     checkEvaluation(
-      DateAdd(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
-    checkConsistencyBetweenInterpretedAndCodegen(DateAdd, DateType, IntegerType)
+      AddDays(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -15910)
+    checkConsistencyBetweenInterpretedAndCodegen(AddDays, DateType, IntegerType)
+    checkEvaluation(AddDays(Literal(Timestamp.valueOf("2015-01-10 12:00:00")), Literal(1)),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-11 12:00:00")))
   }
 
   test("date_sub") {
@@ -247,6 +249,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       DateSub(Literal(Date.valueOf("2016-02-28")), negativeIntLit), 49628)
     checkConsistencyBetweenInterpretedAndCodegen(DateSub, DateType, IntegerType)
+    checkEvaluation(DateSub(Literal(Timestamp.valueOf("2015-01-10 12:00:00")), Literal(1)),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-01-09 12:00:00")))
   }
 
   test("time_add") {
@@ -310,6 +314,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       AddMonths(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -980528)
     checkConsistencyBetweenInterpretedAndCodegen(AddMonths, DateType, IntegerType)
+    checkEvaluation(AddMonths(Literal(Timestamp.valueOf("2015-01-30 12:00:00")), Literal(1)),
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-02-28 12:00:00")))
   }
 
   test("months_between") {
@@ -389,23 +395,61 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(ToDate, DateType)
   }
 
-  test("function trunc") {
+  test("function trunc - date") {
     def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
-      checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
+      checkEvaluation(
+        TruncInstant(Literal.create(input, DateType), Literal.create(fmt, StringType)),
         expected)
       checkEvaluation(
-        TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
+        TruncInstant(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
         expected)
     }
+
     val date = Date.valueOf("2015-07-22")
-    Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach{ fmt =>
+    Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
       testTrunc(date, fmt, Date.valueOf("2015-01-01"))
     }
     Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
       testTrunc(date, fmt, Date.valueOf("2015-07-01"))
     }
-    testTrunc(date, "DD", null)
+
     testTrunc(date, null, null)
+    testTrunc(null, "MON", null)
+    testTrunc(null, null, null)
+  }
+
+  test("function trunc - timestamp") {
+    def testTrunc(input: Timestamp, fmt: String, expected: Timestamp): Unit = {
+      checkEvaluation(
+        TruncInstant(Literal.create(input, TimestampType), Literal.create(fmt, StringType)),
+        expected)
+      checkEvaluation(
+        TruncInstant(
+          Literal.create(input, TimestampType), NonFoldableLiteral.create(fmt, StringType)),
+        expected)
+    }
+
+    val timestamp = Timestamp.valueOf("2015-07-22 12:30:40.123")
+    Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
+      testTrunc(timestamp, fmt, Timestamp.valueOf("2015-01-01 00:00:00.000"))
+    }
+    Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
+      testTrunc(timestamp, fmt, Timestamp.valueOf("2015-07-01 00:00:00.000"))
+    }
+    Seq("DAY", "day", "DD", "dd").foreach { fmt =>
+      testTrunc(timestamp, fmt, Timestamp.valueOf("2015-07-22 00:00:00.000"))
+    }
+    Seq("HOUR", "hour", "HH", "hh").foreach { fmt =>
+      testTrunc(timestamp, fmt, Timestamp.valueOf("2015-07-22 12:00:00.000"))
+    }
+    Seq("MI", "mi").foreach { fmt =>
+      testTrunc(timestamp, fmt, Timestamp.valueOf("2015-07-22 12:30:00.000"))
+    }
+    Seq("SEC", "sec", "SS", "ss").foreach { fmt =>
+      testTrunc(timestamp, fmt, Timestamp.valueOf("2015-07-22 12:30:40.000"))
+    }
+
+    testTrunc(timestamp, null, null)
     testTrunc(null, "MON", null)
     testTrunc(null, null, null)
   }

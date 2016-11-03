@@ -989,7 +989,8 @@ def trunc(date, format):
     """
     Returns date truncated to the unit specified by the format.
 
-    :param format: 'year', 'YYYY', 'yy' or 'month', 'mon', 'mm'
+    :param format: 'year', 'YYYY', 'yy', 'month', 'mon', 'mm', 'day', 'dd', 'hour', 'hh', 'mi',
+                   or 'sec', 'ss'.
 
     >>> df = spark.createDataFrame([('1997-02-28',)], ['d'])
     >>> df.select(trunc(df.d, 'year').alias('year')).collect()

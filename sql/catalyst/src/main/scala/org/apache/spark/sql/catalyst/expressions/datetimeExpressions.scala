@@ -72,58 +72,64 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 }
 
 /**
- * Adds a number of days to startdate.
+ * The base for addition/subtraction for days.
  */
-@ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days after start_date.",
-  extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-31'")
-case class DateAdd(startDate: Expression, days: Expression)
+abstract class AddDaysBase(instant: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  override def left: Expression = startDate
+  override def left: Expression = instant
   override def right: Expression = days
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DateType, TimestampType), IntegerType)
 
-  override def dataType: DataType = DateType
+  override def dataType: DataType = instant.dataType
 
-  override def nullSafeEval(start: Any, d: Any): Any = {
-    start.asInstanceOf[Int] + d.asInstanceOf[Int]
+  // 1 for addition, -1 for subtraction
+  def signModifier: Int
+
+  override def nullSafeEval(start: Any, days: Any): Any = {
+    (instant.dataType, start, days) match {
+      case (_: DateType, startDate: Int, days: Int) =>
+        startDate + (signModifier * days)
+      case (_: TimestampType, startTimestamp: Long, days: Int) =>
+        DateTimeUtils.timestampAddDays(startTimestamp, signModifier * days)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (sd, d) => {
-      s"""${ev.value} = $sd + $d;"""
-    })
+    instant.dataType match {
+      case DateType =>
+        nullSafeCodeGen(ctx, ev, (sd, d) => s"""${ev.value} = $sd + ($signModifier * $d);""")
+      case TimestampType =>
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        defineCodeGen(ctx, ev, (sd, d) => s"""$dtu.timestampAddDays($sd, ($signModifier * $d))""")
+    }
   }
+}
+
+/**
+ * Adds a number of days to date/timestamp.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(instant, num_days) - Returns the date/timestamp that is num_days after instant.",
+  extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-31'")
+case class AddDays(instant: Expression, days: Expression) extends AddDaysBase(instant, days) {
+
+  override def signModifier: Int = 1
 
   override def prettyName: String = "date_add"
 }
 
 /**
- * Subtracts a number of days to startdate.
+ * Subtracts a number of days to date/timestamp.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_days) - Returns the date that is num_days before start_date.",
+  usage = "_FUNC_(instant, num_days) - Returns the date/timestamp that is num_days before instant.",
   extended = "> SELECT _FUNC_('2016-07-30', 1);\n '2016-07-29'")
-case class DateSub(startDate: Expression, days: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-  override def left: Expression = startDate
-  override def right: Expression = days
+case class DateSub(instant: Expression, days: Expression) extends AddDaysBase(instant, days) {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
-
-  override def dataType: DataType = DateType
-
-  override def nullSafeEval(start: Any, d: Any): Any = {
-    start.asInstanceOf[Int] - d.asInstanceOf[Int]
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (sd, d) => {
-      s"""${ev.value} = $sd - $d;"""
-    })
-  }
+  override def signModifier: Int = -1
 
   override def prettyName: String = "date_sub"
 }
@@ -782,29 +788,38 @@ case class TimeSub(start: Expression, interval: Expression)
 }
 
 /**
- * Returns the date that is num_months after start_date.
+ * Returns the date/timestamp that is num_months after instant.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(start_date, num_months) - Returns the date that is num_months after start_date.",
+  usage = "_FUNC_(instant, num_months) - Returns the date/timestamp that is num_months after instant.",
   extended = "> SELECT _FUNC_('2016-08-31', 1);\n '2016-09-30'")
-case class AddMonths(startDate: Expression, numMonths: Expression)
+// scalastyle:on line.size.limit
+case class AddMonths(instant: Expression, numMonths: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  override def left: Expression = startDate
+  override def left: Expression = instant
   override def right: Expression = numMonths
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DateType, TimestampType), IntegerType)
 
-  override def dataType: DataType = DateType
+  override def dataType: DataType = instant.dataType
 
   override def nullSafeEval(start: Any, months: Any): Any = {
-    DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
+    (instant.dataType, start, months) match {
+      case (_: DateType, startDate: Int, months: Int) =>
+        DateTimeUtils.dateAddMonths(startDate, months)
+      case (_: TimestampType, startTimestamp: Long, months: Int) =>
+        DateTimeUtils.timestampAddInterval(startTimestamp, months, 0)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, m) => {
-      s"""$dtu.dateAddMonths($sd, $m)"""
+    defineCodeGen(ctx, ev, (sd, m) => instant.dataType match {
+      case DateType => s"""$dtu.dateAddMonths($sd, $m)"""
+      case TimestampType => s"""$dtu.timestampAddInterval($sd, $m, 0)"""
     })
   }
 
@@ -917,21 +932,26 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 }
 
 /**
- * Returns date truncated to the unit specified by the format.
+ * Returns timestamp truncated to the unit specified by the format.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(date, fmt) - Returns returns date with the time portion of the day truncated to the unit specified by the format model fmt.",
-  extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01'\n> SELECT _FUNC_('2015-10-27', 'YEAR');\n '2015-01-01'")
+  usage = "_FUNC_(instant, fmt) - Returns returns date/timestamp with the time portion truncated to the unit specified by the format model fmt.",
+  extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01 00:00:00'\n> SELECT _FUNC_('2015-10-27', 'YEAR');\n '2015-01-01 00:00:00'")
 // scalastyle:on line.size.limit
-case class TruncDate(date: Expression, format: Expression)
+case class TruncInstant(instant: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
-  override def left: Expression = date
+
+  override def left: Expression = instant
   override def right: Expression = format
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, StringType)
-  override def dataType: DataType = DateType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DateType, TimestampType), StringType)
+
+  override def dataType: DataType = instant.dataType
+
   override def nullable: Boolean = true
+
   override def prettyName: String = "trunc"
 
   private lazy val truncLevel: Int =
@@ -947,11 +967,12 @@ case class TruncDate(date: Expression, format: Expression)
       // unknown format
       null
     } else {
-      val d = date.eval(input)
-      if (d == null) {
-        null
-      } else {
-        DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
+      (instant.dataType, instant.eval(input)) match {
+        case (_: DateType, date: Int) =>
+          DateTimeUtils.truncateInstant(date, level)
+        case (_: TimestampType, timestamp: Long) =>
+          DateTimeUtils.truncateInstant(timestamp, level)
+        case (_, null) => null
       }
     }
   }
@@ -965,13 +986,13 @@ case class TruncDate(date: Expression, format: Expression)
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
-        val d = date.genCode(ctx)
+        val ist = instant.genCode(ctx)
         ev.copy(code = s"""
-          ${d.code}
-          boolean ${ev.isNull} = ${d.isNull};
+          ${ist.code}
+          boolean ${ev.isNull} = ${ist.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $dtu.truncDate(${d.value}, $truncLevel);
+            ${ev.value} = $dtu.truncateInstant(${ist.value}, $truncLevel);
           }""")
       }
     } else {
@@ -982,7 +1003,7 @@ case class TruncDate(date: Expression, format: Expression)
           if ($form == -1) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = $dtu.truncDate($dateVal, $form);
+            ${ev.value} = $dtu.truncateInstant($dateVal, $form);
           }
         """
       })
