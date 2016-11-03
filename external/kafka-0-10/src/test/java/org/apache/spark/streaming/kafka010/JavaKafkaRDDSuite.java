@@ -44,9 +44,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     kafkaTestUtils = new KafkaTestUtils();
     kafkaTestUtils.setup();
     SparkConf sparkConf = new SparkConf()
-      .setMaster("local[4]")
-      .setAppName(this.getClass().getSimpleName())
-      .set("spark.streaming.kafka.consumer.poll.ms", Integer.toString(10 * 1000));
+      .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
     sc = new JavaSparkContext(sparkConf);
   }
 
