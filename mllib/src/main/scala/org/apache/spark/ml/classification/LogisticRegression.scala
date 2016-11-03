@@ -571,8 +571,8 @@ class LogisticRegression @Since("1.2.0") (
            the original space.
 
            Additionally, the coefficients are laid out in column major order during training to
-           avoid extra computation that is unnecessary. Here, we convert them back to row major,
-           which is optimal for prediction.
+           avoid extra computation when performing feature standardization. Here, we convert them
+           back to row major before passing them to the model.
 
            Note that the intercept in scaled space and original space is the same;
            as a result, no scaling is needed.
@@ -1518,23 +1518,13 @@ private class LogisticAggregator(
     val multipliers = new Array[Double](numClasses)
     val sum = {
       var temp = 0.0
-      if (maxMargin > 0) {
-        var i = 0
-        while (i < numClasses) {
-          margins(i) -= maxMargin
-          val exp = math.exp(margins(i))
-          temp += exp
-          multipliers(i) = exp
-          i += 1
-        }
-      } else {
-        var i = 0
-        while (i < numClasses) {
-          val exp = math.exp(margins(i))
-          temp += exp
-          multipliers(i) = exp
-          i += 1
-        }
+      var i = 0
+      while (i < numClasses) {
+        if (maxMargin > 0) margins(i) -= maxMargin
+        val exp = math.exp(margins(i))
+        temp += exp
+        multipliers(i) = exp
+        i += 1
       }
       temp
     }
