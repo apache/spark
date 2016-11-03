@@ -263,7 +263,7 @@ case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with Predic
 
           val dimTables = eligibleDimPlans.map { _._1 }
 
-          if (eligibleDimPlans.isEmpty) {
+          if (dimTables.isEmpty) {
             // This is an expanding join since there are no equality joins
             // between the current fact table and the joined tables.
             // Look for the next eligible star join plan.
@@ -271,6 +271,10 @@ case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with Predic
               joinedTables,
               eligibleFactTables.filterNot(_._1 eq factTable),
               conditions)
+
+          } else if (dimTables.size < 2) {
+            // Conservatively assume at least two dimensions in a star join.
+            Seq.empty[(LogicalPlan, InnerLike)]
 
           } else if (isSelectiveStarJoin(factTable, dimTables, conditions)) {
             // This is a selective star join and all dimensions are base table access.
@@ -295,13 +299,17 @@ case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with Predic
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ExtractFiltersAndInnerJoins(input, conditions)
       if input.size >= 2 && conditions.nonEmpty =>
-      val starJoinPlan = findEligibleStarJoinPlan(input, input, conditions)
-      if (conf.starJoinOptimization && starJoinPlan.nonEmpty) {
-        val rest = input.filterNot(starJoinPlan.contains(_))
-        createOrderedJoin(starJoinPlan ++ rest, conditions)
-      } else {
-        createOrderedJoin(input, conditions)
-      }
+        if (conf.starJoinOptimization) {
+          val starJoinPlan = findEligibleStarJoinPlan(input, input, conditions)
+          if (starJoinPlan.nonEmpty) {
+            val rest = input.filterNot(starJoinPlan.contains(_))
+            createOrderedJoin(starJoinPlan ++ rest, conditions)
+          } else {
+            createOrderedJoin(input, conditions)
+          }
+        } else {
+          createOrderedJoin(input, conditions)
+        }
   }
 }
 

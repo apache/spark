@@ -268,23 +268,15 @@ object BaseTableAccess extends PredicateHelper{
     case t: LeafNode =>
       Some(t, Seq.empty[Expression])
 
-    case Project(_, t: LeafNode) =>
-      Some(t, Seq.empty[Expression])
+    case Project(_, BaseTableAccess(t, pr)) =>
+      Some(t, pr)
 
-    case Filter(filterCond, t: LeafNode) =>
-      val predicates = splitConjunctivePredicates(filterCond).filter(canEvaluate(_, t))
-      Some(t, predicates)
-
-    case Project(_, Filter(filterCond, t: LeafNode)) =>
-      val predicates = splitConjunctivePredicates(filterCond).filter(canEvaluate(_, t))
-      Some(t, predicates)
-
-    case Filter(filterCond, p @ Project(_, t: LeafNode)) =>
-      val predicates = splitConjunctivePredicates(filterCond).filter { pr =>
-        canEvaluate(pr, p) || canEvaluate(pr, t)
+    case Filter(filterCond, p @ BaseTableAccess(t, pr)) =>
+      val predicates = splitConjunctivePredicates(filterCond).filter { pred =>
+        canEvaluate(pred, p) || canEvaluate(pred, t)
       }
-      Some(t, predicates)
 
+      Some(t, predicates ++ pr)
     case _ =>
       None
   }

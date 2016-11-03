@@ -113,12 +113,12 @@ class StarJoinSuite extends QueryTest with SharedSQLContext {
       verifyStarJoinPlans(query1, equivQuery1, Row(1, 2, 3, 4) :: Nil)
 
       // Test 2: Expanding star join with inequality join predicates.
-      // Choose the next largest join, d3-s3.
+      // Choose the next largest join, d3-s3-d1.
       // Star join:
       //   (<)  (<)
       // d1 - f1 - d2
-      //  |
-      // s3 - d3
+      //  | (=)
+      // d3 - s3
       //   (=)
       //
       // Default join reordering: d1, f1, d2, d3, s3
@@ -126,10 +126,10 @@ class StarJoinSuite extends QueryTest with SharedSQLContext {
       val query2 = sql(
         """
           | select d3.*
-          | from d1, d2, f1, d3, s3
+          | from d1, f1, d2, s3, d3
           | where f1_fk2 <= d2_pk1
           | and f1_fk1 <= d1_pk1
-          | and d1_c3 = s3_c3
+          | and d1_c4 = d3_c4
           | and d3_fk1 = s3_pk1 and s3_c3 = 3
           | limit 1
         """.stripMargin)
@@ -142,7 +142,7 @@ class StarJoinSuite extends QueryTest with SharedSQLContext {
           | from d3, s3, d1, f1, d2
           | where f1_fk2 <= d2_pk1
           | and f1_fk1 <= d1_pk1
-          | and d1_c3 = s3_c3
+          | and d1_c4 = d3_c4
           | and d3_fk1 = s3_pk1 and s3_c3 = 3
           | limit 1
         """.stripMargin)
@@ -150,7 +150,7 @@ class StarJoinSuite extends QueryTest with SharedSQLContext {
       verifyStarJoinPlans(query2, equivQuery2, Row(1, 2, 3, 4) :: Nil)
 
       // Test 3: Expanding star join with fact table in Cartesian product.
-      // Choose the next largest join, d3-s3.
+      // Choose the next largest join, d3-s3-d1.
       // Star join:
       // d1   f1
       //  |   | x
@@ -163,7 +163,7 @@ class StarJoinSuite extends QueryTest with SharedSQLContext {
         """
           | select f1.*
           | from d1, s3, d3 cross join f1
-          | where d1_c2 = s3_c2
+          | where d1_c2 = d3_c2
           | and d3_fk1 = s3_pk1 and s3_c3 = 3
           | limit 1
         """.stripMargin)
@@ -174,7 +174,7 @@ class StarJoinSuite extends QueryTest with SharedSQLContext {
         """
           | select f1.*
           | from d3, s3, d1 cross join f1
-          | where d1_c2 = s3_c2
+          | where d1_c2 = d3_c2
           | and d3_fk1 = s3_pk1 and s3_c3 = 3
           | limit 1
         """.stripMargin)
@@ -183,32 +183,32 @@ class StarJoinSuite extends QueryTest with SharedSQLContext {
 
       // Test 4: Selective star join on a subset of dimensions.
       // Star join:
-      //  (<)   (=)
+      //  (=)   (=)
       // d1 - f1  -  d2
       //      | (<)
       //      d3 - s3
       //
       // Default join reordering: d3, f1, s3, d1, d2
-      // Star reordering: f1, d2, d3, s3, d1
+      // Star reordering: f1, d2, d1, d3, s3
       val query4 = sql(
         """
           | select d3.*
           | from d3, f1, s3, d1, d2
           | where f1_fk2 = d2_pk1 and d2_c2 <= 2
-          | and f1_fk1 <= d1_pk1
+          | and f1_fk1 = d1_pk1
           | and f1_fk3 <= d3_pk1
           | and d3_fk1 = s3_pk1
           | limit 1
         """.stripMargin)
 
       // Equivalent query
-      // Default join reordering: f1, d2, d3, s3, d1
+      // Default join reordering: f1, d2, d1, d3, s3
       val equivQuery4 = sql(
         """
           | select d3.*
-          | from f1, d2, d3, s3, d1
+          | from f1, d2, d1, d3, s3
           | where f1_fk2 = d2_pk1 and d2_c2 <= 2
-          | and f1_fk1 <= d1_pk1
+          | and f1_fk1 = d1_pk1
           | and f1_fk3 <= d3_pk1
           | and d3_fk1 = s3_pk1
           | limit 1
@@ -343,6 +343,28 @@ class StarJoinSuite extends QueryTest with SharedSQLContext {
         """.stripMargin)
 
       verifyStarJoinPlans(query5, equivQuery5, Row(1, 2, 3, 4) :: Nil)
+
+      // Test 6: Star plan with only one dimension
+      val query6 = sql(
+        """
+          | select f1.*
+          | from d1, s3, d3 cross join f1
+          | where d1_c2 = s3_c2
+          | and d3_fk1 = s3_pk1 and s3_c3 = 3
+          | limit 1
+        """.stripMargin)
+
+      // Equivalent query: same as query5
+      val equivQuery6 = sql(
+        """
+          | select f1.*
+          | from d1, s3, d3 cross join f1
+          | where d1_c2 = s3_c2
+          | and d3_fk1 = s3_pk1 and s3_c3 = 3
+          | limit 1
+        """.stripMargin)
+
+      verifyStarJoinPlans(query6, equivQuery6, Row(1, 2, 3, 4) :: Nil)
     }
   }
 
