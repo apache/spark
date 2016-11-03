@@ -22,8 +22,8 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
-           'KMeans', 'KMeansModel', 'KMeansSummary',
-           'GaussianMixture', 'GaussianMixtureModel',
+           'KMeans', 'KMeansModel',
+           'GaussianMixture', 'GaussianMixtureModel', 'GaussianMixtureSummary',
            'LDA', 'LDAModel', 'LocalLDAModel', 'DistributedLDAModel']
 
 
@@ -182,6 +182,53 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> gm = GaussianMixture(k=3, tol=0.0001,
     ...                      maxIter=10, seed=10)
     >>> model = gm.fit(df)
+    >>> model.hasSummary
+    True
+    >>> summary = model.summary
+    >>> summary.predictions.show()
+    +-------------+----------+--------------------+
+    |     features|prediction|         probability|
+    +-------------+----------+--------------------+
+    | [-0.1,-0.05]|         0|[0.99609496160777...|
+    | [-0.01,-0.1]|         1|[2.89091615598232...|
+    |    [0.9,0.8]|         1|[2.23789457321856...|
+    | [0.75,0.935]|         1|[2.85667101481575...|
+    |[-0.83,-0.68]|         0|[0.99843788373650...|
+    |[-0.91,-0.76]|         0|[0.99850085851896...|
+    +-------------+----------+--------------------+
+    ...
+    >>> summary.predictionCol
+    'prediction'
+    >>> summary.featuresCol
+    'features'
+    >>> summary.k
+    3
+    >>> summary.probability.show()
+    +--------------------+
+    |         probability|
+    +--------------------+
+    |[0.99609496160777...|
+    |[2.89091615598232...|
+    |[2.23789457321856...|
+    |[2.85667101481575...|
+    |[0.99843788373650...|
+    |[0.99850085851896...|
+    +--------------------+
+    ...
+    >>> summary.cluster.show()
+    +----------+
+    |prediction|
+    +----------+
+    |         0|
+    |         1|
+    |         1|
+    |         1|
+    |         0|
+    |         0|
+    +----------+
+    ...
+    >>> summary.clusterSizes
+    [3, 3, 0]
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -290,32 +337,6 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         for this model on the given data.
         """
         return self._call_java("computeCost", dataset)
-
-    @property
-    @since("2.1.0")
-    def summary(self):
-        """
-        Gets summary of model on training set.
-        """
-        java_km_summary = self._call_java("summary")
-        return KMeansSummary(java_km_summary)
-
-    @property
-    @since("2.1.0")
-    def hasSummary(self):
-        """
-        Indicates whether a summary exists for this model instance.
-        """
-        return self._call_java("hasSummary")
-
-
-@inherit_doc
-class KMeansSummary(ClusteringSummary):
-    """
-    Summary of KMeans algorithms.
-
-    .. versionadded:: 2.1.0
-    """
 
 
 @inherit_doc
@@ -510,6 +531,37 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> df = spark.createDataFrame(data, ["features"])
     >>> bkm = BisectingKMeans(k=2, minDivisibleClusterSize=1.0)
     >>> model = bkm.fit(df)
+    >>> model.hasSummary
+    True
+    >>> summary = model.summary
+    >>> summary.predictions.show()
+    +---------+----------+
+    | features|prediction|
+    +---------+----------+
+    |[0.0,0.0]|         0|
+    |[1.0,1.0]|         0|
+    |[9.0,8.0]|         1|
+    |[8.0,9.0]|         1|
+    +---------+----------+
+    ...
+    >>> summary.predictionCol
+    'prediction'
+    >>> summary.featuresCol
+    'features'
+    >>> summary.k
+    2
+    >>> summary.cluster.show()
+    +----------+
+    |prediction|
+    +----------+
+    |         0|
+    |         0|
+    |         1|
+    |         1|
+    +----------+
+    ...
+    >>> summary.clusterSizes
+    [2, 2]
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
