@@ -200,9 +200,8 @@ class HiveDDLSuite
         val message = intercept[AnalysisException] {
           sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
         }
-        assert(message.getMessage.contains(
-          "Partition spec is invalid. The spec (ds, unknowncol) must be contained within the " +
-            "partition spec (ds, hr) defined in table '`default`.`exttable_with_partitions`'"))
+        assert(message.getMessage.contains("unknownCol is not a valid partition column in table " +
+          "`default`.`exttable_with_partitions`"))
 
         sql(
           s"""
@@ -860,14 +859,6 @@ class HiveDDLSuite
     }
   }
 
-  private def getTablePath(table: CatalogTable): Option[String] = {
-    if (DDLUtils.isDatasourceTable(table)) {
-      new CaseInsensitiveMap(table.storage.properties).get("path")
-    } else {
-      table.storage.locationUri
-    }
-  }
-
   private def checkCreateTableLike(sourceTable: CatalogTable, targetTable: CatalogTable): Unit = {
     // The created table should be a MANAGED table with empty view text and original text.
     assert(targetTable.tableType == CatalogTableType.MANAGED,
@@ -916,10 +907,8 @@ class HiveDDLSuite
       assert(targetTable.provider == sourceTable.provider)
     }
 
-    val sourceTablePath = getTablePath(sourceTable)
-    val targetTablePath = getTablePath(targetTable)
-    assert(targetTablePath.nonEmpty, "target table path should not be empty")
-    assert(sourceTablePath != targetTablePath,
+    assert(targetTable.storage.locationUri.nonEmpty, "target table path should not be empty")
+    assert(sourceTable.storage.locationUri != targetTable.storage.locationUri,
       "source table/view path should be different from target table path")
 
     // The source table contents should not been seen in the target table.

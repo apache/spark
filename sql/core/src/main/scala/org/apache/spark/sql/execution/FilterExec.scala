@@ -181,6 +181,8 @@ abstract class FilterExecBase extends UnaryExecNode with CodegenSupport with Pre
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 /** Physical plan for Filter. */
@@ -201,10 +203,11 @@ case class FilterExec(val condition: Expression, val child: SparkPlan)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitionsInternal { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val predicate = newPredicate(condition, child.output)
+      predicate.initialize(0)
       iter.filter { row =>
-        val r = predicate(row)
+        val r = predicate.eval(row)
         if (r) numOutputRows += 1
         r
       }
@@ -257,15 +260,18 @@ case class StopAfterExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitionsInternal { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val stopPredicate = newPredicate(stopAfterCondition, child.output)
+      stopPredicate.initialize(0)
       val predicate = if (otherCondition.isDefined) {
-        newPredicate(otherCondition.get, child.output)
+        val p = newPredicate(otherCondition.get, child.output)
+        p.initialize(0)
+        p.eval(_)
       } else {
         (_: InternalRow) => true
       }
       iter.takeWhile { row =>
-        stopPredicate(row)
+        stopPredicate.eval(row)
       }.filter { row =>
         val r = predicate(row)
         if (r) numOutputRows += 1

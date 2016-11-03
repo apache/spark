@@ -20,10 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
-import java.util
-import java.util.{Date, Random}
-
-import scala.collection.JavaConverters._
+import java.util.{Date, Locale, Random}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -36,7 +33,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.command.{AlterTableAddPartitionCommand, AlterTableDropPartitionCommand}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
@@ -59,9 +58,8 @@ case class InsertIntoHiveTable(
 
   private def executionId: String = {
     val rand: Random = new Random
-    val format: SimpleDateFormat = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS")
-    val executionId: String = "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
-    return executionId
+    val format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
+    "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
   }
 
   private def getStagingDir(inputPath: Path, hadoopConf: Configuration): Path = {
@@ -257,7 +255,28 @@ case class InsertIntoHiveTable(
             table.catalogTable.identifier.table,
             partitionSpec)
 
+        var doHiveOverwrite = overwrite
+
         if (oldPart.isEmpty || !ifNotExists) {
+          // SPARK-18107: Insert overwrite runs much slower than hive-client.
+          // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
+          // version and we may not want to catch up new Hive version every time. We delete the
+          // Hive partition first and then load data file into the Hive partition.
+          if (oldPart.nonEmpty && overwrite) {
+            oldPart.get.storage.locationUri.map { uri =>
+              val partitionPath = new Path(uri)
+              val fs = partitionPath.getFileSystem(hadoopConf)
+              if (fs.exists(partitionPath)) {
+                if (!fs.delete(partitionPath, true)) {
+                  throw new RuntimeException(
+                    "Cannot remove partition directory '" + partitionPath.toString)
+                }
+                // Don't let Hive do overwrite operation since it is slower.
+                doHiveOverwrite = false
+              }
+            }
+          }
+
           // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
           // which is currently considered as a Hive native command.
           val inheritTableSpecs = true
@@ -266,7 +285,7 @@ case class InsertIntoHiveTable(
             table.catalogTable.identifier.table,
             outputPath.toString,
             partitionSpec,
-            isOverwrite = overwrite,
+            isOverwrite = doHiveOverwrite,
             holdDDLTime = holdDDLTime,
             inheritTableSpecs = inheritTableSpecs)
         }
@@ -290,6 +309,8 @@ case class InsertIntoHiveTable(
     // TODO: implement hive compatibility as rules.
     Seq.empty[InternalRow]
   }
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 

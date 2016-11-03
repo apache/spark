@@ -21,6 +21,7 @@ import org.apache.hadoop.fs._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.StructType
 
 /**
  * A collection of data files from a partitioned relation, along with the partition values in the
@@ -32,7 +33,7 @@ case class PartitionDirectory(values: InternalRow, files: Seq[FileStatus])
  * An interface for objects capable of enumerating the root paths of a relation as well as the
  * partitions of a relation subject to some pruning expressions.
  */
-trait FileCatalog {
+trait FileIndex {
 
   /**
    * Returns the list of root input paths from which the catalog will get files. There may be a
@@ -63,4 +64,7 @@ trait FileCatalog {
 
   /** Sum of table file sizes, in bytes */
   def sizeInBytes: Long
+
+  /** Schema of the partitioning columns, or the empty schema if the table is not partitioned. */
+  def partitionSchema: StructType
 }

@@ -59,6 +59,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
   val maxCores = conf.get("spark.cores.max", Int.MaxValue.toString).toInt
 
+  val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
+
   val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
 
   private[this] val shutdownTimeoutMS =
@@ -156,7 +158,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       sc.sparkUser,
       sc.appName,
       sc.conf,
-      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress)),
+      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.webUrl)),
       None,
       None,
       sc.conf.getOption("spark.mesos.driver.frameworkId")
@@ -226,10 +228,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         s" --hostname ${offer.getHostname}" +
         s" --cores $numCores" +
         s" --app-id $appId")
-      command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
+      command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetcherCache))
     }
 
-    conf.getOption("spark.mesos.uris").foreach(setupUris(_, command))
+    conf.getOption("spark.mesos.uris").foreach(setupUris(_, command, useFetcherCache))
 
     command.build()
   }

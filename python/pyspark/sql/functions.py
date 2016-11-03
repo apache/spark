@@ -1744,6 +1744,29 @@ def from_json(col, schema, options={}):
     return Column(jc)
 
 
+@ignore_unicode_prefix
+@since(2.1)
+def to_json(col, options={}):
+    """
+    Converts a column containing a [[StructType]] into a JSON string. Throws an exception,
+    in the case of an unsupported type.
+
+    :param col: name of column containing the struct
+    :param options: options to control converting. accepts the same options as the json datasource
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.types import *
+    >>> data = [(1, Row(name='Alice', age=2))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'{"age":2,"name":"Alice"}')]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.to_json(_to_java_column(col), options)
+    return Column(jc)
+
+
 @since(1.5)
 def size(col):
     """

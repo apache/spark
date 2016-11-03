@@ -264,7 +264,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val hour = minute * 60
     def str: (Long) => String = Utils.msDurationToString(_)
 
-    val sep = new DecimalFormatSymbols(Locale.getDefault()).getDecimalSeparator()
+    val sep = new DecimalFormatSymbols(Locale.US).getDecimalSeparator
 
     assert(str(123) === "123 ms")
     assert(str(second) === "1" + sep + "0 s")
@@ -394,6 +394,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.getIteratorSize(empty.toIterator) === 0L)
     val iterator = Iterator.range(0, 5)
     assert(Utils.getIteratorSize(iterator) === 5L)
+  }
+
+  test("getIteratorZipWithIndex") {
+    val iterator = Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L + Int.MaxValue)
+    assert(iterator.toArray === Array(
+      (0, -1L + Int.MaxValue), (1, 0L + Int.MaxValue), (2, 1L + Int.MaxValue)
+    ))
+    intercept[IllegalArgumentException] {
+      Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L)
+    }
   }
 
   test("doesDirectoryContainFilesNewerThan") {
@@ -836,14 +846,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("Set Spark CallerContext") {
     val context = "test"
-    try {
+    new CallerContext(context).setCurrentContext()
+    if (CallerContext.callerContextSupported) {
       val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-      assert(new CallerContext(context).setCurrentContext())
       assert(s"SPARK_$context" ===
         callerContext.getMethod("getCurrent").invoke(null).toString)
-    } catch {
-      case e: ClassNotFoundException =>
-        assert(!new CallerContext(context).setCurrentContext())
     }
   }
 

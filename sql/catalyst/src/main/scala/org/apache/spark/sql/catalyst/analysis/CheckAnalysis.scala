@@ -214,6 +214,18 @@ trait CheckAnalysis extends PredicateHelper {
                         s"appear in the arguments of an aggregate function.")
                   }
                 }
+              case e: Attribute if groupingExprs.isEmpty =>
+                // Collect all [[AggregateExpressions]]s.
+                val aggExprs = aggregateExprs.filter(_.collect {
+                  case a: AggregateExpression => a
+                }.nonEmpty)
+                failAnalysis(
+                  s"grouping expressions sequence is empty, " +
+                    s"and '${e.sql}' is not an aggregate function. " +
+                    s"Wrap '${aggExprs.map(_.sql).mkString("(", ", ", ")")}' in windowing " +
+                    s"function(s) or wrap '${e.sql}' in first() (or first_value) " +
+                    s"if you don't care which value you get."
+                )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.sql}' is neither present in the group by, " +
@@ -287,7 +299,8 @@ trait CheckAnalysis extends PredicateHelper {
               }
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-                if (dt1 != dt2) {
+                // SPARK-18058: we shall not care about the nullability of columns
+                if (dt1.asNullable != dt2.asNullable) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
