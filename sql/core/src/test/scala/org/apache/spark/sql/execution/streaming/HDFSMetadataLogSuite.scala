@@ -119,6 +119,12 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       assert(metadataLog.get(1).isEmpty)
       assert(metadataLog.get(2).isDefined)
       assert(metadataLog.getLatest().get._1 == 2)
+
+      // There should be exactly one file, called "2", in the metadata directory.
+      // This check also tests for regressions of SPARK-17475
+      val allFiles = new File(metadataLog.metadataPath.toString).listFiles().toSeq
+      assert(allFiles.size == 1)
+      assert(allFiles(0).getName() == "2")
     }
   }
 
