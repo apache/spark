@@ -24,6 +24,7 @@ import java.security.PrivilegedExceptionAction
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.util.Properties
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
@@ -46,7 +47,6 @@ import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
-
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -104,6 +104,8 @@ object SparkSubmit {
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
                         """.format(SPARK_VERSION))
+    printStream.println("Using Scala %s, %s, %s".format(
+      Properties.versionString, Properties.javaVmName, Properties.javaVersion))
     printStream.println("Branch %s".format(SPARK_BRANCH))
     printStream.println("Compiled by user %s on %s".format(SPARK_BUILD_USER, SPARK_BUILD_DATE))
     printStream.println("Revision %s".format(SPARK_REVISION))

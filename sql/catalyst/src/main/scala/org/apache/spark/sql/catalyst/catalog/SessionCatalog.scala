@@ -160,8 +160,6 @@ class SessionCatalog(
     val dbName = formatDatabaseName(db)
     if (dbName == DEFAULT_DATABASE) {
       throw new AnalysisException(s"Can not drop default database")
-    } else if (dbName == getCurrentDatabase) {
-      throw new AnalysisException(s"Can not drop current database `$dbName`")
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
@@ -462,11 +460,20 @@ class SessionCatalog(
    * If a database is specified in `oldName`, this will rename the table in that database.
    * If no database is specified, this will first attempt to rename a temporary table with
    * the same name, then, if that does not exist, rename the table in the current database.
+   *
+   * This assumes the database specified in `newName` matches the one in `oldName`.
    */
-  def renameTable(oldName: TableIdentifier, newName: String): Unit = synchronized {
+  def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
     val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
+    newName.database.map(formatDatabaseName).foreach { newDb =>
+      if (db != newDb) {
+        throw new AnalysisException(
+          s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
+      }
+    }
+
     val oldTableName = formatTableName(oldName.table)
-    val newTableName = formatTableName(newName)
+    val newTableName = formatTableName(newName.table)
     if (db == globalTempViewManager.database) {
       globalTempViewManager.rename(oldTableName, newTableName)
     } else {
@@ -476,6 +483,11 @@ class SessionCatalog(
         requireTableNotExists(TableIdentifier(newTableName, Some(db)))
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
+        if (newName.database.isDefined) {
+          throw new AnalysisException(
+            s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
+              s"name '${newName.database.get}' in the destination table")
+        }
         if (tempTables.contains(newTableName)) {
           throw new AnalysisException(s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': " +
             "destination table already exists")
@@ -742,6 +754,20 @@ class SessionCatalog(
   }
 
   /**
+   * List the metadata of partitions that belong to the specified table, assuming it exists, that
+   * satisfy the given partition-pruning predicate expressions.
+   */
+  def listPartitionsByFilter(
+      tableName: TableIdentifier,
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(tableName.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
+    externalCatalog.listPartitionsByFilter(db, table, predicates)
+  }
+
+  /**
    * Verify if the input partition spec exactly matches the existing defined partition spec
    * The columns must be the same but the orders could be different.
    */
@@ -915,7 +941,10 @@ class SessionCatalog(
         requireDbExists(db)
         if (externalCatalog.functionExists(db, name.funcName)) {
           val metadata = externalCatalog.getFunction(db, name.funcName)
-          new ExpressionInfo(metadata.className, qualifiedName.unquotedString)
+          new ExpressionInfo(
+            metadata.className,
+            qualifiedName.database.orNull,
+            qualifiedName.identifier)
         } else {
           failFunctionLookup(name.funcName)
         }
@@ -972,7 +1001,10 @@ class SessionCatalog(
     // catalog. So, it is possible that qualifiedName is not exactly the same as
     // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
     // At here, we preserve the input from the user.
-    val info = new ExpressionInfo(catalogFunction.className, qualifiedName.unquotedString)
+    val info = new ExpressionInfo(
+      catalogFunction.className,
+      qualifiedName.database.orNull,
+      qualifiedName.funcName)
     val builder = makeFunctionBuilder(qualifiedName.unquotedString, catalogFunction.className)
     createTempFunction(qualifiedName.unquotedString, info, builder, ignoreIfExists = false)
     // Now, we need to create the Expression.

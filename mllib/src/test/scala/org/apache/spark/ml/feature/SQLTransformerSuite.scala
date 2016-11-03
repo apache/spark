@@ -43,6 +43,7 @@ class SQLTransformerSuite
     assert(result.schema.toString == resultSchema.toString)
     assert(resultSchema == expected.schema)
     assert(result.collect().toSeq == expected.collect().toSeq)
+    assert(original.sparkSession.catalog.listTables().count() == 0)
   }
 
   test("read/write") {

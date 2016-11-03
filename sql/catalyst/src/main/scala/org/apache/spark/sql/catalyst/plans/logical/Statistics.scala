@@ -98,7 +98,7 @@ case class StringColumnStat(statRow: InternalRow) {
   // The indices here must be consistent with `ColumnStatStruct.stringColumnStat`.
   val numNulls: Long = statRow.getLong(0)
   val avgColLen: Double = statRow.getDouble(1)
-  val maxColLen: Long = statRow.getLong(2)
+  val maxColLen: Long = statRow.getInt(2)
   val ndv: Long = statRow.getLong(3)
 }
 
@@ -106,7 +106,7 @@ case class BinaryColumnStat(statRow: InternalRow) {
   // The indices here must be consistent with `ColumnStatStruct.binaryColumnStat`.
   val numNulls: Long = statRow.getLong(0)
   val avgColLen: Double = statRow.getDouble(1)
-  val maxColLen: Long = statRow.getLong(2)
+  val maxColLen: Long = statRow.getInt(2)
 }
 
 case class BooleanColumnStat(statRow: InternalRow) {

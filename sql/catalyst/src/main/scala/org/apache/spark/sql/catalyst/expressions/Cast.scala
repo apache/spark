@@ -114,8 +114,12 @@ object Cast {
 
 /** Cast the child expression to the target data type. */
 @ExpressionDescription(
-  usage = " - Cast value v to the target data type.",
-  extended = "> SELECT _FUNC_('10' as int);\n 10")
+  usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('10' as int);
+       10
+  """)
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
@@ -657,7 +661,12 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
     case StringType =>
       (c, evPrim, evNull) =>
-        s"$evPrim = CalendarInterval.fromString($c.toString());"
+        s"""$evPrim = CalendarInterval.fromString($c.toString());
+           if(${evPrim} == null) {
+             ${evNull} = true;
+           }
+         """.stripMargin
+
   }
 
   private[this] def decimalToTimestampCode(d: String): String =
