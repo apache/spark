@@ -192,10 +192,10 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     True
     >>> summary.cluster.collect() == transformed.select("prediction").collect()
     True
-    >>> summary.predictionCol
-    u'prediction'
-    >>> summary.featuresCol
-    u'features'
+    >>> summary.predictionCol == "prediction"
+    True
+    >>> summary.featuresCol == "features"
+    True
     >>> summary.k
     3
     >>> len(summary.clusterSizes)
@@ -514,10 +514,10 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     |[8.0,9.0]|         1|
     +---------+----------+
     ...
-    >>> summary.predictionCol
-    u'prediction'
-    >>> summary.featuresCol
-    u'features'
+    >>> summary.predictionCol == "prediction"
+    True
+    >>> summary.featuresCol == "features"
+    True
     >>> summary.k
     2
     >>> summary.cluster.show()
