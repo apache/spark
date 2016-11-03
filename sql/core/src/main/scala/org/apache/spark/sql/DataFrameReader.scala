@@ -331,8 +331,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
     if (parsedOptions.failFast) {
       // We can fail before starting to parse in cast of "FAILFAST" mode. In case of "PERMISIVE"
-      // mode, allows to read values as null for unsupported types. In case of "DROPMALFORMED"
-      // mode, drops records only containing non-null values in unsupported types.
+      // mode, it allows to read values as null for unsupported types. In case of "DROPMALFORMED"
+      // mode, it drops records only containing non-null values in unsupported types.
       JacksonUtils.verifySchema(schema)
     }
     val parsed = jsonRDD.mapPartitions { iter =>

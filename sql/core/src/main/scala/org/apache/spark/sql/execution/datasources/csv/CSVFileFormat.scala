@@ -145,8 +145,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     if (csvOptions.failFast) {
       // We can fail before starting to parse in cast of "FAILFAST" mode. In case of "PERMISIVE"
-      // mode, allows to read values as null for unsupported types. In case of "DROPMALFORMED"
-      // mode, drops records only containing non-null values in unsupported types. We should use
+      // mode, it allows to read values as null for unsupported types. In case of "DROPMALFORMED"
+      // mode, it drops records only containing non-null values in unsupported types. We should use
       // `requiredSchema` instead of whole schema `dataSchema` here to not to break the original
       // behaviour.
       verifySchema(requiredSchema)
