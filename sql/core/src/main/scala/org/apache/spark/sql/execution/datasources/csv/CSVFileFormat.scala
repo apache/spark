@@ -143,6 +143,15 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
+    if (csvOptions.failFast) {
+      // We can fail before starting to parse in cast of "FAILFAST" mode. In case of "PERMISIVE"
+      // mode, allows to read values as null for unsupported types. In case of "DROPMALFORMED"
+      // mode, drops records only containing non-null values in unsupported types. We should use
+      // `requiredSchema` instead of whole schema `dataSchema` here to not to break the original
+      // behaviour.
+      verifySchema(requiredSchema)
+    }
+
     (file: PartitionedFile) => {
       val lineIterator = {
         val conf = broadcastedHadoopConf.value.value
@@ -222,18 +231,18 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
   private def verifySchema(schema: StructType): Unit = {
-    def verifyType(dataType: DataType): Unit = dataType match {
+    def verifyType(name: String, dataType: DataType): Unit = dataType match {
         case ByteType | ShortType | IntegerType | LongType | FloatType |
              DoubleType | BooleanType | _: DecimalType | TimestampType |
              DateType | StringType =>
 
-        case udt: UserDefinedType[_] => verifyType(udt.sqlType)
+        case udt: UserDefinedType[_] => verifyType(name, udt.sqlType)
 
         case _ =>
           throw new UnsupportedOperationException(
-            s"CSV data source does not support ${dataType.simpleString} data type.")
+            s"Unable to convert column $name of type ${dataType.simpleString} to CSV.")
     }
 
-    schema.foreach(field => verifyType(field.dataType))
+    schema.foreach(field => verifyType(field.name, field.dataType))
   }
 }

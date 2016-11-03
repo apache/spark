@@ -1055,6 +1055,37 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode: {"))
   }
 
+  test("Unsupported types: FAILFAST mode") {
+    val schema = StructType(
+      StructField("a", CalendarIntervalType, true) :: Nil)
+    val exceptionOne = intercept[UnsupportedOperationException] {
+      // Read JSON data from RDD
+      spark.read
+        .option("mode", "FAILFAST")
+        .schema(schema)
+        .json(corruptRecords)
+        .collect()
+    }
+
+    assert(exceptionOne.getMessage.contains(
+      "Unable to convert column a of type calendarinterval to JSON."))
+
+    val exceptionTwo = intercept[UnsupportedOperationException] {
+      // Read JSON data from files.
+      withTempDir { path =>
+        spark.read
+          .option("mode", "FAILFAST")
+          .schema(schema)
+          .format("json")
+          .load(path.getAbsolutePath)
+          .collect()
+      }
+    }
+
+    assert(exceptionTwo.getMessage.contains(
+      "Unable to convert column a of type calendarinterval to JSON."))
+  }
+
   test("Corrupt records: DROPMALFORMED mode") {
     val schemaOne = StructType(
       StructField("a", StringType, true) ::

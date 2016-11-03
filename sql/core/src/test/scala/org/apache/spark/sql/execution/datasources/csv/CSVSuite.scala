@@ -669,32 +669,41 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
       var msg = intercept[UnsupportedOperationException] {
-        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b)").write.csv(csvDir)
+        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b) as a").write.csv(csvDir)
       }.getMessage
-      assert(msg.contains("CSV data source does not support struct<a:int,b:string> data type"))
+      assert(msg.contains("Unable to convert column a of type struct<a:int,b:string> to CSV"))
 
       msg = intercept[UnsupportedOperationException] {
         Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.csv(csvDir)
       }.getMessage
-      assert(msg.contains("CSV data source does not support map<string,int> data type"))
+      assert(msg.contains("Unable to convert column cars of type map<string,int> to CSV"))
 
       msg = intercept[UnsupportedOperationException] {
         Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands").write.csv(csvDir)
       }.getMessage
-      assert(msg.contains("CSV data source does not support array<string> data type"))
+      assert(msg.contains("Unable to convert column brands of type array<string> to CSV"))
 
       msg = intercept[UnsupportedOperationException] {
         Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
           .write.csv(csvDir)
       }.getMessage
-      assert(msg.contains("CSV data source does not support array<double> data type"))
+      assert(msg.contains("Unable to convert column vectors of type array<double> to CSV"))
 
-      msg = intercept[SparkException] {
+      msg = intercept[UnsupportedOperationException] {
         val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
-        spark.range(1).write.csv(csvDir)
-        spark.read.schema(schema).csv(csvDir).collect()
-      }.getCause.getMessage
-      assert(msg.contains("Unsupported type: array"))
+        val path = s"$csvDir/tmp"
+        spark.range(1).write.csv(path)
+        spark.read.schema(schema).option("mode", "FAILFAST").csv(path).collect()
+      }.getMessage
+      assert(msg.contains("Unable to convert column a of type array<double> to CSV"))
+
+     msg = intercept[SparkException] {
+        val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
+        val path = s"$csvDir/tmp1"
+        spark.range(1).write.csv(path)
+        spark.read.schema(schema).csv(path).show()
+     }.getCause.getMessage
+     assert(msg.contains("Unsupported type: array"))
     }
   }
 
