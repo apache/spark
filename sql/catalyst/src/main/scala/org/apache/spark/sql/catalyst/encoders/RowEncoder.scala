@@ -122,6 +122,7 @@ object RowEncoder {
     case t @ ArrayType(et, cn) =>
       val cls = inputObject.dataType.asInstanceOf[ObjectType].cls
       et match {
+/*
         case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType
           if !cn && (
             cls.isAssignableFrom(classOf[Array[Boolean]]) ||
@@ -131,11 +132,13 @@ object RowEncoder {
             cls.isAssignableFrom(classOf[Array[Long]]) ||
             cls.isAssignableFrom(classOf[Array[Float]]) ||
             cls.isAssignableFrom(classOf[Array[Double]])) =>
+          print(s"1@ET: $et, $cn, $cls\n")
           StaticInvoke(
             classOf[UnsafeArrayData],
             ArrayType(et, false),
             "fromPrimitiveArray",
             inputObject :: Nil)
+*/
         case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
           NewInstance(
             classOf[GenericArrayData],
@@ -208,18 +211,8 @@ object RowEncoder {
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
     // In order to support both Array and Seq in external row, we make this as java.lang.Object.
-    case a @ ArrayType(et, cn) if !cn =>
-      et match {
-        case BooleanType => ObjectType(classOf[Array[Boolean]])
-        case ByteType => ObjectType(classOf[Array[Byte]])
-        case ShortType => ObjectType(classOf[Array[Short]])
-        case IntegerType => ObjectType(classOf[Array[Int]])
-        case LongType => ObjectType(classOf[Array[Long]])
-        case FloatType => ObjectType(classOf[Array[Float]])
-        case DoubleType => ObjectType(classOf[Array[Double]])
-        case _ => ObjectType(classOf[java.lang.Object])
-      }
-    case _: ArrayType => ObjectType(classOf[java.lang.Object])
+    case a @ ArrayType(et, cn) =>
+      ObjectType(classOf[java.lang.Object])
     case _ => externalDataTypeFor(dt)
   }
 
