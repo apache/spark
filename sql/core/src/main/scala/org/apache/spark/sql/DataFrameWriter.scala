@@ -209,11 +209,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       df.sparkSession,
       className = source,
       partitionColumns = partitioningColumns.getOrElse(Nil),
-      bucketSpec = getBucketSpec,
+      bucketSpec = None,
       options = extraOptions.toMap)
 
     dataSource.write(mode, df)
   }
+
   /**
    * Inserts the content of the [[DataFrame]] to the specified table. It requires that
    * the schema of the [[DataFrame]] is the same as the schema of the table.
