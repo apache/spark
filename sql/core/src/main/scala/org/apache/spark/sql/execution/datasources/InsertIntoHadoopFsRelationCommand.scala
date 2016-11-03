@@ -21,6 +21,7 @@ import java.io.IOException
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -86,8 +87,9 @@ case class InsertIntoHadoopFsRelationCommand(
     if (doInsertion) {
       val committer = FileCommitProtocol.instantiate(
         sparkSession.sessionState.conf.fileCommitProtocolClass,
-        outputPath.toString,
-        isAppend)
+        jobId = java.util.UUID.randomUUID().toString,
+        outputPath = outputPath.toString,
+        isAppend = isAppend)
 
       FileFormatWriter.write(
         sparkSession = sparkSession,
