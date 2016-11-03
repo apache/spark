@@ -182,9 +182,10 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
           "Cannot overwrite a path that is also being read from.")
       }
 
-      val overwritingSinglePartition = (overwrite.specificPartition.isDefined &&
+      val overwritingSinglePartition =
+        overwrite.specificPartition.isDefined &&
         t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
-        l.catalogTable.get.partitionProviderIsHive)
+        l.catalogTable.get.tracksPartitionsInCatalog
 
       val effectiveOutputPath = if (overwritingSinglePartition) {
         val partition = t.sparkSession.sessionState.catalog.getPartition(
@@ -203,7 +204,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
         if (l.catalogTable.isDefined && updatedPartitions.nonEmpty &&
             l.catalogTable.get.partitionColumnNames.nonEmpty &&
-            l.catalogTable.get.partitionProviderIsHive) {
+            l.catalogTable.get.tracksPartitionsInCatalog) {
           val metastoreUpdater = AlterTableAddPartitionCommand(
             l.catalogTable.get.identifier,
             updatedPartitions.map(p => (p, None)),
