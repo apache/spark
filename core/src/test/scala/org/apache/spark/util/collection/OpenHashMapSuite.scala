@@ -49,9 +49,6 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     intercept[IllegalArgumentException] {
       new OpenHashMap[String, Int](-1)
     }
-    intercept[IllegalArgumentException] {
-      new OpenHashMap[String, String](0)
-    }
   }
 
   test("primitive value") {
