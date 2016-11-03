@@ -206,7 +206,7 @@ private[spark] object UIData {
           recordsRead = metrics.recordsRead)
       }
     }
-    val EMPTY = InputMetricsUIData(0, 0)
+    private val EMPTY = InputMetricsUIData(0, 0)
   }
 
   case class OutputMetricsUIData(bytesWritten: Long, recordsWritten: Long)
@@ -220,7 +220,7 @@ private[spark] object UIData {
           recordsWritten = metrics.recordsWritten)
       }
     }
-    val EMPTY = OutputMetricsUIData(0, 0)
+    private val EMPTY = OutputMetricsUIData(0, 0)
   }
 
   case class ShuffleReadMetricsUIData(
@@ -258,7 +258,7 @@ private[spark] object UIData {
         )
       }
     }
-    val EMPTY = ShuffleReadMetricsUIData(0, 0, 0, 0, 0, 0, 0, 0)
+    private val EMPTY = ShuffleReadMetricsUIData(0, 0, 0, 0, 0, 0, 0, 0)
   }
 
   case class ShuffleWriteMetricsUIData(
@@ -278,7 +278,7 @@ private[spark] object UIData {
         )
       }
     }
-    val EMPTY = ShuffleWriteMetricsUIData(0, 0, 0)
+    private val EMPTY = ShuffleWriteMetricsUIData(0, 0, 0)
   }
 
 }
