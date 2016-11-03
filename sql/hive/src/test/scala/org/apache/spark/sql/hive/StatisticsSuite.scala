@@ -310,38 +310,49 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     }
   }
 
-  test("test table-level statistics for data source table created in HiveExternalCatalog") {
-    val parquetTable = "parquetTable"
-    withTable(parquetTable) {
-      sql(s"CREATE TABLE $parquetTable (key STRING, value STRING) USING PARQUET")
-      val catalogTable = spark.sessionState.catalog.getTableMetadata(TableIdentifier(parquetTable))
-      assert(DDLUtils.isDatasourceTable(catalogTable))
+  private def testUpdatingTableStats(tableDescription: String, createTableCmd: String): Unit = {
+    test("test table-level statistics for " + tableDescription) {
+      val parquetTable = "parquetTable"
+      withTable(parquetTable) {
+        sql(createTableCmd)
+        val catalogTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(parquetTable))
+        assert(DDLUtils.isDatasourceTable(catalogTable))
 
-      sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
-      checkTableStats(
-        parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
+        sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+        checkTableStats(
+          parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
 
-      // noscan won't count the number of rows
-      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      val fetchedStats1 = checkTableStats(
-        parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
+        // noscan won't count the number of rows
+        sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
+        val fetchedStats1 = checkTableStats(
+          parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
 
-      sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
-      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
-      val fetchedStats2 = checkTableStats(
-        parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
-      assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
+        sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+        sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
+        val fetchedStats2 = checkTableStats(
+          parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
+        assert(fetchedStats2.get.sizeInBytes > fetchedStats1.get.sizeInBytes)
 
-      // without noscan, we count the number of rows
-      sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
-      val fetchedStats3 = checkTableStats(
-        parquetTable,
-        isDataSourceTable = true,
-        hasSizeInBytes = true,
-        expectedRowCounts = Some(1000))
-      assert(fetchedStats3.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
+        // without noscan, we count the number of rows
+        sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS")
+        val fetchedStats3 = checkTableStats(
+          parquetTable,
+          isDataSourceTable = true,
+          hasSizeInBytes = true,
+          expectedRowCounts = Some(1000))
+        assert(fetchedStats3.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
+      }
     }
   }
+
+  testUpdatingTableStats(
+    "data source table created in HiveExternalCatalog",
+    "CREATE TABLE parquetTable (key STRING, value STRING) USING PARQUET")
+
+  testUpdatingTableStats(
+    "partitioned data source table",
+    "CREATE TABLE parquetTable (key STRING, value STRING) USING PARQUET PARTITIONED BY (key)")
 
   test("statistics collection of a table with zero column") {
     val table_no_cols = "table_no_cols"

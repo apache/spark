@@ -25,15 +25,23 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, No
 trait CodegenFallback extends Expression {
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    foreach {
-      case n: Nondeterministic => n.setInitialValues()
-      case _ =>
-    }
-
     // LeafNode does not need `input`
     val input = if (this.isInstanceOf[LeafExpression]) "null" else ctx.INPUT_ROW
     val idx = ctx.references.length
     ctx.references += this
+    var childIndex = idx
+    this.foreach {
+      case n: Nondeterministic =>
+        // This might add the current expression twice, but it won't hurt.
+        ctx.references += n
+        childIndex += 1
+        ctx.addPartitionInitializationStatement(
+          s"""
+             |((Nondeterministic) references[$childIndex])
+             |  .initialize(partitionIndex);
+          """.stripMargin)
+      case _ =>
+    }
     val objectTerm = ctx.freshName("obj")
     val placeHolder = ctx.registerComment(this.toString)
     if (nullable) {

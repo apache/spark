@@ -177,7 +177,7 @@ class CacheManager extends Logging {
 
   /**
    * Traverses a given `plan` and searches for the occurrences of `qualifiedPath` in the
-   * [[org.apache.spark.sql.execution.datasources.FileCatalog]] of any [[HadoopFsRelation]] nodes
+   * [[org.apache.spark.sql.execution.datasources.FileIndex]] of any [[HadoopFsRelation]] nodes
    * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
    * false.
    */
@@ -185,9 +185,10 @@ class CacheManager extends Logging {
     plan match {
       case lr: LogicalRelation => lr.relation match {
         case hr: HadoopFsRelation =>
+          val prefixToInvalidate = qualifiedPath.toString
           val invalidate = hr.location.rootPaths
-            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-            .contains(qualifiedPath)
+            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory).toString)
+            .exists(_.startsWith(prefixToInvalidate))
           if (invalidate) hr.location.refresh()
           invalidate
         case _ => false

@@ -998,7 +998,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("not_skip_hive_metadata"),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat.empty.copy(
-          properties = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "false")
+          locationUri = Some(tempPath.getCanonicalPath),
+          properties = Map("skipHiveMetadata" -> "false")
         ),
         schema = schema,
         provider = Some("parquet")
@@ -1282,9 +1283,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sql("insert into t values (2, 3, 4)")
         checkAnswer(table("t"), Seq(Row(1, 2, 3), Row(2, 3, 4)))
         val catalogTable = hiveClient.getTable("default", "t")
-        // there should not be a lowercase key 'path' now
-        assert(catalogTable.storage.properties.get("path").isEmpty)
-        assert(catalogTable.storage.properties.get("PATH").isDefined)
+        assert(catalogTable.storage.locationUri.isDefined)
       }
     }
   }
@@ -1321,22 +1320,55 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sharedState.externalCatalog.getTable("default", "t")
       }.getMessage
       assert(e.contains(s"Could not read schema from the hive metastore because it is corrupted"))
+
+      withDebugMode {
+        val tableMeta = sharedState.externalCatalog.getTable("default", "t")
+        assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
+        assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
+      }
     } finally {
       hiveClient.dropTable("default", "t", ignoreIfNotExists = true, purge = true)
     }
   }
 
   test("should keep data source entries in table properties when debug mode is on") {
-    val previousValue = sparkSession.sparkContext.conf.get(DEBUG_MODE)
-    try {
-      sparkSession.sparkContext.conf.set(DEBUG_MODE, true)
+    withDebugMode {
       val newSession = sparkSession.newSession()
       newSession.sql("CREATE TABLE abc(i int) USING json")
       val tableMeta = newSession.sessionState.catalog.getTableMetadata(TableIdentifier("abc"))
       assert(tableMeta.properties(DATASOURCE_SCHEMA_NUMPARTS).toInt == 1)
       assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
+    }
+  }
+
+  private def withDebugMode(f: => Unit): Unit = {
+    val previousValue = sparkSession.sparkContext.conf.get(DEBUG_MODE)
+    try {
+      sparkSession.sparkContext.conf.set(DEBUG_MODE, true)
+      f
     } finally {
       sparkSession.sparkContext.conf.set(DEBUG_MODE, previousValue)
+    }
+  }
+
+  test("SPARK-17470: support old table that stores table location in storage properties") {
+    withTable("old") {
+      withTempPath { path =>
+        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getAbsolutePath)
+        val tableDesc = CatalogTable(
+          identifier = TableIdentifier("old", Some("default")),
+          tableType = CatalogTableType.EXTERNAL,
+          storage = CatalogStorageFormat.empty.copy(
+            properties = Map("path" -> path.getAbsolutePath)
+          ),
+          schema = new StructType(),
+          properties = Map(
+            HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet",
+            HiveExternalCatalog.DATASOURCE_SCHEMA ->
+              new StructType().add("i", "int").add("j", "string").json))
+        hiveClient.createTable(tableDesc, ignoreIfExists = false)
+        checkAnswer(spark.table("old"), Row(1, "a"))
+      }
     }
   }
 }

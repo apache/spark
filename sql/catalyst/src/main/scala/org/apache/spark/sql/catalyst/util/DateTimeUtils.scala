@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
@@ -79,14 +79,14 @@ object DateTimeUtils {
   // `SimpleDateFormat` is not thread-safe.
   val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     }
   }
 
   // `SimpleDateFormat` is not thread-safe.
   private val threadLocalDateFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
-      new SimpleDateFormat("yyyy-MM-dd")
+      new SimpleDateFormat("yyyy-MM-dd", Locale.US)
     }
   }
 

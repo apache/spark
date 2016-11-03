@@ -171,7 +171,7 @@ class NaiveBayes @Since("1.5.0") (
     // Aggregates term frequencies per label.
     // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
     // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd
+    val aggregated = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
       .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
       }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
       seqOp = {

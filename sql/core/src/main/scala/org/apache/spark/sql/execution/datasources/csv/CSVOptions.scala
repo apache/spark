@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 import org.apache.commons.lang3.time.FastDateFormat
 
@@ -104,11 +105,11 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
 
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =
-    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"))
+    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"), Locale.US)
 
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
-      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"))
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), Locale.US)
 
   val maxColumns = getInt("maxColumns", 20480)
 
