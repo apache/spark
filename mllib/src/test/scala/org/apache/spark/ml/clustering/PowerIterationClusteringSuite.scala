@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
 class PowerIterationClusteringSuite extends SparkFunSuite
   with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -76,58 +76,43 @@ class PowerIterationClusteringSuite extends SparkFunSuite
 
   test("power iteration clustering") {
     val n = n1 + n2
-    val model = new PowerIterationClustering()
+
+    val result = new PowerIterationClustering()
       .setK(2)
       .setMaxIter(40)
-      .fit(data)
+      .transform(data)
+
     val predictions = Array.fill(2)(mutable.Set.empty[Long])
-    model.assignments.collect().foreach { a =>
-      predictions(a.cluster) += a.id
+    result.select("features", "prediction").collect().foreach {
+      case Row(id: Long, cluster: Integer) => predictions(cluster) += id
     }
     assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
 
-    val model2 = new PowerIterationClustering()
+    val result2 = new PowerIterationClustering()
       .setK(2)
       .setMaxIter(10)
       .setInitMode("degree")
-      .fit(data)
+      .transform(data)
     val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
-    model2.assignments.collect().foreach { a =>
-      predictions2(a.cluster) += a.id
+    result2.select("features", "prediction").collect().foreach {
+      case Row(id: Long, cluster: Integer) => predictions2(cluster) += id
     }
     assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
-  }
 
-  test("transform") {
-    val predictionColName = "pic_prediction"
-    val model = new PowerIterationClustering()
-      .setK(2)
-      .setMaxIter(10)
-      .setPredictionCol(predictionColName)
-      .fit(data)
-
-    val transformed = model.transform(data)
-    val expectedColumns = Array("features", predictionColName)
+    val expectedColumns = Array("features", "prediction")
     expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
+      assert(result2.columns.contains(column))
     }
   }
 
   test("read/write") {
-    def checkModelData(model: PowerIterationClusteringModel,
-                       model2: PowerIterationClusteringModel): Unit = {
-      assert(model.getK === model2.getK)
-      val modelAssignments =
-        model.assignments.map(x => (x.id, x.cluster))
-      val model2Assignments =
-        model2.assignments.map(x => (x.id, x.cluster))
-      val unequalElements = modelAssignments.join(model2Assignments).filter {
-        case (id, (c1, c2)) => c1 != c2 }.count()
-      assert(unequalElements === 0L)
-    }
-    val pic = new PowerIterationClustering()
-    testEstimatorAndModelReadWrite(pic, data, PowerIterationClusteringSuite.allParamSettings,
-      checkModelData)
+    val t = new PowerIterationClustering()
+      .setK(4)
+      .setMaxIter(100)
+      .setInitMode("degree")
+      .setFeaturesCol("test_feature")
+      .setPredictionCol("test_prediction")
+    testDefaultReadWrite(t)
   }
 }
 
@@ -161,16 +146,4 @@ object PowerIterationClusteringSuite {
       .map(v => TestRow(v))
     spark.createDataFrame(rdd)
   }
-
-  /**
-   * Mapping from all Params to valid settings which differ from the defaults.
-   * This is useful for tests which need to exercise all Params, such as save/load.
-   * This excludes input columns to simplify some tests.
-   */
-  val allParamSettings: Map[String, Any] = Map(
-    "predictionCol" -> "myPrediction",
-    "k" -> 2,
-    "maxIter" -> 10,
-    "initMode" -> "random"
-  )
 }
