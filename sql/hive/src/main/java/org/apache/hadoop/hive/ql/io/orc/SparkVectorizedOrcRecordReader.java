@@ -50,7 +50,9 @@ public class SparkVectorizedOrcRecordReader
     private float progress = 0.0f;
     private ObjectInspector objectInspector;
 
-    SparkVectorizedOrcRecordReader(Reader file, Configuration conf,
+    SparkVectorizedOrcRecordReader(
+        Reader file,
+        Configuration conf,
         FileSplit fileSplit) throws IOException {
       this.offset = fileSplit.getStart();
       this.length = fileSplit.getLength();
@@ -91,17 +93,19 @@ public class SparkVectorizedOrcRecordReader
                 column.initBuffer();
                 return column;
               case DECIMAL:
-                DecimalTypeInfo tInfo = (DecimalTypeInfo) primitiveTypeInfo;
+                DecimalTypeInfo decimalTypeInfo = (DecimalTypeInfo) primitiveTypeInfo;
                 return new DecimalColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
-                    tInfo.precision(), tInfo.scale());
+                    decimalTypeInfo.precision(), decimalTypeInfo.scale());
               default:
                 throw new RuntimeException("Vectorizaton is not supported for datatype:"
-                    + primitiveTypeInfo.getPrimitiveCategory());
+                    + primitiveTypeInfo.getPrimitiveCategory() + ". "
+                    + "Please disable spark.sql.orc.enableVectorizedReader.");
             }
           }
         default:
           throw new RuntimeException("Vectorization is not supported for datatype:"
-              + inspector.getCategory());
+              + inspector.getCategory() + ". "
+              + "Please disable the config spark.sql.orc.enableVectorizedReader.");
       }
     }
 
