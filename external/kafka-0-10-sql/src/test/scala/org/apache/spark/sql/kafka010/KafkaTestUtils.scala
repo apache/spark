@@ -43,8 +43,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.streaming.DataStreamReader
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -244,17 +242,6 @@ class KafkaTestUtils extends Logging {
     kc.close()
     logInfo("Closed consumer to get latest offsets")
     offsets
-  }
-
-  /** Return a kafka reader with standard testing options (e.g. broker) plus those specified */
-  def reader(spark: SparkSession, options: (String, String)*): DataStreamReader = {
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", this.brokerAddress)
-      .option("kafkaConsumer.pollTimeoutMs", 10 * 1000)
-    options.foreach { case (k, v) => reader.option(k, v) }
-    reader
   }
 
   private def brokerConfiguration: Properties = {
