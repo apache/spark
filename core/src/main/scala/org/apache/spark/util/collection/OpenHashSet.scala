@@ -271,8 +271,12 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   private def hashcode(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
 
   private def nextPowerOf2(n: Int): Int = {
-    val highBit = Integer.highestOneBit(if (n == 0) 1 else n)
-    if (highBit == n) n else highBit << 1
+    if (n == 0) {
+      2
+    } else {
+      val highBit = Integer.highestOneBit(n)
+      if (highBit == n) n else highBit << 1
+    }
   }
 }
 
