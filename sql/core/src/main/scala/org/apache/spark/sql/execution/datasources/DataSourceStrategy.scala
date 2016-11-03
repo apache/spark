@@ -237,6 +237,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       sparkSession: SparkSession,
       simpleCatalogRelation: SimpleCatalogRelation): LogicalPlan = {
     val table = simpleCatalogRelation.catalogTable
+    val pathOption = table.storage.locationUri.map("path" -> _)
     val dataSource =
       DataSource(
         sparkSession,
@@ -244,7 +245,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         partitionColumns = table.partitionColumnNames,
         bucketSpec = table.bucketSpec,
         className = table.provider.get,
-        options = table.storage.properties)
+        options = table.storage.properties ++ pathOption)
 
     LogicalRelation(
       dataSource.resolveRelation(),
