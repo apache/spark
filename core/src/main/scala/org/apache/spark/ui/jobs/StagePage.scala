@@ -905,7 +905,7 @@ private[ui] class TaskDataSource(
     val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
     val gettingResultTime = getGettingResultTime(info, currentTime)
 
-    val externalAccumulableReadable = info.accumulables
+    val externalAccumulableReadable = info._accumulables
       .filterNot(_.internal)
       .flatMap { a =>
         (a.name, a.update) match {

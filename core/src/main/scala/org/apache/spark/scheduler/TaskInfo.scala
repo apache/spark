@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.TaskState
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.annotation.DeveloperApi
@@ -52,7 +54,12 @@ class TaskInfo(
    * accumulable to be updated multiple times in a single task or for two accumulables with the
    * same name but different IDs to exist in a task.
    */
-  var accumulables: List[AccumulableInfo] = Nil
+  lazy val accumulables: ListBuffer[AccumulableInfo] = ListBuffer(_accumulables: _*)
+
+  // Note: all internal uses should use _accumulables; the above `accumulables` is only exposed
+  // for backwards-compatibility purposes for non-Spark-users of this class.
+  // See SPARK-18236 for discussion.
+  private[spark] var _accumulables: List[AccumulableInfo] = Nil
 
   /**
    * The time when the task has completed successfully (including the time to remotely fetch

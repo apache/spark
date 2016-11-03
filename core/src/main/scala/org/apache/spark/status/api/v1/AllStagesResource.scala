@@ -146,7 +146,7 @@ private[v1] object AllStagesResource {
       host = uiData.taskInfo.host,
       taskLocality = uiData.taskInfo.taskLocality.toString(),
       speculative = uiData.taskInfo.speculative,
-      accumulatorUpdates = uiData.taskInfo.accumulables.map { convertAccumulableInfo },
+      accumulatorUpdates = uiData.taskInfo._accumulables.map { convertAccumulableInfo },
       errorMessage = uiData.errorMessage,
       taskMetrics = uiData.metrics.map { convertUiTaskMetrics }
     )

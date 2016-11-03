@@ -347,7 +347,7 @@ class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
       taskEnd.taskInfo.taskId,
       taskEnd.stageId,
       taskEnd.stageAttemptId,
-      taskEnd.taskInfo.accumulables.flatMap { a =>
+      taskEnd.taskInfo._accumulables.flatMap { a =>
         // Filter out accumulators that are not SQL metrics
         // For now we assume all SQL metrics are Long's that have been JSON serialized as String's
         if (a.metadata == Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)) {

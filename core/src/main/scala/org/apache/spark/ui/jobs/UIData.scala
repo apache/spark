@@ -170,7 +170,7 @@ private[spark] object UIData {
         speculative = taskInfo.speculative
       )
       newTaskInfo.gettingResultTime = taskInfo.gettingResultTime
-      newTaskInfo.accumulables = taskInfo.accumulables.filter {
+      newTaskInfo._accumulables = taskInfo._accumulables.filter {
         accum => !accum.internal && accum.metadata != Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
       }
       newTaskInfo.finishTime = taskInfo.finishTime

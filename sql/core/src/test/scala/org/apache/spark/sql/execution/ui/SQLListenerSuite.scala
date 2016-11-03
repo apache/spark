@@ -374,7 +374,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.value), None)
     val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.value), None)
     val taskInfo = createTaskInfo(0, 0)
-    taskInfo.accumulables = List(sqlMetricInfo, nonSqlMetricInfo)
+    taskInfo._accumulables = List(sqlMetricInfo, nonSqlMetricInfo)
     val taskEnd = SparkListenerTaskEnd(0, 0, "just-a-task", null, taskInfo, null)
     listener.onOtherEvent(executionStart)
     listener.onJobStart(jobStart)
