@@ -44,7 +44,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def shortName(): String = "text"
 
   private def verifySchema(schema: StructType): Unit = {
-    if (schema.size > 1) {
+    if (schema.size != 1) {
       throw new UnsupportedOperationException(
         s"Text data source supports only a single column, and you have ${schema.size} columns.")
     }
