@@ -1581,7 +1581,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         } finally {
           // scalastyle:off println
           Utils.classForName("org.apache.derby.jdbc.EmbeddedDriver")
-          val dir = new File("../../assembly/metastore_db")
+          val dir = new File("assembly/metastore_db")
           println("connecting to: " + dir.getCanonicalPath)
           val conn = DriverManager.getConnection("jdbc:derby:" + dir.getCanonicalPath)
           var query = conn.createStatement
