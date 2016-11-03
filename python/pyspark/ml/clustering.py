@@ -17,14 +17,70 @@
 
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
 
-__all__ = ['BisectingKMeans', 'BisectingKMeansModel',
-           'KMeans', 'KMeansModel',
+__all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
+           'KMeans', 'KMeansModel', 'KMeansSummary',
            'GaussianMixture', 'GaussianMixtureModel',
            'LDA', 'LDAModel', 'LocalLDAModel', 'DistributedLDAModel']
+
+
+class ClusteringSummary(JavaWrapper):
+    """
+    Summary of clustering algorithms.
+
+    .. versionadded:: 2.1.0
+    """
+
+    @property
+    @since("2.1.0")
+    def predictions(self):
+        """
+        Dataframe produced by the model's `transform` method.
+        """
+        return self._call_java("predictions")
+
+    @property
+    @since("2.1.0")
+    def predictionCol(self):
+        """
+        Column of predicted clusters in `predictions`.
+        """
+        return self._call_java("predictionCol")
+
+    @property
+    @since("2.1.0")
+    def featuresCol(self):
+        """
+        Column of features clusters in `predictions`.
+        """
+        return self._call_java("featuresCol")
+
+    @property
+    @since("2.1.0")
+    def k(self):
+        """
+        Number of clusters.
+        """
+        return self._call_java("k")
+
+    @property
+    @since("2.1.0")
+    def cluster(self):
+        """
+        Cluster centers of the transformed data.
+        """
+        return self._call_java("cluster")
+
+    @property
+    @since("2.1.0")
+    def clusterSizes(self):
+        """
+        Size of (number of data points in) each cluster.
+        """
+        return self._call_java("clusterSizes")
 
 
 class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
@@ -55,6 +111,40 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         The DataFrame has two columns: mean (Vector) and cov (Matrix).
         """
         return self._call_java("gaussiansDF")
+
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary of model on training set.
+        """
+        java_gmm_summary = self._call_java("summary")
+        return GaussianMixtureSummary(java_gmm_summary)
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a summary exists for this model instance.
+        """
+        return self._call_java("hasSummary")
+
+
+@inherit_doc
+class GaussianMixtureSummary(ClusteringSummary):
+    """
+    Summary of BisectingKMeans algorithms.
+
+    .. versionadded:: 2.1.0
+    """
+
+    @property
+    @since("2.1.0")
+    def probability(self):
+        """
+        Probability of each cluster.
+        """
+        return self._call_java("probability")
 
 
 @inherit_doc
@@ -201,6 +291,32 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("computeCost", dataset)
 
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary of model on training set.
+        """
+        java_km_summary = self._call_java("summary")
+        return KMeansSummary(java_km_summary)
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a summary exists for this model instance.
+        """
+        return self._call_java("hasSummary")
+
+
+@inherit_doc
+class KMeansSummary(ClusteringSummary):
+    """
+    Summary of KMeans algorithms.
+
+    .. versionadded:: 2.1.0
+    """
+
 
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
@@ -345,6 +461,32 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         and their corresponding cluster centers.
         """
         return self._call_java("computeCost", dataset)
+
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary of model on training set.
+        """
+        java_bkm_summary = self._call_java("summary")
+        return BisectingKMeansSummary(java_bkm_summary)
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a summary exists for this model instance.
+        """
+        return self._call_java("hasSummary")
+
+
+@inherit_doc
+class BisectingKMeansSummary(ClusteringSummary):
+    """
+    Summary of BisectingKMeans algorithms.
+
+    .. versionadded:: 2.1.0
+    """
 
 
 @inherit_doc
