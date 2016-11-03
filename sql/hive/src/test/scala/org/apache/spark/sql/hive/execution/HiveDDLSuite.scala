@@ -236,8 +236,10 @@ class HiveDDLSuite
         }
       }
 
-      sql("ALTER TABLE sales DROP PARTITION (country < 'KR')")
+      sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter > '2')")
       checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=CA/quarter=1") ::
+        Row("country=CA/quarter=2") ::
         Row("country=KR/quarter=1") ::
         Row("country=KR/quarter=2") ::
         Row("country=KR/quarter=3") ::
@@ -247,7 +249,7 @@ class HiveDDLSuite
         Row("country=US/quarter=3") ::
         Row("country=US/quarter=4") :: Nil)
 
-      sql("ALTER TABLE sales DROP PARTITION (quarter <= '2')")
+      sql("ALTER TABLE sales DROP PARTITION (country < 'KR'), PARTITION (quarter <= '2')")
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") ::
         Row("country=KR/quarter=4") ::
@@ -259,10 +261,13 @@ class HiveDDLSuite
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") ::
         Row("country=US/quarter=4") :: Nil)
+
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= 3), PARTITION (quarter >= '4')")
+      checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
     }
   }
 
-  test("SPARK-17732: Error handlnig for drop partitions by filter") {
+  test("SPARK-17732: Error handling for drop partitions by filter") {
     withTable("sales") {
       sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
 

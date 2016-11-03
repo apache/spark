@@ -445,12 +445,14 @@ case class AlterTableDropPartitionCommand(
     }
 
     if (specs.exists(hasNonEqualToComparison)) {
-      val partitions = catalog.listPartitionsByFilter(table.identifier, specs)
-      if (partitions.nonEmpty) {
-        catalog.dropPartitions(
-          table.identifier, partitions.map(_.spec), ignoreIfNotExists = ifExists, purge = purge)
-      } else if (!ifExists) {
-        throw new AnalysisException(s"There is no partition for ${specs}.")
+      specs.foreach { spec =>
+        val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(spec))
+        if (partitions.nonEmpty) {
+          catalog.dropPartitions(
+            table.identifier, partitions.map(_.spec), ignoreIfNotExists = ifExists, purge = purge)
+        } else if (!ifExists) {
+          throw new AnalysisException(s"There is no partition for ${spec}.")
+        }
       }
     } else {
       val normalizedSpecs = specs.map { expr =>
