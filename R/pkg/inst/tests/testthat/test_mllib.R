@@ -939,4 +939,55 @@ test_that("spark.randomForest Classification", {
   unlink(modelPath)
 })
 
+test_that("spark.gbt", {
+  # regression
+  data <- suppressWarnings(createDataFrame(longley))
+  model <- spark.gbt(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16, seed = 123)
+  predictions <- collect(predict(model, data))
+  expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
+                                         63.221, 63.639, 64.989, 63.761,
+                                         66.019, 67.857, 68.169, 66.513,
+                                         68.655, 69.564, 69.331, 70.551),
+               tolerance = 1e-4)
+  stats <- summary(model)
+  expect_equal(stats$numTrees, 20)
+
+  modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$formula, stats2$formula)
+  expect_equal(stats$numFeatures, stats2$numFeatures)
+  expect_equal(stats$features, stats2$features)
+  expect_equal(stats$featureImportances, stats2$featureImportances)
+  expect_equal(stats$numTrees, stats2$numTrees)
+  expect_equal(stats$treeWeights, stats2$treeWeights)
+
+  unlink(modelPath)
+
+  # classification
+  # label must be binary - GBTClassifier currently only supports binary classification.
+  data <- suppressWarnings(createDataFrame(iris[iris$Species != "virginica", ]))
+  model <- spark.gbt(data, Species ~ Petal_Length + Petal_Width, "classification")
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$numTrees, 20)
+  expect_error(capture.output(stats), NA)
+  expect_true(length(capture.output(stats)) > 6)
+
+  modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$depth, stats2$depth)
+  expect_equal(stats$numNodes, stats2$numNodes)
+  expect_equal(stats$numClasses, stats2$numClasses)
+
+  unlink(modelPath)
+})
+
 sparkR.session.stop()

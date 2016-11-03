@@ -116,6 +116,20 @@ setClass("RandomForestRegressionModel", representation(jobj = "jobj"))
 #' @note RandomForestClassificationModel since 2.1.0
 setClass("RandomForestClassificationModel", representation(jobj = "jobj"))
 
+#' S4 class that represents a GBTRegressionModel
+#'
+#' @param jobj a Java object reference to the backing Scala GBTRegressionModel
+#' @export
+#' @note GBTRegressionModel since 2.1.0
+setClass("GBTRegressionModel", representation(jobj = "jobj"))
+
+#' S4 class that represents a GBTClassificationModel
+#'
+#' @param jobj a Java object reference to the backing Scala GBTClassificationModel
+#' @export
+#' @note GBTClassificationModel since 2.1.0
+setClass("GBTClassificationModel", representation(jobj = "jobj"))
+
 #' Saves the MLlib model to the input path
 #'
 #' Saves the MLlib model to the input path. For more information, see the specific
@@ -124,7 +138,8 @@ setClass("RandomForestClassificationModel", representation(jobj = "jobj"))
 #' @name write.ml
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
-#' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
+#' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.gbt}, \link{spark.isoreg},
+#' @seealso \link{spark.kmeans},
 #' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
 #' @seealso \link{spark.randomForest}, \link{spark.survreg},
 #' @seealso \link{read.ml}
@@ -138,7 +153,8 @@ NULL
 #' @name predict
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
-#' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
+#' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.gbt}, \link{spark.isoreg},
+#' @seealso \link{spark.kmeans},
 #' @seealso \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
 #' @seealso \link{spark.randomForest}, \link{spark.survreg}
 NULL
@@ -1141,6 +1157,10 @@ read.ml <- function(path) {
     new("RandomForestRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.RandomForestClassifierWrapper")) {
     new("RandomForestClassificationModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GBTRegressorWrapper")) {
+    new("GBTRegressionModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GBTClassifierWrapper")) {
+    new("GBTClassificationModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
   }
@@ -1658,19 +1678,19 @@ print.summary.KSTest <- function(x, ...) {
 #' @param impurity Criterion used for information gain calculation.
 #'                 For regression, must be "variance". For classification, must be one of
 #'                 "entropy" and "gini". (default = gini)
-#' @param minInstancesPerNode Minimum number of instances each child must have after split.
-#' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
-#' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #' @param featureSubsetStrategy The number of features to consider for splits at each tree node.
 #'        Supported options: "auto", "all", "onethird", "sqrt", "log2", (0.0-1.0], [1-n].
 #' @param seed integer seed for random number generation.
 #' @param subsamplingRate Fraction of the training data used for learning each decision tree, in
 #'                        range (0, 1]. (default = 1.0)
-#' @param probabilityCol column name for predicted class conditional probabilities, only for
-#'                       classification. (default = "probability")
+#' @param minInstancesPerNode Minimum number of instances each child must have after split.
+#' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
+#' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes.
+#' @param probabilityCol column name for predicted class conditional probabilities, only for
+#'                       classification. (default = "probability")
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.randomForest,SparkDataFrame,formula-method
 #' @return \code{spark.randomForest} returns a fitted Random Forest model.
@@ -1703,9 +1723,9 @@ print.summary.KSTest <- function(x, ...) {
 setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, type = c("regression", "classification"),
                    maxDepth = 5, maxBins = 32, numTrees = 20, impurity = NULL,
-                   minInstancesPerNode = 1, minInfoGain = 0.0, checkpointInterval = 10,
                    featureSubsetStrategy = "auto", seed = NULL, subsamplingRate = 1.0,
-                   probabilityCol = "probability", maxMemoryInMB = 256, cacheNodeIds = FALSE) {
+                   minInstancesPerNode = 1, minInfoGain = 0.0, checkpointInterval = 10,
+                   maxMemoryInMB = 256, cacheNodeIds = FALSE, probabilityCol = "probability") {
             type <- match.arg(type)
             formula <- paste(deparse(formula), collapse = "")
             if (!is.null(seed)) {
@@ -1749,7 +1769,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
 #' @rdname spark.randomForest
 #' @aliases predict,RandomForestRegressionModel-method
 #' @export
-#' @note predict(randomForestRegressionModel) since 2.1.0
+#' @note predict(RandomForestRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "RandomForestRegressionModel"),
           function(object, newData) {
             predict_internal(object, newData)
@@ -1758,7 +1778,7 @@ setMethod("predict", signature(object = "RandomForestRegressionModel"),
 #' @rdname spark.randomForest
 #' @aliases predict,RandomForestClassificationModel-method
 #' @export
-#' @note predict(randomForestClassificationModel) since 2.1.0
+#' @note predict(RandomForestClassificationModel) since 2.1.0
 setMethod("predict", signature(object = "RandomForestClassificationModel"),
           function(object, newData) {
             predict_internal(object, newData)
@@ -1789,8 +1809,7 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
             write_internal(object, path, overwrite)
           })
 
-#  Get the summary of an RandomForestRegressionModel model
-summary.randomForest <- function(model) {
+summary.treeEnsemble <- function(model) {
   jobj <- model@jobj
   formula <- callJMethod(jobj, "formula")
   numFeatures <- callJMethod(jobj, "numFeatures")
@@ -1807,6 +1826,8 @@ summary.randomForest <- function(model) {
        jobj = jobj)
 }
 
+#  Get the summary of an RandomForestRegressionModel model
+
 #' @return \code{summary} returns the model's features as lists, depth and number of nodes
 #'                        or number of classes.
 #' @rdname spark.randomForest
@@ -1815,7 +1836,7 @@ summary.randomForest <- function(model) {
 #' @note summary(RandomForestRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "RandomForestRegressionModel"),
           function(object) {
-            ans <- summary.randomForest(object)
+            ans <- summary.treeEnsemble(object)
             class(ans) <- "summary.RandomForestRegressionModel"
             ans
           })
@@ -1828,13 +1849,13 @@ setMethod("summary", signature(object = "RandomForestRegressionModel"),
 #' @note summary(RandomForestClassificationModel) since 2.1.0
 setMethod("summary", signature(object = "RandomForestClassificationModel"),
           function(object) {
-            ans <- summary.randomForest(object)
+            ans <- summary.treeEnsemble(object)
             class(ans) <- "summary.RandomForestClassificationModel"
             ans
           })
 
 #  Prints the summary of Random Forest Regression Model
-print.summary.randomForest <- function(x) {
+print.summary.treeEnsemble <- function(x) {
   jobj <- x$jobj
   cat("Formula: ", x$formula)
   cat("\nNumber of features: ", x$numFeatures)
@@ -1854,7 +1875,7 @@ print.summary.randomForest <- function(x) {
 #' @export
 #' @note print.summary.RandomForestRegressionModel since 2.1.0
 print.summary.RandomForestRegressionModel <- function(x, ...) {
-  print.summary.randomForest(x)
+  print.summary.treeEnsemble(x)
 }
 
 #  Prints the summary of Random Forest Classification Model
@@ -1863,5 +1884,197 @@ print.summary.RandomForestRegressionModel <- function(x, ...) {
 #' @export
 #' @note print.summary.RandomForestClassificationModel since 2.1.0
 print.summary.RandomForestClassificationModel <- function(x, ...) {
-  print.summary.randomForest(x)
+  print.summary.treeEnsemble(x)
+}
+
+#' Gradient Boosted Tree Model for Regression and Classification
+#'
+#' \code{spark.gbt} fits a Gradient Boosted Tree Regression model or Classification model on a
+#' SparkDataFrame. Users can call \code{summary} to get a summary of the fitted
+#' Gradient Boosted Tree model, \code{predict} to make predictions on new data, and
+#' \code{write.ml}/\code{read.ml} to save/load fitted models.
+#' For more details, see
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html}{GBT}
+#'
+#' @param data a SparkDataFrame for training.
+#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', ':', '+', and '-'.
+#' @param type type of model, one of "regression" or "classification", to fit
+#' @param maxDepth Maximum depth of the tree (>= 0). (default = 5)
+#' @param maxBins Maximum number of bins used for discretizing continuous features and for choosing
+#'                how to split on features at each node. More bins give higher granularity. Must be
+#'                >= 2 and >= number of categories in any categorical feature. (default = 32)
+#' @param maxIter Param for maximum number of iterations (>= 0).
+#' @param stepSize Param for Step size to be used for each iteration of optimization.
+#' @param lossType Loss function which GBT tries to minimize.
+#'                 For classification, must be "logistic". For regression, must be one of
+#'                 "squared" (L2) and "absolute" (L1). (default = "squared")
+#' @param seed integer seed for random number generation.
+#' @param subsamplingRate Fraction of the training data used for learning each decision tree, in
+#'                        range (0, 1]. (default = 1.0)
+#' @param minInstancesPerNode Minimum number of instances each child must have after split. If a
+#'                            split causes the left or right child to have fewer than
+#'                            minInstancesPerNode, the split will be discarded as invalid. Should be
+#'                            >= 1.
+#' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
+#' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
+#' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
+#'                     nodes.
+#' @param ... additional arguments passed to the method.
+#' @aliases spark.gbt,SparkDataFrame,formula-method
+#' @return \code{spark.gbt} returns a fitted Gradient Boosted Tree model.
+#' @rdname spark.gbt
+#' @name spark.gbt
+#' @export
+#' @examples
+#' \dontrun{
+#' # fit a Gradient Boosted Tree Regression Model
+#' df <- createDataFrame(longley)
+#' model <- spark.gbt(df, Employed ~ ., type = "regression", maxDepth = 5, maxBins = 16)
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#'
+#' # fit a Gradient Boosted Tree Classification Model
+#' df <- createDataFrame(iris)
+#' model <- spark.gbt(df, Species ~ Petal_Length + Petal_Width, "classification")
+#' }
+#' @note spark.gbt since 2.1.0
+setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, type = c("regression", "classification"),
+                   maxDepth = 5, maxBins = 32, maxIter = 20, stepSize = 0.1, lossType = NULL,
+                   seed = NULL, subsamplingRate = 1.0, minInstancesPerNode = 1, minInfoGain = 0.0,
+                   checkpointInterval = 10, maxMemoryInMB = 256, cacheNodeIds = FALSE) {
+            type <- match.arg(type)
+            formula <- paste(deparse(formula), collapse = "")
+            if (!is.null(seed)) {
+              seed <- as.character(as.integer(seed))
+            }
+            switch(type,
+                   regression = {
+                     if (is.null(lossType)) lossType <- "squared"
+                     lossType <- match.arg(lossType, c("squared", "absolute"))
+                     jobj <- callJStatic("org.apache.spark.ml.r.GBTRegressorWrapper",
+                                         "fit", data@sdf, formula, as.integer(maxDepth),
+                                         as.integer(maxBins), as.integer(maxIter),
+                                         as.numeric(stepSize), as.integer(minInstancesPerNode),
+                                         as.numeric(minInfoGain), as.integer(checkpointInterval),
+                                         lossType, seed, as.numeric(subsamplingRate),
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                     new("GBTRegressionModel", jobj = jobj)
+                   },
+                   classification = {
+                     if (is.null(lossType)) lossType <- "logistic"
+                     lossType <- match.arg(lossType, "logistic")
+                     jobj <- callJStatic("org.apache.spark.ml.r.GBTClassifierWrapper",
+                                         "fit", data@sdf, formula, as.integer(maxDepth),
+                                         as.integer(maxBins), as.integer(maxIter),
+                                         as.numeric(stepSize), as.integer(minInstancesPerNode),
+                                         as.numeric(minInfoGain), as.integer(checkpointInterval),
+                                         lossType, seed, as.numeric(subsamplingRate),
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                     new("GBTClassificationModel", jobj = jobj)
+                   }
+            )
+          })
+
+# Makes predictions from a Gradient Boosted Tree Regression model or Classification model
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
+#' "prediction"
+#' @rdname spark.gbt
+#' @aliases predict,GBTRegressionModel-method
+#' @export
+#' @note predict(GBTRegressionModel) since 2.1.0
+setMethod("predict", signature(object = "GBTRegressionModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+#' @rdname spark.gbt
+#' @aliases predict,GBTClassificationModel-method
+#' @export
+#' @note predict(GBTClassificationModel) since 2.1.0
+setMethod("predict", signature(object = "GBTClassificationModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+# Save the Gradient Boosted Tree Regression or Classification model to the input path.
+
+#' @param object A fitted Gradient Boosted Tree regression model or classification model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#' @aliases write.ml,GBTRegressionModel,character-method
+#' @rdname spark.gbt
+#' @export
+#' @note write.ml(GBTRegressionModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "GBTRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#' @aliases write.ml,GBTClassificationModel,character-method
+#' @rdname spark.gbt
+#' @export
+#' @note write.ml(GBTClassificationModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "GBTClassificationModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#' @return \code{summary} returns the model's features as lists, depth and number of nodes
+#'                        or number of classes.
+#' @rdname spark.gbt
+#' @aliases summary,GBTRegressionModel-method
+#' @export
+#' @note summary(GBTRegressionModel) since 2.1.0
+setMethod("summary", signature(object = "GBTRegressionModel"),
+          function(object) {
+            ans <- summary.treeEnsemble(object)
+            class(ans) <- "summary.GBTRegressionModel"
+            ans
+          })
+
+#  Get the summary of a GBTClassificationModel model
+
+#' @rdname spark.gbt
+#' @aliases summary,GBTClassificationModel-method
+#' @export
+#' @note summary(GBTClassificationModel) since 2.1.0
+setMethod("summary", signature(object = "GBTClassificationModel"),
+          function(object) {
+            ans <- summary.treeEnsemble(object)
+            class(ans) <- "summary.GBTClassificationModel"
+            ans
+          })
+
+#' @param x summary object of Gradient Boosted Tree regression model or classification model
+#'          returned by \code{summary}.
+#' @rdname spark.gbt
+#' @export
+#' @note print.summary.GBTRegressionModel since 2.1.0
+print.summary.GBTRegressionModel <- function(x, ...) {
+  print.summary.treeEnsemble(x)
+}
+
+#  Prints the summary of Gradient Boosted Tree Classification Model
+
+#' @rdname spark.gbt
+#' @export
+#' @note print.summary.GBTClassificationModel since 2.1.0
+print.summary.GBTClassificationModel <- function(x, ...) {
+  print.summary.treeEnsemble(x)
 }
