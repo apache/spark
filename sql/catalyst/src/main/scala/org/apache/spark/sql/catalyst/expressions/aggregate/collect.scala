@@ -106,7 +106,7 @@ case class CollectList(
 }
 
 /**
- * Collect a list of unique elements.
+ * Collect a set of unique elements.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.")
