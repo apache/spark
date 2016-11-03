@@ -185,50 +185,21 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> model.hasSummary
     True
     >>> summary = model.summary
-    >>> summary.predictions.show()
-    +-------------+----------+--------------------+
-    |     features|prediction|         probability|
-    +-------------+----------+--------------------+
-    | [-0.1,-0.05]|         0|[0.99609496160777...|
-    | [-0.01,-0.1]|         1|[2.89091615598232...|
-    |    [0.9,0.8]|         1|[2.23789457321856...|
-    | [0.75,0.935]|         1|[2.85667101481575...|
-    |[-0.83,-0.68]|         0|[0.99843788373650...|
-    |[-0.91,-0.76]|         0|[0.99850085851896...|
-    +-------------+----------+--------------------+
-    ...
+    >>> transformed = model.transform(df)
+    >>> summary.predictions.collect() == transformed.collect()
+    True
+    >>> summary.probability.collect() == transformed.select("probability").collect()
+    True
+    >>> summary.cluster.collect() == transformed.select("prediction").collect()
+    True
     >>> summary.predictionCol
-    'prediction'
+    u'prediction'
     >>> summary.featuresCol
-    'features'
+    u'features'
     >>> summary.k
     3
-    >>> summary.probability.show()
-    +--------------------+
-    |         probability|
-    +--------------------+
-    |[0.99609496160777...|
-    |[2.89091615598232...|
-    |[2.23789457321856...|
-    |[2.85667101481575...|
-    |[0.99843788373650...|
-    |[0.99850085851896...|
-    +--------------------+
-    ...
-    >>> summary.cluster.show()
-    +----------+
-    |prediction|
-    +----------+
-    |         0|
-    |         1|
-    |         1|
-    |         1|
-    |         0|
-    |         0|
-    +----------+
-    ...
-    >>> summary.clusterSizes
-    [3, 3, 0]
+    >>> len(summary.clusterSizes)
+    3
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -241,7 +212,6 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     |[-0.4472625243352...|0.167304119758233...|
     +--------------------+--------------------+
     ...
-    >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[4].prediction == rows[5].prediction
     True
@@ -545,9 +515,9 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     +---------+----------+
     ...
     >>> summary.predictionCol
-    'prediction'
+    u'prediction'
     >>> summary.featuresCol
-    'features'
+    u'features'
     >>> summary.k
     2
     >>> summary.cluster.show()
