@@ -90,7 +90,12 @@ class KryoSerializer(conf: SparkConf)
       new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
     }
 
-  def newKryoInput(): KryoInput = if (useUnsafe) new KryoUnsafeInput() else new KryoInput()
+  def newKryoInput(): KryoInput =
+    if (useUnsafe) {
+      new KryoUnsafeInput(bufferSize)
+    } else {
+      new KryoInput(bufferSize)
+    }
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
@@ -305,7 +310,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boole
 
   // Make these lazy vals to avoid creating a buffer unless we use them.
   private lazy val output = ks.newKryoOutput()
-  private lazy val input = if (useUnsafe) new KryoUnsafeInput() else new KryoInput()
+  private lazy val input = ks.newKryoInput()
 
   override def serialize[T: ClassTag](t: T): ChunkedByteBuffer = {
     output.clear()
