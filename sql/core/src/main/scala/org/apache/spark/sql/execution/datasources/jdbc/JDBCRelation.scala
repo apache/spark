@@ -27,7 +27,6 @@ import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 
-
 /**
  * Instructions on how to partition the table among workers.
  */
