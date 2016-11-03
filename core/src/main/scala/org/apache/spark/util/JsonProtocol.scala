@@ -107,20 +107,20 @@ private[spark] object JsonProtocol {
   def stageSubmittedToJson(stageSubmitted: SparkListenerStageSubmitted): JValue = {
     val stageInfo = stageInfoToJson(stageSubmitted.stageInfo)
     val properties = propertiesToJson(stageSubmitted.properties)
-    ("Event" -> Utils.getFormattedClassName(stageSubmitted)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageSubmitted) ~
     ("Stage Info" -> stageInfo) ~
     ("Properties" -> properties)
   }
 
   def stageCompletedToJson(stageCompleted: SparkListenerStageCompleted): JValue = {
     val stageInfo = stageInfoToJson(stageCompleted.stageInfo)
-    ("Event" -> Utils.getFormattedClassName(stageCompleted)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageCompleted) ~
     ("Stage Info" -> stageInfo)
   }
 
   def taskStartToJson(taskStart: SparkListenerTaskStart): JValue = {
     val taskInfo = taskStart.taskInfo
-    ("Event" -> Utils.getFormattedClassName(taskStart)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskStart) ~
     ("Stage ID" -> taskStart.stageId) ~
     ("Stage Attempt ID" -> taskStart.stageAttemptId) ~
     ("Task Info" -> taskInfoToJson(taskInfo))
@@ -128,7 +128,7 @@ private[spark] object JsonProtocol {
 
   def taskGettingResultToJson(taskGettingResult: SparkListenerTaskGettingResult): JValue = {
     val taskInfo = taskGettingResult.taskInfo
-    ("Event" -> Utils.getFormattedClassName(taskGettingResult)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskGettingResult) ~
     ("Task Info" -> taskInfoToJson(taskInfo))
   }
 
@@ -137,7 +137,7 @@ private[spark] object JsonProtocol {
     val taskInfo = taskEnd.taskInfo
     val taskMetrics = taskEnd.taskMetrics
     val taskMetricsJson = if (taskMetrics != null) taskMetricsToJson(taskMetrics) else JNothing
-    ("Event" -> Utils.getFormattedClassName(taskEnd)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskEnd) ~
     ("Stage ID" -> taskEnd.stageId) ~
     ("Stage Attempt ID" -> taskEnd.stageAttemptId) ~
     ("Task Type" -> taskEnd.taskType) ~
@@ -148,7 +148,7 @@ private[spark] object JsonProtocol {
 
   def jobStartToJson(jobStart: SparkListenerJobStart): JValue = {
     val properties = propertiesToJson(jobStart.properties)
-    ("Event" -> Utils.getFormattedClassName(jobStart)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.jobStart) ~
     ("Job ID" -> jobStart.jobId) ~
     ("Submission Time" -> jobStart.time) ~
     ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~  // Added in Spark 1.2.0
@@ -158,7 +158,7 @@ private[spark] object JsonProtocol {
 
   def jobEndToJson(jobEnd: SparkListenerJobEnd): JValue = {
     val jobResult = jobResultToJson(jobEnd.jobResult)
-    ("Event" -> Utils.getFormattedClassName(jobEnd)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.jobEnd) ~
     ("Job ID" -> jobEnd.jobId) ~
     ("Completion Time" -> jobEnd.time) ~
     ("Job Result" -> jobResult)
@@ -170,7 +170,7 @@ private[spark] object JsonProtocol {
     val sparkProperties = mapToJson(environmentDetails("Spark Properties").toMap)
     val systemProperties = mapToJson(environmentDetails("System Properties").toMap)
     val classpathEntries = mapToJson(environmentDetails("Classpath Entries").toMap)
-    ("Event" -> Utils.getFormattedClassName(environmentUpdate)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.environmentUpdate) ~
     ("JVM Information" -> jvmInformation) ~
     ("Spark Properties" -> sparkProperties) ~
     ("System Properties" -> systemProperties) ~
@@ -179,7 +179,7 @@ private[spark] object JsonProtocol {
 
   def blockManagerAddedToJson(blockManagerAdded: SparkListenerBlockManagerAdded): JValue = {
     val blockManagerId = blockManagerIdToJson(blockManagerAdded.blockManagerId)
-    ("Event" -> Utils.getFormattedClassName(blockManagerAdded)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockManagerAdded) ~
     ("Block Manager ID" -> blockManagerId) ~
     ("Maximum Memory" -> blockManagerAdded.maxMem) ~
     ("Timestamp" -> blockManagerAdded.time)
@@ -187,18 +187,18 @@ private[spark] object JsonProtocol {
 
   def blockManagerRemovedToJson(blockManagerRemoved: SparkListenerBlockManagerRemoved): JValue = {
     val blockManagerId = blockManagerIdToJson(blockManagerRemoved.blockManagerId)
-    ("Event" -> Utils.getFormattedClassName(blockManagerRemoved)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.blockManagerRemoved) ~
     ("Block Manager ID" -> blockManagerId) ~
     ("Timestamp" -> blockManagerRemoved.time)
   }
 
   def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD): JValue = {
-    ("Event" -> Utils.getFormattedClassName(unpersistRDD)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.unpersistRDD) ~
     ("RDD ID" -> unpersistRDD.rddId)
   }
 
   def applicationStartToJson(applicationStart: SparkListenerApplicationStart): JValue = {
-    ("Event" -> Utils.getFormattedClassName(applicationStart)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.applicationStart) ~
     ("App Name" -> applicationStart.appName) ~
     ("App ID" -> applicationStart.appId.map(JString(_)).getOrElse(JNothing)) ~
     ("Timestamp" -> applicationStart.time) ~
@@ -208,33 +208,33 @@ private[spark] object JsonProtocol {
   }
 
   def applicationEndToJson(applicationEnd: SparkListenerApplicationEnd): JValue = {
-    ("Event" -> Utils.getFormattedClassName(applicationEnd)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.applicationEnd) ~
     ("Timestamp" -> applicationEnd.time)
   }
 
   def executorAddedToJson(executorAdded: SparkListenerExecutorAdded): JValue = {
-    ("Event" -> Utils.getFormattedClassName(executorAdded)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.executorAdded) ~
     ("Timestamp" -> executorAdded.time) ~
     ("Executor ID" -> executorAdded.executorId) ~
     ("Executor Info" -> executorInfoToJson(executorAdded.executorInfo))
   }
 
   def executorRemovedToJson(executorRemoved: SparkListenerExecutorRemoved): JValue = {
-    ("Event" -> Utils.getFormattedClassName(executorRemoved)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.executorRemoved) ~
     ("Timestamp" -> executorRemoved.time) ~
     ("Executor ID" -> executorRemoved.executorId) ~
     ("Removed Reason" -> executorRemoved.reason)
   }
 
   def logStartToJson(logStart: SparkListenerLogStart): JValue = {
-    ("Event" -> Utils.getFormattedClassName(logStart)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.logStart) ~
     ("Spark Version" -> SPARK_VERSION)
   }
 
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
     val execId = metricsUpdate.execId
     val accumUpdates = metricsUpdate.accumUpdates
-    ("Event" -> Utils.getFormattedClassName(metricsUpdate)) ~
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.metricsUpdate) ~
     ("Executor ID" -> execId) ~
     ("Metrics Updated" -> accumUpdates.map { case (taskId, stageId, stageAttemptId, updates) =>
       ("Task ID" -> taskId) ~
@@ -485,7 +485,7 @@ private[spark] object JsonProtocol {
    * JSON deserialization methods for SparkListenerEvents |
    * ---------------------------------------------------- */
 
-  private val SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES = new Object {
+  private object SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES {
     val stageSubmitted = Utils.getFormattedClassName(SparkListenerStageSubmitted)
     val stageCompleted = Utils.getFormattedClassName(SparkListenerStageCompleted)
     val taskStart = Utils.getFormattedClassName(SparkListenerTaskStart)
@@ -837,7 +837,7 @@ private[spark] object JsonProtocol {
     metrics
   }
 
-  private val TASK_END_REASON_FORMATTED_CLASS_NAMES = new Object {
+  private object TASK_END_REASON_FORMATTED_CLASS_NAMES {
     val success = Utils.getFormattedClassName(Success)
     val resubmitted = Utils.getFormattedClassName(Resubmitted)
     val fetchFailed = Utils.getFormattedClassName(FetchFailed)
@@ -909,7 +909,7 @@ private[spark] object JsonProtocol {
     BlockManagerId(executorId, host, port)
   }
 
-  private val JOB_RESULT_FORMATTED_CLASS_NAMES = new Object {
+  private object JOB_RESULT_FORMATTED_CLASS_NAMES {
     val jobSucceeded = Utils.getFormattedClassName(JobSucceeded)
     val jobFailed = Utils.getFormattedClassName(JobFailed)
   }
