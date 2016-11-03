@@ -138,8 +138,9 @@ case class BucketSpec(
  *                 Can be None if this table is a View, should be "hive" for hive serde tables.
  * @param unsupportedFeatures is a list of string descriptions of features that are used by the
  *        underlying table but not supported by Spark SQL yet.
- * @param partitionProviderIsHive whether this table's partition metadata is stored in the Hive
- *                                metastore.
+ * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
+ *                                  catalog. If false, it is inferred automatically based on file
+ *                                  structure.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -158,7 +159,7 @@ case class CatalogTable(
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
-    partitionProviderIsHive: Boolean = false) {
+    tracksPartitionsInCatalog: Boolean = false) {
 
   /** schema of this table's partition columns */
   def partitionSchema: StructType = StructType(schema.filter {
@@ -217,7 +218,7 @@ case class CatalogTable(
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
         if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
         s"$storage",
-        if (partitionProviderIsHive) "Partition Provider: Hive" else "")
+        if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "")
 
     output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
   }
