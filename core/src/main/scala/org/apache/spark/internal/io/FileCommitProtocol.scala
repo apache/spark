@@ -110,22 +110,17 @@ object FileCommitProtocol {
    */
   def instantiate(className: String, jobId: String, outputPath: String, isAppend: Boolean)
     : FileCommitProtocol = {
-    try {
-      val clazz = Utils.classForName(className).asInstanceOf[Class[FileCommitProtocol]]
+    val clazz = Utils.classForName(className).asInstanceOf[Class[FileCommitProtocol]]
 
-      // First try the one with argument (outputPath: String, isAppend: Boolean).
-      // If that doesn't exist, try the one with (outputPath: String).
-      try {
-        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
-        ctor.newInstance(jobId, outputPath, isAppend.asInstanceOf[java.lang.Boolean])
-      } catch {
-        case _: NoSuchMethodException =>
-          val ctor = clazz.getDeclaredConstructor(classOf[String])
-          ctor.newInstance(jobId, outputPath)
-      }
+    // First try the one with argument (jobId: String, outputPath: String, isAppend: Boolean).
+    // If that doesn't exist, try the one with (jobId: string, outputPath: String).
+    try {
+      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
+      ctor.newInstance(jobId, outputPath, isAppend.asInstanceOf[java.lang.Boolean])
     } catch {
-      case e: ClassNotFoundException =>
-        throw e
+      case _: NoSuchMethodException =>
+        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
+        ctor.newInstance(jobId, outputPath)
     }
   }
 }

@@ -55,10 +55,11 @@ class FileStreamSink(
       logInfo(s"Skipping already committed batch $batchId")
     } else {
       val committer = FileCommitProtocol.instantiate(
-        sparkSession.sessionState.conf.streamingFileCommitProtocolClass,
+        className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,
         jobId = batchId.toString,
         outputPath = path,
         isAppend = false)
+
       committer match {
         case manifestCommitter: ManifestFileCommitProtocol =>
           manifestCommitter.setupManifestOptions(fileLog, batchId)
