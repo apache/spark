@@ -1946,7 +1946,8 @@ print.summary.RandomForestClassificationModel <- function(x, ...) {
 #' summary(savedModel)
 #'
 #' # fit a Gradient Boosted Tree Classification Model
-#' df <- createDataFrame(iris)
+#' # label must be binary - Only binary classification is supported for GBT.
+#' df <- createDataFrame(iris[iris$Species != "virginica", ])
 #' model <- spark.gbt(df, Species ~ Petal_Length + Petal_Width, "classification")
 #' }
 #' @note spark.gbt since 2.1.0
