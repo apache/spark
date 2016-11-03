@@ -29,7 +29,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     val expectedPath =
       spark.sharedState.externalCatalog.getDatabase(dbName).locationUri + "/" + tableName
 
-    assert(metastoreTable.storage.properties("path") === expectedPath)
+    assert(metastoreTable.storage.locationUri.get === expectedPath)
   }
 
   private def getTableNames(dbName: Option[String] = None): Array[String] = {
