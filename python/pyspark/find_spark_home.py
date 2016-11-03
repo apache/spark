@@ -47,9 +47,9 @@ def _find_spark_home():
             # Not pip installed no worries
             True
     else:
-        import importlib
+        from importlib.util import find_spec
         try:
-            paths.append(importlib.util.find_spec("pyspark").origin)
+            paths.append(os.path.dirname(find_spec("pyspark").origin))
         except ImportError:
             # Not pip installed no worries
             True

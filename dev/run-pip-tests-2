@@ -50,7 +50,7 @@ if hash python3 2>/dev/null; then
   PYTHON_EXECS+=('python3')
 fi
 
-for python in $PYTHON_EXECS; do
+for python in "${PYTHON_EXECS[@]}"; do
   echo "Testing pip installation with python $python"
   # Create a temp directory for us to work in and save its name to a file for cleanup
   echo "Constucting virtual env for testing"
