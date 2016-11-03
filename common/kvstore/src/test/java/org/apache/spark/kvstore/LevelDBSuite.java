@@ -226,6 +226,32 @@ public class LevelDBSuite {
     return idx.getCount(idx.end());
   }
 
+  @Test
+  public void testUpdate() throws Exception {
+    CustomType1 t = new CustomType1();
+    t.key = "key";
+    t.id = "id";
+    t.name = "name";
+
+    db.write(t);
+
+    t.name = "anotherName";
+
+    db.write(t);
+
+    assertEquals(1, db.count(t.getClass()));
+
+    LevelDBTypeInfo.Index ni = db.getTypeInfo(t.getClass()).index("name");
+    assertEquals(1, ni.getCount(ni.end()));
+    assertEquals(1, ni.getCount(ni.end("anotherName")));
+    try {
+      db.get(ni.end("name"), Integer.class);
+      fail("Should have gotten an exception.");
+    } catch (NoSuchElementException nsee) {
+      // Expected.
+    }
+  }
+
   private int countKeys(Class<?> type) throws Exception {
     byte[] prefix = db.getTypeInfo(type).keyPrefix();
     int count = 0;

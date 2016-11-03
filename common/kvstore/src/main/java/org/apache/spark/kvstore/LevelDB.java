@@ -136,7 +136,7 @@ public class LevelDB implements KVStore {
     Preconditions.checkArgument(value != null, "Null values are not allowed.");
     LevelDBTypeInfo<?> ti = getTypeInfo(value.getClass());
 
-    WriteBatch batch = db.createWriteBatch();
+    LevelDBWriteBatch batch = new LevelDBWriteBatch(this);
     try {
       byte[] data = serializer.serialize(value);
       synchronized (ti) {
@@ -149,7 +149,7 @@ public class LevelDB implements KVStore {
         for (LevelDBTypeInfo<?>.Index idx : ti.indices()) {
           idx.add(batch, value, data);
         }
-        db.write(batch, new WriteOptions().sync(sync));
+        batch.write(sync);
       }
     } finally {
       batch.close();
@@ -163,7 +163,7 @@ public class LevelDB implements KVStore {
 
   public void delete(Class<?> type, Object naturalKey, boolean sync) throws Exception {
     Preconditions.checkArgument(naturalKey != null, "Null keys are not allowed.");
-    WriteBatch batch = db.createWriteBatch();
+    LevelDBWriteBatch batch = new LevelDBWriteBatch(this);
     try {
       LevelDBTypeInfo<?> ti = getTypeInfo(type);
       byte[] key = ti.naturalIndex().start(naturalKey);
@@ -172,7 +172,7 @@ public class LevelDB implements KVStore {
         Object existing = serializer.deserialize(data, type);
         synchronized (ti) {
           removeInstance(ti, batch, existing);
-          db.write(batch,  new WriteOptions().sync(sync));
+          batch.write(sync);
         }
       }
     } finally {
@@ -229,7 +229,7 @@ public class LevelDB implements KVStore {
     return idx;
   }
 
-  private void removeInstance(LevelDBTypeInfo<?> ti, WriteBatch batch, Object instance)
+  private void removeInstance(LevelDBTypeInfo<?> ti, LevelDBWriteBatch batch, Object instance)
       throws Exception {
     for (LevelDBTypeInfo<?>.Index idx : ti.indices()) {
       idx.remove(batch, instance);

@@ -30,7 +30,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
-import org.iq80.leveldb.WriteBatch;
 
 /**
  * Holds metadata about app-specific types stored in LevelDB. Serves as a cache for data collected
@@ -235,14 +234,14 @@ class LevelDBTypeInfo<T> {
      * @param data Serialized entity to store (when storing the entity, not a reference).
      * @param naturalKey The value's key.
      */
-    void add(WriteBatch batch, Object entity, byte[] data) throws Exception {
+    void add(LevelDBWriteBatch batch, Object entity, byte[] data) throws Exception {
       byte[] stored = data;
       if (!copy) {
         stored = db.serializer.serialize(toKey(naturalIndex().accessor.get(entity)));
       }
       batch.put(entityKey(entity), stored);
-      updateCount(batch, end(accessor.get(entity)), 1L);
-      updateCount(batch, end(), 1L);
+      batch.updateCount(end(accessor.get(entity)), 1L);
+      batch.updateCount(end(), 1L);
     }
 
     /**
@@ -252,24 +251,15 @@ class LevelDBTypeInfo<T> {
      * @param entity The entity being removed, to identify the index entry to modify.
      * @param naturalKey The value's key.
      */
-    void remove(WriteBatch batch, Object entity) throws Exception {
+    void remove(LevelDBWriteBatch batch, Object entity) throws Exception {
       batch.delete(entityKey(entity));
-      updateCount(batch, end(accessor.get(entity)), -1L);
-      updateCount(batch, end(), -1L);
+      batch.updateCount(end(accessor.get(entity)), -1L);
+      batch.updateCount(end(), -1L);
     }
 
     long getCount(byte[] key) throws Exception {
       byte[] data = db.db.get(key);
       return data != null ? db.serializer.deserializeLong(data) : 0;
-    }
-
-    private void updateCount(WriteBatch batch, byte[] key, long delta) throws Exception {
-      long count = getCount(key) + delta;
-      if (count > 0) {
-        batch.put(key, db.serializer.serialize(count));
-      } else {
-        batch.delete(key);
-      }
     }
 
     /**
