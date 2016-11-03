@@ -323,8 +323,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     val properties = new scala.collection.mutable.HashMap[String, String]
     properties.put(DATASOURCE_PROVIDER, provider)
-    if (table.partitionProviderIsHive) {
-      properties.put(TABLE_PARTITION_PROVIDER, "hive")
+    if (table.tracksPartitionsInCatalog) {
+      properties.put(TABLE_PARTITION_PROVIDER, TABLE_PARTITION_PROVIDER_CATALOG)
     }
 
     // Serialized JSON schema string may be too long to be stored into a single metastore table
@@ -489,10 +489,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         updateLocationInStorageProps(oldTableDef, newLocation).copy(locationUri = newLocation)
       }
 
-      val partitionProviderProp = if (tableDefinition.partitionProviderIsHive) {
-        TABLE_PARTITION_PROVIDER -> "hive"
+      val partitionProviderProp = if (tableDefinition.tracksPartitionsInCatalog) {
+        TABLE_PARTITION_PROVIDER -> TABLE_PARTITION_PROVIDER_CATALOG
       } else {
-        TABLE_PARTITION_PROVIDER -> "builtin"
+        TABLE_PARTITION_PROVIDER -> TABLE_PARTITION_PROVIDER_FILESYSTEM
       }
 
       // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
@@ -537,7 +537,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table
     } else {
       getProviderFromTableProperties(table).map { provider =>
-        assert(provider != "hive", "Hive serde table should not save provider in table properties.")
+        assert(provider != TABLE_PARTITION_PROVIDER_CATALOG,
+          "Hive serde table should not save provider in table properties.")
         // Internally we store the table location in storage properties with key "path" for data
         // source tables. Here we set the table location to `locationUri` field and filter out the
         // path option in storage properties, to avoid exposing this concept externally.
@@ -545,6 +546,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           val tableLocation = getLocationFromStorageProps(table)
           updateLocationInStorageProps(table, None).copy(locationUri = tableLocation)
         }
+        val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
         table.copy(
           storage = storageWithLocation,
@@ -552,9 +554,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           provider = Some(provider),
           partitionColumnNames = getPartitionColumnsFromTableProperties(table),
           bucketSpec = getBucketSpecFromTableProperties(table),
-          partitionProviderIsHive = table.properties.get(TABLE_PARTITION_PROVIDER) == Some("hive"))
+          tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG)
+        )
       } getOrElse {
-        table.copy(provider = Some("hive"), partitionProviderIsHive = true)
+        table.copy(provider = Some("hive"), tracksPartitionsInCatalog = true)
       }
     }
 
@@ -851,6 +854,8 @@ object HiveExternalCatalog {
   val STATISTICS_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
 
   val TABLE_PARTITION_PROVIDER = SPARK_SQL_PREFIX + "partitionProvider"
+  val TABLE_PARTITION_PROVIDER_CATALOG = "catalog"
+  val TABLE_PARTITION_PROVIDER_FILESYSTEM = "filesystem"
 
 
   def getProviderFromTableProperties(metadata: CatalogTable): Option[String] = {

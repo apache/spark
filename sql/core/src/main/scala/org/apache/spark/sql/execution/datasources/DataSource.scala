@@ -308,7 +308,7 @@ case class DataSource(
         }
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
-            catalogTable.isDefined && catalogTable.get.partitionProviderIsHive) {
+            catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
           new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
