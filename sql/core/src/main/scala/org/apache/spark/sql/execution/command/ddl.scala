@@ -31,8 +31,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison,
-  EqualTo, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, PredicateHelper}
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -451,7 +451,7 @@ case class AlterTableDropPartitionCommand(
           catalog.dropPartitions(
             table.identifier, partitions.map(_.spec), ignoreIfNotExists = ifExists, purge = purge)
         } else if (!ifExists) {
-          throw new AnalysisException(s"There is no partition for ${spec}.")
+          throw new AnalysisException(s"There is no partition for $spec.")
         }
       }
     } else {

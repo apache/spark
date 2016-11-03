@@ -285,6 +285,16 @@ class HiveDDLSuite
         sql("ALTER TABLE sales DROP PARTITION (unknown <=> 'KR')")
       }.getMessage
       assert(m3.contains("'<=>' operator is not allowed in partition specification"))
+
+      val m4 = intercept[ParseException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown <=> upper('KR'))")
+      }.getMessage
+      assert(m4.contains("extraneous input '(' expecting STRING"))
+
+      val m5 = intercept[ParseException] {
+        sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter)")
+      }.getMessage
+      assert(m5.contains("Invalid partition filter specification"))
     }
   }
 

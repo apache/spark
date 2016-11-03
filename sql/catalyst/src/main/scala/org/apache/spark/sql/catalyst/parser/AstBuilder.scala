@@ -216,8 +216,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText
       val operator = Option(pVal.comparisonOperator).map(_.getText)
-      validate(operator.nonEmpty && !operator.get.equals("<=>"),
-        "'<=>' operator is not allowed in partition specification.", ctx)
       if (operator.isDefined) {
         val left = AttributeReference(name, DataTypes.StringType)()
         val right = expression(pVal.constant)
@@ -225,6 +223,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         operator.getSymbol.getType match {
           case SqlBaseParser.EQ =>
             EqualTo(left, right)
+          case SqlBaseParser.NSEQ =>
+            throw new ParseException(
+              "'<=>' operator is not allowed in partition specification.", ctx)
           case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
             Not(EqualTo(left, right))
           case SqlBaseParser.LT =>
