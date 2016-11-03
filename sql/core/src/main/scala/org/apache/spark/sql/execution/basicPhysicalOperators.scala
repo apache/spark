@@ -95,8 +95,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   // If one expression and its children are null intolerant, it is null intolerant.
   private def isNullIntolerant(expr: Expression): Boolean = expr match {
-    case e: NullIntolerant =>
-      if (e.isInstanceOf[LeafExpression]) true else e.children.forall(isNullIntolerant)
+    case e: NullIntolerant => e.children.forall(isNullIntolerant)
     case _ => false
   }
 

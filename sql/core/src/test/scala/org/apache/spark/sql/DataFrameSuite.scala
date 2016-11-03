@@ -1667,6 +1667,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       expr = "_1 + _2", expectedNonNullableColumns = Seq("_1", "_2"))
     verifyNullabilityInFilterExec(df,
       expr = "_1", expectedNonNullableColumns = Seq("_1"))
+    // `constructIsNotNullConstraints` infers the IsNotNull(_2) from IsNotNull(_2 + Rand())
+    // Thus, we are able to set nullability of _2 to false.
+    // If IsNotNull(_2) is not given from `constructIsNotNullConstraints`, the impl of
+    // isNullIntolerant in `FilterExec` needs an update for more advanced inference.
     verifyNullabilityInFilterExec(df,
       expr = "_2 + Rand()", expectedNonNullableColumns = Seq("_2"))
     verifyNullabilityInFilterExec(df,
