@@ -22,7 +22,6 @@ import java.io.ObjectInputStream
 import java.util.{ArrayList, Collections}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
@@ -194,17 +193,17 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
   }
 
   private def dataPropertyAdd(v: IN): Unit = {
-    // Add first for localValue & AccumulatorInfo
+    // To allow the user to be able to access the current accumulated value from their process
+    // worker side then we need to perform a "normal" add as well as the data property add.
     addImpl(v)
-    if (metadata != null && metadata.dataProperty) {
-      val updateInfo = TaskContext.get().getRDDPartitionInfo()
-      val base = pending.getOrElse(updateInfo, copyAndReset())
-      // Since we may have constructed a new accumulator, set atDriverSide to false as the default
-      // new accumulators will have atDriverSide equal to true.
-      base.atDriverSide = false
-      base.addImpl(v)
-      pending(updateInfo) = base
-    }
+    // Add to the pending updates for data property
+    val updateInfo = TaskContext.get().getRDDPartitionInfo()
+    val base = pending.getOrElse(updateInfo, copyAndReset())
+    // Since we may have constructed a new accumulator, set atDriverSide to false as the default
+    // new accumulators will have atDriverSide equal to true.
+    base.atDriverSide = false
+    base.addImpl(v)
+    pending(updateInfo) = base
   }
 
   /**
