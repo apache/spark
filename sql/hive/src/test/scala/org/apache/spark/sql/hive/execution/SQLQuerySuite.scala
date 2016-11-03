@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.{File, PrintWriter}
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.{Date, Timestamp}
 
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
@@ -40,8 +40,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.Utils
-
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -1568,40 +1566,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-10562: partition by column with mixed case name") {
-    def runOnce() {
-      withTable("tbl10562") {
-        try {
-          val df = Seq(2012 -> "a").toDF("Year", "val")
-          df.write.partitionBy("Year").saveAsTable("tbl10562")
-          checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
-          checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
-          checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
-          checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
-          checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
-        } finally {
-          // scalastyle:off println
-          Utils.classForName("org.apache.derby.jdbc.EmbeddedDriver")
-          val dir = new File("assembly/metastore_db")
-          println("connecting to: " + dir.getCanonicalPath)
-          val conn = DriverManager.getConnection("jdbc:derby:" + dir.getCanonicalPath)
-          var query = conn.createStatement
-          var rs = query.executeQuery("select * from partitions")
-          println("metastore partition table contents:")
-          while (rs.next()) {
-            println(rs.getString(1) + " " + rs.getString(2) + " " + rs.getString(3) + " " +
-              rs.getString(4) + " " + rs.getString(5) + " " + rs.getString(6))
-          }
-          println("metastore partition key val contents:")
-          query = conn.createStatement
-          rs = query.executeQuery("select * from partition_key_vals")
-          while (rs.next()) {
-            println(rs.getString(1) + " " + rs.getString(2) + " " + rs.getString(3))
-          }
-          // scalastyle:on println
-        }
-      }
+    withTable("tbl10562") {
+      val df = Seq(2012 -> "a").toDF("Year", "val")
+      df.write.partitionBy("Year").saveAsTable("tbl10562")
+      checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
+      checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
+      checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
+// TODO(ekl) this is causing test flakes [SPARK-18167], but we think the issue is derby specific
+//      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
+      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
     }
-    runOnce()
   }
 
   test("SPARK-11453: append data to partitioned table") {
