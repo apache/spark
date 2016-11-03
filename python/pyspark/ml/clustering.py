@@ -133,7 +133,7 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
 @inherit_doc
 class GaussianMixtureSummary(ClusteringSummary):
     """
-    Summary of BisectingKMeans algorithms.
+    Summary of GaussianMixture algorithms.
 
     .. versionadded:: 2.1.0
     """
