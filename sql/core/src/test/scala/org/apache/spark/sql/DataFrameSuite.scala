@@ -1728,4 +1728,48 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
     assert(df.filter($"array1" === $"array2").count() == 1)
   }
+
+  test("SPARK-18207: Compute hash for wider table") {
+    import org.apache.spark.sql.types.{StructType, StringType}
+    // nest some data structures
+    val ndr = NestedDR("1", Seq(new DR("1", "2")))
+    val dsNDR = spark.createDataset(Seq(ndr))
+
+    val COLMAX = 1000
+    val schema: StructType = (1 to COLMAX)
+      .foldLeft(new StructType())((s, i) => s.add(s"g$i", StringType, nullable = true))
+    val rdds = spark.sparkContext.parallelize(Seq(Row.fromSeq((1 to COLMAX).map(_.toString))))
+    val wideDF = spark.createDataFrame(rdds, schema)
+    wideDF.createOrReplaceTempView("wide")
+
+    // now explode it out
+    val exploded = dsNDR.explode($"r")(DRo.rowToClass)
+    exploded.createOrReplaceTempView("exploded")
+
+    val topDf = spark.sqlContext.sql("""
+     select * from (
+       select *, row_number() OVER (PARTITION BY f1 ORDER BY f2 desc) as d_rank
+       from exploded
+     ) inner_table
+     where inner_table.d_rank = 1""").toDF
+    topDf.createOrReplaceTempView("d_top1_temp")
+
+    // create datasets to union
+    val widePlus = spark.sqlContext.sql("select * from wide, d_top1_temp where wide.g1 = d_top1_temp.m1")
+    widePlus.createOrReplaceTempView("wide_plus")
+    val widePlus2 = widePlus.withColumn("d_rank", lit(0))
+    widePlus2.createOrReplaceTempView("wide_plus2")
+
+    val df = spark.sqlContext.sql("select * from wide_plus union select * from wide_plus2")
+    df.count
+  }
 }
+
+case class DR(val f1: String = "", val f2: String = "")
+object DRo {
+  def rowToClass(r: org.apache.spark.sql.Row) : Seq[DR] = {
+    if (r.getSeq[org.apache.spark.sql.Row](0) == null) { return Seq() }
+    r.getSeq[org.apache.spark.sql.Row](0).map(x => new DR())
+  }
+}
+case class NestedDR(m1: String, r: Seq[DR])
