@@ -144,7 +144,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     if (csvOptions.failFast) {
-      // We can fail before starting to parse in cast of "FAILFAST" mode. In case of "PERMISIVE"
+      // We can fail before starting to parse in case of "FAILFAST" mode. In case of "PERMISIVE"
       // mode, it allows to read values as null for unsupported types. In case of "DROPMALFORMED"
       // mode, it drops records only containing non-null values in unsupported types. We should use
       // `requiredSchema` instead of whole schema `dataSchema` here to not to break the original
