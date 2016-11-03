@@ -1755,7 +1755,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     topDf.createOrReplaceTempView("d_top1_temp")
 
     // create datasets to union
-    val widePlus = spark.sqlContext.sql("select * from wide, d_top1_temp where wide.g1 = d_top1_temp.m1")
+    val widePlus = spark.sqlContext.sql(
+      "select * from wide, d_top1_temp where wide.g1 = d_top1_temp.m1")
     widePlus.createOrReplaceTempView("wide_plus")
     val widePlus2 = widePlus.withColumn("d_rank", lit(0))
     widePlus2.createOrReplaceTempView("wide_plus2")
