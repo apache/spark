@@ -263,10 +263,6 @@ public class UnsafeArrayWriter {
 
   private void writePrimitiveArray(Object input, int offset, int elementSize, int length)  {
     Platform.copyMemory(input, offset, holder.buffer, holder.cursor, elementSize * length);
-    for (int ordinal = 0; ordinal < length; ordinal++) {
-      Platform.putInt(holder.buffer, getElementOffset(ordinal),
-        (holder.cursor + ordinal * elementSize) - startingOffset);
-    }
     holder.cursor += elementSize * length;
   }
 
@@ -321,15 +317,6 @@ public class UnsafeArrayWriter {
 
 /** uncomment this if SPARK-16043 is merged
 
-  // remove this method if SPARK-15962 is merged
-  private void updateIndex(int elementSize, int length)  {
-    for (int ordinal = 0; ordinal < length; ordinal++) {
-      Platform.putInt(holder.buffer, getElementOffset(ordinal),
-              (holder.cursor + ordinal * elementSize) - startingOffset);
-    }
-    holder.cursor += elementSize * length;
-  }
-
   public void writePrimitiveBooleanArray(ArrayData arrayData) {
     if (arrayData instanceof GenericBooleanArrayData) {
       boolean[] input = ((GenericBooleanArrayData)arrayData).primitiveArray();
@@ -341,7 +328,6 @@ public class UnsafeArrayWriter {
       for (int i = 0; i < length; i++) {
         Platform.putBoolean(holder.buffer, holder.cursor + i, arrayData.getBoolean(i));
       }
-      updateIndex(1, length);
     }
   }
 
@@ -356,7 +342,6 @@ public class UnsafeArrayWriter {
       for (int i = 0; i < length; i++) {
         Platform.putByte(holder.buffer, holder.cursor + i, arrayData.getByte(i));
       }
-      updateIndex(1, length);
     }
   }
 
@@ -371,7 +356,6 @@ public class UnsafeArrayWriter {
       for (int i = 0; i < length; i++) {
         Platform.putShort(holder.buffer, holder.cursor + i, arrayData.getShort(i));
       }
-      updateIndex(2, length);
     }
   }
 
@@ -386,7 +370,6 @@ public class UnsafeArrayWriter {
       for (int i = 0; i < length; i++) {
         Platform.putInt(holder.buffer, holder.cursor + i, arrayData.getInt(i));
       }
-      updateIndex(4, length);
     }
   }
 
@@ -401,7 +384,6 @@ public class UnsafeArrayWriter {
       for (int i = 0; i < length; i++) {
         Platform.putLong(holder.buffer, holder.cursor + i, arrayData.getLong(i));
       }
-      updateIndex(8, length);
     }
   }
 
@@ -416,7 +398,6 @@ public class UnsafeArrayWriter {
       for (int i = 0; i < length; i++) {
         Platform.putFloat(holder.buffer, holder.cursor + i, arrayData.getFloat(i));
       }
-      updateIndex(4, length);
     }
   }
 
@@ -431,7 +412,6 @@ public class UnsafeArrayWriter {
       for (int i = 0; i < length; i++) {
         Platform.putFloat(holder.buffer, holder.cursor + i, arrayData.getFloat(i));
       }
-      updateIndex(8, length);
     }
   }
 */

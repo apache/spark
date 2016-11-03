@@ -206,7 +206,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case a @ ArrayType(et, cn) =>
         s"""
           final int $tmpCursor = $bufferHolder.cursor;
-          ${writeArrayToBuffer(ctx, element, et, bufferHolder)}
+          ${writeArrayToBuffer(ctx, element, et, cn, bufferHolder)}
           $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
@@ -289,7 +289,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         // Remember the current cursor so that we can write numBytes of key array later.
         final int $tmpCursor = $bufferHolder.cursor;
 
-        ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder)}
+        ${writeArrayToBuffer(ctx, keys, keyType, false, bufferHolder)}
         // Write the numBytes of key array into the first 8 bytes.
         Platform.putLong($bufferHolder.buffer, $tmpCursor - 8, $bufferHolder.cursor - $tmpCursor);
 
