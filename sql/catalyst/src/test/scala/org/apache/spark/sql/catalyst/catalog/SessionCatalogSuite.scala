@@ -127,6 +127,21 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = true, cascade = false)
   }
 
+  test("drop current database and drop default database") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    catalog.setCurrentDatabase("db1")
+    assert(catalog.getCurrentDatabase == "db1")
+    catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = true)
+    intercept[NoSuchDatabaseException] {
+      catalog.createTable(newTable("tbl1", "db1"), ignoreIfExists = false)
+    }
+    catalog.setCurrentDatabase("default")
+    assert(catalog.getCurrentDatabase == "default")
+    intercept[AnalysisException] {
+      catalog.dropDatabase("default", ignoreIfNotExists = false, cascade = true)
+    }
+  }
+
   test("alter database") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val db1 = catalog.getDatabaseMetadata("db1")
