@@ -106,26 +106,26 @@ object JDBCRDD extends Logging {
    * Returns None for an unhandled filter.
    */
   def compileFilter(f: Filter, dialect: JdbcDialect): Option[String] = {
+    def quote(colName: String): String = dialect.quoteIdentifier(colName)
+
     Option(f match {
-      case EqualTo(attr, value) => s"${dialect.quoteIdentifier(attr)} = ${compileValue(value)}"
+      case EqualTo(attr, value) => s"${quote(attr)} = ${compileValue(value)}"
       case EqualNullSafe(attr, value) =>
-        val col = dialect.quoteIdentifier(attr)
+        val col = quote(attr)
         s"(NOT ($col != ${compileValue(value)} OR $col IS NULL OR " +
           s"${compileValue(value)} IS NULL) OR ($col IS NULL AND ${compileValue(value)} IS NULL))"
-      case LessThan(attr, value) => s"${dialect.quoteIdentifier(attr)} < ${compileValue(value)}"
-      case GreaterThan(attr, value) => s"${dialect.quoteIdentifier(attr)} > ${compileValue(value)}"
-      case LessThanOrEqual(attr, value) =>
-        s"${dialect.quoteIdentifier(attr)} <= ${compileValue(value)}"
-      case GreaterThanOrEqual(attr, value) =>
-        s"${dialect.quoteIdentifier(attr)} >= ${compileValue(value)}"
-      case IsNull(attr) => s"${dialect.quoteIdentifier(attr)} IS NULL"
-      case IsNotNull(attr) => s"${dialect.quoteIdentifier(attr)} IS NOT NULL"
-      case StringStartsWith(attr, value) => s"${dialect.quoteIdentifier(attr)} LIKE '${value}%'"
-      case StringEndsWith(attr, value) => s"${dialect.quoteIdentifier(attr)} LIKE '%${value}'"
-      case StringContains(attr, value) => s"${dialect.quoteIdentifier(attr)} LIKE '%${value}%'"
+      case LessThan(attr, value) => s"${quote(attr)} < ${compileValue(value)}"
+      case GreaterThan(attr, value) => s"${quote(attr)} > ${compileValue(value)}"
+      case LessThanOrEqual(attr, value) => s"${quote(attr)} <= ${compileValue(value)}"
+      case GreaterThanOrEqual(attr, value) => s"${quote(attr)} >= ${compileValue(value)}"
+      case IsNull(attr) => s"${quote(attr)} IS NULL"
+      case IsNotNull(attr) => s"${quote(attr)} IS NOT NULL"
+      case StringStartsWith(attr, value) => s"${quote(attr)} LIKE '${value}%'"
+      case StringEndsWith(attr, value) => s"${quote(attr)} LIKE '%${value}'"
+      case StringContains(attr, value) => s"${quote(attr)} LIKE '%${value}%'"
       case In(attr, value) if value.isEmpty =>
-        s"CASE WHEN ${dialect.quoteIdentifier(attr)} IS NULL THEN NULL ELSE FALSE END"
-      case In(attr, value) => s"${dialect.quoteIdentifier(attr)} IN (${compileValue(value)})"
+        s"CASE WHEN ${quote(attr)} IS NULL THEN NULL ELSE FALSE END"
+      case In(attr, value) => s"${quote(attr)} IN (${compileValue(value)})"
       case Not(f) => compileFilter(f, dialect).map(p => s"(NOT ($p))").getOrElse(null)
       case Or(f1, f2) =>
         // We can't compile Or filter unless both sub-filters are compiled successfully.
