@@ -225,11 +225,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => s"$arrayWriter.write($index, $element);"
     }
 
+    val typeName = if (ctx.isPrimitiveType(jt)) ctx.primitiveTypeName(et) else ""
     val storeElements = if (containsNull) {
       s"""
       for (int $index = 0; $index < $numElements; $index++) {
         if ($input.isNullAt($index)) {
-          $arrayWriter.setNullAt($index);
+          $arrayWriter.setNull${typeName}($index);
         } else {
           final $jt $element = ${ctx.getValue(input, et, index)};
           $writeElement
@@ -237,8 +238,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       }
       """
     } else {
-      if (ctx.isPrimitiveType(et)) {
-        val typeName = ctx.primitiveTypeName(et)
+      if (ctx.isPrimitiveType(jt)) {
         s"$arrayWriter.writePrimitive${typeName}Array($input);"
       } else {
         s"""
