@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -59,7 +59,28 @@ class TextSuite extends QueryTest with SharedSQLContext {
         "Text data source supports only a string column, but you have bigint."))
 
       message = intercept[UnsupportedOperationException] {
-        spark.range(2).selectExpr("'a'", "'b'").write.text(path.getCanonicalPath)
+        Seq(("a", "b")).toDF().write.text(path.getCanonicalPath)
+      }.getMessage
+      assert(message.contains(
+        "Text data source supports only a single column, and you have 2 columns."))
+    }
+
+    withTempDir { dir =>
+      var message = intercept[UnsupportedOperationException] {
+        val path = s"${dir.getAbsolutePath}/text1"
+        val schema = StructType(StructField("a", LongType, true) :: Nil)
+        spark.range(1).write.text(path)
+        spark.read.schema(schema).text(path).collect()
+      }.getMessage
+      assert(message.contains(
+        "Text data source supports only a string column, but you have bigint."))
+
+      message = intercept[UnsupportedOperationException] {
+        val path = s"${dir.getAbsolutePath}/text2"
+        val schema = StructType(
+          StructField("a", StringType, true) :: StructField("b", StringType, true) :: Nil)
+        Seq(Tuple1("a")).toDF().write.text(path)
+        spark.read.schema(schema).text(path).collect()
       }.getMessage
       assert(message.contains(
         "Text data source supports only a single column, and you have 2 columns."))
@@ -153,24 +174,6 @@ class TextSuite extends QueryTest with SharedSQLContext {
           checkAnswer(df2, expected)
         }
       }
-    }
-  }
-
-  test("error handling for unsupported data types.") {
-    withTempPath { path =>
-      var msg = intercept[UnsupportedOperationException] {
-        Seq((1, "Tesla"))
-          .toDF("a", "b").selectExpr("struct(a, b) as a").write.text(path.getAbsolutePath)
-      }.getMessage
-      assert(msg.contains(
-        "Text data source supports only a string column, but you have struct<a:int,b:string>."))
-
-      msg = intercept[UnsupportedOperationException] {
-        val schema = StructType(StructField("a", LongType, true) :: Nil)
-        spark.range(1).write.text(path.getAbsolutePath)
-        spark.read.schema(schema).text(path.getAbsolutePath).collect()
-      }.getMessage
-      assert(msg.contains("Text data source supports only a string column, but you have bigint."))
     }
   }
 

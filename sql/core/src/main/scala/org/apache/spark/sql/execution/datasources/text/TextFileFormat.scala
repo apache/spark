@@ -48,7 +48,6 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       throw new UnsupportedOperationException(
         s"Text data source supports only a single column, and you have ${schema.size} columns.")
     }
-
     val tpe = schema(0).dataType
     if (tpe != StringType) {
       throw new UnsupportedOperationException(
