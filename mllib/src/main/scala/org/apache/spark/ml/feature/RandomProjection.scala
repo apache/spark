@@ -60,7 +60,7 @@ private[ml] trait RandomProjectionParams extends Params {
  *
  * Model produced by [[RandomProjection]], where multiple random vectors are stored. The vectors
  * are normalized to be unit vectors and each vector is used in a hash function:
- *    `h_i(x) = floor(r_i.dot(x) / bucketLength)`
+ *    `h_i(x) = floor(r_i * x / bucketLength)`
  * where `r_i` is the i-th random unit vector. The number of buckets will be `(max L2 norm of input
  * vectors) / bucketLength`.
  *
