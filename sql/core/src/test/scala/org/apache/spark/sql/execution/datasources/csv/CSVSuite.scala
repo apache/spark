@@ -890,4 +890,20 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }
     }
   }
+
+  test("load null when the schema is larger than parsed tokens ") {
+    withTempPath { path =>
+      val schema = StructType(Array(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", IntegerType, nullable = true)
+      ))
+      Seq("1").toDF().write.text(path.getAbsolutePath)
+      val df = spark.read
+        .schema(schema)
+        .option("header", "false")
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(df, Row(1, null))
+    }
+  }
 }

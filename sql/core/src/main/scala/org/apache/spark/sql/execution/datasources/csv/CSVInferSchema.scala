@@ -232,7 +232,7 @@ private[csv] object CSVTypeCast {
       nullable: Boolean = true,
       options: CSVOptions = CSVOptions()): Any = {
 
-    if (nullable && datum == options.nullValue) {
+    if (datum == null || nullable && datum == options.nullValue) {
       null
     } else {
       castType match {

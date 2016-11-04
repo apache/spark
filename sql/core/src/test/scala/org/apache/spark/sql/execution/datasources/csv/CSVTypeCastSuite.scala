@@ -88,6 +88,8 @@ class CSVTypeCastSuite extends SparkFunSuite {
       CSVTypeCast.castTo("-", DateType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
       CSVTypeCast.castTo("-", StringType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo(null, IntegerType, nullable = true, CSVOptions("nullValue", "-")))
   }
 
   test("String type should also respect `nullValue`") {
