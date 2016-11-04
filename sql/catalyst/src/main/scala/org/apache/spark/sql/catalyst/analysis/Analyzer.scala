@@ -134,7 +134,7 @@ class Analyzer(
         case u : UnresolvedRelation =>
           val substituted = cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
             .map(_._2).map { relation =>
-              val withAlias = u.alias.map(SubqueryAlias(_, relation, None))
+              val withAlias = u.alias.map(SubqueryAlias(_, relation, None)())
               withAlias.getOrElse(relation)
             }
           substituted.getOrElse(u)

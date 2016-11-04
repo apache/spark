@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
-import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias}
+import org.apache.spark.sql.types.MetadataBuilder
 
 
 /**
@@ -129,6 +128,18 @@ case class CreateViewCommand(
       throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
         s"(num: `${analyzedPlan.output.length}`) does not match the number of column names " +
         s"specified by CREATE VIEW (num: `${userSpecifiedColumns.length}`).")
+    }
+
+    // When creating a permanent view, not allowed to reference temporary objects. For example,
+    // temporary views.
+    // TODO: Disallow creating permanent views based on temporary UDFs
+    if (!isTemporary) {
+      analyzedPlan.collectFirst {
+        case s: SubqueryAlias if s.isGeneratedByTempTable =>
+          throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+            s"referencing a temp view `${s.alias}`. " +
+            originalText.map(sql => s"""SQL: "$sql".""").getOrElse(""))
+      }
     }
 
     val aliasedPlan = if (userSpecifiedColumns.isEmpty) {

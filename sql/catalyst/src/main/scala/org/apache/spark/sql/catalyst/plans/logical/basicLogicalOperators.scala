@@ -709,10 +709,13 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan,
-    view: Option[TableIdentifier])
+    view: Option[TableIdentifier])(
+    val isGeneratedByTempTable: java.lang.Boolean = false)
   extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+
+  override protected def otherCopyArgs: Seq[AnyRef] = isGeneratedByTempTable :: Nil
 }
 
 /**

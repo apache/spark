@@ -75,7 +75,7 @@ class SQLBuilder private (
     val aliasedOutput = canonicalizedPlan.output.zip(outputNames).map {
       case (attr, name) => Alias(attr.withQualifier(None), name)()
     }
-    val finalPlan = Project(aliasedOutput, SubqueryAlias(finalName, canonicalizedPlan, None))
+    val finalPlan = Project(aliasedOutput, SubqueryAlias(finalName, canonicalizedPlan, None)())
 
     try {
       val replaced = finalPlan.transformAllExpressions {
@@ -563,7 +563,7 @@ class SQLBuilder private (
     }
 
     private def addSubquery(plan: LogicalPlan): SubqueryAlias = {
-      SubqueryAlias(newSubqueryName(), plan, None)
+      SubqueryAlias(newSubqueryName(), plan, None)()
     }
 
     private def addSubqueryIfNeeded(plan: LogicalPlan): LogicalPlan = plan match {

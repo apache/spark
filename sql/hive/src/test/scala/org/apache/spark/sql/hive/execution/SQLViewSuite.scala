@@ -38,21 +38,38 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     spark.sql(s"DROP TABLE IF EXISTS jt")
   }
 
-  test("nested views (interleaved with temporary views)") {
-    withView("jtv1", "jtv2", "jtv3", "temp_jtv1", "temp_jtv2", "temp_jtv3") {
+  test("create a persistent view on a persistent view") {
+    withView("jtv1", "jtv2") {
       sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE VIEW jtv2 AS SELECT * FROM jtv1 WHERE id < 6")
       checkAnswer(sql("select count(*) FROM jtv2"), Row(2))
+    }
+  }
 
-      // Checks temporary views
+  test("create a temp view on a persistent view") {
+    withView("jtv1", "temp_jtv1") {
+      sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
+      sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jtv1 WHERE id < 6")
+      checkAnswer(sql("select count(*) FROM temp_jtv1"), Row(2))
+    }
+  }
+
+  test("create a temp view on a temp view") {
+    withView("temp_jtv1", "temp_jtv2") {
       sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE TEMPORARY VIEW temp_jtv2 AS SELECT * FROM temp_jtv1 WHERE id < 6")
       checkAnswer(sql("select count(*) FROM temp_jtv2"), Row(2))
+    }
+  }
 
-      // Checks interleaved temporary view and normal view
-      sql("CREATE TEMPORARY VIEW temp_jtv3 AS SELECT * FROM jt WHERE id > 3")
-      sql("CREATE VIEW jtv3 AS SELECT * FROM temp_jtv3 WHERE id < 6")
-      checkAnswer(sql("select count(*) FROM jtv3"), Row(2))
+  test("create a persistent view on a temp view") {
+    withView("jtv1", "temp_jtv1") {
+      sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
+      val e = intercept[AnalysisException] {
+        sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
+      }.getMessage
+      assert(e.contains(
+        s"Not allowed to create a permanent view `jtv1` by referencing a temp view `temp_jtv1`"))
     }
   }
 
