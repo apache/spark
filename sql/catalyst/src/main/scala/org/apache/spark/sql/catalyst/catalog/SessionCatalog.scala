@@ -924,7 +924,7 @@ class SessionCatalog(
   }
 
   /**
-   * Returns whether it is a temporary function.
+   * Returns whether it is a temporary function. If not existed, returns false.
    */
   def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
     // copied from HiveSessionCatalog
