@@ -101,7 +101,7 @@ private[spark] class ShuffleMapTask(
         val shuffleWriteId = dep.shuffleHandle.shuffleId
         val shuffleMapOutputId = ShuffleMapOutputId(shuffleWriteId, partition.index)
         val data = input.map { x =>
-          context.setRDDPartitionInfo(shuffleMapOutputId)
+          context.setTaskOutputInfo(shuffleMapOutputId)
           x
         }
         Utils.signalWhenEmpty(data,

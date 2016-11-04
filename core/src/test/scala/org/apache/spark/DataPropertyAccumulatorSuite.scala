@@ -32,7 +32,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true, "l2")
 
     val a = sc.parallelize(1 to 20, 2)
-    val b = a.map{x => acc.add(x); x}
+    val b = a.map { x => acc.add(x); x}
     b.cache()
     b.count()
     acc.value should be (210)
@@ -43,7 +43,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 1)
-    val b = a.map{x => acc.add(x); x}
+    val b = a.map { x => acc.add(x); x}
     b.cache()
     b.count()
     acc.value should be (210)
@@ -56,7 +56,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val a = sc.parallelize(1 to 20)
     val b = a.foreach{x => acc.add(x); x}
     acc.value should be (210)
-    val c = a.map{x => acc.add(x); x}
+    val c = a.map { x => acc.add(x); x}
     c.foreach{x => acc.add(x)}
     acc.value should be (3 * 210)
   }
@@ -77,7 +77,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     sc = new SparkContext("local[2]", "test")
     val a = sc.parallelize(1L to 40L, 5)
     val buckets = 4
-    val b = a.map{x => ((x % buckets), x)}
+    val b = a.map { x => ((x % buckets), x)}
     val inputs = List(b, b.repartition(10), b.partitionBy(new HashPartitioner(5))).map(_.cache())
     val mapSideCombines = List(true, false)
     inputs.foreach { input =>
@@ -98,7 +98,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
           {(a: Long, b: Long) => acc3.add(1); acc.add(1); (a + b)},
           new HashPartitioner(2),
           mapSideCombine)
-        val e = d.map{x => acc.add(1); x}
+        val e = d.map { x => acc.add(1); x}
         c.count()
         // If our partitioner is known then we should only create
         // one combiner for each key value. Otherwise we should
@@ -139,7 +139,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc.add(x); x}
+    val b = a.map { x => acc.add(x); x}
     b.cache()
     b.first()
     acc.value.toInt should be > (0)
@@ -151,8 +151,8 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     sc = new SparkContext("local[2]", "test")
     val List(acc1, acc2, acc3) = (1 to 3).map(x => sc.longAccumulator(dataProperty = true)).toList
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc1.add(x); acc2.add(x); 2 * x}
-    val c = b.coalesce(2).map{x => acc1.add(x); acc3.add(x); x}
+    val b = a.map { x => acc1.add(x); acc2.add(x); 2 * x}
+    val c = b.coalesce(2).map { x => acc1.add(x); acc3.add(x); x}
     c.count()
     acc1.value should be (630L)
     acc2.value should be (210L)
@@ -164,9 +164,9 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc.add(x); x}
+    val b = a.map { x => acc.add(x); x}
     b.cache()
-    val c = b.map{x => acc.add(x); x}
+    val c = b.map { x => acc.add(x); x}
     c.first()
     c.count()
     acc.value should be (420L)
@@ -178,7 +178,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.filter{x =>
+    val b = a.filter { x =>
       if (x % 2 == 0) {
         acc.add(1)
         true
@@ -198,12 +198,12 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val d = sc.parallelize(1 to 20)
-    d.map{x => acc.add(x)}.count()
+    d.map { x => acc.add(x)}.count()
     acc.value should be (210L)
 
     val longAcc = sc.longAccumulator(dataProperty = true)
     val maxInt = Integer.MAX_VALUE.toLong
-    d.map{x => longAcc.add(maxInt + x); x}.count()
+    d.map { x => longAcc.add(maxInt + x); x}.count()
     longAcc.value should be (210L + maxInt * 20)
   }
 
@@ -212,7 +212,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val d = sc.parallelize(1 to 20)
-    d.map{x => acc.add(x)}.count()
+    d.map { x => acc.add(x)}.count()
     acc.value should be (210L)
 
     val longAcc = sc.longAccumulator(dataProperty = true)
@@ -234,8 +234,8 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc.add(x); x}
-    val c = b.map{x => acc.add(x); x}
+    val b = a.map { x => acc.add(x); x}
+    val c = b.map { x => acc.add(x); x}
     c.count()
     acc.value should be (420L)
   }
@@ -245,7 +245,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc.add(x); x}
+    val b = a.map { x => acc.add(x); x}
     b.first()
     b.count()
     acc.value should be (210L)
@@ -256,12 +256,12 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc.add(x); x}
+    val b = a.map { x => acc.add(x); x}
     b.count()
     acc.value should be (210L)
     b.count()
     acc.value should be (210L)
-    val c = b.map{x => acc.add(x); x}
+    val c = b.map { x => acc.add(x); x}
     c.count()
     acc.value should be (420L)
   }
@@ -271,7 +271,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val a = sc.parallelize(1 to 100, 10)
-    val b = a.map{x => acc.add(x); x}
+    val b = a.map { x => acc.add(x); x}
     // This depends on toLocalIterators per-partition fetch behaviour
     b.toLocalIterator.take(2).toList
     acc.value.toInt should be > (0)
@@ -280,7 +280,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     b.count()
     acc.value should be (5050L)
 
-    val c = b.map{x => acc.add(x); x}
+    val c = b.map { x => acc.add(x); x}
     c.cache()
     c.toLocalIterator.take(2).toList
     acc.value.toInt should be > (5050)
@@ -295,8 +295,8 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     sc = new SparkContext("local[2]", "test")
     val List(acc1, acc2, acc3) = 1.to(3).map(x => sc.longAccumulator(dataProperty = true)).toList
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc1.add(x); acc2.add(x); 2 * x}
-    val c = b.coalesce(2).map{x => acc1.add(x); acc3.add(x); x}
+    val b = a.map { x => acc1.add(x); acc2.add(x); 2 * x}
+    val c = b.coalesce(2).map { x => acc1.add(x); acc3.add(x); x}
     // we read all of partition 1 from RDD's a & b, and part of partition 2
     // however, for RDD c, we don't read any of the partitions fully
     // so we should get updates for 1 partition from b, and nothing from c
@@ -328,7 +328,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     sc = new SparkContext("local[2]", "test")
     val acc = sc.longAccumulator( dataProperty = true)
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc.add(x)}
+    val b = a.map { x => acc.add(x)}
     val futures = List(b, b).map(_.countAsync)
     futures.foreach(_.onComplete{_ => acc.value should be (210)})
     futures.foreach{_.get()}
@@ -339,7 +339,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     sc = new SparkContext("local[2]", "test")
     val acc = sc.longAccumulator(dataProperty = true)
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc.add(x)}
+    val b = a.map { x => acc.add(x)}
     val futures = List(b, b).map(_.countAsync)
     futures.foreach(_.onComplete{_ => acc.value should be (210)})
     futures.foreach{_.get()}
@@ -353,9 +353,9 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val List(acc1, acc2, acc3, acc4) = 1.to(4).map(x =>
       sc.longAccumulator(dataProperty = true)).toList
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.map{x => acc1.add(x); acc2.add(x); 2 * x}
-    val c = b.map{x => acc3.add(x); acc2.add(x)}
-    val d = b.map{x => acc4.add(x + 1); acc2.add(x)}
+    val b = a.map { x => acc1.add(x); acc2.add(x); 2 * x}
+    val c = b.map { x => acc3.add(x); acc2.add(x)}
+    val d = b.map { x => acc4.add(x + 1); acc2.add(x)}
     val future1 = c.countAsync()
     val future2 = d.countAsync()
     future1.onComplete({_ =>

@@ -68,18 +68,19 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
    * The following values are used for data property [[AccumulatorV2]]s.
    * Data property [[AccumulatorV2]]s have only-once semantics. These semantics are implemented
    * by keeping track of which RDD id, shuffle id, and partition id the current function is
-   * processing in. If a partition is fully processed the results for that partition/shuffle/rdd
-   * combination are sent back to the driver. The driver keeps track of which rdd/shuffle/partitions
+   * processing in. The driver keeps track of which rdd/shuffle/partitions
    * already have been applied, and only combines values into value_ if the rdd/shuffle/partition
    * has not already been aggregated on the driver program
    */
   // For data property accumulators pending and processed updates.
-  // Pending and processed are keyed by (rdd id, shuffle id, partition id)
+  // Pending and processed are keyed by TaskOutputId
   private[spark] lazy val pending =
     new mutable.HashMap[TaskOutputId, AccumulatorV2[IN, OUT]]()
-  // Completed contains the set of (rdd id, shuffle id, partition id) that have been
+  // Completed contains the set of TaskOutputId that have been
   // fully processed on the worker side. This is used to determine if the updates should
   // be merged on the driver for a particular rdd/shuffle/partition combination.
+  // Some elements may be in pending which are not completed if a partition is only partially
+  // evaluated (e.g. `take(x)`).
   private[spark] lazy val completed = new mutable.HashSet[TaskOutputId]()
   // rddProcessed is keyed by rdd id and the value is a bitset containing all partitions
   // for the given key which have been merged into the value. This is used on the driver.
@@ -197,18 +198,19 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
     // worker side then we need to perform a "normal" add as well as the data property add.
     addImpl(v)
     // Add to the pending updates for data property
-    val updateInfo = TaskContext.get().getRDDPartitionInfo()
-    val base = pending.getOrElse(updateInfo, copyAndReset())
+    val taskOutputInfo = TaskContext.get().getTaskOutputInfo()
+    val updateForTask = pending.getOrElse(taskOutputInfo, copyAndReset())
     // Since we may have constructed a new accumulator, set atDriverSide to false as the default
     // new accumulators will have atDriverSide equal to true.
-    base.atDriverSide = false
-    base.addImpl(v)
-    pending(updateInfo) = base
+    updateForTask.atDriverSide = false
+    updateForTask.addImpl(v)
+    pending(taskOutputInfo) = updateForTask
   }
 
   /**
    * Mark a specific rdd/shuffle/partition as completely processed. This is a noop for
-   * non-data property accumuables.
+   * non-data property accumuables. See [[TaskOutputId]] for an explanation of why this is
+   * important for data property accumulators.
    */
   private[spark] def markFullyProcessed(taskOutputId: TaskOutputId): Unit = {
     if (metadata.dataProperty) {
@@ -226,6 +228,9 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
    * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
+   * When merging data property accumulators, the merge function must always be called on the local
+   * (that is created driver side) accumulator with the accumulator passed in being created on the
+   * workers.
    */
   final private[spark] lazy val merge: (AccumulatorV2[IN, OUT] => Unit) = {
     assert(isAtDriverSide)
@@ -237,14 +242,21 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
     }
   }
 
+  /**
+   * `dataPropertyMerge` must only be called on an accumulator created on the driver side, and
+   * `other` must be an accumulator created on a worker.
+   */
   final private[spark] def dataPropertyMerge(other: AccumulatorV2[IN, OUT]) = {
     // Apply all foreach partitions regardless - they can only be fully evaluated
-    val unprocessed = other.pending.filter{
-      case (ForeachOutputId(), v) => mergeImpl(v); false
+    val unprocessed = other.pending.filter {
+      case (ForeachOutputId, v) => mergeImpl(v); false
       case _ => true
     }
-    val term = unprocessed.filter{case (k, v) => other.completed.contains(k)}
-    term.flatMap {
+    // Only take updates for task outputs which were completed (e.g. skip partial evaluations)
+    val completedUpdates = unprocessed.filter { case (k, v) => other.completed.contains(k)}
+    // We track RDDOutput and ShuffleMapOutput's seperately, so look up the correct map based on
+    // the type of OutputId.
+    completedUpdates.flatMap {
       case (RDDOutputId(rddId, splitId), v) =>
         Some((rddProcessed, rddId, splitId, v))
       case (ShuffleMapOutputId(shuffleWriteId, splitId), v) =>
@@ -253,6 +265,9 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
         None
     }.foreach {
       case (processed, id, splitId, v) =>
+        // Only take updates for task outputs we haven't seen before.
+        // So if this task computed two rdds, but one of them had been computed previously, only
+        // take the accumulator updates from the other one.
       val splits = processed.getOrElseUpdate(id, new mutable.BitSet())
       if (!splits.contains(splitId)) {
         splits += splitId

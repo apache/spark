@@ -43,15 +43,15 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
       val rddOutputId = RDDOutputId(id, split.index)
       // Set the ID of the RDD and partition being processed. We need to do this per
       // element since we chain the iterator transformations together
-      val data = input.map{x =>
-        context.setRDDPartitionInfo(rddOutputId)
+      val data = input.map { x =>
+        context.setTaskOutputInfo(rddOutputId)
         x
       }
       val wrappedData = Utils.signalWhenEmpty(data,
         () => context.taskMetrics.markFullyProcessed(rddOutputId))
       // We also set it before the first call to the user function in case the user provides a
       // function which access a data property accumulator before accessing any elements.
-      context.setRDDPartitionInfo(rddOutputId)
+      context.setTaskOutputInfo(rddOutputId)
       f(context, split.index, wrappedData)
     } else {
       // There are no data property accumulators so we avoid the overhead of keeping track of the

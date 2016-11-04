@@ -1950,12 +1950,13 @@ class SparkContext(config: SparkConf) extends Logging {
     // accumulators (e.g. inside of `foreach`).
     val wrappedFunc = {(context: TaskContext, itr: Iterator[T]) =>
       if (context.taskMetrics.hasDataPropertyAccumulators()) {
-        val outputId = ForeachOutputId()
-        context.setRDDPartitionInfo(outputId)
-        val wrappedItr = itr.map{x =>
-          context.setRDDPartitionInfo(outputId)
+        val outputId = ForeachOutputId
+        context.setTaskOutputInfo(outputId)
+        val wrappedItr = itr.map { x =>
+          context.setTaskOutputInfo(outputId)
+          x
         }
-        func(context, itr)
+        func(context, wrappedItr)
       } else {
         func(context, itr)
       }

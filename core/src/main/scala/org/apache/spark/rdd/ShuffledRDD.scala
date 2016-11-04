@@ -113,7 +113,7 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
       // since the user's aggregator code will be evaluated on the entire input before it returns
       // the iterator to its results. Additionally since we are on the read side of the shuffle
       // there is no shuffleWriteId to keep track of.
-      context.setRDDPartitionInfo(rddOutputId)
+      context.setTaskOutputInfo(rddOutputId)
     }
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
     val itr = SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1,
