@@ -60,7 +60,7 @@ private[spark] case class AccumulatorMetadata(
  * `OUT` should be a type that can be read atomically (e.g., Int, Long), or thread-safely
  * (e.g., synchronized collections) because it will be read from other threads.
  */
-abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Serializable {
+abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
   private[spark] var atDriverSide = true
 
@@ -193,7 +193,7 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
     }
   }
 
-  private def dataPropertyAdd(v: IN): Unit = {
+  protected def dataPropertyAdd(v: IN): Unit = {
     // To allow the user to be able to access the current accumulated value from their process
     // worker side then we need to perform a "normal" add as well as the data property add.
     addImpl(v)
@@ -444,12 +444,16 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
 
   /**
    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
-   * Added for simplicity with adding non java Longs.
+   * Added for simplicity with adding non java Longs & boxing.
    * @since 2.1.0
    */
   def add(v: Long): Unit = {
-    val javaValue: jl.Long = v
-    add(javaValue)
+    // Note: This is based on the add method in [[AccumulatorV2]] but copied to avoid boxing.
+    if (metadata != null && metadata.dataProperty) {
+      dataPropertyAdd(v: jl.Long)
+    } else {
+      addImpl(v)
+    }
   }
 
   /**
@@ -516,6 +520,20 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   override def reset(): Unit = {
     _sum = 0.0
     _count = 0L
+  }
+
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * Added for boxing.
+   * @since 2.1.0
+   */
+  def add(v: Double): Unit = {
+    // Note: This is based on the add method in [[AccumulatorV2]] but copied to avoid boxing.
+    if (metadata != null && metadata.dataProperty) {
+      dataPropertyAdd(v: jl.Double)
+    } else {
+      addImpl(v)
+    }
   }
 
   /**
