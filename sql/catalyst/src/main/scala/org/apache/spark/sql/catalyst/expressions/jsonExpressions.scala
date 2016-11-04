@@ -499,6 +499,7 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
 
   override def eval(input: InternalRow): Any = {
     try parser.parse(child.eval(input).toString).head catch {
+      case _: NullPointerException => null
       case _: SparkSQLJsonProcessingException => null
     }
   }

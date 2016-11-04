@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import org.apache.spark.sql.functions.{from_json, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructType}
@@ -112,6 +114,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(from_json($"value", schema)),
       Row(Row(null)) :: Nil)
+  }
+
+  test("from_json null column") {
+    withTempDir { dir =>
+      Seq("""{"a": 1}""").toDF("value").write.parquet(new File(dir, "p=x").toString)
+      Seq("""{"a": 2}""").toDF("record").write.parquet(new File(dir, "p=y").toString)
+      val schema = new StructType().add("a", IntegerType)
+      val df = spark.read.parquet(dir.toString)
+      checkAnswer(
+        df.select(from_json($"value", schema)),
+        Row(Row(1)) :: Row(null) :: Nil)
+    }
   }
 
   test("from_json invalid json") {
