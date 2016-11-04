@@ -797,9 +797,8 @@ class SparseVector(Vector):
     def __getattr__(self, item):
         def wrapper(*args, **kwargs):
             if _have_scip:
-                csr = scipy.sparse.csr_matrix((\
-                                               np.append(self.values, 0),\
-                                               np.append(self.indices, self.size-1),\
+                csr = scipy.sparse.csr_matrix((np.append(self.values, 0),
+                                               np.append(self.indices, self.size-1),
                                                [0, len(self.values)]))
                 func = getattr(csr, item)
                 result = func(*args, **kwargs)
@@ -807,7 +806,8 @@ class SparseVector(Vector):
                     return SparseVector(result.shape[1],result.indices,result.data)
                 return result
             else:
-                raise AttributeError("'{0}' object has no attribute '{1}'.".format(self.__class__, item))
+                raise AttributeError(
+                    "'{0}' object has no attribute '{1}' or SciPy not installed.".format(self.__class__, item))
         return wrapper
 
     def __getitem__(self, index):
