@@ -35,18 +35,18 @@ private[r] class GBTRegressorWrapper private (
   val formula: String,
   val features: Array[String]) extends MLWritable {
 
-  private val DTModel: GBTRegressionModel =
+  private val gbtrModel: GBTRegressionModel =
     pipeline.stages(1).asInstanceOf[GBTRegressionModel]
 
-  lazy val numFeatures: Int = DTModel.numFeatures
-  lazy val featureImportances: Vector = DTModel.featureImportances
-  lazy val numTrees: Int = DTModel.getNumTrees
-  lazy val treeWeights: Array[Double] = DTModel.treeWeights
+  lazy val numFeatures: Int = gbtrModel.numFeatures
+  lazy val featureImportances: Vector = gbtrModel.featureImportances
+  lazy val numTrees: Int = gbtrModel.getNumTrees
+  lazy val treeWeights: Array[Double] = gbtrModel.treeWeights
 
-  def summary: String = DTModel.toDebugString
+  def summary: String = gbtrModel.toDebugString
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(DTModel.getFeaturesCol)
+    pipeline.transform(dataset).drop(gbtrModel.getFeaturesCol)
   }
 
   override def write: MLWriter = new

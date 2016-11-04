@@ -969,13 +969,18 @@ test_that("spark.gbt", {
 
   # classification
   # label must be binary - GBTClassifier currently only supports binary classification.
-  data <- suppressWarnings(createDataFrame(iris[iris$Species != "virginica", ]))
+  iris2 <- iris[iris$Species != "virginica", ]
+  data <- suppressWarnings(createDataFrame(iris2))
   model <- spark.gbt(data, Species ~ Petal_Length + Petal_Width, "classification")
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
+  predictions <- collect(predict(model, data))$prediction
+  # test string prediction values
+  expect_equal(length(grep("setosa", predictions)), 50)
+  expect_equal(length(grep("versicolor", predictions)), 50)
 
   modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
   write.ml(model, modelPath)
@@ -988,6 +993,13 @@ test_that("spark.gbt", {
   expect_equal(stats$numClasses, stats2$numClasses)
 
   unlink(modelPath)
+
+  iris2$NumericSpecies <- ifelse(iris2$Species == "setosa", 0, 1)
+  df <- suppressWarnings(createDataFrame(iris2))
+  m <- spark.gbt(df, NumericSpecies ~ ., type = "classification")
+  s <- summary(m)
+  # test numeric prediction values
+  expect_equal(iris2$NumericSpecies, as.double(collect(predict(m, df))$prediction))
 })
 
 sparkR.session.stop()
