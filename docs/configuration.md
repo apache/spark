@@ -1598,7 +1598,7 @@ Apart from these, the following properties are also available, and may be useful
         <td>false</td>
         <td>
             <p>Whether to enable SSL connections on all supported protocols.</p>
-            
+
             <p>When <code>spark.ssl.enabled</code> is configured, <code>spark.ssl.protocol</code>
             is required.</p>
 
