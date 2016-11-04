@@ -692,8 +692,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("Unsupported types - DROPMALFORMED mode") {
+    val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+
     withTempPath { path =>
-      val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
       spark.range(1).write.csv(path.getAbsolutePath)
       val df = spark.read
         .schema(schema)
@@ -701,6 +702,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .csv(path.getAbsolutePath)
 
       assert(df.collect().isEmpty)
+    }
+
+    withTempPath { path =>
+      Seq(Tuple1("null")).toDF().write.csv(path.getAbsolutePath)
+      val nullDf = spark.read
+        .schema(schema)
+        .option("nullValue", "null")
+        .option("mode", "DROPMALFORMED")
+        .csv(path.getAbsolutePath)
+
+      // This succeeds to read null even thought it is unsupported.
+      checkAnswer(nullDf, Row(null))
     }
   }
 
@@ -719,10 +732,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("Unsupported types - PERMISSIVE mode") {
     withTempDir { dir =>
       // If the values are null, it is fine to read.
-      val csvDir = new File(dir, "csv").getCanonicalPath
       val schema = StructType(StructField("a",
           StructType(StructField("b", StringType, true) :: Nil), true) :: Nil)
-      val path = s"$csvDir/tmp1"
+      val path = s"${dir.getAbsolutePath}/tmp1"
       Seq(Tuple1("null")).toDF().write.csv(path)
       val df = spark.read
         .schema(schema)
@@ -734,7 +746,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       // If the values are non-null and the type is unsupported, it throws an exception.
       val msg = intercept[SparkException] {
-        val path = s"$csvDir/tmp2"
+        val path = s"${dir.getAbsolutePath}/tmp2"
         spark.range(1).write.csv(path)
         spark.read.schema(schema).option("mode", "PERMISSIVE").csv(path).collect()
       }.getCause.getMessage

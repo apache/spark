@@ -1133,7 +1133,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       .json(nullRdd)
 
     // This succeeds to read null even thought it is unsupported.
-    assert(nullDf.collect().head.get(0) == null)
+    checkAnswer(nullDf, Row(null))
 
     withTempPath { path =>
       // Read JSON data from files.
