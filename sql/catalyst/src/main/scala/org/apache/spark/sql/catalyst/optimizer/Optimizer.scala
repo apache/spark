@@ -1020,7 +1020,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // state and all the input rows processed before. In another word, the order of input rows
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
     case filter @ Filter(condition, project @ Project(fields, grandChild))
-      if fields.forall(_.deterministic) =>
+      if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
 
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
@@ -1160,6 +1160,20 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     } else {
       filter
     }
+  }
+
+  /**
+   * Check if we can safely push a filter through a projection, by making sure that predicate
+   * subqueries in the condition do not contain the same attributes as the plan they are moved
+   * into. This can happen when the plan and predicate subquery have the same source.
+   */
+  private def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
+    val attributes = plan.outputSet
+    val matched = condition.find {
+      case PredicateSubquery(p, _, _, _) => p.outputSet.intersect(attributes).nonEmpty
+      case _ => false
+    }
+    matched.isEmpty
   }
 }
 

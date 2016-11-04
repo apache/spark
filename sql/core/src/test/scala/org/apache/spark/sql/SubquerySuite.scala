@@ -571,4 +571,20 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
         Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
   }
+
+  test("SPARK-17337: Incorrect column resolution leads to incorrect results") {
+    withTempView("t1", "t2") {
+      Seq(1, 2).toDF("c1").createOrReplaceTempView("t1")
+      Seq(1).toDF("c2").createOrReplaceTempView("t2")
+
+      checkAnswer(
+        sql(
+          """
+            | select *
+            | from   (select t2.c2+1 as c3
+            |         from   t1 left join t2 on t1.c1=t2.c2) t3
+            | where  c3 not in (select c2 from t2)""".stripMargin),
+        Row(2) :: Nil)
+    }
+  }
 }
