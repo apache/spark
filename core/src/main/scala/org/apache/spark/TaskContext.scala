@@ -85,10 +85,24 @@ object TaskContext {
  * Any accumulators used inside of `runJob` directly are always counted because there is no
  * resubmition of `runJob`/`foreach`.
 */
-private[spark] sealed trait TaskOutputId
-private[spark] case class RDDOutputId(rddId: Int, partition: Int) extends TaskOutputId
-private[spark] case class ShuffleMapOutputId(shuffleId: Int, partition: Int) extends TaskOutputId
-private[spark] case object ForeachOutputId extends TaskOutputId
+private[spark] sealed trait TaskOutputId {
+  def id: Int
+  def partition: Int
+}
+private[spark] case class RDDOutputId(rddId: Int, partition: Int) extends TaskOutputId {
+  override def id: Int = rddId
+}
+private[spark] case class ShuffleMapOutputId(shuffleId: Int, partition: Int) extends TaskOutputId {
+  override def id: Int = shuffleId
+}
+private[spark] case object ForeachOutputId extends TaskOutputId {
+  override def id: Int = {
+    throw new Exception("ForeachOutputId does not have an id")
+  }
+  override def partition: Int = {
+    throw new Exception("ForeachOutputId does not have a partition")
+  }
+}
 
 /**
  * Contextual information about a task which can be read or mutated during

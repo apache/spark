@@ -247,34 +247,36 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
    * `other` must be an accumulator created on a worker.
    */
   final private[spark] def dataPropertyMerge(other: AccumulatorV2[IN, OUT]) = {
-    // Apply all foreach partitions regardless - they can only be fully evaluated
-    val unprocessed = other.pending.filter {
-      case (ForeachOutputId, v) => mergeImpl(v); false
-      case _ => true
-    }
-    // Only take updates for task outputs which were completed (e.g. skip partial evaluations)
-    val completedUpdates = unprocessed.filter { case (k, v) => other.completed.contains(k)}
-    // We track RDDOutput and ShuffleMapOutput's seperately, so look up the correct map based on
-    // the type of OutputId.
-    completedUpdates.flatMap {
-      case (RDDOutputId(rddId, splitId), v) =>
-        Some((rddProcessed, rddId, splitId, v))
-      case (ShuffleMapOutputId(shuffleWriteId, splitId), v) =>
-        Some((shuffleProcessed, shuffleWriteId, splitId, v))
-      case _ => // We won't ever hit this case but avoid compiler warnings
-        None
-    }.foreach {
-      case (processed, id, splitId, v) =>
+    def processAccumUpdate(
+      processed: mutable.HashMap[Int, mutable.BitSet],
+      outputId: TaskOutputId,
+      accumUpdate: AccumulatorV2[IN, OUT]
+    ): Unit = {
+      val partitionsAlreadyMerged = processed.getOrElseUpdate(outputId.id, new mutable.BitSet())
+      // Only take updates for task outputs which were completed (e.g. skip partial evaluations)
+      if (other.completed.contains(outputId)) {
         // Only take updates for task outputs we haven't seen before.
         // So if this task computed two rdds, but one of them had been computed previously, only
         // take the accumulator updates from the other one.
-      val splits = processed.getOrElseUpdate(id, new mutable.BitSet())
-      if (!splits.contains(splitId)) {
-        splits += splitId
-        mergeImpl(v)
+        if (!partitionsAlreadyMerged.contains(outputId.partition)) {
+          partitionsAlreadyMerged += outputId.partition
+          mergeImpl(accumUpdate)
+        }
       }
     }
-  }
+    other.pending.foreach {
+      // Apply all foreach partitions regardless - they can only be fully evaluated
+      case (ForeachOutputId, v) =>
+        mergeImpl(v)
+      // For RDDs & shuffles, apply the accumulator updates as long as the output is complete
+      // and its the first time we're seeing it (just slightly different bookkeeping between
+      // RDDs and shuffles).
+      case (outputId: RDDOutputId, v) =>
+        processAccumUpdate(rddProcessed, outputId, v)
+      case (outputId: ShuffleMapOutputId, v) =>
+        processAccumUpdate(shuffleProcessed, outputId, v)
+    }
+ }
 
 
   /**
