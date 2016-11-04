@@ -488,37 +488,30 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("create a permanent/temp view using a hive function") {
-    withView("view1", "tempView1") {
-      sql(s"CREATE VIEW tempView1 AS SELECT histogram_numeric(id, 5) from jt")
-      checkAnswer(sql("select count(*) FROM tempView1"), Row(1))
-      sql(s"CREATE VIEW view1 AS SELECT histogram_numeric(id, 5) from jt")
-      checkAnswer(sql("select count(*) FROM view1"), Row(1))
-    }
-  }
-
-  test("create a permanent/temp view using a built-in function") {
-    withView("view1", "tempView1") {
-      sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT abs(id) from jt")
-      checkAnswer(sql("select count(*) FROM tempView1"), Row(9))
-      sql(s"CREATE VIEW view1 AS SELECT abs(id) from jt")
-      checkAnswer(sql("select count(*) FROM view1"), Row(9))
-    }
-  }
-
-  test("create a permanent/temp view using a permanent function") {
-    val functionName = "myUpper"
-    val functionClass =
+  test("create a permanent/temp view using a hive, built-in, and permanent user function") {
+    val permanentFuncName = "myUpper"
+    val permanentFuncClass =
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
-    withUserDefinedFunction(functionName -> false) {
-      sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
-      withView("view1", "tempView1") {
-        withTable("tab1") {
-          (1 to 10).map(i => s"$i").toDF("id").write.saveAsTable("tab1")
-          sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $functionName(id) from tab1")
-          checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
-          sql(s"CREATE VIEW view1 AS SELECT $functionName(id) from tab1")
-          checkAnswer(sql("select count(*) FROM view1"), Row(10))
+    val builtInFuncName = "abs"
+    val hiveFuncName = "histogram_numeric"
+
+    withUserDefinedFunction(permanentFuncName -> false) {
+      sql(s"CREATE FUNCTION $permanentFuncName AS '$permanentFuncClass'")
+      withTable("tab1") {
+        (1 to 10).map(i => (s"$i", i)).toDF("str", "id").write.saveAsTable("tab1")
+        Seq("VIEW", "TEMPORARY VIEW").foreach { viewMode =>
+          withView("view1") {
+            sql(
+              s"""
+                 |CREATE $viewMode view1
+                 |AS SELECT
+                 |$permanentFuncName(str),
+                 |$builtInFuncName(id),
+                 |$hiveFuncName(id, 5) over()
+                 |FROM tab1
+               """.stripMargin)
+            checkAnswer(sql("select count(*) FROM view1"), Row(10))
+          }
         }
       }
     }
