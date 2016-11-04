@@ -140,13 +140,12 @@ class LinearRegressionSuite
     assert(lir.getStandardization)
     assert(lir.getSolver == "auto")
     val model = lir.fit(datasetWithDenseFeature)
-    assert(model.hasSummary)
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
+    assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
-
 
     model.transform(datasetWithDenseFeature)
       .select("label", "prediction")

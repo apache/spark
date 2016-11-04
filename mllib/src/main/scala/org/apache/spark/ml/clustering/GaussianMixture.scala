@@ -170,13 +170,6 @@ class GaussianMixtureModel private[ml] (
     throw new RuntimeException(
       s"No training summary available for the ${this.getClass.getSimpleName}")
   }
-
-//  @Since("2.1.0")
-//  override def copy(extra: ParamMap): GaussianMixtureModel = {
-//    val newModel = copyValues(new GaussianMixtureModel(uid, weights, gaussians), extra)
-//    if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
-//    newModel.setParent(parent)
-//  }
 }
 
 @Since("2.0.0")

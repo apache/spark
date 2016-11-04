@@ -142,6 +142,8 @@ class LogisticRegressionSuite
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
 
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
@@ -255,9 +257,6 @@ class LogisticRegressionSuite
     mlr.setFitIntercept(false)
     val mlrModel = mlr.fit(smallMultinomialDataset)
     assert(mlrModel.interceptVector === Vectors.sparse(3, Seq()))
-
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
   }
 
   test("logistic regression with setters") {
