@@ -116,18 +116,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Row(null)) :: Nil)
   }
 
-  test("from_json null column with parquet source") {
-    withTempDir { dir =>
-      Seq("""{"a": 1}""").toDF("value").write.parquet(new File(dir, "p=x").toString)
-      Seq("""{"a": 2}""").toDF("record").write.parquet(new File(dir, "p=y").toString)
-      val schema = new StructType().add("a", IntegerType)
-      val df = spark.read.parquet(dir.toString)
-      checkAnswer(
-        df.select(from_json($"value", schema)),
-        Row(Row(1)) :: Row(null) :: Nil)
-    }
-  }
-
   test("from_json invalid json") {
     val df = Seq("""{"a" 1}""").toDS()
     val schema = new StructType().add("a", IntegerType)
