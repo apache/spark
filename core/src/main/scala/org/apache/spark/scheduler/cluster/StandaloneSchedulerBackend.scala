@@ -139,7 +139,13 @@ private[spark] class StandaloneSchedulerBackend(
         scheduler.error(reason)
       } finally {
         // Ensure the application terminates, as we can no longer run jobs.
-        sc.stop()
+        new Thread("stop-spark-context") {
+          setDaemon(true)
+
+          override def run(): Unit = {
+            sc.stop()
+          }
+        }.start()
       }
     }
   }
