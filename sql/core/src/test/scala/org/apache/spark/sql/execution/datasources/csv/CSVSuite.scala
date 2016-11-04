@@ -896,7 +896,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       Seq("1").toDF().write.text(path.getAbsolutePath)
       val schema = StructType(
         StructField("a", IntegerType, true) ::
-          StructField("b", IntegerType, true) :: Nil)
+        StructField("b", IntegerType, true) :: Nil)
       val df = spark.read
         .schema(schema)
         .option("header", "false")
