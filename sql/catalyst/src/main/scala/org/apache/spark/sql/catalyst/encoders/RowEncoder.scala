@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -122,28 +122,12 @@ object RowEncoder {
     case t @ ArrayType(et, cn) =>
       val cls = inputObject.dataType.asInstanceOf[ObjectType].cls
       et match {
-/*
-        case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType
-          if !cn && (
-            cls.isAssignableFrom(classOf[Array[Boolean]]) ||
-            cls.isAssignableFrom(classOf[Array[Byte]]) ||
-            cls.isAssignableFrom(classOf[Array[Short]]) ||
-            cls.isAssignableFrom(classOf[Array[Int]]) ||
-            cls.isAssignableFrom(classOf[Array[Long]]) ||
-            cls.isAssignableFrom(classOf[Array[Float]]) ||
-            cls.isAssignableFrom(classOf[Array[Double]])) =>
-          print(s"1@ET: $et, $cn, $cls\n")
-          StaticInvoke(
-            classOf[UnsafeArrayData],
-            ArrayType(et, false),
-            "fromPrimitiveArray",
-            inputObject :: Nil)
-*/
         case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
-          NewInstance(
-            classOf[GenericArrayData],
-            inputObject :: Nil,
-            dataType = t)
+          StaticInvoke(
+            classOf[ArrayData],
+            ObjectType(classOf[ArrayData]),
+            "toArrayData",
+            inputObject :: Nil)
         case _ => MapObjects(
           element => serializerFor(ValidateExternalType(element, et), et),
           inputObject,
@@ -211,8 +195,7 @@ object RowEncoder {
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
     // In order to support both Array and Seq in external row, we make this as java.lang.Object.
-    case a @ ArrayType(et, cn) =>
-      ObjectType(classOf[java.lang.Object])
+    case _: ArrayType => ObjectType(classOf[java.lang.Object])
     case _ => externalDataTypeFor(dt)
   }
 

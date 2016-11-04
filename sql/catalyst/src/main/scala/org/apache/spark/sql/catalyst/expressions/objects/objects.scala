@@ -993,7 +993,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
       case _: DecimalType =>
         Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
           .map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
-      case a @ ArrayType(et, cn) =>
+      case _: ArrayType =>
         s"$obj instanceof ${classOf[Seq[_]].getName} || $obj.getClass().isArray()"
       case _ =>
         s"$obj instanceof ${ctx.boxedType(dataType)}"

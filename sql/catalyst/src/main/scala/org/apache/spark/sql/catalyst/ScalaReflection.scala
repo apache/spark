@@ -444,13 +444,7 @@ object ScalaReflection extends ScalaReflection {
          case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
                     FloatType | DoubleType) =>
           val cls = input.dataType.asInstanceOf[ObjectType].cls
-          if (cls.isAssignableFrom(classOf[Array[Boolean]]) ||
-              cls.isAssignableFrom(classOf[Array[Byte]]) ||
-              cls.isAssignableFrom(classOf[Array[Short]]) ||
-              cls.isAssignableFrom(classOf[Array[Int]]) ||
-              cls.isAssignableFrom(classOf[Array[Long]]) ||
-              cls.isAssignableFrom(classOf[Array[Float]]) ||
-              cls.isAssignableFrom(classOf[Array[Double]])) {
+          if (cls.isArray && cls.getComponentType.isPrimitive) {
             StaticInvoke(
               classOf[UnsafeArrayData],
               ArrayType(dt, false),
