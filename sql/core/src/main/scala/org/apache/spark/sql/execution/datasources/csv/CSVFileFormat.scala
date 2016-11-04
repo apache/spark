@@ -31,6 +31,7 @@ import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -56,13 +57,16 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     // TODO: Move filtering.
     val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
-    val lines = readText(sparkSession, csvOptions, paths)
-    val firstLine = findFirstLine(csvOptions, lines)
+    val lines: Dataset[String] = readText(sparkSession, csvOptions, paths)
+    val firstLine: String = findFirstLine(csvOptions, lines)
     val firstRow = new CsvReader(csvOptions).parseLine(firstLine)
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val header = makeSafeHeader(firstRow, csvOptions, caseSensitive)
 
-    val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
+    val parsedRdd: RDD[Array[String]] = CSVRelation.univocityTokenizer(
+      lines,
+      firstLine = if (csvOptions.headerFlag) firstLine else null,
+      params = csvOptions)
     val schema = if (csvOptions.inferSchemaFlag) {
       CSVInferSchema.infer(parsedRdd, header, csvOptions)
     } else {
@@ -173,17 +177,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
   }
 
-  private def tokenRdd(
-      sparkSession: SparkSession,
-      options: CSVOptions,
-      header: Array[String],
-      inputPaths: Seq[String]): RDD[Array[String]] = {
-    val lines = readText(sparkSession, options, inputPaths)
-    // Make sure firstLine is materialized before sending to executors
-    val firstLine = if (options.headerFlag) findFirstLine(options, lines) else null
-    CSVRelation.univocityTokenizer(lines, firstLine, options)
-  }
-
   /**
    * Returns the first line of the first non-empty file in path
    */
@@ -205,7 +198,13 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: CSVOptions,
       inputPaths: Seq[String]): Dataset[String] = {
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
-      sparkSession.read.textFile(inputPaths: _*)
+      sparkSession.baseRelationToDataFrame(
+        DataSource.apply(
+          sparkSession,
+          paths = inputPaths,
+          className = classOf[TextFileFormat].getName
+        ).resolveRelation(checkFilesExist = false))
+        .select("value").as[String](Encoders.STRING)
     } else {
       val charset = options.charset
       val rdd = sparkSession.sparkContext

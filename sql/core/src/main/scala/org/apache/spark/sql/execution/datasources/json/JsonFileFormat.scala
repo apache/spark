@@ -52,10 +52,10 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       val columnNameOfCorruptRecord =
         parsedOptions.columnNameOfCorruptRecord
           .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-      val jsonFiles = files.filterNot { status =>
+      val jsonFiles: Seq[String] = files.filterNot { status =>
         val name = status.getPath.getName
         (name.startsWith("_") && !name.contains("=")) || name.startsWith(".")
-      }.map(_.getPath.toString).toArray
+      }.map(_.getPath.toString)
 
       val lines = sparkSession.baseRelationToDataFrame(
         DataSource.apply(
