@@ -161,9 +161,8 @@ class GBTClassifier @Since("1.4.0") (
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(labelCol, featuresCol, predictionCol, impurity, lossType,
-                    maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain,
-                    minInstancesPerNode, seed, stepSize, subsamplingRate,
-                    cacheNodeIds, checkpointInterval)
+      maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
+      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval)
     instr.logNumFeatures(numFeatures)
     instr.logNumClasses(2)
 

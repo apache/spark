@@ -132,9 +132,8 @@ class RandomForestClassifier @Since("1.4.0") (
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
-                    impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB,
-                    minInfoGain, minInstancesPerNode, seed, subsamplingRate, thresholds,
-                    cacheNodeIds, checkpointInterval)
+      impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
+      minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
 
     val trees = RandomForest
       .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))

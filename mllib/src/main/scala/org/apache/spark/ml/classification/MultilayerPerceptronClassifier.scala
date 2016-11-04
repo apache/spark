@@ -233,8 +233,8 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    */
   override protected def train(dataset: Dataset[_]): MultilayerPerceptronClassificationModel = {
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(labelCol, featuresCol, predictionCol, layers, maxIter,
-                    tol, blockSize, solver, stepSize, seed)
+    instr.logParams(labelCol, featuresCol, predictionCol, layers, maxIter, tol,
+      blockSize, solver, stepSize, seed)
 
     val myLayers = $(layers)
     val labels = myLayers.last

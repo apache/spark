@@ -149,7 +149,7 @@ class NaiveBayes @Since("1.5.0") (
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
-                    probabilityCol, modelType, smoothing, thresholds)
+      probabilityCol, modelType, smoothing, thresholds)
 
     val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
     instr.logNumFeatures(numFeatures)
