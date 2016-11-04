@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructTyp
  * Common params for PowerIterationClustering
  */
 private[clustering] trait PowerIterationClusteringParams extends Params with HasMaxIter
-  with HasFeaturesCol with HasPredictionCol with HasLabelCol {
+  with HasFeaturesCol with HasPredictionCol {
 
   /**
    * The number of clusters to create (k). Must be > 1. Default: 2.
@@ -70,11 +70,21 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   def getInitMode: String = $(initMode)
 
   /**
+   * Param for the column name for ids returned by [[PowerIterationClustering.transform()]].
+   * Default: "id"
+   * @group param
+   */
+  val idCol = new Param[String](this, "idCol", "column name for ids.")
+
+  /** @group getParam */
+  def getIdCol: String = $(idCol)
+
+  /**
    * Validates the input schema
    * @param schema input schema
    */
   protected def validateSchema(schema: StructType): Unit = {
-    SchemaUtils.checkColumnType(schema, $(labelCol), LongType)
+    SchemaUtils.checkColumnType(schema, $(idCol), LongType)
     SchemaUtils.checkColumnType(schema, $(predictionCol), IntegerType)
   }
 }
@@ -101,7 +111,7 @@ class PowerIterationClustering private[clustering] (
     k -> 2,
     maxIter -> 20,
     initMode -> "random",
-    labelCol -> "id")
+    idCol -> "id")
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): PowerIterationClustering = defaultCopy(extra)
@@ -131,7 +141,7 @@ class PowerIterationClustering private[clustering] (
 
   /** @group setParam */
   @Since("2.2.0")
-  def setLabelCol(value: String): this.type = set(labelCol, value)
+  def setIdCol(value: String): this.type = set(idCol, value)
 
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -150,7 +160,7 @@ class PowerIterationClustering private[clustering] (
     val rows: RDD[Row] = model.assignments.map {
       case assignment: Assignment => Row(assignment.id, assignment.cluster)
     }
-    val schema = transformSchema(new StructType(Array(StructField($(labelCol), LongType),
+    val schema = transformSchema(new StructType(Array(StructField($(idCol), LongType),
       StructField($(predictionCol), IntegerType))))
     sparkSession.createDataFrame(rows, schema)
   }
