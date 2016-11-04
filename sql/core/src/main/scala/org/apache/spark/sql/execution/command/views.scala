@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -139,6 +140,15 @@ case class CreateViewCommand(
           throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
             s"referencing a temp view `${s.alias}`. " +
             originalText.map(sql => s"""SQL: "$sql".""").getOrElse(""))
+      }
+
+      child.collect {
+        case other if !other.resolved => other.expressions.flatMap(_.collect {
+          case e: UnresolvedFunction if sparkSession.sessionState.catalog.isTempFunction(e.name) =>
+            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+              s"referencing a temp function `${e.name}`. " +
+              originalText.map(sql => s"""SQL: "$sql".""").getOrElse(""))
+        })
       }
     }
 
