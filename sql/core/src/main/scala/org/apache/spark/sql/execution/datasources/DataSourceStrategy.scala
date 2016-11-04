@@ -182,9 +182,10 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
           "Cannot overwrite a path that is also being read from.")
       }
 
-      val overwritingSinglePartition = (overwrite.specificPartition.isDefined &&
+      val overwritingSinglePartition =
+        overwrite.specificPartition.isDefined &&
         t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
-        l.catalogTable.get.partitionProviderIsHive)
+        l.catalogTable.get.tracksPartitionsInCatalog
 
       val effectiveOutputPath = if (overwritingSinglePartition) {
         val partition = t.sparkSession.sessionState.catalog.getPartition(
@@ -203,7 +204,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
         if (l.catalogTable.isDefined && updatedPartitions.nonEmpty &&
             l.catalogTable.get.partitionColumnNames.nonEmpty &&
-            l.catalogTable.get.partitionProviderIsHive) {
+            l.catalogTable.get.tracksPartitionsInCatalog) {
           val metastoreUpdater = AlterTableAddPartitionCommand(
             l.catalogTable.get.identifier,
             updatedPartitions.map(p => (p, None)),
@@ -237,6 +238,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       sparkSession: SparkSession,
       simpleCatalogRelation: SimpleCatalogRelation): LogicalPlan = {
     val table = simpleCatalogRelation.catalogTable
+    val pathOption = table.storage.locationUri.map("path" -> _)
     val dataSource =
       DataSource(
         sparkSession,
@@ -244,7 +246,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         partitionColumns = table.partitionColumnNames,
         bucketSpec = table.bucketSpec,
         className = table.provider.get,
-        options = table.storage.properties)
+        options = table.storage.properties ++ pathOption)
 
     LogicalRelation(
       dataSource.resolveRelation(),
