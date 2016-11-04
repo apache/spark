@@ -116,7 +116,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Row(null)) :: Nil)
   }
 
-  test("from_json null column") {
+  test("from_json null column with parquet source") {
     withTempDir { dir =>
       Seq("""{"a": 1}""").toDF("value").write.parquet(new File(dir, "p=x").toString)
       Seq("""{"a": 2}""").toDF("record").write.parquet(new File(dir, "p=y").toString)
