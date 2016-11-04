@@ -92,8 +92,9 @@ print.structType <- function(x, ...) {
 #'
 #' Create a structField object that contains the metadata for a single field in a schema.
 #'
-#' @param x The name of the field
-#' @return a structField object
+#' @param x the name of the field.
+#' @param ... additional argument(s) passed to the method.
+#' @return A structField object.
 #' @rdname structField
 #' @export
 #' @examples

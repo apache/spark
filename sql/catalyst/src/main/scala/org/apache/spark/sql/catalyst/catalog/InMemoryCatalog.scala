@@ -24,10 +24,11 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
@@ -39,7 +40,11 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  *
  * All public methods should be synchronized for thread-safety.
  */
-class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends ExternalCatalog {
+class InMemoryCatalog(
+    conf: SparkConf = new SparkConf,
+    hadoopConfig: Configuration = new Configuration)
+  extends ExternalCatalog {
+
   import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
@@ -57,18 +62,6 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   private def partitionExists(db: String, table: String, spec: TablePartitionSpec): Boolean = {
     requireTableExists(db, table)
     catalog(db).tables(table).partitions.contains(spec)
-  }
-
-  private def requireFunctionExists(db: String, funcName: String): Unit = {
-    if (!functionExists(db, funcName)) {
-      throw new NoSuchFunctionException(db = db, func = funcName)
-    }
-  }
-
-  private def requireFunctionNotExists(db: String, funcName: String): Unit = {
-    if (functionExists(db, funcName)) {
-      throw new FunctionAlreadyExistsException(db = db, func = funcName)
-    }
   }
 
   private def requireTableExists(db: String, table: String): Unit = {
@@ -203,18 +196,32 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
         throw new TableAlreadyExistsException(db = db, table = table)
       }
     } else {
-      if (tableDefinition.tableType == CatalogTableType.MANAGED) {
-        val dir = new Path(catalog(db).db.locationUri, table)
+      // Set the default table location if this is a managed table and its location is not
+      // specified.
+      // Ideally we should not create a managed table with location, but Hive serde table can
+      // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
+      // to create the table directory and write out data before we create this table, to avoid
+      // exposing a partial written table.
+      val needDefaultTableLocation =
+        tableDefinition.tableType == CatalogTableType.MANAGED &&
+          tableDefinition.storage.locationUri.isEmpty
+
+      val tableWithLocation = if (needDefaultTableLocation) {
+        val defaultTableLocation = new Path(catalog(db).db.locationUri, table)
         try {
-          val fs = dir.getFileSystem(hadoopConfig)
-          fs.mkdirs(dir)
+          val fs = defaultTableLocation.getFileSystem(hadoopConfig)
+          fs.mkdirs(defaultTableLocation)
         } catch {
           case e: IOException =>
             throw new SparkException(s"Unable to create table $table as failed " +
-              s"to create its directory $dir", e)
+              s"to create its directory $defaultTableLocation", e)
         }
+        tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri.toString))
+      } else {
+        tableDefinition
       }
-      catalog(db).tables.put(table, new TableDesc(tableDefinition))
+
+      catalog(db).tables.put(table, new TableDesc(tableWithLocation))
     }
   }
 
@@ -225,8 +232,12 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       purge: Boolean): Unit = synchronized {
     requireDbExists(db)
     if (tableExists(db, table)) {
-      if (getTable(db, table).tableType == CatalogTableType.MANAGED) {
-        val dir = new Path(catalog(db).db.locationUri, table)
+      val tableMeta = getTable(db, table)
+      if (tableMeta.tableType == CatalogTableType.MANAGED) {
+        assert(tableMeta.storage.locationUri.isDefined,
+          "Managed table should always have table location, as we will assign a default location " +
+            "to it if it doesn't have one.")
+        val dir = new Path(tableMeta.storage.locationUri.get)
         try {
           val fs = dir.getFileSystem(hadoopConfig)
           fs.delete(dir, true)
@@ -251,7 +262,10 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     oldDesc.table = oldDesc.table.copy(identifier = TableIdentifier(newName, Some(db)))
 
     if (oldDesc.table.tableType == CatalogTableType.MANAGED) {
-      val oldDir = new Path(catalog(db).db.locationUri, oldName)
+      assert(oldDesc.table.storage.locationUri.isDefined,
+        "Managed table should always have table location, as we will assign a default location " +
+          "to it if it doesn't have one.")
+      val oldDir = new Path(oldDesc.table.storage.locationUri.get)
       val newDir = new Path(catalog(db).db.locationUri, newName)
       try {
         val fs = oldDir.getFileSystem(hadoopConfig)
@@ -261,6 +275,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
           throw new SparkException(s"Unable to rename table $oldName to $newName as failed " +
             s"to rename its directory $oldDir", e)
       }
+      oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri.toString))
     }
 
     catalog(db).tables.put(newName, oldDesc)
@@ -313,9 +328,19 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit = {
+      inheritTableSpecs: Boolean): Unit = {
     throw new UnsupportedOperationException("loadPartition is not implemented.")
+  }
+
+  override def loadDynamicPartitions(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      replace: Boolean,
+      numDP: Int,
+      holdDDLTime: Boolean): Unit = {
+    throw new UnsupportedOperationException("loadDynamicPartitions is not implemented.")
   }
 
   // --------------------------------------------------------------------------
@@ -452,6 +477,17 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     catalog(db).tables(table).partitions(spec)
   }
 
+  override def getPartitionOption(
+      db: String,
+      table: String,
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = synchronized {
+    if (!partitionExists(db, table, spec)) {
+      None
+    } else {
+      Option(catalog(db).tables(table).partitions(spec))
+    }
+  }
+
   override def listPartitions(
       db: String,
       table: String,
@@ -464,17 +500,23 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     catalog(db).tables(table).partitions.values.toSeq
   }
 
+  override def listPartitionsByFilter(
+      db: String,
+      table: String,
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
+    // TODO: Provide an implementation
+    throw new UnsupportedOperationException(
+      "listPartitionsByFilter is not implemented for InMemoryCatalog")
+  }
+
   // --------------------------------------------------------------------------
   // Functions
   // --------------------------------------------------------------------------
 
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
-    if (functionExists(db, func.identifier.funcName)) {
-      throw new FunctionAlreadyExistsException(db = db, func = func.identifier.funcName)
-    } else {
-      catalog(db).functions.put(func.identifier.funcName, func)
-    }
+    requireFunctionNotExists(db, func.identifier.funcName)
+    catalog(db).functions.put(func.identifier.funcName, func)
   }
 
   override def dropFunction(db: String, funcName: String): Unit = synchronized {

@@ -36,7 +36,8 @@ private[spark] object UIUtils extends Logging {
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+    override def initialValue(): SimpleDateFormat =
+      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
   }
 
   def formatDate(date: Date): String = dateFormat.get.format(date)
@@ -510,4 +511,16 @@ private[spark] object UIUtils extends Logging {
 
   def getTimeZoneOffset() : Int =
     TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
+
+  /**
+  * Return the correct Href after checking if master is running in the
+  * reverse proxy mode or not.
+  */
+  def makeHref(proxy: Boolean, id: String, origHref: String): String = {
+    if (proxy) {
+      s"/proxy/$id"
+    } else {
+      origHref
+    }
+  }
 }

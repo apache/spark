@@ -175,7 +175,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a")
       .createOrReplaceTempView("jt_array")
 
-    setConf(HiveUtils.CONVERT_METASTORE_PARQUET, true)
+    assert(spark.sqlContext.getConf(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
   }
 
   override def afterAll(): Unit = {
@@ -187,7 +187,6 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       "jt",
       "jt_array",
        "test_parquet")
-    setConf(HiveUtils.CONVERT_METASTORE_PARQUET, false)
   }
 
   test(s"conversion is working") {
@@ -586,8 +585,32 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         checkAnswer(
           sql("SELECT * FROM test_added_partitions"),
           Seq(("foo", 0), ("bar", 0), ("baz", 1)).toDF("a", "b"))
+
+        // Check it with pruning predicates
+        checkAnswer(
+          sql("SELECT * FROM test_added_partitions where b = 0"),
+          Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+        checkAnswer(
+          sql("SELECT * FROM test_added_partitions where b = 1"),
+          Seq(("baz", 1)).toDF("a", "b"))
+        checkAnswer(
+          sql("SELECT * FROM test_added_partitions where b = 2"),
+          Seq[(String, Int)]().toDF("a", "b"))
+
+        // Also verify the inputFiles implementation
+        assert(sql("select * from test_added_partitions").inputFiles.length == 2)
+        assert(sql("select * from test_added_partitions where b = 0").inputFiles.length == 1)
+        assert(sql("select * from test_added_partitions where b = 1").inputFiles.length == 1)
+        assert(sql("select * from test_added_partitions where b = 2").inputFiles.length == 0)
       }
     }
+  }
+
+  test("self-join") {
+    val table = spark.table("normal_parquet")
+    val selfJoin = table.as("t1").crossJoin(table.as("t2"))
+    checkAnswer(selfJoin,
+      sql("SELECT * FROM normal_parquet x CROSS JOIN normal_parquet y"))
   }
 }
 

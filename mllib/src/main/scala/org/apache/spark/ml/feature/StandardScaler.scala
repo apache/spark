@@ -41,8 +41,7 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 
   /**
    * Whether to center the data with mean before scaling.
-   * It will build a dense output, so this does not work on sparse input
-   * and will raise an exception.
+   * It will build a dense output, so take care when applying to sparse input.
    * Default: false
    * @group param
    */

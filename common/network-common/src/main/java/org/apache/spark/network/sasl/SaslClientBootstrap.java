@@ -38,7 +38,7 @@ import org.apache.spark.network.util.TransportConf;
  * server should be setup with a {@link SaslRpcHandler} with matching keys for the given appId.
  */
 public class SaslClientBootstrap implements TransportClientBootstrap {
-  private final Logger logger = LoggerFactory.getLogger(SaslClientBootstrap.class);
+  private static final Logger logger = LoggerFactory.getLogger(SaslClientBootstrap.class);
 
   private final boolean encrypt;
   private final TransportConf conf;

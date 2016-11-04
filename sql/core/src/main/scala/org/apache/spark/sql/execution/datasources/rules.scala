@@ -55,7 +55,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
             s"${u.tableIdentifier.database.get}")
         }
         val plan = LogicalRelation(dataSource.resolveRelation())
-        u.alias.map(a => SubqueryAlias(u.alias.get, plan)).getOrElse(plan)
+        u.alias.map(a => SubqueryAlias(u.alias.get, plan, None)).getOrElse(plan)
       } catch {
         case e: ClassNotFoundException => u
         case e: Exception =>
@@ -66,35 +66,27 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 }
 
 /**
- * Preprocess some DDL plans, e.g. [[CreateTable]], to do some normalization and checking.
+ * Analyze [[CreateTable]] and do some normalization and checking.
+ * For CREATE TABLE AS SELECT, the SELECT query is also analyzed.
  */
-case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
+case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
-    // bucketing information is specified, as we can't infer bucketing from data files currently,
-    // and we should ignore the partition columns if it's specified, as we will infer it later, at
-    // runtime.
+    // bucketing information is specified, as we can't infer bucketing from data files currently.
+    // Since the runtime inferred partition columns could be different from what user specified,
+    // we fail the query if the partitioning information is specified.
     case c @ CreateTable(tableDesc, _, None) if tableDesc.schema.isEmpty =>
       if (tableDesc.bucketSpec.isDefined) {
         failAnalysis("Cannot specify bucketing information if the table schema is not specified " +
           "when creating and will be inferred at runtime")
       }
-
-      val partitionColumnNames = tableDesc.partitionColumnNames
-      if (partitionColumnNames.nonEmpty) {
-        // The table does not have a specified schema, which means that the schema will be inferred
-        // at runtime. So, we are not expecting partition columns and we will discover partitions
-        // at runtime. However, if there are specified partition columns, we simply ignore them and
-        // provide a warning message.
-        logWarning(
-          s"Specified partition columns (${partitionColumnNames.mkString(",")}) will be " +
-            s"ignored. The schema and partition columns of table ${tableDesc.identifier} will " +
-            "be inferred.")
-        c.copy(tableDesc = tableDesc.copy(partitionColumnNames = Nil))
-      } else {
-        c
+      if (tableDesc.partitionColumnNames.nonEmpty) {
+        failAnalysis("It is not allowed to specify partition columns when the table schema is " +
+          "not defined. When the table schema is not provided, schema and partition columns " +
+          "will be inferred.")
       }
+      c
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
@@ -104,13 +96,28 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
     //   * can't use all table columns as partition columns.
     //   * partition columns' type must be AtomicType.
     //   * sort columns' type must be orderable.
-    case c @ CreateTable(tableDesc, mode, query) if c.childrenResolved =>
-      val schema = if (query.isDefined) query.get.schema else tableDesc.schema
-      checkDuplication(schema.map(_.name), "table definition of " + tableDesc.identifier)
+    case c @ CreateTable(tableDesc, mode, query) =>
+      val analyzedQuery = query.map { q =>
+        // Analyze the query in CTAS and then we can do the normalization and checking.
+        val qe = sparkSession.sessionState.executePlan(q)
+        qe.assertAnalyzed()
+        qe.analyzed
+      }
+      val schema = if (analyzedQuery.isDefined) {
+        analyzedQuery.get.schema
+      } else {
+        tableDesc.schema
+      }
+      val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
+        schema.map(_.name)
+      } else {
+        schema.map(_.name.toLowerCase)
+      }
+      checkDuplication(columnNames, "table definition of " + tableDesc.identifier)
 
       val partitionColsChecked = checkPartitionColumns(schema, tableDesc)
       val bucketColsChecked = checkBucketColumns(schema, partitionColsChecked)
-      c.copy(tableDesc = bucketColsChecked)
+      c.copy(tableDesc = bucketColsChecked, query = analyzedQuery)
   }
 
   private def checkPartitionColumns(schema: StructType, tableDesc: CatalogTable): CatalogTable = {
@@ -180,7 +187,8 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
       colName: String,
       colType: String): String = {
     val tableCols = schema.map(_.name)
-    tableCols.find(conf.resolver(_, colName)).getOrElse {
+    val resolver = sparkSession.sessionState.conf.resolver
+    tableCols.find(resolver(_, colName)).getOrElse {
       failAnalysis(s"$colType column $colName is not defined in table $tableIdent, " +
         s"defined table columns are: ${tableCols.mkString(", ")}")
     }
@@ -201,50 +209,55 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
       tblName: String,
       partColNames: Seq[String]): InsertIntoTable = {
 
-    val expectedColumns = insert.expectedColumns
-    if (expectedColumns.isDefined && expectedColumns.get.length != insert.child.schema.length) {
+    val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
+      insert.partition, partColNames, tblName, conf.resolver)
+
+    val expectedColumns = {
+      val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
+      insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+    }
+
+    if (expectedColumns.length != insert.child.schema.length) {
       throw new AnalysisException(
         s"Cannot insert into table $tblName because the number of columns are different: " +
-          s"need ${expectedColumns.get.length} columns, " +
+          s"need ${expectedColumns.length} columns, " +
           s"but query has ${insert.child.schema.length} columns.")
     }
 
-    if (insert.partition.nonEmpty) {
-      // the query's partitioning must match the table's partitioning
-      // this is set for queries like: insert into ... partition (one = "a", two = <expr>)
-      val samePartitionColumns =
-        if (conf.caseSensitiveAnalysis) {
-          insert.partition.keySet == partColNames.toSet
-        } else {
-          insert.partition.keySet.map(_.toLowerCase) == partColNames.map(_.toLowerCase).toSet
-        }
-      if (!samePartitionColumns) {
+    if (normalizedPartSpec.nonEmpty) {
+      if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
           s"""
              |Requested partitioning does not match the table $tblName:
-             |Requested partitions: ${insert.partition.keys.mkString(",")}
+             |Requested partitions: ${normalizedPartSpec.keys.mkString(",")}
              |Table partitions: ${partColNames.mkString(",")}
            """.stripMargin)
       }
-      expectedColumns.map(castAndRenameChildOutput(insert, _)).getOrElse(insert)
+
+      castAndRenameChildOutput(insert.copy(partition = normalizedPartSpec), expectedColumns)
     } else {
-      // All partition columns are dynamic because because the InsertIntoTable command does
+      // All partition columns are dynamic because the InsertIntoTable command does
       // not explicitly specify partitioning columns.
-      expectedColumns.map(castAndRenameChildOutput(insert, _)).getOrElse(insert)
+      castAndRenameChildOutput(insert, expectedColumns)
         .copy(partition = partColNames.map(_ -> None).toMap)
     }
   }
 
-  // TODO: do we really need to rename?
-  def castAndRenameChildOutput(
+  private def castAndRenameChildOutput(
       insert: InsertIntoTable,
       expectedOutput: Seq[Attribute]): InsertIntoTable = {
     val newChildOutput = expectedOutput.zip(insert.child.output).map {
       case (expected, actual) =>
-        if (expected.dataType.sameType(actual.dataType) && expected.name == actual.name) {
+        if (expected.dataType.sameType(actual.dataType) &&
+            expected.name == actual.name &&
+            expected.metadata == actual.metadata) {
           actual
         } else {
-          Alias(Cast(actual, expected.dataType), expected.name)()
+          // Renaming is needed for handling the following cases like
+          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
+          // 2) Target tables have column metadata
+          Alias(Cast(actual, expected.dataType), expected.name)(
+            explicitMetadata = Option(expected.metadata))
         }
     }
 
@@ -261,11 +274,11 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
         case relation: CatalogRelation =>
           val metadata = relation.catalogTable
           preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
-        case LogicalRelation(h: HadoopFsRelation, _, identifier) =>
-          val tblName = identifier.map(_.quotedString).getOrElse("unknown")
+        case LogicalRelation(h: HadoopFsRelation, _, catalogTable) =>
+          val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, h.partitionSchema.map(_.name))
-        case LogicalRelation(_: InsertableRelation, _, identifier) =>
-          val tblName = identifier.map(_.quotedString).getOrElse("unknown")
+        case LogicalRelation(_: InsertableRelation, _, catalogTable) =>
+          val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, Nil)
         case other => i
       }
@@ -312,6 +325,25 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         if (tblIdent.database.exists(db => !validNameFormat.matcher(db).matches())) {
           failAnalysis(s"Database name ${tblIdent.database.get} is not a valid name for " +
             s"metastore. Metastore only accepts table name containing characters, numbers and _.")
+        }
+        if (query.isDefined &&
+          mode == SaveMode.Overwrite &&
+          catalog.tableExists(tableDesc.identifier)) {
+          // Need to remove SubQuery operator.
+          EliminateSubqueryAliases(catalog.lookupRelation(tableDesc.identifier)) match {
+            // Only do the check if the table is a data source table
+            // (the relation is a BaseRelation).
+            case l @ LogicalRelation(dest: BaseRelation, _, _) =>
+              // Get all input data source relations of the query.
+              val srcRelations = query.get.collect {
+                case LogicalRelation(src: BaseRelation, _, _) => src
+              }
+              if (srcRelations.contains(dest)) {
+                failAnalysis(
+                  s"Cannot overwrite table ${tableDesc.identifier} that is also being read from")
+              }
+            case _ => // OK
+          }
         }
 
       case i @ logical.InsertIntoTable(
@@ -365,32 +397,6 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
       case logical.InsertIntoTable(l: LogicalRelation, _, _, _, _) =>
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
-
-      case CreateTable(tableDesc, mode, Some(query)) =>
-        // When the SaveMode is Overwrite, we need to check if the table is an input table of
-        // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
-        if (mode == SaveMode.Overwrite && catalog.tableExists(tableDesc.identifier)) {
-          // Need to remove SubQuery operator.
-          EliminateSubqueryAliases(catalog.lookupRelation(tableDesc.identifier)) match {
-            // Only do the check if the table is a data source table
-            // (the relation is a BaseRelation).
-            case l @ LogicalRelation(dest: BaseRelation, _, _) =>
-              // Get all input data source relations of the query.
-              val srcRelations = query.collect {
-                case LogicalRelation(src: BaseRelation, _, _) => src
-              }
-              if (srcRelations.contains(dest)) {
-                failAnalysis(
-                  s"Cannot overwrite table ${tableDesc.identifier} that is also being read from.")
-              } else {
-                // OK
-              }
-
-            case _ => // OK
-          }
-        } else {
-          // OK
-        }
 
       case _ => // OK
     }

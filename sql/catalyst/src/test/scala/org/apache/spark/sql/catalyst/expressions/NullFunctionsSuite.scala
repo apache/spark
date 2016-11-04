@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types._
 
 class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -86,18 +88,23 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-16602 Nvl should support numeric-string cases") {
+    def analyze(expr: Expression): Expression = {
+      val relation = LocalRelation()
+      SimpleAnalyzer.execute(Project(Seq(Alias(expr, "c")()), relation)).expressions.head
+    }
+
     val intLit = Literal.create(1, IntegerType)
     val doubleLit = Literal.create(2.2, DoubleType)
     val stringLit = Literal.create("c", StringType)
     val nullLit = Literal.create(null, NullType)
 
-    assert(Nvl(intLit, doubleLit).replaceForTypeCoercion().dataType == DoubleType)
-    assert(Nvl(intLit, stringLit).replaceForTypeCoercion().dataType == StringType)
-    assert(Nvl(stringLit, doubleLit).replaceForTypeCoercion().dataType == StringType)
+    assert(analyze(new Nvl(intLit, doubleLit)).dataType == DoubleType)
+    assert(analyze(new Nvl(intLit, stringLit)).dataType == StringType)
+    assert(analyze(new Nvl(stringLit, doubleLit)).dataType == StringType)
 
-    assert(Nvl(nullLit, intLit).replaceForTypeCoercion().dataType == IntegerType)
-    assert(Nvl(doubleLit, nullLit).replaceForTypeCoercion().dataType == DoubleType)
-    assert(Nvl(nullLit, stringLit).replaceForTypeCoercion().dataType == StringType)
+    assert(analyze(new Nvl(nullLit, intLit)).dataType == IntegerType)
+    assert(analyze(new Nvl(doubleLit, nullLit)).dataType == DoubleType)
+    assert(analyze(new Nvl(nullLit, stringLit)).dataType == StringType)
   }
 
   test("AtLeastNNonNulls") {

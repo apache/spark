@@ -2,9 +2,16 @@ Package: SparkR
 Type: Package
 Title: R Frontend for Apache Spark
 Version: 2.0.0
-Date: 2016-07-07
-Author: The Apache Software Foundation
-Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
+Date: 2016-08-27
+Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
+                    email = "shivaram@cs.berkeley.edu"),
+             person("Xiangrui", "Meng", role = "aut",
+                    email = "meng@databricks.com"),
+             person("Felix", "Cheung", role = "aut",
+                    email = "felixcheung@apache.org"),
+             person(family = "The Apache Software Foundation", role = c("aut", "cph")))
+URL: http://www.apache.org/ http://spark.apache.org/
+BugReports: https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-ContributingBugReports
 Depends:
     R (>= 3.0),
     methods
@@ -32,6 +39,7 @@ Collate:
     'deserialize.R'
     'functions.R'
     'install.R'
+    'jvm.R'
     'mllib.R'
     'serialize.R'
     'sparkR.R'

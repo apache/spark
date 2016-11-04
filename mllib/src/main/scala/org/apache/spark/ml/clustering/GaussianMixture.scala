@@ -323,6 +323,9 @@ class GaussianMixture @Since("2.0.0") (
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 
+    val instr = Instrumentation.create(this, rdd)
+    instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
+
     val algo = new MLlibGM()
       .setK($(k))
       .setMaxIterations($(maxIter))
@@ -337,6 +340,9 @@ class GaussianMixture @Since("2.0.0") (
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
     model.setSummary(summary)
+    instr.logNumFeatures(model.gaussians.head.mean.size)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("2.0.0")
@@ -356,42 +362,25 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  * :: Experimental ::
  * Summary of GaussianMixture.
  *
- * @param predictions  [[DataFrame]] produced by [[GaussianMixtureModel.transform()]]
- * @param predictionCol  Name for column of predicted clusters in `predictions`
- * @param probabilityCol  Name for column of predicted probability of each cluster in `predictions`
- * @param featuresCol  Name for column of features in `predictions`
- * @param k  Number of clusters
+ * @param predictions  [[DataFrame]] produced by [[GaussianMixtureModel.transform()]].
+ * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param probabilityCol  Name for column of predicted probability of each cluster
+ *                        in `predictions`.
+ * @param featuresCol  Name for column of features in `predictions`.
+ * @param k  Number of clusters.
  */
 @Since("2.0.0")
 @Experimental
 class GaussianMixtureSummary private[clustering] (
-    @Since("2.0.0") @transient val predictions: DataFrame,
-    @Since("2.0.0") val predictionCol: String,
+    predictions: DataFrame,
+    predictionCol: String,
     @Since("2.0.0") val probabilityCol: String,
-    @Since("2.0.0") val featuresCol: String,
-    @Since("2.0.0") val k: Int) extends Serializable {
-
-  /**
-   * Cluster centers of the transformed data.
-   */
-  @Since("2.0.0")
-  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
+    featuresCol: String,
+    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
 
   /**
    * Probability of each cluster.
    */
   @Since("2.0.0")
   @transient lazy val probability: DataFrame = predictions.select(probabilityCol)
-
-  /**
-   * Size of (number of data points in) each cluster.
-   */
-  @Since("2.0.0")
-  lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
-      case Row(cluster: Int, count: Long) => sizes(cluster) = count
-    }
-    sizes
-  }
 }
