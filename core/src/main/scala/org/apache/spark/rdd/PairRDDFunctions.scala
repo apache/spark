@@ -21,6 +21,8 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap, Locale}
 
+import org.apache.spark.internal.io.{HadoopMapReduceCommitProtocol, FileCommitProtocol}
+
 import scala.collection.{mutable, Map}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -28,12 +30,12 @@ import scala.reflect.ClassTag
 import scala.util.DynamicVariable
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
-import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, TaskAttemptID, TaskType}
+import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewOutputFormat, TaskAttemptID, TaskType}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
@@ -1092,37 +1094,38 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       jobFormat.checkOutputSpecs(job)
     }
 
+    // Instantiate writer
+    val committer = FileCommitProtocol.instantiate(
+      className = classOf[HadoopMapReduceCommitProtocol].getName,
+      jobId = stageId.toString,
+      outputPath = jobConfiguration.get("mapred.output.dir"),
+      isAppend = false
+    ).asInstanceOf[HadoopMapReduceCommitProtocol]
+    val writer = new SparkNewHadoopWriter(hadoopConf, committer)
+
     val writeShard = (context: TaskContext, iter: Iterator[(K, V)]) => {
-      val config = wrappedConf.value
-      /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = new TaskAttemptID(jobtrackerID, stageId, TaskType.REDUCE, context.partitionId,
-        context.attemptNumber)
-      val hadoopContext = new TaskAttemptContextImpl(config, attemptId)
-      val format = outfmt.newInstance
-      format match {
-        case c: Configurable => c.setConf(config)
-        case _ => ()
-      }
-      val committer = format.getOutputCommitter(hadoopContext)
-      committer.setupTask(hadoopContext)
+      writer.setupTask(context)
 
       val outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)] =
         initHadoopOutputMetrics(context)
 
-      val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K, V]]
       require(writer != null, "Unable to obtain RecordWriter")
       var recordsWritten = 0L
       Utils.tryWithSafeFinallyAndFailureCallbacks {
         while (iter.hasNext) {
           val pair = iter.next()
-          writer.write(pair._1, pair._2)
+          writer.write(context, pair._1.asInstanceOf[AnyRef], pair._2.asInstanceOf[AnyRef])
 
           // Update bytes written metric every few records
           maybeUpdateOutputMetrics(outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
-      }(finallyBlock = writer.close(hadoopContext))
-      committer.commitTask(hadoopContext)
+
+        writer.commitTask(context)
+      }(catchBlock = {
+        writer.abortTask(context)
+        writer.abortJob()
+      })
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
         om.setBytesWritten(callback())
         om.setRecordsWritten(recordsWritten)
@@ -1147,9 +1150,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       logWarning(warningMessage)
     }
 
-    jobCommitter.setupJob(jobTaskContext)
+    writer.setupJob()
     self.context.runJob(self, writeShard)
-    jobCommitter.commitJob(jobTaskContext)
+    writer.commitJob()
   }
 
   /**

@@ -162,9 +162,12 @@ class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
 private[spark]
 object SparkHadoopWriter {
   def createJobID(time: Date, id: Int): JobID = {
-    val formatter = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-    val jobtrackerID = formatter.format(time)
+    val jobtrackerID = createJobTrackerID(time)
     new JobID(jobtrackerID, id)
+  }
+
+  def createJobTrackerID(time: Date): String = {
+    new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(time)
   }
 
   def createPathFromString(path: String, conf: JobConf): Path = {
