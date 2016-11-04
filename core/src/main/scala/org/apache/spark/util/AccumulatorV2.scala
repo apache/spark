@@ -27,7 +27,7 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.scheduler.AccumulableInfo
 
 /**
@@ -168,7 +168,6 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
    * merge-in-place. This should not be called directly outside of Spark.
    */
-  @DeveloperApi
   def merge(other: AccumulatorV2[IN, OUT]): Unit
 
   /**
