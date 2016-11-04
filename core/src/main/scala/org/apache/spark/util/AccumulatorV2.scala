@@ -27,7 +27,7 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.scheduler.AccumulableInfo
 
 /**
@@ -162,13 +162,14 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
    * Developers should extend this to customize the adding functionality.
    */
-  def add(v: IN)
+  def add(v: IN): Unit
 
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
    * merge-in-place. This should not be called directly outside of Spark.
    */
-  val merge: (AccumulatorV2[IN, OUT] => Unit)
+  @DeveloperApi
+  def merge(other: AccumulatorV2[IN, OUT]): Unit
 
   /**
    * Defines the current value of this accumulator
@@ -328,7 +329,7 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
    * (that is created driver side) accumulator with the accumulator passed in being created on the
    * workers.
    */
-  override final lazy val merge: (AccumulatorV2[IN, OUT] => Unit) = {
+  override final def merge(other: AccumulatorV2[IN, OUT]): Unit = {
     assert(isAtDriverSide)
     // Handle data property accumulators
     if (metadata != null && metadata.dataProperty) {
