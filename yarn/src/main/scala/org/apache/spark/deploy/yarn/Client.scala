@@ -598,8 +598,16 @@ private[spark] class Client(
     ).foreach { case (flist, resType, addToClasspath) =>
       flist.foreach { file =>
         val (_, localizedPath) = distribute(file, resType = resType)
-        if (addToClasspath && localizedPath != null) {
-          cachedSecondaryJarLinks += localizedPath
+        // If addToClassPath, we ignore adding jar multiple times to distitrbuted cache.
+        if (addToClasspath) {
+          if (localizedPath != null) {
+            cachedSecondaryJarLinks += localizedPath
+          }
+        } else {
+          if (localizedPath != null) {
+            throw new IllegalArgumentException(s"Attempt to add ($file) multiple times" +
+              " to the distributed cache.")
+          }
         }
       }
     }
@@ -1059,9 +1067,11 @@ private[spark] class Client(
         } catch {
           case e: ApplicationNotFoundException =>
             logError(s"Application $appId not found.")
+            cleanupStagingDir(appId)
             return (YarnApplicationState.KILLED, FinalApplicationStatus.KILLED)
           case NonFatal(e) =>
             logError(s"Failed to contact YARN for application $appId.", e)
+            // Don't necessarily clean up staging dir because status is unknown
             return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
         }
       val state = report.getYarnApplicationState
@@ -1179,7 +1189,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.3-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.4-src.zip")
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
@@ -1200,7 +1210,10 @@ private object Client extends Logging {
     // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
     System.setProperty("SPARK_YARN_MODE", "true")
     val sparkConf = new SparkConf
-
+    // SparkSubmit would use yarn cache to distribute files & jars in yarn mode,
+    // so remove them from sparkConf here for yarn mode.
+    sparkConf.remove("spark.jars")
+    sparkConf.remove("spark.files")
     val args = new ClientArguments(argStrings)
     new Client(args, sparkConf).run()
   }

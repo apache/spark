@@ -29,6 +29,8 @@ import org.apache.hadoop.util.Shell
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
@@ -241,6 +243,46 @@ object PartitioningUtils {
       val literal = inferPartitionColumnValue(rawColumnValue, defaultPartitionName, typeInference)
       Some(columnName -> literal)
     }
+  }
+
+  /**
+   * Given a partition path fragment, e.g. `fieldOne=1/fieldTwo=2`, returns a parsed spec
+   * for that fragment, e.g. `Map(("fieldOne", "1"), ("fieldTwo", "2"))`.
+   */
+  def parsePathFragment(pathFragment: String): TablePartitionSpec = {
+    pathFragment.split("/").map { kv =>
+      val pair = kv.split("=", 2)
+      (unescapePathName(pair(0)), unescapePathName(pair(1)))
+    }.toMap
+  }
+
+  /**
+   * Normalize the column names in partition specification, w.r.t. the real partition column names
+   * and case sensitivity. e.g., if the partition spec has a column named `monTh`, and there is a
+   * partition column named `month`, and it's case insensitive, we will normalize `monTh` to
+   * `month`.
+   */
+  def normalizePartitionSpec[T](
+      partitionSpec: Map[String, T],
+      partColNames: Seq[String],
+      tblName: String,
+      resolver: Resolver): Map[String, T] = {
+    val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
+      val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
+        throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
+      }
+      normalizedKey -> value
+    }
+
+    if (normalizedPartSpec.map(_._1).distinct.length != normalizedPartSpec.length) {
+      val duplicateColumns = normalizedPartSpec.map(_._1).groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => x
+      }
+      throw new AnalysisException(s"Found duplicated columns in partition specification: " +
+        duplicateColumns.mkString(", "))
+    }
+
+    normalizedPartSpec.toMap
   }
 
   /**

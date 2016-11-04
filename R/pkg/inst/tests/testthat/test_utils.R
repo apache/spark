@@ -224,6 +224,8 @@ test_that("varargsToStrEnv", {
   expect_error(varargsToStrEnv(a = list(1, "a")),
                paste0("Unsupported type for a : list. Supported types are logical, ",
                       "numeric, character and NULL."))
+  expect_warning(varargsToStrEnv(a = 1, 2, 3, 4), "Unnamed arguments ignored: 2, 3, 4.")
+  expect_warning(varargsToStrEnv(1, 2, 3, 4), "Unnamed arguments ignored: 1, 2, 3, 4.")
 })
 
 sparkR.session.stop()

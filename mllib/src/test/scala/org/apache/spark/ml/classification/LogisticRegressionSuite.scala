@@ -1807,7 +1807,6 @@ class LogisticRegressionSuite
         .objectiveHistory
         .sliding(2)
         .forall(x => x(0) >= x(1)))
-
   }
 
   test("binary logistic regression with weighted data") {

@@ -68,19 +68,16 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
       }
     datasetWithIncrementalExecution.foreachPartition { iter =>
       if (writer.open(TaskContext.getPartitionId(), batchId)) {
-        var isFailed = false
         try {
           while (iter.hasNext) {
             writer.process(iter.next())
           }
         } catch {
           case e: Throwable =>
-            isFailed = true
             writer.close(e)
+            throw e
         }
-        if (!isFailed) {
-          writer.close(null)
-        }
+        writer.close(null)
       } else {
         writer.close(null)
       }

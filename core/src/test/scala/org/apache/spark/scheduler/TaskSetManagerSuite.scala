@@ -261,14 +261,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL) == None)
 
     clock.advance(LOCALITY_WAIT_MS)
-    // Offer host1, exec1 again, at NODE_LOCAL level: the node local (task 2) should
+    // Offer host1, exec1 again, at NODE_LOCAL level: the node local (task 3) should
     // get chosen before the noPref task
     assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).get.index == 2)
 
-    // Offer host2, exec3 again, at NODE_LOCAL level: we should choose task 2
+    // Offer host2, exec2, at NODE_LOCAL level: we should choose task 2
     assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL).get.index == 1)
 
-    // Offer host2, exec3 again, at NODE_LOCAL level: we should get noPref task
+    // Offer host2, exec2 again, at NODE_LOCAL level: we should get noPref task
     // after failing to find a node_Local task
     assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL) == None)
     clock.advance(LOCALITY_WAIT_MS)
@@ -904,7 +904,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
         task.index == index && !sched.endedTasks.contains(task.taskId)
       }.getOrElse {
         throw new RuntimeException(s"couldn't find index $index in " +
-          s"tasks: ${tasks.map{t => t.index -> t.taskId}} with endedTasks:" +
+          s"tasks: ${tasks.map { t => t.index -> t.taskId }} with endedTasks:" +
           s" ${sched.endedTasks.keys}")
       }
     }
@@ -972,6 +972,24 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     verify(sched.backend).killTask(origTask2.taskId, "exec2", true)
     assert(manager.tasksSuccessful === 5)
     assert(manager.isZombie)
+  }
+
+  test("SPARK-17894: Verify TaskSetManagers for different stage attempts have unique names") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, new ManualClock)
+    assert(manager.name === "TaskSet_0.0")
+
+    // Make sure a task set with the same stage ID but different attempt ID has a unique name
+    val taskSet2 = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 1)
+    val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES, new ManualClock)
+    assert(manager2.name === "TaskSet_0.1")
+
+    // Make sure a task set with the same attempt ID but different stage ID also has a unique name
+    val taskSet3 = FakeTask.createTaskSet(numTasks = 1, stageId = 1, stageAttemptId = 1)
+    val manager3 = new TaskSetManager(sched, taskSet3, MAX_TASK_FAILURES, new ManualClock)
+    assert(manager3.name === "TaskSet_1.1")
   }
 
   private def createTaskResult(

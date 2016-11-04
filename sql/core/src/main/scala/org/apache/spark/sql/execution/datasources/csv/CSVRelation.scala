@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
 import org.apache.spark.sql.types._
 
 object CSVRelation extends Logging {
@@ -170,17 +171,19 @@ object CSVRelation extends Logging {
 
 private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
-      stagingDir: String,
-      fileNamePrefix: String,
+      path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    new CsvOutputWriter(stagingDir, fileNamePrefix, dataSchema, context, params)
+    new CsvOutputWriter(path, dataSchema, context, params)
+  }
+
+  override def getFileExtension(context: TaskAttemptContext): String = {
+    ".csv" + TextOutputWriter.getCompressionExtension(context)
   }
 }
 
 private[csv] class CsvOutputWriter(
-    stagingDir: String,
-    fileNamePrefix: String,
+    path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
@@ -199,7 +202,7 @@ private[csv] class CsvOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        new Path(stagingDir, s"$fileNamePrefix.csv$extension")
+        new Path(path)
       }
     }.getRecordWriter(context)
   }

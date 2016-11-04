@@ -32,9 +32,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -82,11 +83,14 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(stagingDir, parsedOptions, fileNamePrefix, dataSchema, context)
+        new JsonOutputWriter(path, parsedOptions, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".json" + TextOutputWriter.getCompressionExtension(context)
       }
     }
   }
@@ -153,9 +157,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 }
 
 private[json] class JsonOutputWriter(
-    stagingDir: String,
+    path: String,
     options: JSONOptions,
-    fileNamePrefix: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
@@ -168,7 +171,7 @@ private[json] class JsonOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        new Path(stagingDir, s"$fileNamePrefix.json$extension")
+        new Path(path)
       }
     }.getRecordWriter(context)
   }

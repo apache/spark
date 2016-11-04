@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.IOException
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, Locale}
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
@@ -67,12 +67,12 @@ class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
 
   def setup(jobid: Int, splitid: Int, attemptid: Int) {
     setIDs(jobid, splitid, attemptid)
-    HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmmss").format(now),
+    HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(now),
       jobid, splitID, attemptID, conf.value)
   }
 
   def open() {
-    val numfmt = NumberFormat.getInstance()
+    val numfmt = NumberFormat.getInstance(Locale.US)
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
 
@@ -162,7 +162,7 @@ class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
 private[spark]
 object SparkHadoopWriter {
   def createJobID(time: Date, id: Int): JobID = {
-    val formatter = new SimpleDateFormat("yyyyMMddHHmmss")
+    val formatter = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
     val jobtrackerID = formatter.format(time)
     new JobID(jobtrackerID, id)
   }

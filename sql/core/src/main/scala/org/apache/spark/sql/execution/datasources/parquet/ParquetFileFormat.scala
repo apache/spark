@@ -33,6 +33,7 @@ import org.apache.parquet.{Log => ApacheParquetLog}
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.hadoop._
+import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
 import org.slf4j.bridge.SLF4JBridgeHandler
@@ -121,7 +122,7 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.writeLegacyParquetFormat.toString)
 
     // Sets compression scheme
-    conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodec)
+    conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
     // SPARK-15719: Disables writing Parquet summary files by default.
     if (conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
@@ -133,10 +134,13 @@ class ParquetFileFormat
     new OutputWriterFactory {
       override def newInstance(
           path: String,
-          fileNamePrefix: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new ParquetOutputWriter(path, fileNamePrefix, context)
+        new ParquetOutputWriter(path, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        CodecConfig.from(context).getCodec.getExtension + ".parquet"
       }
     }
   }
@@ -410,17 +414,6 @@ class ParquetFileFormat
         }
       }
     }
-  }
-
-  override def buildWriter(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      options: Map[String, String]): OutputWriterFactory = {
-    new ParquetOutputWriterFactory(
-      sqlContext.conf,
-      dataSchema,
-      sqlContext.sessionState.newHadoopConf(),
-      options)
   }
 }
 

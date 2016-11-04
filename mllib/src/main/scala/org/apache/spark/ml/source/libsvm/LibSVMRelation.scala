@@ -35,13 +35,13 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 private[libsvm] class LibSVMOutputWriter(
-    stagingDir: String,
-    fileNamePrefix: String,
+    path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
@@ -51,7 +51,7 @@ private[libsvm] class LibSVMOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        new Path(stagingDir, fileNamePrefix + extension)
+        new Path(path)
       }
     }.getRecordWriter(context)
   }
@@ -129,11 +129,14 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       dataSchema: StructType): OutputWriterFactory = {
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new LibSVMOutputWriter(stagingDir, fileNamePrefix, dataSchema, context)
+        new LibSVMOutputWriter(path, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".libsvm" + TextOutputWriter.getCompressionExtension(context)
       }
     }
   }
