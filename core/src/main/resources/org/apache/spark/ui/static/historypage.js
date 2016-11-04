@@ -120,7 +120,7 @@ $(document).ready(function() {
       }
 
       var data = {
-        "uiroot": (typeof uiRoot != 'undefined') ? uiRoot : "",
+        "uiroot": uiRoot,
         "applications": array
         }
 
