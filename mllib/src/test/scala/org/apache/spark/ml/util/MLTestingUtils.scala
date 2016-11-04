@@ -52,8 +52,7 @@ object MLTestingUtils extends SparkFunSuite {
       case weighted: Estimator[M] with HasWeightCol =>
         weighted.set(weighted.weightCol, "weight")
         weighted.fit(dfs(DoubleType))
-      case _: Estimator[M] => estimator.fit(dfs(DoubleType))
-      case _ => throw new Exception()
+      case _ => estimator.fit(dfs(DoubleType))
     }
 
     val actuals = dfs.keys.filter(_ != DoubleType).map { t =>
@@ -61,8 +60,7 @@ object MLTestingUtils extends SparkFunSuite {
         case weighted: Estimator[M] with HasWeightCol =>
           weighted.set(weighted.weightCol, "weight")
           weighted.fit(dfs(t))
-        case _: Estimator[M] => estimator.fit(dfs(t))
-        case _ => throw new Exception()
+        case _ => estimator.fit(dfs(t))
       }
     }
 
@@ -150,7 +148,7 @@ object MLTestingUtils extends SparkFunSuite {
     types.map { t =>
         val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
         t -> TreeTests.setMetadata(castDF, 2, labelColName, featuresColName)
-          .withColumn(weightColName, ceil(rand(seed = 42) * 10).cast(t))
+          .withColumn(weightColName, ceil(rand(seed = 42)).cast(t))
       }.toMap
   }
 
@@ -174,7 +172,7 @@ object MLTestingUtils extends SparkFunSuite {
       val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
       t -> TreeTests.setMetadata(castDF, 0, labelColName, featuresColName)
         .withColumn(censorColName, lit(0.0))
-        .withColumn(weightColName, ceil(rand(seed = 42) * 10).cast(t))
+        .withColumn(weightColName, ceil(rand(seed = 42)).cast(t))
     }.toMap
   }
 

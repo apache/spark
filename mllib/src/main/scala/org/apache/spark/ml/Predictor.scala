@@ -52,10 +52,8 @@ private[ml] trait PredictorParams extends Params
     if (fitting) {
       SchemaUtils.checkNumericType(schema, $(labelCol))
 
-      // If the params supports weights and the weightCol is available,
-      // the datatype of weightCol must be numeric.
       this match {
-        case p: Params with HasWeightCol =>
+        case p: HasWeightCol =>
           if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
             SchemaUtils.checkNumericType(schema, $(p.weightCol))
           }
@@ -70,8 +68,8 @@ private[ml] trait PredictorParams extends Params
  * :: DeveloperApi ::
  * Abstraction for prediction problems (regression and classification). It accepts all NumericType
  * labels and will automatically cast it to DoubleType in [[fit()]]. If this predictor support
- * weights, it accepts all NumericType weights. And if the weightCol is available (defined and
- * non-empty), the weights will also be automatically cast to DoubleType in [[fit()]].
+ * weights, it accepts all NumericType weights, which will be automatically casted to DoubleType
+ * in in [[fit()]].
  *
  * @tparam FeaturesType  Type of features.
  *                       E.g., [[org.apache.spark.ml.linalg.VectorUDT]] for vector features.
@@ -105,10 +103,9 @@ abstract class Predictor[
     val labelMeta = dataset.schema($(labelCol)).metadata
     val labelCasted = dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
 
-    // If the predictor supports weights and the weightCol is available,
-    // cast WeightCol to DoubleType and keep the metadata.
+    // Cast WeightCol to DoubleType and keep the metadata.
     val casted = this match {
-      case p: Predictor[_, _, _] with HasWeightCol =>
+      case p: HasWeightCol =>
         if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
           val weightMeta = dataset.schema($(p.weightCol)).metadata
           labelCasted.withColumn($(p.weightCol), col($(p.weightCol)).cast(DoubleType), weightMeta)
