@@ -882,6 +882,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       df.withColumn("b", expr("0")).as[ClassData]
         .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
   }
+
+  // This is moved from ReplSuite to prevent java.lang.ClassCircularityError.
+  test("SPARK-18189: Fix serialization issue in KeyValueGroupedDataset") {
+    val resultValue = 12345
+    val keyValueGrouped = Seq((1, 2), (3, 4)).toDS().groupByKey(_._1)
+    val mapGroups = keyValueGrouped.mapGroups((k, v) => (k, 1))
+    val broadcasted = spark.sparkContext.broadcast(resultValue)
+
+    // Using broadcast triggers serialization issue in KeyValueGroupedDataset
+    val dataset = mapGroups.map(_ => broadcasted.value)
+
+    assert(dataset.collect() sameElements Array(resultValue, resultValue))
+  }
 }
 
 case class Generic[T](id: T, value: Double)
