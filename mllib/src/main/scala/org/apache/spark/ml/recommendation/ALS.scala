@@ -276,7 +276,7 @@ class ALSModel private[ml] (
    * Recommends top items for all users.
    *
    * @param num how many items to return for every user.
-   * @return a DataFrame that stores recommendations two columns: `user` and `ratings`, where
+   * @return a DataFrame that stores recommendations in two columns: `user` and `ratings`, where
    *         every row contains a userID and an array of [[Rating]] objects which contains the
    *         same userId, recommended itemID and "score".
    */
@@ -307,7 +307,6 @@ class ALSModel private[ml] (
       .map(r => (r.getInt(0), r.getSeq[Float](1).toArray.map(_.toDouble)))
     val itemFeatures = itemFactors.select("id", "features").rdd
       .map(r => (r.getInt(0), r.getSeq[Float](1).toArray.map(_.toDouble)))
-
     new MatrixFactorizationModel(rank, userFeatures, itemFeatures)
   }
 
