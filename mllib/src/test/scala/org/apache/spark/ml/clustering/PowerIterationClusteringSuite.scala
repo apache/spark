@@ -48,7 +48,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(pic.getInitMode === "random")
     assert(pic.getFeaturesCol === "features")
     assert(pic.getPredictionCol === "prediction")
-    assert(pic.getLabelCol === "id")
+    assert(pic.getIdCol === "id")
   }
 
   test("set parameters") {
@@ -58,14 +58,14 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setInitMode("degree")
       .setFeaturesCol("test_feature")
       .setPredictionCol("test_prediction")
-      .setLabelCol("test_id")
+      .setIdCol("test_id")
 
     assert(pic.getK === 9)
     assert(pic.getMaxIter === 33)
     assert(pic.getInitMode === "degree")
     assert(pic.getFeaturesCol === "test_feature")
     assert(pic.getPredictionCol === "test_prediction")
-    assert(pic.getLabelCol === "test_id")
+    assert(pic.getIdCol === "test_id")
   }
 
   test("parameters validation") {
@@ -115,7 +115,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setInitMode("degree")
       .setFeaturesCol("test_feature")
       .setPredictionCol("test_prediction")
-      .setLabelCol("test_id")
+      .setIdCol("test_id")
     testDefaultReadWrite(t)
   }
 }
