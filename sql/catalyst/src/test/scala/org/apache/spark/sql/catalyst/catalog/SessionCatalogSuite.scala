@@ -406,24 +406,24 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.setCurrentDatabase("db2")
     // If we explicitly specify the database, we'll look up the relation in that database
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1", Some("db2")))
-      == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1), None)())
+      == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1), None))
     // Otherwise, we'll first look up a temporary table with the same name
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
-      == SubqueryAlias("tbl1", tempTable1, Some(TableIdentifier("tbl1")))())
+      == SubqueryAlias("tbl1", tempTable1, Some(TableIdentifier("tbl1"))))
     // Then, if that does not exist, look up the relation in the current database
     sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
-      == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1), None)())
+      == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1), None))
   }
 
   test("lookup table relation with alias") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val alias = "monster"
     val tableMetadata = catalog.getTableMetadata(TableIdentifier("tbl1", Some("db2")))
-    val relation = SubqueryAlias("tbl1", SimpleCatalogRelation("db2", tableMetadata), None)()
+    val relation = SubqueryAlias("tbl1", SimpleCatalogRelation("db2", tableMetadata), None)
     val relationWithAlias =
       SubqueryAlias(alias,
-        SimpleCatalogRelation("db2", tableMetadata), None)()
+        SimpleCatalogRelation("db2", tableMetadata), None)
     assert(catalog.lookupRelation(
       TableIdentifier("tbl1", Some("db2")), alias = None) == relation)
     assert(catalog.lookupRelation(
@@ -435,7 +435,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tmpView = Range(1, 10, 2, 10)
     catalog.createTempView("vw1", tmpView, overrideIfExists = false)
     val plan = catalog.lookupRelation(TableIdentifier("vw1"), Option("range"))
-    assert(plan == SubqueryAlias("range", tmpView, Option(TableIdentifier("vw1")))())
+    assert(plan == SubqueryAlias("range", tmpView, Option(TableIdentifier("vw1"))))
   }
 
   test("table exists") {

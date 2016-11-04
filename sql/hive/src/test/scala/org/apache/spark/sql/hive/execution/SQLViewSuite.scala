@@ -38,7 +38,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     spark.sql(s"DROP TABLE IF EXISTS jt")
   }
 
-  test("create a persistent view on a persistent view") {
+  test("create a permanent view on a permanent view") {
     withView("jtv1", "jtv2") {
       sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE VIEW jtv2 AS SELECT * FROM jtv1 WHERE id < 6")
@@ -46,7 +46,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("create a temp view on a persistent view") {
+  test("create a temp view on a permanent view") {
     withView("jtv1", "temp_jtv1") {
       sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jtv1 WHERE id < 6")
@@ -62,14 +62,22 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("create a persistent view on a temp view") {
-    withView("jtv1", "temp_jtv1") {
+  test("create a permanent view on a temp view") {
+    withView("jtv1", "temp_jtv1", "global_temp_jtv1") {
       sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
-      val e = intercept[AnalysisException] {
+      var e = intercept[AnalysisException] {
         sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
       }.getMessage
       assert(e.contains(
         s"Not allowed to create a permanent view `jtv1` by referencing a temp view `temp_jtv1`"))
+
+      val globalTempDB = spark.sharedState.globalTempViewManager.database
+      sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
+      e = intercept[AnalysisException] {
+        sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
+      }.getMessage
+      assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
+        s"a temp view `global_temp`.`global_temp_jtv1`"))
     }
   }
 
@@ -480,7 +488,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("create a persistent/temp view using a hive function") {
+  test("create a permanent/temp view using a hive function") {
     withView("view1", "tempView1") {
       sql(s"CREATE VIEW tempView1 AS SELECT histogram_numeric(id, 5) from jt")
       checkAnswer(sql("select count(*) FROM tempView1"), Row(1))
@@ -489,7 +497,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("create a persistent/temp view using a built-in function") {
+  test("create a permanent/temp view using a built-in function") {
     withView("view1", "tempView1") {
       sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT abs(id) from jt")
       checkAnswer(sql("select count(*) FROM tempView1"), Row(9))
@@ -498,7 +506,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("create a persistent/temp view using a persistent function") {
+  test("create a permanent/temp view using a permanent function") {
     val functionName = "myUpper"
     val functionClass =
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
@@ -516,7 +524,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("create a persistent/temp view using a temporary function") {
+  test("create a permanent/temp view using a temporary function") {
     val tempFunctionName = "temp"
     val functionClass =
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
@@ -530,7 +538,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $tempFunctionName(id) from tab1")
           checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
 
-          // persistent view
+          // permanent view
           val e = intercept[AnalysisException] {
             sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
           }.getMessage

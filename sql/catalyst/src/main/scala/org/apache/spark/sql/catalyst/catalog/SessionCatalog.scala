@@ -553,16 +553,16 @@ class SessionCatalog(
       val relationAlias = alias.getOrElse(table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(relationAlias, viewDef, Some(name))(isGeneratedByTempTable = true)
+          SubqueryAlias(relationAlias, viewDef, Some(name))
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
         val view = Option(metadata.tableType).collect {
           case CatalogTableType.VIEW => name
         }
-        SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)()
+        SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)
       } else {
-        SubqueryAlias(relationAlias, tempTables(table), Option(name))(isGeneratedByTempTable = true)
+        SubqueryAlias(relationAlias, tempTables(table), Option(name))
       }
     }
   }
@@ -926,7 +926,7 @@ class SessionCatalog(
   /**
    * Returns whether it is a temporary function.
    */
-  def isTempFunction(name: FunctionIdentifier): Boolean = {
+  def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
     // copied from HiveSessionCatalog
     val hiveFunctions = Seq(
       "hash",

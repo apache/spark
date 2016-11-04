@@ -18,10 +18,9 @@
 package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
-
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -133,18 +132,17 @@ case class CreateViewCommand(
 
     // When creating a permanent view, not allowed to reference temporary objects.
     if (!isTemporary) {
-      // Disallow creating permanent views based on temporary views.
-      analyzedPlan.collectFirst {
-        case s: SubqueryAlias if s.isGeneratedByTempTable =>
-          throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-            s"referencing a temp view `${s.alias}`. " +
-            originalText.map(sql => s"""SQL: "$sql".""").getOrElse(""))
-      }
-
-      // Disallow creating permanent views based on temporary UDFs.
       child.collect {
+        // Disallow creating permanent views based on temporary views.
+        case s: UnresolvedRelation
+            if sparkSession.sessionState.catalog.isTemporaryTable(s.tableIdentifier) =>
+          throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+            s"referencing a temp view ${s.tableIdentifier}. " +
+            originalText.map(sql => s"""SQL: "$sql".""").getOrElse(""))
         case other if !other.resolved => other.expressions.flatMap(_.collect {
-          case e: UnresolvedFunction if sparkSession.sessionState.catalog.isTempFunction(e.name) =>
+          // Disallow creating permanent views based on temporary UDFs.
+          case e: UnresolvedFunction
+              if sparkSession.sessionState.catalog.isTemporaryFunction(e.name) =>
             throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
               s"referencing a temp function `${e.name}`. " +
               originalText.map(sql => s"""SQL: "$sql".""").getOrElse(""))

@@ -293,7 +293,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               case Project(projList, _) =>
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
               case s @ SubqueryAlias(alias, _, None) =>
-                subqueryRoot = SubqueryAlias(alias, subqueryRoot, None)()
+                subqueryRoot = SubqueryAlias(alias, subqueryRoot, None)
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 

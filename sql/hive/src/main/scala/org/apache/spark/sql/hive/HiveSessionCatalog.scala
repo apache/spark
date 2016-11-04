@@ -61,7 +61,7 @@ private[sql] class HiveSessionCatalog(
     if (db == globalTempViewManager.database) {
       val relationAlias = alias.getOrElse(table)
       globalTempViewManager.get(table).map { viewDef =>
-        SubqueryAlias(relationAlias, viewDef, Some(name))(isGeneratedByTempTable = true)
+        SubqueryAlias(relationAlias, viewDef, Some(name))
       }.getOrElse(throw new NoSuchTableException(db, table))
     } else if (name.database.isDefined || !tempTables.contains(table)) {
       val database = name.database.map(formatDatabaseName)
@@ -69,10 +69,10 @@ private[sql] class HiveSessionCatalog(
       metastoreCatalog.lookupRelation(newName, alias)
     } else {
       val relation = tempTables(table)
-      val tableWithQualifiers = SubqueryAlias(table, relation, None)(isGeneratedByTempTable = true)
+      val tableWithQualifiers = SubqueryAlias(table, relation, None)
       // If an alias was specified by the lookup, wrap the plan in a subquery so that
       // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)()).getOrElse(tableWithQualifiers)
+      alias.map(a => SubqueryAlias(a, tableWithQualifiers, None)).getOrElse(tableWithQualifiers)
     }
   }
 
@@ -232,6 +232,7 @@ private[sql] class HiveSessionCatalog(
   // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
   // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
   // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
+  // Note: don't forget to update SessionCatalog.isTemporaryFunction
   private val hiveFunctions = Seq(
     "hash",
     "histogram_numeric",

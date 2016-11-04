@@ -106,21 +106,21 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
     if (DDLUtils.isDatasourceTable(table)) {
       val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
-      val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable, None)()
+      val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable, None)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
-      alias.map(a => SubqueryAlias(a, qualifiedTable, None)()).getOrElse(qualifiedTable)
+      alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
     } else if (table.tableType == CatalogTableType.VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       SubqueryAlias(
         alias.getOrElse(table.identifier.table),
         sparkSession.sessionState.sqlParser.parsePlan(viewText),
-        Option(table.identifier))()
+        Option(table.identifier))
     } else {
       val qualifiedTable =
         MetastoreRelation(
           qualifiedTableName.database, qualifiedTableName.name)(table, sparkSession)
-      alias.map(a => SubqueryAlias(a, qualifiedTable, None)()).getOrElse(qualifiedTable)
+      alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
     }
   }
 
@@ -312,7 +312,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Read path
         case relation: MetastoreRelation if shouldConvertMetastoreParquet(relation) =>
           val parquetRelation = convertToParquetRelation(relation)
-          SubqueryAlias(relation.tableName, parquetRelation, None)()
+          SubqueryAlias(relation.tableName, parquetRelation, None)
       }
     }
   }
@@ -350,7 +350,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Read path
         case relation: MetastoreRelation if shouldConvertMetastoreOrc(relation) =>
           val orcRelation = convertToOrcRelation(relation)
-          SubqueryAlias(relation.tableName, orcRelation, None)()
+          SubqueryAlias(relation.tableName, orcRelation, None)
       }
     }
   }
