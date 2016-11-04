@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Encoders, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
@@ -56,6 +56,14 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
         val name = status.getPath.getName
         (name.startsWith("_") && !name.contains("=")) || name.startsWith(".")
       }.map(_.getPath.toString).toArray
+
+      val lines = sparkSession.baseRelationToDataFrame(
+        DataSource.apply(
+          sparkSession,
+          paths = jsonFiles,
+          className = classOf[TextBasedFileFormat].getName
+        ).resolveRelation(checkFilesExist = false))
+        .select("value").as[String](Encoders.STRING)
 
       val jsonSchema = InferSchema.infer(
         sparkSession.read.textFile(jsonFiles: _*),
