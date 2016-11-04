@@ -699,7 +699,8 @@ class LSHModel():
 
         * Single Probing: Fast, return at most k elements (Probing only one buckets)
 
-        * Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to the key)
+        * Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to \
+        the key)
 
         :param dataset: The dataset to search for nearest neighbors of the key.
         :param key: Feature vector representing the item to search for.
@@ -824,8 +825,8 @@ class MinHash(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     The input can be dense or sparse vectors, but it is more efficient if it is sparse.
     For example, `Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])`
     means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5.
-    Also, any input vector must have at least 1 non-zero indices, and all non-zero values are treated
-    as binary "1" values.
+    Also, any input vector must have at least 1 non-zero indices, and all non-zero values
+    are treated as binary "1" values.
 
     .. seealso:: `MinHash <https://en.wikipedia.org/wiki/MinHash>`_
 
@@ -1459,7 +1460,8 @@ class RandomProjection(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasS
     distance space. The output will be vectors of configurable dimension. Hash value in the
     same dimension is calculated by the same hash function.
 
-    .. seealso:: `Stable Distributions <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
+    .. seealso:: `Stable Distributions \
+    <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
     .. seealso:: `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
 
     >>> from pyspark.ml.linalg import Vectors
