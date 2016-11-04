@@ -96,7 +96,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
-      partitionProviderIsHive = true)
+      tracksPartitionsInCatalog = true)
   }
 
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
@@ -1145,7 +1145,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           assert(storageFormat.properties.isEmpty)
           assert(storageFormat.locationUri === Some(expected))
         } else {
-          assert(storageFormat.properties.get("path") === Some(expected))
           assert(storageFormat.locationUri === Some(expected))
         }
       } else {
@@ -1446,34 +1445,34 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("DESCRIBE FUNCTION log"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Logarithm") ::
         Row("Function: log") ::
-        Row("Usage: log(b, x) - Returns the logarithm of x with base b.") :: Nil
+        Row("Usage: log(base, expr) - Returns the logarithm of `expr` with `base`.") :: Nil
     )
     // predicate operator
     checkAnswer(
       sql("DESCRIBE FUNCTION or"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Or") ::
         Row("Function: or") ::
-        Row("Usage: a or b - Logical OR.") :: Nil
+        Row("Usage: expr1 or expr2 - Logical OR.") :: Nil
     )
     checkAnswer(
       sql("DESCRIBE FUNCTION !"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Not") ::
         Row("Function: !") ::
-        Row("Usage: ! a - Logical not") :: Nil
+        Row("Usage: ! expr - Logical not.") :: Nil
     )
     // arithmetic operators
     checkAnswer(
       sql("DESCRIBE FUNCTION +"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Add") ::
         Row("Function: +") ::
-        Row("Usage: a + b - Returns a+b.") :: Nil
+        Row("Usage: expr1 + expr2 - Returns `expr1`+`expr2`.") :: Nil
     )
     // comparison operators
     checkAnswer(
       sql("DESCRIBE FUNCTION <"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.LessThan") ::
         Row("Function: <") ::
-        Row("Usage: a < b - Returns TRUE if a is less than b.") :: Nil
+        Row("Usage: expr1 < expr2 - Returns true if `expr1` is less than `expr2`.") :: Nil
     )
     // STRING
     checkAnswer(
@@ -1481,15 +1480,21 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
         Row("Usage: concat(str1, str2, ..., strN) " +
-          "- Returns the concatenation of str1, str2, ..., strN") :: Nil
+          "- Returns the concatenation of `str1`, `str2`, ..., `strN`.") :: Nil
     )
     // extended mode
     checkAnswer(
       sql("DESCRIBE FUNCTION EXTENDED ^"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
-        Row("Extended Usage:\n> SELECT 3 ^ 5; 2") ::
+        Row(
+          """Extended Usage:
+            |    Examples:
+            |      > SELECT 3 ^ 5;
+            |       2
+            |  """.stripMargin) ::
         Row("Function: ^") ::
-        Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
+        Row("Usage: expr1 ^ expr2 - Returns the result of " +
+          "bitwise exclusive OR of `expr1` and `expr2`.") :: Nil
     )
   }
 
@@ -1594,10 +1599,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   test("drop current database") {
     sql("CREATE DATABASE temp")
     sql("USE temp")
-    val m = intercept[AnalysisException] {
-      sql("DROP DATABASE temp")
-    }.getMessage
-    assert(m.contains("Can not drop current database `temp`"))
+    sql("DROP DATABASE temp")
+    val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t (a INT, b INT)")
+      }.getMessage
+    assert(e.contains("Database 'temp' not found"))
   }
 
   test("drop default database") {

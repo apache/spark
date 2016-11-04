@@ -30,7 +30,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.execution.datasources.HadoopCommitProtocolWrapper
+import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol
 import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -384,7 +385,7 @@ object SQLConf {
     SQLConfigBuilder("spark.sql.sources.commitProtocolClass")
       .internal()
       .stringConf
-      .createWithDefault(classOf[HadoopCommitProtocolWrapper].getName)
+      .createWithDefault(classOf[SQLHadoopMapReduceCommitProtocol].getName)
 
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     SQLConfigBuilder("spark.sql.sources.parallelPartitionDiscovery.threshold")
@@ -523,7 +524,25 @@ object SQLConf {
     SQLConfigBuilder("spark.sql.streaming.commitProtocolClass")
       .internal()
       .stringConf
-      .createWithDefault(classOf[HadoopCommitProtocolWrapper].getName)
+      .createWithDefault(classOf[ManifestFileCommitProtocol].getName)
+
+  val OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD =
+    SQLConfigBuilder("spark.sql.objectHashAggregate.sortBased.fallbackThreshold")
+      .internal()
+      .doc("In the case of ObjectHashAggregateExec, when the size of the in-memory hash map " +
+        "grows too large, we will fall back to sort-based aggregation. This option sets a row " +
+        "count threshold for the size of the hash map.")
+      .intConf
+      // We are trying to be conservative and use a relatively small default count threshold here
+      // since the state object of some TypedImperativeAggregate function can be quite large (e.g.
+      // percentile_approx).
+      .createWithDefault(128)
+
+  val USE_OBJECT_HASH_AGG = SQLConfigBuilder("spark.sql.execution.useObjectHashAggregateExec")
+    .internal()
+    .doc("Decides if we use ObjectHashAggregateExec")
+    .booleanConf
+    .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -767,6 +786,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
+
+  def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
+
+  def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 

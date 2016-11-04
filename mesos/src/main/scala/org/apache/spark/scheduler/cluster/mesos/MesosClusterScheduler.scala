@@ -129,6 +129,7 @@ private[spark] class MesosClusterScheduler(
   private val queuedCapacity = conf.getInt("spark.mesos.maxDrivers", 200)
   private val retainedDrivers = conf.getInt("spark.mesos.retainedDrivers", 200)
   private val maxRetryWaitTime = conf.getInt("spark.mesos.cluster.retry.wait.max", 60) // 1 minute
+  private val useFetchCache = conf.getBoolean("spark.mesos.fetchCache.enable", false)
   private val schedulerState = engineFactory.createEngine("scheduler")
   private val stateLock = new Object()
   private val finishedDrivers =
@@ -396,7 +397,7 @@ private[spark] class MesosClusterScheduler(
     val jarUrl = desc.jarUrl.stripPrefix("file:").stripPrefix("local:")
 
     ((jarUrl :: confUris) ++ getDriverExecutorURI(desc).toList).map(uri =>
-      CommandInfo.URI.newBuilder().setValue(uri.trim()).build())
+      CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
   }
 
   private def getDriverCommandValue(desc: MesosDriverDescription): String = {
@@ -481,7 +482,7 @@ private[spark] class MesosClusterScheduler(
       .filter { case (key, _) => !replicatedOptionsBlacklist.contains(key) }
       .toMap
     (defaultConf ++ driverConf).foreach { case (key, value) =>
-      options ++= Seq("--conf", s"$key=${shellEscape(value)}") }
+      options ++= Seq("--conf", s""""$key=${shellEscape(value)}"""".stripMargin) }
 
     options
   }

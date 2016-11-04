@@ -338,20 +338,40 @@ varargsToEnv <- function(...) {
 # into string.
 varargsToStrEnv <- function(...) {
   pairs <- list(...)
+  nameList <- names(pairs)
   env <- new.env()
-  for (name in names(pairs)) {
-    value <- pairs[[name]]
-    if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
-      stop(paste0("Unsupported type for ", name, " : ", class(value),
-           ". Supported types are logical, numeric, character and NULL."))
+  ignoredNames <- list()
+
+  if (is.null(nameList)) {
+    # When all arguments are not named, names(..) returns NULL.
+    ignoredNames <- pairs
+  } else {
+    for (i in seq_along(pairs)) {
+      name <- nameList[i]
+      value <- pairs[i]
+      if (identical(name, "")) {
+        # When some of arguments are not named, name is "".
+        ignoredNames <- append(ignoredNames, value)
+      } else {
+        value <- pairs[[name]]
+        if (!(is.logical(value) || is.numeric(value) || is.character(value) || is.null(value))) {
+          stop(paste0("Unsupported type for ", name, " : ", class(value),
+               ". Supported types are logical, numeric, character and NULL."), call. = FALSE)
+        }
+        if (is.logical(value)) {
+          env[[name]] <- tolower(as.character(value))
+        } else if (is.null(value)) {
+          env[[name]] <- value
+        } else {
+          env[[name]] <- as.character(value)
+        }
+      }
     }
-    if (is.logical(value)) {
-      env[[name]] <- tolower(as.character(value))
-    } else if (is.null(value)) {
-      env[[name]] <- value
-    } else {
-      env[[name]] <- as.character(value)
-    }
+  }
+
+  if (length(ignoredNames) != 0) {
+    warning(paste0("Unnamed arguments ignored: ", paste(ignoredNames, collapse = ", "), "."),
+            call. = FALSE)
   }
   env
 }

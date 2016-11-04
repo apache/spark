@@ -183,6 +183,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
 
+  warnDeprecatedVersions()
+
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
    | not accessible by the outside world. They're mutable since we want to initialize all  |
@@ -344,6 +346,16 @@ class SparkContext(config: SparkConf) extends Logging {
     logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
       "deprecated, please use spark.executor.memory instead.")
     value
+  }
+
+  private def warnDeprecatedVersions(): Unit = {
+    val javaVersion = System.getProperty("java.version").split("[+.\\-]+", 3)
+    if (javaVersion.length >= 2 && javaVersion(1).toInt == 7) {
+      logWarning("Support for Java 7 is deprecated as of Spark 2.0.0")
+    }
+    if (scala.util.Properties.releaseVersion.exists(_.startsWith("2.10"))) {
+      logWarning("Support for Scala 2.10 is deprecated as of Spark 2.1.0")
+    }
   }
 
   /** Control our logLevel. This overrides any user-defined log settings.
@@ -1716,29 +1728,12 @@ class SparkContext(config: SparkConf) extends Logging {
         key = uri.getScheme match {
           // A JAR file which exists only on the driver node
           case null | "file" =>
-            if (master == "yarn" && deployMode == "cluster") {
-              // In order for this to work in yarn cluster mode the user must specify the
-              // --addJars option to the client to upload the file into the distributed cache
-              // of the AM to make it show up in the current working directory.
-              val fileName = new Path(uri.getPath).getName()
-              try {
-                env.rpcEnv.fileServer.addJar(new File(fileName))
-              } catch {
-                case e: Exception =>
-                  // For now just log an error but allow to go through so spark examples work.
-                  // The spark examples don't really need the jar distributed since its also
-                  // the app jar.
-                  logError("Error adding jar (" + e + "), was the --addJars option used?")
-                  null
-              }
-            } else {
-              try {
-                env.rpcEnv.fileServer.addJar(new File(uri.getPath))
-              } catch {
-                case exc: FileNotFoundException =>
-                  logError(s"Jar not found at $path")
-                  null
-              }
+            try {
+              env.rpcEnv.fileServer.addJar(new File(uri.getPath))
+            } catch {
+              case exc: FileNotFoundException =>
+                logError(s"Jar not found at $path")
+                null
             }
           // A JAR file which exists locally on every worker node
           case "local" =>
