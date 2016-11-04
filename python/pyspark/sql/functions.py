@@ -543,7 +543,7 @@ def shiftRightUnsigned(col, numBits):
 
 @since(1.6)
 def spark_partition_id():
-    """A column for partition ID of the Spark task.
+    """A column for partition ID.
 
     Note that this is indeterministic because it depends on data partitioning and task scheduling.
 
