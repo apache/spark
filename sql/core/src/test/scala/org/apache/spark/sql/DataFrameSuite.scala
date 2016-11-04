@@ -1728,29 +1728,4 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
     assert(df.filter($"array1" === $"array2").count() == 1)
   }
-
-  test("SPARK-17854: rand/randn allows null and long as input seed") {
-    checkAnswer(testData.selectExpr("rand(NULL)"), testData.selectExpr("rand(0)"))
-    checkAnswer(testData.selectExpr("rand(0L)"), testData.selectExpr("rand(0)"))
-    checkAnswer(testData.selectExpr("randn(NULL)"), testData.selectExpr("randn(0)"))
-    checkAnswer(testData.selectExpr("randn(0L)"), testData.selectExpr("randn(0)"))
-    checkAnswer(testData.selectExpr("rand(cast(NULL AS INT))"), testData.selectExpr("rand(0)"))
-    checkAnswer(testData.selectExpr("rand(cast(3 / 7 AS INT))"), testData.selectExpr("rand(0)"))
-    checkAnswer(
-      testData.selectExpr("randn(cast(NULL AS LONG))"), testData.selectExpr("randn(0L)"))
-    checkAnswer(
-      testData.selectExpr("randn(cast(3L / 12L AS LONG))"), testData.selectExpr("randn(0L)"))
-
-    val eOne = intercept[AnalysisException] {
-      testData.selectExpr("rand(key)").collect()
-    }
-    assert(
-      eOne.message.contains("Input argument to rand must be an integer, long or null literal."))
-
-    val eTwo = intercept[AnalysisException] {
-      testData.selectExpr("randn(key)").collect()
-    }
-    assert(
-      eTwo.message.contains("Input argument to randn must be an integer, long or null literal."))
-  }
 }
