@@ -22,10 +22,11 @@ import java.util.Locale
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, DataAccumulatorV2, Utils}
 
 
-class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
+class SQLMetric(val metricType: String, initValue: Long = 0L)
+    extends DataAccumulatorV2[Long, Long] {
   // This is a workaround for SPARK-11013.
   // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
   // update it at the end of task and the value will be at least 0. Then we can filter out the -1

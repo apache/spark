@@ -45,23 +45,8 @@ object MimaExcludes {
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references")
     ) ++ Seq(
       // SPARK-12469 Add data property accumulators to Spark
-      ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.setRDDPartitionInfo"),
-      ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.getRDDPartitionInfo"),
-      // We changed merge final and private since people shouldn't be calling it outside of Spark
-      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.util.LegacyAccumulatorWrapper.merge"),
-      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.util.LongAccumulator.merge"),
-      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.util.AccumulatorV2.merge"),
-      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.util.CollectionAccumulator.merge"),
-      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.util.DoubleAccumulator.merge"),
-      // mergeImpl is now required and wrapped by merge
-      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.util.AccumulatorV2.mergeImpl"),
-      // Now require addImpl and wrap by merge
-      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.util.AccumulatorV2.addImpl"),
-      // add is now final
-      ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.util.AccumulatorV2#mcJ#sp.add"),
-      // The add method for some accumulators changed for easier handling of other numerics.
-      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.util.LongAccumulator.add"),
-      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.util.DoubleAccumulator.add"),
+      ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.setTaskOutputInfo"),
+      ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.getTaskOutputInfo"),
       // AccumulableInfo's constructor is internal and we added a new field
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.apply"),
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.copy")

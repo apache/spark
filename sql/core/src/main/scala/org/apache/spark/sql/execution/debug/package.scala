@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
+import org.apache.spark.util.{AccumulatorV2, DataAccumulatorV2, LongAccumulator}
 
 /**
  * Contains methods for debugging query execution.
@@ -100,10 +100,10 @@ package object debug {
   case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
-    class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
+    class SetAccumulator[T] extends DataAccumulatorV2[T, java.util.Set[T]] {
       private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
       override def isZero: Boolean = _set.isEmpty
-      override def copy(): AccumulatorV2[T, java.util.Set[T]] = {
+      override def copy(): DataAccumulatorV2[T, java.util.Set[T]] = {
         val newAcc = new SetAccumulator[T]()
         newAcc._set.addAll(_set)
         newAcc

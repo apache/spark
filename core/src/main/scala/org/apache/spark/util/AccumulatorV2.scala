@@ -27,6 +27,7 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.scheduler.AccumulableInfo
 
 /**
@@ -54,8 +55,8 @@ private[spark] case class AccumulatorMetadata(
 
 
 /**
- * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
- * type `OUT`.
+ * The legacy base class for accumulators, that can accumulate inputs of type `IN`, and produce
+ * output of type `OUT`.
  *
  * `OUT` should be a type that can be read atomically (e.g., Int, Long), or thread-safely
  * (e.g., synchronized collections) because it will be read from other threads.
@@ -63,30 +64,6 @@ private[spark] case class AccumulatorMetadata(
 abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
   private[spark] var atDriverSide = true
-
-  /**
-   * The following values are used for data property [[AccumulatorV2]]s.
-   * Data property [[AccumulatorV2]]s have only-once semantics. These semantics are implemented
-   * by keeping track of which RDD id, shuffle id, and partition id the current function is
-   * processing in. The driver keeps track of which rdd/shuffle/partitions
-   * already have been applied, and only combines values into value_ if the rdd/shuffle/partition
-   * has not already been aggregated on the driver program
-   */
-  // For data property accumulators pending and processed updates.
-  // Pending and processed are keyed by TaskOutputId
-  private[spark] lazy val pending =
-    new mutable.HashMap[TaskOutputId, AccumulatorV2[IN, OUT]]()
-  // Completed contains the set of TaskOutputId that have been
-  // fully processed on the worker side. This is used to determine if the updates should
-  // be merged on the driver for a particular rdd/shuffle/partition combination.
-  // Some elements may be in pending which are not completed if a partition is only partially
-  // evaluated (e.g. `take(x)`).
-  private[spark] lazy val completed = new mutable.HashSet[TaskOutputId]()
-  // rddProcessed is keyed by rdd id and the value is a bitset containing all partitions
-  // for the given key which have been merged into the value. This is used on the driver.
-  @transient private[spark] lazy val rddProcessed = new mutable.HashMap[Int, mutable.BitSet]()
-  // shuffleProcessed is the same as rddProcessed except keyed by shuffle id.
-  @transient private[spark] lazy val shuffleProcessed = new mutable.HashMap[Int, mutable.BitSet]()
 
   private[spark] def dataProperty: Boolean = metadata.dataProperty
 
@@ -183,107 +160,15 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
 
   /**
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
-   * Developers should extend addImpl to customize the adding functionality.
+   * Developers should extend this to customize the adding functionality.
    */
-  final def add(v: IN): Unit = {
-    if (metadata != null && metadata.dataProperty) {
-      dataPropertyAdd(v)
-    } else {
-      addImpl(v)
-    }
-  }
-
-  protected def dataPropertyAdd(v: IN): Unit = {
-    // To allow the user to be able to access the current accumulated value from their process
-    // worker side then we need to perform a "normal" add as well as the data property add.
-    addImpl(v)
-    // Add to the pending updates for data property
-    val taskOutputInfo = TaskContext.get().getTaskOutputInfo()
-    val updateForTask = pending.getOrElse(taskOutputInfo, copyAndReset())
-    // Since we may have constructed a new accumulator, set atDriverSide to false as the default
-    // new accumulators will have atDriverSide equal to true.
-    updateForTask.atDriverSide = false
-    updateForTask.addImpl(v)
-    pending(taskOutputInfo) = updateForTask
-  }
-
-  /**
-   * Mark a specific rdd/shuffle/partition as completely processed. This is a noop for
-   * non-data property accumuables. See [[TaskOutputId]] for an explanation of why this is
-   * important for data property accumulators.
-   */
-  private[spark] def markFullyProcessed(taskOutputId: TaskOutputId): Unit = {
-    if (metadata.dataProperty) {
-      completed += taskOutputId
-    }
-  }
-
-  /**
-   * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
-   * Developers should extend addImpl to customize the adding functionality.
-   * Takes the inputs and accumulates.
-   */
-  protected[spark] def addImpl(v: IN)
+  def add(v: IN)
 
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
-   * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
-   * When merging data property accumulators, the merge function must always be called on the local
-   * (that is created driver side) accumulator with the accumulator passed in being created on the
-   * workers.
+   * merge-in-place. This should not be called directly outside of Spark.
    */
-  final private[spark] lazy val merge: (AccumulatorV2[IN, OUT] => Unit) = {
-    assert(isAtDriverSide)
-    // Handle data property accumulators
-    if (metadata != null && metadata.dataProperty) {
-      dataPropertyMerge _
-    } else {
-      mergeImpl _
-    }
-  }
-
-  /**
-   * `dataPropertyMerge` must only be called on an accumulator created on the driver side, and
-   * `other` must be an accumulator created on a worker.
-   */
-  final private[spark] def dataPropertyMerge(other: AccumulatorV2[IN, OUT]) = {
-    def processAccumUpdate(
-      processed: mutable.HashMap[Int, mutable.BitSet],
-      outputId: TaskOutputId,
-      accumUpdate: AccumulatorV2[IN, OUT]
-    ): Unit = {
-      val partitionsAlreadyMerged = processed.getOrElseUpdate(outputId.id, new mutable.BitSet())
-      // Only take updates for task outputs which were completed (e.g. skip partial evaluations)
-      if (other.completed.contains(outputId)) {
-        // Only take updates for task outputs we haven't seen before.
-        // So if this task computed two rdds, but one of them had been computed previously, only
-        // take the accumulator updates from the other one.
-        if (!partitionsAlreadyMerged.contains(outputId.partition)) {
-          partitionsAlreadyMerged += outputId.partition
-          mergeImpl(accumUpdate)
-        }
-      }
-    }
-    other.pending.foreach {
-      // Apply all foreach partitions regardless - they can only be fully evaluated
-      case (ForeachOutputId, v) =>
-        mergeImpl(v)
-      // For RDDs & shuffles, apply the accumulator updates as long as the output is complete
-      // and its the first time we're seeing it (just slightly different bookkeeping between
-      // RDDs and shuffles).
-      case (outputId: RDDOutputId, v) =>
-        processAccumUpdate(rddProcessed, outputId, v)
-      case (outputId: ShuffleMapOutputId, v) =>
-        processAccumUpdate(shuffleProcessed, outputId, v)
-    }
- }
-
-
-  /**
-   * Merges another same-type accumulator into this one and update its state, i.e. this should be
-   * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
-   */
-  protected def mergeImpl(other: AccumulatorV2[IN, OUT]): Unit
+  val merge: (AccumulatorV2[IN, OUT] => Unit)
 
   /**
    * Defines the current value of this accumulator
@@ -331,8 +216,172 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
       getClass.getSimpleName + s"(id: $id, name: $name, value: $value)"
     }
   }
+
+  /**
+   * Mark a specific rdd/shuffle/partition as completely processed. This is a noop for
+   * non-data property accumuables. See [[TaskOutputId]] for an explanation of why this is
+   * important for data property accumulators.
+   */
+  private[spark] def markFullyProcessed(taskOutputId: TaskOutputId): Unit = {
+  }
 }
 
+
+/**
+ * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output
+ *  of type `OUT`. [[DataAccumulatorV2]] extends [[AccumulatorV2]] to add support for data property
+ * accumulators. Note that [[DataAccumulatorV2]] can be used for both data-property and "regular"
+ * accumulation tasks depending on the accumulator metadata data property flag.
+ *
+ * `OUT` should be a type that can be read atomically (e.g., Int, Long), or thread-safely
+ * (e.g., synchronized collections) because it will be read from other threads.
+ */
+@Experimental
+abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
+
+  /**
+   * The following values are used for data property [[AccumulatorV2]]s.
+   * Data property [[AccumulatorV2]]s have only-once semantics. These semantics are implemented
+   * by keeping track of which RDD id, shuffle id, and partition id the current function is
+   * processing in. The driver keeps track of which rdd/shuffle/partitions
+   * already have been applied, and only combines values into value_ if the rdd/shuffle/partition
+   * has not already been aggregated on the driver program
+   */
+  // For data property accumulators pending and processed updates.
+  // Pending and processed are keyed by TaskOutputId
+  private[spark] lazy val pending =
+    new mutable.HashMap[TaskOutputId, DataAccumulatorV2[IN, OUT]]()
+  // Completed contains the set of TaskOutputId that have been
+  // fully processed on the worker side. This is used to determine if the updates should
+  // be merged on the driver for a particular rdd/shuffle/partition combination.
+  // Some elements may be in pending which are not completed if a partition is only partially
+  // evaluated (e.g. `take(x)`).
+  private[spark] lazy val completed = new mutable.HashSet[TaskOutputId]()
+  // rddProcessed is keyed by rdd id and the value is a bitset containing all partitions
+  // for the given key which have been merged into the value. This is used on the driver.
+  @transient private[spark] lazy val rddProcessed = new mutable.HashMap[Int, mutable.BitSet]()
+  // shuffleProcessed is the same as rddProcessed except keyed by shuffle id.
+  @transient private[spark] lazy val shuffleProcessed = new mutable.HashMap[Int, mutable.BitSet]()
+
+  /**
+   * Creates a new copy of this accumulator, which is zero value. i.e. call `isZero` on the copy
+   * must return true.
+   */
+  override def copyAndReset(): DataAccumulatorV2[IN, OUT] = {
+    val copyAcc = copy()
+    copyAcc.reset()
+    copyAcc
+  }
+
+  /**
+   * Creates a new copy of this accumulator.
+   */
+  override def copy(): DataAccumulatorV2[IN, OUT]
+
+  /**
+   * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
+   * Developers should extend `addImpl` to customize the adding functionality.
+   */
+  final def add(v: IN): Unit = {
+    if (metadata != null && metadata.dataProperty) {
+      dataPropertyAdd(v)
+    } else {
+      addImpl(v)
+    }
+  }
+
+  protected def dataPropertyAdd(v: IN): Unit = {
+    // To allow the user to be able to access the current accumulated value from their process
+    // worker side then we need to perform a "normal" add as well as the data property add.
+    addImpl(v)
+    // Add to the pending updates for data property
+    val taskOutputInfo = TaskContext.get().getTaskOutputInfo()
+    val updateForTask = pending.getOrElse(taskOutputInfo, copyAndReset())
+    // Since we may have constructed a new accumulator, set atDriverSide to false as the default
+    // new accumulators will have atDriverSide equal to true.
+    updateForTask.atDriverSide = false
+    updateForTask.addImpl(v)
+    pending(taskOutputInfo) = updateForTask
+  }
+
+  /**
+   * Mark a specific rdd/shuffle/partition as completely processed. This is a noop for
+   * non-data property accumuables. See [[TaskOutputId]] for an explanation of why this is
+   * important for data property accumulators.
+   */
+  private[spark] override def markFullyProcessed(taskOutputId: TaskOutputId): Unit = {
+    if (metadata.dataProperty) {
+      completed += taskOutputId
+    }
+  }
+
+  /**
+   * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
+   * Developers should extend this to customize the adding functionality.
+   */
+  protected[spark] def addImpl(v: IN)
+
+  /**
+   * Merges another same-type accumulator into this one and update its state, i.e. this should be
+   * merge-in-place. Developers should extend `mergeImpl` to customize the merge functionality.
+   * When merging data property accumulators, the merge function must always be called on the local
+   * (that is created driver side) accumulator with the accumulator passed in being created on the
+   * workers.
+   */
+  override final lazy val merge: (AccumulatorV2[IN, OUT] => Unit) = {
+    assert(isAtDriverSide)
+    // Handle data property accumulators
+    if (metadata != null && metadata.dataProperty) {
+      dataPropertyMerge _
+    } else {
+      mergeImpl _
+    }
+  }
+
+  /**
+   * Merges another same-type accumulator into this one and update its state, i.e. this should be
+   * merge-in-place. Developers should extend this to customize the merge functionality.
+   */
+  protected def mergeImpl(other: AccumulatorV2[IN, OUT]): Unit
+
+
+  /**
+   * `dataPropertyMerge` must only be called on an accumulator created on the driver side, and
+   * `other` must be an accumulator created on a worker.
+   */
+  final private[spark] def dataPropertyMerge(other: AccumulatorV2[IN, OUT]) = {
+    val otherDataProperty = other.asInstanceOf[DataAccumulatorV2[IN, OUT]]
+    def processAccumUpdate(
+      processed: mutable.HashMap[Int, mutable.BitSet],
+      outputId: TaskOutputId,
+      accumUpdate: AccumulatorV2[IN, OUT]
+    ): Unit = {
+      val partitionsAlreadyMerged = processed.getOrElseUpdate(outputId.id, new mutable.BitSet())
+      // Only take updates for task outputs which were completed (e.g. skip partial evaluations)
+      if (otherDataProperty.completed.contains(outputId)) {
+        // Only take updates for task outputs we haven't seen before.
+        // So if this task computed two rdds, but one of them had been computed previously, only
+        // take the accumulator updates from the other one.
+        if (!partitionsAlreadyMerged.contains(outputId.partition)) {
+          partitionsAlreadyMerged += outputId.partition
+          mergeImpl(accumUpdate)
+        }
+      }
+    }
+    otherDataProperty.pending.foreach {
+      // Apply all foreach partitions regardless - they can only be fully evaluated
+      case (ForeachOutputId, v) =>
+        mergeImpl(v)
+      // For RDDs & shuffles, apply the accumulator updates as long as the output is complete
+      // and its the first time we're seeing it (just slightly different bookkeeping between
+      // RDDs and shuffles).
+      case (outputId: RDDOutputId, v) =>
+        processAccumUpdate(rddProcessed, outputId, v)
+      case (outputId: ShuffleMapOutputId, v) =>
+        processAccumUpdate(shuffleProcessed, outputId, v)
+    }
+ }
+}
 
 /**
  * An internal class used to track accumulators by Spark itself.
@@ -420,7 +469,7 @@ private[spark] object AccumulatorContext {
  *
  * @since 2.0.0
  */
-class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
+class LongAccumulator extends DataAccumulatorV2[jl.Long, jl.Long] {
   private var _sum = 0L
   private var _count = 0L
 
@@ -504,7 +553,7 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
  *
  * @since 2.0.0
  */
-class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
+class DoubleAccumulator extends DataAccumulatorV2[jl.Double, jl.Double] {
   private var _sum = 0.0
   private var _count = 0L
 
@@ -583,7 +632,7 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
  *
  * @since 2.0.0
  */
-class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
+class CollectionAccumulator[T] extends DataAccumulatorV2[T, java.util.List[T]] {
   private val _list: java.util.List[T] = Collections.synchronizedList(new ArrayList[T]())
 
   override def isZero: Boolean = _list.isEmpty
@@ -621,7 +670,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 
 class LegacyAccumulatorWrapper[R, T](
     initialValue: R,
-    param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
+    param: org.apache.spark.AccumulableParam[R, T]) extends DataAccumulatorV2[T, R] {
   private[spark] var _value = initialValue  // Current value on driver
 
   override def isZero: Boolean = _value == param.zero(initialValue)

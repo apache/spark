@@ -1359,7 +1359,7 @@ class SparkContext(config: SparkConf) extends Logging {
    *                     supported in Datasets.
    */
   @Experimental
-  def register(acc: AccumulatorV2[_, _], dataProperty: Boolean): Unit = {
+  def register(acc: DataAccumulatorV2[_, _], dataProperty: Boolean): Unit = {
     acc.register(this, dataProperty = dataProperty)
   }
 
@@ -1374,7 +1374,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   @Experimental
-  def register(acc: AccumulatorV2[_, _], dataProperty: Boolean, name: String): Unit = {
+  def register(acc: DataAccumulatorV2[_, _], dataProperty: Boolean, name: String): Unit = {
     acc.register(this, name = Some(name), dataProperty = dataProperty)
   }
 
