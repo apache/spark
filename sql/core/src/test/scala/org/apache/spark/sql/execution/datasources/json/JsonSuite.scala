@@ -1068,7 +1068,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     assert(exceptionOne.getMessage.contains(
-      "Unable to convert column a of type calendarinterval to JSON."))
+      "Unsupported type calendarinterval of column a in JSON conversion."))
 
     val exceptionTwo = intercept[UnsupportedOperationException] {
       // Read JSON data from files.
@@ -1083,7 +1083,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     assert(exceptionTwo.getMessage.contains(
-      "Unable to convert column a of type calendarinterval to JSON."))
+      "Unsupported type calendarinterval of column a in JSON conversion."))
   }
 
   test("Corrupt records: DROPMALFORMED mode") {

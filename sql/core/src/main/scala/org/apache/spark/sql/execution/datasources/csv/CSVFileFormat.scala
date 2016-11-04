@@ -231,18 +231,18 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
   private def verifySchema(schema: StructType): Unit = {
-    def verifyType(name: String, dataType: DataType): Unit = dataType match {
-        case ByteType | ShortType | IntegerType | LongType | FloatType |
-             DoubleType | BooleanType | _: DecimalType | TimestampType |
-             DateType | StringType =>
+    def verifyType(dataType: DataType): Unit = dataType match {
+      case ByteType | ShortType | IntegerType | LongType | FloatType |
+           DoubleType | BooleanType | _: DecimalType | TimestampType |
+           DateType | StringType =>
 
-        case udt: UserDefinedType[_] => verifyType(name, udt.sqlType)
+      case udt: UserDefinedType[_] => verifyType(udt.sqlType)
 
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"Unable to convert column $name of type ${dataType.simpleString} to CSV.")
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"CSV data source does not support ${dataType.simpleString} data type.")
     }
 
-    schema.foreach(field => verifyType(field.name, field.dataType))
+    schema.foreach(field => verifyType(field.dataType))
   }
 }

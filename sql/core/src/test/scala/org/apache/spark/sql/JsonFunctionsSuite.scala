@@ -132,7 +132,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(from_json($"value", schema)).collect()
     }
     assert(e.getMessage.contains(
-      "Unable to convert column a of type calendarinterval to JSON."))
+      "Unsupported type calendarinterval of column a in JSON conversion"))
   }
 
   test("to_json") {
@@ -151,7 +151,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(to_json($"c")).collect()
     }
     assert(e.getMessage.contains(
-      "Unable to convert column a of type calendarinterval to JSON."))
+      "Unsupported type calendarinterval of column a in JSON conversion"))
   }
 
   test("roundtrip in to_json and from_json") {

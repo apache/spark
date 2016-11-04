@@ -671,23 +671,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       var msg = intercept[UnsupportedOperationException] {
         Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b) as a").write.csv(csvDir)
       }.getMessage
-      assert(msg.contains("Unable to convert column a of type struct<a:int,b:string> to CSV"))
+      assert(msg.contains("CSV data source does not support struct<a:int,b:string> data type"))
 
       msg = intercept[UnsupportedOperationException] {
         Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.csv(csvDir)
       }.getMessage
-      assert(msg.contains("Unable to convert column cars of type map<string,int> to CSV"))
+      assert(msg.contains("CSV data source does not support map<string,int> data type"))
 
       msg = intercept[UnsupportedOperationException] {
         Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands").write.csv(csvDir)
       }.getMessage
-      assert(msg.contains("Unable to convert column brands of type array<string> to CSV"))
+      assert(msg.contains("CSV data source does not support array<string> data type"))
 
       msg = intercept[UnsupportedOperationException] {
         Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))).toDF("id", "vectors")
           .write.csv(csvDir)
       }.getMessage
-      assert(msg.contains("Unable to convert column vectors of type array<double> to CSV"))
+      assert(msg.contains("CSV data source does not support array<double> data type"))
     }
   }
 
@@ -725,7 +725,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         spark.read.schema(schema).option("mode", "FAILFAST").csv(path.getAbsolutePath).collect()
       }.getMessage
 
-      assert(msg.contains("Unable to convert column a of type array<double> to CSV"))
+      assert(msg.contains("CSV data source does not support array<double> data type"))
     }
   }
 

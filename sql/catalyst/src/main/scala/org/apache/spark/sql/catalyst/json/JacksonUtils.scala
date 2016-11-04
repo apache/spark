@@ -50,7 +50,7 @@ object JacksonUtils {
 
       case _ =>
         throw new UnsupportedOperationException(
-          s"Unable to convert column $name of type ${dataType.simpleString} to JSON.")
+          s"Unsupported type ${dataType.simpleString} of column $name in JSON conversion.")
     }
 
     schema.foreach(field => verifyType(field.name, field.dataType))
