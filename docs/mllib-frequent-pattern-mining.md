@@ -178,5 +178,19 @@ Refer to the [`PrefixSpan` Java docs](api/java/org/apache/spark/mllib/fpm/Prefix
 {% include_example java/org/apache/spark/examples/mllib/JavaPrefixSpanExample.java %}
 
 </div>
+
+<div data-lang="python" markdown="1">
+
+[`PrefixSpan`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.PrefixSpan) implements the
+PrefixSpan algorithm.
+Calling `PrefixSpan.run` returns a
+[`PrefixSpanModel`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.PrefixSpanModel)
+that stores the frequent sequences with their frequencies.
+
+Refer to the [`PrefixSpan` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.fpm.PrefixSpan) and [`PrefixSpanModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.fpm.PrefixSpanModel) for details on the API.
+
+{% include_example python/mllib/prefix_span_example.py %}
+
+</div>
 </div>
 
