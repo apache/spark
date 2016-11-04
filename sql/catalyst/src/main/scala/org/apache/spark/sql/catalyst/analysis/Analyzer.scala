@@ -917,19 +917,21 @@ class Analyzer(
      * Resolve the correlated expressions in a subquery by using the an outer plans' references. All
      * resolved outer references are wrapped in an [[OuterReference]]
      */
-    private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
+    private def resolveOuterReferences(
+        plan: LogicalPlan,
+        outers: Seq[LogicalPlan]): LogicalPlan = {
       plan transformDown {
         case q: LogicalPlan if q.childrenResolved && !q.resolved =>
           q transformExpressions {
             case u @ UnresolvedAttribute(nameParts) =>
               withPosition(u) {
-                try {
-                  outer.resolve(nameParts, resolver) match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
-                    case None => u
-                  }
-                } catch {
-                  case _: AnalysisException => u
+                val expr = outers.iterator.map(_.resolve(nameParts, resolver))
+                  .collectFirst{case Some(attr) => attr}
+                expr match {
+                  case Some(outerAttr) => OuterReference(outerAttr)
+                  case None =>
+                    failAnalysis(s"Correlated column in subquery cannot be resolved:" +
+                      s" ${nameParts.mkString(".")}")
                 }
               }
           }
@@ -1105,10 +1107,8 @@ class Analyzer(
         current = execute(current)
 
         // Use the outer references to resolve the subquery plan if it isn't resolved yet.
-        val i = plans.iterator
-        val afterResolve = current
-        while (!current.resolved && current.fastEquals(afterResolve) && i.hasNext) {
-          current = resolveOuterReferences(current, i.next())
+        if (!current.resolved) {
+          current = resolveOuterReferences(current, plans)
         }
       } while (!current.resolved && !current.fastEquals(previous))
 
