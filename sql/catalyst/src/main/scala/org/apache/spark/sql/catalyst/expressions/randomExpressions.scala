@@ -46,7 +46,7 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
     case Literal(s, IntegerType) => s.asInstanceOf[Int]
     case Literal(s, LongType) => s.asInstanceOf[Long]
     case _ => throw new AnalysisException(
-      s"Input argument to $prettyName must be an integer/long/NULL literal.")
+      s"Input argument to $prettyName must be an integer, long or null literal.")
   }
 
   override def nullable: Boolean = false
@@ -65,6 +65,8 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
       > SELECT _FUNC_();
        0.9629742951434543
       > SELECT _FUNC_(0);
+       0.8446490682263027
+      > SELECT _FUNC_(null);
        0.8446490682263027
   """)
 // scalastyle:on line.size.limit
@@ -98,6 +100,8 @@ object Rand {
       > SELECT _FUNC_();
        -0.3254147983080288
       > SELECT _FUNC_(0);
+       1.1164209726833079
+      > SELECT _FUNC_(null);
        1.1164209726833079
   """)
 // scalastyle:on line.size.limit

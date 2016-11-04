@@ -1635,7 +1635,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-<<<<<<< 5213bd60f4be0795e23362f555dcdcf1a1d060cd
   private def verifyNullabilityInFilterExec(
       df: DataFrame,
       expr: String,
