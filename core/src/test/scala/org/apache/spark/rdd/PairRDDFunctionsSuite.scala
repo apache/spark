@@ -710,8 +710,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
 }
 
 /*
-  These classes are fakes for testing
-    "saveNewAPIHadoopFile should call setConf if format is configurable".
+  These classes are fakes for testing saveAsHadoopFile/saveNewAPIHadoopFile.
   Unfortunately, they have to be top level classes, and not defined in
   the test method, because otherwise Scala won't generate no-args constructors
   and the test will therefore throw InstantiationException when saveAsNewAPIHadoopFile
