@@ -21,6 +21,7 @@ import java.io.IOException
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -30,11 +31,7 @@ import org.apache.spark.sql.execution.command.RunnableCommand
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
- * Writing to dynamic partitions is also supported.  Each [[InsertIntoHadoopFsRelationCommand]]
- * issues a single write job, and owns a UUID that identifies this job.  Each concrete
- * implementation of [[HadoopFsRelation]] should use this UUID together with task id to generate
- * unique file path for each task output file.  This UUID is passed to executor side via a
- * property named `spark.sql.sources.writeJobUUID`.
+ * Writing to dynamic partitions is also supported.
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
@@ -86,8 +83,9 @@ case class InsertIntoHadoopFsRelationCommand(
     if (doInsertion) {
       val committer = FileCommitProtocol.instantiate(
         sparkSession.sessionState.conf.fileCommitProtocolClass,
-        outputPath.toString,
-        isAppend)
+        jobId = java.util.UUID.randomUUID().toString,
+        outputPath = outputPath.toString,
+        isAppend = isAppend)
 
       FileFormatWriter.write(
         sparkSession = sparkSession,

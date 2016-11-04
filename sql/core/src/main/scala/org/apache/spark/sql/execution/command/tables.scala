@@ -467,7 +467,7 @@ case class DescribeTableCommand(
 
     if (table.tableType == CatalogTableType.VIEW) describeViewInfo(table, buffer)
 
-    if (DDLUtils.isDatasourceTable(table) && table.partitionProviderIsHive) {
+    if (DDLUtils.isDatasourceTable(table) && table.tracksPartitionsInCatalog) {
       append(buffer, "Partition Provider:", "Hive", "")
     }
   }

@@ -337,8 +337,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     val properties = new scala.collection.mutable.HashMap[String, String]
     properties.put(DATASOURCE_PROVIDER, provider)
-    if (table.partitionProviderIsHive) {
-      properties.put(TABLE_PARTITION_PROVIDER, "hive")
+    if (table.tracksPartitionsInCatalog) {
+      properties.put(TABLE_PARTITION_PROVIDER, TABLE_PARTITION_PROVIDER_CATALOG)
     }
 
     // Serialized JSON schema string may be too long to be stored into a single metastore table
@@ -513,10 +513,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         }
       }
 
-      val partitionProviderProp = if (tableDefinition.partitionProviderIsHive) {
-        TABLE_PARTITION_PROVIDER -> "hive"
+      val partitionProviderProp = if (tableDefinition.tracksPartitionsInCatalog) {
+        TABLE_PARTITION_PROVIDER -> TABLE_PARTITION_PROVIDER_CATALOG
       } else {
-        TABLE_PARTITION_PROVIDER -> "builtin"
+        TABLE_PARTITION_PROVIDER -> TABLE_PARTITION_PROVIDER_FILESYSTEM
       }
 
       // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
@@ -565,7 +565,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           restoreDataSourceTable(table, provider)
         }
       } getOrElse {
-        table.copy(provider = Some("hive"), partitionProviderIsHive = true)
+        table.copy(provider = Some("hive"), tracksPartitionsInCatalog = true)
       }
     }
 
@@ -592,7 +592,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def restoreHiveSerdeTable(table: CatalogTable): CatalogTable = {
-    val hiveTable = table.copy(provider = Some("hive"), partitionProviderIsHive = true)
+    val hiveTable = table.copy(provider = Some("hive"), tracksPartitionsInCatalog = true)
 
     val schemaFromTableProps = getSchemaFromTableProperties(table)
     if (DataType.equalsIgnoreCaseAndNullability(schemaFromTableProps, table.schema)) {
@@ -618,13 +618,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // We pass None as `newPath` here, to remove the path option in storage properties.
       updateLocationInStorageProps(table, newPath = None).copy(locationUri = tableLocation)
     }
+    val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
+
     table.copy(
       provider = Some(provider),
       storage = storageWithLocation,
       schema = getSchemaFromTableProperties(table),
       partitionColumnNames = getPartitionColumnsFromTableProperties(table),
       bucketSpec = getBucketSpecFromTableProperties(table),
-      partitionProviderIsHive = table.properties.get(TABLE_PARTITION_PROVIDER) == Some("hive"))
+      tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG))
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
@@ -902,6 +904,8 @@ object HiveExternalCatalog {
   val STATISTICS_COL_STATS_PREFIX = STATISTICS_PREFIX + "colStats."
 
   val TABLE_PARTITION_PROVIDER = SPARK_SQL_PREFIX + "partitionProvider"
+  val TABLE_PARTITION_PROVIDER_CATALOG = "catalog"
+  val TABLE_PARTITION_PROVIDER_FILESYSTEM = "filesystem"
 
 
   def getProviderFromTableProperties(metadata: CatalogTable): Option[String] = {
