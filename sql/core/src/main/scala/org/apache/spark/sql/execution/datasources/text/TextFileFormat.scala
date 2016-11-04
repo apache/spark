@@ -95,7 +95,10 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    verifySchema(dataSchema)
+    if (requiredSchema.nonEmpty) {
+      // `requiredSchema` can be empty when the projected column is only the partitioned column.
+      verifySchema(requiredSchema)
+    }
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
