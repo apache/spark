@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
@@ -77,19 +78,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Calculates the approximate quantiles of numerical columns of a DataFrame.
    *
-   * The result of this algorithm has the following deterministic bound:
-   * If the DataFrame has N elements and if we request the quantile at probability `p` up to error
-   * `err`, then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
-   * of `x` is close to (p * N).
-   * More precisely,
-   *
-   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
-   *
-   * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
-   * optimizations).
-   * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
-   * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
-   *
+   * Note that rows containing any null values will be removed before calculation.
    * @param cols the names of the numerical columns
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
@@ -105,8 +94,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
-    StatFunctions.multipleApproxQuantiles(df, cols, probabilities, relativeError)
-      .map(_.toArray).toArray
+    StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
+      probabilities, relativeError).map(_.toArray).toArray
   }
 
 

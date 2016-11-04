@@ -1365,6 +1365,8 @@ class DataFrame(object):
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
+        Note that rows containing any null values will be removed before calculation.
+
         :param col: str, list.
           Can be a single column name, or a list of names for multiple columns.
         :param probabilities: a list of quantile probabilities
@@ -1413,10 +1415,8 @@ class DataFrame(object):
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
-        if isStr:
-            return [list(j) for j in jaq][0]
-        else:
-            return [list(j) for j in jaq]
+        jaq_list = [list(j) for j in jaq]
+        return jaq_list[0] if isStr else jaq_list
 
     @since(1.4)
     def corr(self, col1, col2, method=None):
