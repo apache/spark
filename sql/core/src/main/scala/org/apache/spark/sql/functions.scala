@@ -1119,6 +1119,7 @@ object functions {
   /**
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
+   *
    * Note that this is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
