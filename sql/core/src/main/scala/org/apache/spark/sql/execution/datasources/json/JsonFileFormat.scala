@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
+import org.apache.spark.sql.execution.datasources.text.{TextFileFormat, TextOutputWriter}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -61,7 +61,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
         DataSource.apply(
           sparkSession,
           paths = jsonFiles,
-          className = classOf[TextBasedFileFormat].getName
+          className = classOf[TextFileFormat].getName
         ).resolveRelation(checkFilesExist = false))
         .select("value").as[String](Encoders.STRING)
 
