@@ -21,8 +21,6 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap, Locale}
 
-import org.apache.spark.internal.io.{HadoopMapReduceCommitProtocol, FileCommitProtocol}
-
 import scala.collection.{mutable, Map}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -43,6 +41,7 @@ import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
+import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol}
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer

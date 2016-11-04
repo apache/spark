@@ -22,8 +22,9 @@ import java.util.Date
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.spark.internal.Logging
+
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.SerializableConfiguration
 
 /**
