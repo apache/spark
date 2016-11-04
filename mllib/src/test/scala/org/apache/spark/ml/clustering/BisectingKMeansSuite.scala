@@ -18,7 +18,8 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.{MLTestingUtils, DefaultReadWriteTest}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
 
@@ -41,6 +42,12 @@ class BisectingKMeansSuite
     assert(bkm.getPredictionCol === "prediction")
     assert(bkm.getMaxIter === 20)
     assert(bkm.getMinDivisibleClusterSize === 1.0)
+
+    val model = bkm.setMaxIter(1).fit(dataset)
+    assert(model.hasSummary)
+    val copiedModel = model.copy(ParamMap.empty)
+    assert(copiedModel.hasSummary)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("setter/getter") {

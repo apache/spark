@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
-import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
@@ -140,9 +140,13 @@ class LinearRegressionSuite
     assert(lir.getStandardization)
     assert(lir.getSolver == "auto")
     val model = lir.fit(datasetWithDenseFeature)
+    assert(model.hasSummary)
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
+    val copiedModel = model.copy(ParamMap.empty)
+    assert(copiedModel.hasSummary)
+
 
     model.transform(datasetWithDenseFeature)
       .select("label", "prediction")
