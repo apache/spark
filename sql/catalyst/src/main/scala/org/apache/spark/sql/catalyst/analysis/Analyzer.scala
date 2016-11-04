@@ -977,13 +977,6 @@ class Analyzer(
         localPredicateReferences -- p.outputSet
       }
 
-      // SPARK-17348
-      // Report a non-supported case where there exists a correlated predicate
-      // that is not an equality predicate and the outer reference of the correlated predicate
-      // is not at the immediate parent operator.
-      def failOnNonEqualityPredicate(p: LogicalPlan): Unit = {
-        failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n $p")
-      }
       // Simplify the predicates before pulling them out.
       val transformed = BooleanSimplification(sub) transformUp {
         case f @ Filter(cond, child) =>
@@ -1075,7 +1068,8 @@ class Analyzer(
           }
       }
       if (!continue) {
-        failOnNonEqualityPredicate(sub)
+        // Report a non-supported case as an exception
+        failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n$sub")
       }
 
       (transformed, predicateMap.values.flatten.toSeq)
