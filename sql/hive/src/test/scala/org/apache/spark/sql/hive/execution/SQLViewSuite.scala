@@ -68,8 +68,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       var e = intercept[AnalysisException] {
         sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
       }.getMessage
-      assert(e.contains(
-        s"Not allowed to create a permanent view `jtv1` by referencing a temp view `temp_jtv1`"))
+      assert(e.contains("Not allowed to create a permanent view `jtv1` by " +
+        "referencing a temporary view `temp_jtv1`"))
 
       val globalTempDB = spark.sharedState.globalTempViewManager.database
       sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
@@ -77,7 +77,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
       }.getMessage
       assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
-        s"a temp view `global_temp`.`global_temp_jtv1`"))
+        s"a temporary view `global_temp`.`global_temp_jtv1`"))
     }
   }
 
@@ -464,7 +464,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-14933 - create view from hive parquet tabale") {
+  test("SPARK-14933 - create view from hive parquet table") {
     withTable("t_part") {
       withView("v_part") {
         spark.sql("create table t_part stored as parquet as select 1 as a, 2 as b")
@@ -476,7 +476,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-14933 - create view from hive orc tabale") {
+  test("SPARK-14933 - create view from hive orc table") {
     withTable("t_orc") {
       withView("v_orc") {
         spark.sql("create table t_orc stored as orc as select 1 as a, 2 as b")
@@ -543,7 +543,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
           }.getMessage
           assert(e.contains("Not allowed to create a permanent view `view1` by referencing " +
-            s"a temp function `$tempFunctionName`"))
+            s"a temporary function `$tempFunctionName`"))
         }
       }
     }
