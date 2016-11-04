@@ -2659,7 +2659,7 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
   # It makes sure that we can omit path argument in write.df API and then it calls
   # DataFrameWriter.save() without path.
   expect_error(write.df(df, source = "csv"),
-               "Error in save : illegal argument - 'path' is not specified")
+              "Error in save : illegal argument - Expected exactly one path to be specified")
   expect_error(write.json(df, jsonPath),
               "Error in json : analysis error - path file:.*already exists")
   expect_error(write.text(df, jsonPath),
@@ -2667,7 +2667,7 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
   expect_error(write.orc(df, jsonPath),
               "Error in orc : analysis error - path file:.*already exists")
   expect_error(write.parquet(df, jsonPath),
-                            "Error in parquet : analysis error - path file:.*already exists")
+              "Error in parquet : analysis error - path file:.*already exists")
 
   # Arguments checking in R side.
   expect_error(write.df(df, "data.tmp", source = c(1, 2)),

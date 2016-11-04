@@ -30,7 +30,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * Returns an Array containing the evaluation of all children expressions.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(n0, ...) - Returns an array with the given elements.")
+  usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1, 2, 3);
+       [1,2,3]
+  """)
 case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -84,7 +89,12 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
  * The children are a flatted sequence of kv pairs, e.g. (key1, value1, key2, value2, ...)
  */
 @ExpressionDescription(
-  usage = "_FUNC_(key0, value0, key1, value1...) - Creates a map with the given key/value pairs.")
+  usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1.0, '2', 3.0, '4');
+       {1.0:"2",3.0:"4"}
+  """)
 case class CreateMap(children: Seq[Expression]) extends Expression {
   lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
   lazy val values = children.indices.filter(_ % 2 != 0).map(children)
@@ -276,7 +286,12 @@ trait CreateNamedStructLike extends Expression {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.")
+  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
+       {"a":1,"b":2,"c":3}
+  """)
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStructLike {
 
@@ -329,8 +344,12 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateName
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
-  extended = """ > SELECT _FUNC_('a:1,b:2,c:3',',',':');\n map("a":"1","b":"2","c":"3") """)
+  usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
+       map("a":"1","b":"2","c":"3")
+  """)
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with CodegenFallback with ExpectsInputTypes {
