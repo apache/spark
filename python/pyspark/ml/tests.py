@@ -69,6 +69,14 @@ from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
+_have_scipy = False
+try:
+    import scipy.sparse
+    _have_scipy = True
+except:
+    # No SciPy, but that's okay, we'll skip those tests
+    pass
+
 ser = PickleSerializer()
 
 
@@ -1554,10 +1562,34 @@ class MatrixUDTTests(MLlibTestCase):
             else:
                 raise ValueError("Expected a matrix but got type %r" % type(m))
 
+@unittest.skipIf(not _have_scipy, "SciPy not installed")
+class SciPyTests(MLlibTestCase):
+
+    """
+    Test both vector operations and MLlib algorithms with SciPy sparse matrices,
+    if SciPy is available.
+    """
+
+    def test_assorted_functs(self):
+        from scipy.sparse import csr_matrix
+        from numpy import array, eye
+        sv  = SparseVector(40, {1: 1, 3: 2, 23: 99})
+        sv2 = SparseVector(5, {1: 2, 3: 2, 4: 2}) 
+        self.assertEqual(sum(sv.values), sv.sum())
+        self.assertEqual(sum(sv.values)/(sv.size), sv.mean())        
+        self.assertEqual(0, sv.min())        
+        self.assertEqual(99, sv.max())
+        self.assertEqual(SparseVector(40, {1: 1, 3: 16, 23: 96059601}), sv.power(4))
+        sv2_dot_array = array([ 0.,  2.,  0.,  2.,  2.])
+        self.assertEqual(5, sum(sv2.dot(eye(5)) == sv2_dot_array))
 
 if __name__ == "__main__":
     from pyspark.ml.tests import *
+    if not _have_scipy:
+        print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if xmlrunner:
         unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
     else:
         unittest.main()
+    if not _have_scipy:
+        print("NOTE: SciPy tests were skipped as it does not seem to be installed")
