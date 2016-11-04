@@ -903,16 +903,30 @@ abstract class RDD[T: ClassTag](
    * Applies a function f to all elements of this RDD.
    */
   def foreach(f: T => Unit): Unit = withScope {
-    val cleanF = sc.clean(f)
-    sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
+    foreachPartition(iter => iter.foreach(f))
   }
 
   /**
    * Applies a function f to each partition of this RDD.
    */
   def foreachPartition(f: Iterator[T] => Unit): Unit = withScope {
-    val cleanF = sc.clean(f)
-    sc.runJob(this, (iter: Iterator[T]) => cleanF(iter))
+    // Wrap the provided function to handle the case func operates on data property
+    // accumulators (e.g. inside of `foreach`).
+    val wrappedFunc = {(context: TaskContext, itr: Iterator[T]) =>
+      if (context.taskMetrics.hasDataPropertyAccumulators()) {
+        val outputId = ForeachOutputId
+        context.setTaskOutputInfo(outputId)
+        val wrappedItr = itr.map { x =>
+          context.setTaskOutputInfo(outputId)
+          x
+        }
+        f(wrappedItr)
+      } else {
+        f(itr)
+      }
+    }
+    val cleanF = sc.clean(wrappedFunc)
+    sc.runJob(this, (context: TaskContext, iter: Iterator[T]) => cleanF(context, iter))
   }
 
   /**
