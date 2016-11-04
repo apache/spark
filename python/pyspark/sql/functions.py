@@ -359,8 +359,8 @@ def grouping_id(*cols):
 
        (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
 
-    .. note:: the list of columns should match with grouping columns exactly, or empty (means all the
-        grouping columns).
+    .. note:: the list of columns should match with grouping columns exactly, or empty (means all
+        the grouping columns).
 
     >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
     +-----+-------------+--------+
