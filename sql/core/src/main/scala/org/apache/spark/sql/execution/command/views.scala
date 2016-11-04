@@ -131,10 +131,9 @@ case class CreateViewCommand(
         s"specified by CREATE VIEW (num: `${userSpecifiedColumns.length}`).")
     }
 
-    // When creating a permanent view, not allowed to reference temporary objects. For example,
-    // temporary views.
-    // TODO: Disallow creating permanent views based on temporary UDFs
+    // When creating a permanent view, not allowed to reference temporary objects.
     if (!isTemporary) {
+      // Disallow creating permanent views based on temporary views.
       analyzedPlan.collectFirst {
         case s: SubqueryAlias if s.isGeneratedByTempTable =>
           throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
@@ -142,6 +141,7 @@ case class CreateViewCommand(
             originalText.map(sql => s"""SQL: "$sql".""").getOrElse(""))
       }
 
+      // Disallow creating permanent views based on temporary UDFs.
       child.collect {
         case other if !other.resolved => other.expressions.flatMap(_.collect {
           case e: UnresolvedFunction if sparkSession.sessionState.catalog.isTempFunction(e.name) =>
