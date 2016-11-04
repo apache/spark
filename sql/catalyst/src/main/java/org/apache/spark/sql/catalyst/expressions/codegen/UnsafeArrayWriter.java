@@ -263,7 +263,6 @@ public class UnsafeArrayWriter {
 
   private void writePrimitiveArray(Object input, int offset, int elementSize, int length)  {
     Platform.copyMemory(input, offset, holder.buffer, startingOffset + headerInBytes, elementSize * length);
-    holder.cursor += elementSize * length;
   }
 
   public void writePrimitiveBooleanArray(ArrayData arrayData) {

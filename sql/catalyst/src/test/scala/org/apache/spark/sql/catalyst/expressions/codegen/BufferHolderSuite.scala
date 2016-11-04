@@ -60,18 +60,11 @@ class BufferHolderSuite extends SparkFunSuite {
   UnsafeArrayData = {
     val length = data.length
     val unsafeArray = new UnsafeArrayData
-    // uncomment this if SPARK-15962 is merged
-    // val headerSize = calculateHeaderPortionInBytes(length)
-    val headerSize = 4 + 4 * length
+    val headerSize = UnsafeArrayData.calculateHeaderPortionInBytes(length)
     val size = headerSize + elementSize * length
     val buffer = new Array[Byte](size)
     Platform.putInt(buffer, Platform.BYTE_ARRAY_OFFSET, length)
     unsafeArray.pointTo(buffer, Platform.BYTE_ARRAY_OFFSET, size)
-    // remove this if SPARK-15962 is merged
-    (0 until length).map(ordinal =>
-      Platform.putInt(buffer, Platform.BYTE_ARRAY_OFFSET + 4 + ordinal * 4,
-        headerSize + ordinal * elementSize)
-    )
     assert(unsafeArray.numElements == length)
     data.zipWithIndex.map { case (e, i) =>
       val offset = Platform.BYTE_ARRAY_OFFSET + headerSize + elementSize * i
@@ -160,8 +153,6 @@ class BufferHolderSuite extends SparkFunSuite {
   }
 
   test("fromPrimitiveArray") {
-    // uncomment this if SPARK-15962 is merged
-/*
     val booleanArray = booleanData.toArray
     val booleanUnsafeArray = UnsafeArrayData.fromPrimitiveArray(booleanArray)
     booleanArray.zipWithIndex.map { case (e, i) => assert(booleanUnsafeArray.getBoolean(i) == e) }
@@ -173,12 +164,11 @@ class BufferHolderSuite extends SparkFunSuite {
     val shortArray = shortData.toArray
     val shortUnsafeArray = UnsafeArrayData.fromPrimitiveArray(shortArray)
     shortArray.zipWithIndex.map { case (e, i) => assert(shortUnsafeArray.getShort(i) == e) }
-*/
+
     val intArray = intData.toArray
     val intUnsafeArray = UnsafeArrayData.fromPrimitiveArray(intArray)
     intArray.zipWithIndex.map { case (e, i) => assert(intUnsafeArray.getInt(i) == e) }
 
-/*
     val longArray = longData.toArray
     val longUnsafeArray = UnsafeArrayData.fromPrimitiveArray(longArray)
     longArray.zipWithIndex.map { case (e, i) => assert(longUnsafeArray.getLong(i) == e) }
@@ -186,7 +176,7 @@ class BufferHolderSuite extends SparkFunSuite {
     val floatArray = floatData.toArray
     val floatUnsafeArray = UnsafeArrayData.fromPrimitiveArray(floatArray)
     floatArray.zipWithIndex.map { case (e, i) => assert(floatUnsafeArray.getFloat(i) == e) }
-*/
+
     val doubleArray = doubleData.toArray
     val doubleUnsafeArray = UnsafeArrayData.fromPrimitiveArray(doubleArray)
     doubleArray.zipWithIndex.map { case (e, i) => assert(doubleUnsafeArray.getDouble(i) == e) }
