@@ -1125,6 +1125,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(df.collect().isEmpty)
 
+    val nullRdd = sparkContext.parallelize(Seq("""{"a": null}"""))
+    // Read JSON data from RDD
+    val nullDf = spark.read
+      .option("mode", "DROPMALFORMED")
+      .schema(schema)
+      .json(nullRdd)
+
+    // This succeeds to read null even thought it is unsupported.
+    assert(nullDf.collect().head.get(0) == null)
+
     withTempPath { path =>
       // Read JSON data from files.
       rdd.saveAsTextFile(path.getAbsolutePath)
