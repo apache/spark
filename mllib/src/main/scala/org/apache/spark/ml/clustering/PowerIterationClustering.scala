@@ -19,7 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{Vector}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructTyp
  * Common params for PowerIterationClustering
  */
 private[clustering] trait PowerIterationClusteringParams extends Params with HasMaxIter
-  with HasFeaturesCol with HasPredictionCol {
+  with HasFeaturesCol with HasPredictionCol with HasLabelCol {
 
   /**
    * The number of clusters to create (k). Must be > 1. Default: 2.
@@ -74,7 +74,7 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
    * @param schema input schema
    */
   protected def validateSchema(schema: StructType): Unit = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), LongType)
+    SchemaUtils.checkColumnType(schema, $(labelCol), LongType)
     SchemaUtils.checkColumnType(schema, $(predictionCol), IntegerType)
   }
 }
@@ -100,7 +100,8 @@ class PowerIterationClustering private[clustering] (
   setDefault(
     k -> 2,
     maxIter -> 20,
-    initMode -> "random")
+    initMode -> "random",
+    labelCol -> "id")
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): PowerIterationClustering = defaultCopy(extra)
@@ -128,6 +129,10 @@ class PowerIterationClustering private[clustering] (
   @Since("2.2.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setLabelCol(value: String): this.type = set(labelCol, value)
+
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val sparkSession = dataset.sparkSession
@@ -145,7 +150,7 @@ class PowerIterationClustering private[clustering] (
     val rows: RDD[Row] = model.assignments.map {
       case assignment: Assignment => Row(assignment.id, assignment.cluster)
     }
-    val schema = transformSchema(new StructType(Array(StructField($(featuresCol), LongType),
+    val schema = transformSchema(new StructType(Array(StructField($(labelCol), LongType),
       StructField($(predictionCol), IntegerType))))
     sparkSession.createDataFrame(rows, schema)
   }

@@ -48,6 +48,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(pic.getInitMode === "random")
     assert(pic.getFeaturesCol === "features")
     assert(pic.getPredictionCol === "prediction")
+    assert(pic.getLabelCol === "id")
   }
 
   test("set parameters") {
@@ -57,12 +58,14 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setInitMode("degree")
       .setFeaturesCol("test_feature")
       .setPredictionCol("test_prediction")
+      .setLabelCol("test_id")
 
     assert(pic.getK === 9)
     assert(pic.getMaxIter === 33)
     assert(pic.getInitMode === "degree")
     assert(pic.getFeaturesCol === "test_feature")
     assert(pic.getPredictionCol === "test_prediction")
+    assert(pic.getLabelCol === "test_id")
   }
 
   test("parameters validation") {
@@ -83,7 +86,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .transform(data)
 
     val predictions = Array.fill(2)(mutable.Set.empty[Long])
-    result.select("features", "prediction").collect().foreach {
+    result.select("id", "prediction").collect().foreach {
       case Row(id: Long, cluster: Integer) => predictions(cluster) += id
     }
     assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
@@ -94,12 +97,12 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setInitMode("degree")
       .transform(data)
     val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
-    result2.select("features", "prediction").collect().foreach {
+    result2.select("id", "prediction").collect().foreach {
       case Row(id: Long, cluster: Integer) => predictions2(cluster) += id
     }
     assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
 
-    val expectedColumns = Array("features", "prediction")
+    val expectedColumns = Array("id", "prediction")
     expectedColumns.foreach { column =>
       assert(result2.columns.contains(column))
     }
@@ -112,6 +115,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setInitMode("degree")
       .setFeaturesCol("test_feature")
       .setPredictionCol("test_prediction")
+      .setLabelCol("test_id")
     testDefaultReadWrite(t)
   }
 }
