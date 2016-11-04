@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.io.File
-
 import org.apache.spark.sql.functions.{from_json, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructType}
