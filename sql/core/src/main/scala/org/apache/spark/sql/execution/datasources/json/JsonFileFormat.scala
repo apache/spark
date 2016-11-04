@@ -66,7 +66,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
         .select("value").as[String](Encoders.STRING)
 
       val jsonSchema = InferSchema.infer(
-        sparkSession.read.textFile(jsonFiles: _*),
+        lines,
         columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
