@@ -669,7 +669,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
       var msg = intercept[UnsupportedOperationException] {
-        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b) as a").write.csv(csvDir)
+        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b)").write.csv(csvDir)
       }.getMessage
       assert(msg.contains("CSV data source does not support struct<a:int,b:string> data type"))
 
