@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Expression, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, Expression, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,21 +44,28 @@ class MapAggregateSuite extends SparkFunSuite {
       TypeCheckFailure(
         "The maximum number of bins provided must be a constant literal"))
 
-    val wrongNumBins = new MapAggregate(attribute, numBinsExpression = Literal(1))
-    assertEqual(
-      wrongNumBins.checkInputDataTypes(),
-      TypeCheckFailure(
-        "The maximum number of bins provided must be a positive integer literal >= 2 " +
-          s"(current value = 1)"))
-
-    var wrongType = new MapAggregate(AttributeReference("a", BinaryType)(),
-      numBinsExpression = Literal(5))
-    wrongType.checkInputDataTypes() match {
-      case TypeCheckFailure(message) =>
-        assert(message.contains("requires (numeric or timestamp or date or string) type"))
+    Seq(Literal(1), Cast(Literal(null), IntegerType)).foreach { expr =>
+      val wrongNumBins = new MapAggregate(attribute, numBinsExpression = expr)
+      assertEqual(
+        wrongNumBins.checkInputDataTypes(),
+        TypeCheckFailure(
+          "The maximum number of bins provided must be a positive integer literal >= 2 " +
+            s"(current value = ${expr.eval()})"))
     }
-    wrongType = new MapAggregate(attribute, numBinsExpression = Literal(0.5))
-    wrongType.checkInputDataTypes() match {
+
+    val unsupportedTypes: Seq[DataType] = Seq(BinaryType, BooleanType, ArrayType(IntegerType),
+      MapType(IntegerType, IntegerType), StructType(Seq(StructField("s", IntegerType))))
+    unsupportedTypes.foreach { dataType =>
+      val wrongColType = new MapAggregate(AttributeReference("a", dataType)(),
+        numBinsExpression = Literal(5))
+      wrongColType.checkInputDataTypes() match {
+        case TypeCheckFailure(message) =>
+          assert(message.contains("requires (numeric or timestamp or date or string) type"))
+      }
+    }
+
+    val wrongNumberType = new MapAggregate(attribute, numBinsExpression = Literal(0.5))
+    wrongNumberType.checkInputDataTypes() match {
       case TypeCheckFailure(message) => assert(message.contains("requires int type"))
     }
   }
@@ -90,19 +97,8 @@ class MapAggregateSuite extends SparkFunSuite {
 
     val random = new java.util.Random()
     val mapData = mutable.HashMap(data.map(s => (s, random.nextInt(10000).toLong)): _*)
-    val buffer = agg.createAggregationBuffer()
-    buffer match {
-      case stringDigest: StringMapDigest =>
-        stringDigest.mergeMap(
-          baseMap = stringDigest.bins,
-          otherMap = mapData.asInstanceOf[mutable.HashMap[UTF8String, Long]],
-          numBins)
-      case numericDigest: NumericMapDigest =>
-        numericDigest.mergeMap(
-          baseMap = numericDigest.bins,
-          otherMap = mapData.asInstanceOf[mutable.HashMap[Double, Long]],
-          numBins)
-    }
+    val buffer = agg.createAggregationBuffer().asInstanceOf[MapDigestBase[T]]
+    buffer.mergeMap(mapData, numBins)
     assert(compareEquals(buffer, agg.deserialize(agg.serialize(buffer))))
   }
 

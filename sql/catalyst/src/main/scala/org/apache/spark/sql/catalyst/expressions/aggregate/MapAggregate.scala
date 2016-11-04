@@ -33,23 +33,30 @@ import org.apache.spark.sql.types.{DataType, _}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * The MapAggregate function for a column returns:
- * 1. null if no non-null value exists.
- * 2. (distinct non-null value, frequency) pairs of equi-width histogram when the number of
- * distinct non-null values is less than or equal to the specified maximum number of bins.
- * 3. an empty map otherwise.
+ * The MapAggregate function Computes frequency for each distinct non-null value of a column.
+ * It returns: 1. null if the table is empty or all values of the column are null.
+ * 2. (distinct non-null value, frequency) pairs if the number of distinct non-null values is
+ * less than or equal to the specified threshold.
+ * 3. an empty result if the number of distinct non-null values exceeds that threshold.
  *
  * @param child child expression that can produce column value with `child.eval(inputRow)`
- * @param numBinsExpression The maximum number of bins.
+ * @param numBinsExpression The maximum number of pairs.
  */
 @ExpressionDescription(
-  usage =
-    """
-      _FUNC_(col, numBins) - Returns 1. null if no non-null value exists.
-      2. (distinct non-null value, frequency) pairs of equi-width histogram when the number of
-      distinct non-null values is less than or equal to the specified maximum number of bins.
-      3. an empty map otherwise.
-    """)
+  usage = """
+    _FUNC_(col, numBins) - Computes frequency for each distinct non-null value of column `col`.
+      It returns: 1. null if the table is empty or all values of column `col` are null.
+      2. (distinct non-null value, frequency) pairs if the number of distinct non-null values
+      is less than or equal to the specified threshold `numBins`.
+      3. an empty result if the number of distinct non-null values exceeds `numBins`.
+  """,
+  extended = """
+    Examples:
+      > SELECT map_aggregate(col, 3) FROM tbl;
+       1. null - if `tbl` is empty or values of `col` are all nulls
+       2. Map((10, 2), (20, 1)) - if values of `col` are (10, 20, 10)
+       3. Map.empty - if values of `col` are (1, 2, 3, 4)
+  """)
 case class MapAggregate(
     child: Expression,
     numBinsExpression: Expression,
@@ -74,32 +81,31 @@ case class MapAggregate(
     } else if (!numBinsExpression.foldable) {
       TypeCheckFailure("The maximum number of bins provided must be a constant literal")
     } else if (numBins < 2) {
+      val currentValue = if (numBinsExpression.eval() == null) null else numBins
       TypeCheckFailure(
         "The maximum number of bins provided must be a positive integer literal >= 2 " +
-          s"(current value = $numBins)")
+          s"(current value = $currentValue)")
     } else {
       TypeCheckSuccess
     }
   }
 
   override def update(buffer: MapDigest, input: InternalRow): Unit = {
-    if (buffer.isInvalid) {
-      return
-    }
-    val evaluated = child.eval(input)
-    if (evaluated != null) {
-      buffer.update(child.dataType, evaluated, numBins)
+    if (!buffer.isInvalid) {
+      val evaluated = child.eval(input)
+      if (evaluated != null) buffer.update(child.dataType, evaluated, numBins)
     }
   }
 
   override def merge(buffer: MapDigest, other: MapDigest): Unit = {
-    if (buffer.isInvalid) return
-    if (other.isInvalid) {
-      buffer.isInvalid = true
-      buffer.clear()
-      return
+    if (!buffer.isInvalid) {
+      if (other.isInvalid) {
+        buffer.isInvalid = true
+        buffer.clear()
+      } else {
+        buffer.merge(other, numBins)
+      }
     }
-    buffer.merge(other, numBins)
   }
 
   override def eval(buffer: MapDigest): Any = {
@@ -122,17 +128,11 @@ case class MapAggregate(
   }
 
   override def serialize(buffer: MapDigest): Array[Byte] = {
-    buffer match {
-      case stringDigest: StringMapDigest => StringMapDigest.serialize(stringDigest)
-      case numericDigest: NumericMapDigest => NumericMapDigest.serialize(numericDigest)
-    }
+    buffer.serialize()
   }
 
   override def deserialize(bytes: Array[Byte]): MapDigest = {
-    child.dataType match {
-      case StringType => StringMapDigest.deserialize(bytes)
-      case _ => NumericMapDigest.deserialize(bytes)
-    }
+    MapDigest.deserialize(child.dataType, bytes)
   }
 
   override def createAggregationBuffer(): MapDigest = {
@@ -166,111 +166,128 @@ case class MapAggregate(
 
 trait MapDigest {
   // Mark this MapDigest invalid when the size of the hashmap (ndv of the column) exceeds numBins
-  var isInvalid: Boolean = false
-
+  var isInvalid: Boolean
   def update(dataType: DataType, value: Any, numBins: Int): Unit
   def merge(otherDigest: MapDigest, numBins: Int): Unit
   def clear(): Unit
+  def serialize(): Array[Byte]
+}
 
-  // Update baseMap and clear it when its size exceeds numBins.
-  def updateMap[T](baseMap: mutable.HashMap[T, Long], value: T, numBins: Int): Unit = {
-    mergeMap(baseMap, mutable.HashMap(value -> 1L), numBins)
+abstract class MapDigestBase[T] extends MapDigest {
+  val bins: mutable.HashMap[T, Long]
+
+  // Update bins and clear it when its size exceeds numBins.
+  def updateMap(value: T, numBins: Int): Unit = {
+    mergeMap(mutable.HashMap(value -> 1L), numBins)
   }
 
-  // Merge two maps and clear baseMap when its size exceeds numBins.
-  def mergeMap[T](
-      baseMap: mutable.HashMap[T, Long],
-      otherMap: mutable.HashMap[T, Long],
-      numBins: Int): Unit = {
+  // Merge two maps and clear bins when its size exceeds numBins.
+  override def merge(otherDigest: MapDigest, numBins: Int): Unit = {
+    val otherMap = otherDigest.asInstanceOf[MapDigestBase[T]].bins
+    mergeMap(otherMap, numBins)
+  }
+
+  def mergeMap(otherMap: mutable.HashMap[T, Long], numBins: Int): Unit = {
     otherMap.foreach { case (key, value) =>
-      if (baseMap.contains(key)) {
-        baseMap.update(key, baseMap(key) + value)
+      if (bins.contains(key)) {
+        bins.update(key, bins(key) + value)
       } else {
-        if (baseMap.size >= numBins) {
+        if (bins.size >= numBins) {
           isInvalid = true
-          baseMap.clear()
+          bins.clear()
           return
         } else {
-          baseMap.put(key, value)
+          bins.put(key, value)
         }
       }
+    }
+  }
+
+  override def clear(): Unit = bins.clear()
+
+  override def serialize(): Array[Byte] = {
+    // isInvalid, size of bins
+    var length: Int = Ints.BYTES + Ints.BYTES
+    bins.foreach { case (key, value) =>
+      // key, value
+      length += keyLen(key) + Longs.BYTES
+    }
+    val buffer = ByteBuffer.wrap(new Array(length))
+    buffer.putInt(if (isInvalid) 0 else 1)
+    buffer.putInt(bins.size)
+    bins.foreach { case (key, value) =>
+      putKey(key, buffer)
+      buffer.putLong(value)
+    }
+    buffer.array()
+  }
+
+  def deserialize(bytes: Array[Byte]): (mutable.HashMap[T, Long], Boolean) = {
+    val buffer = ByteBuffer.wrap(bytes)
+    val isInvalid = if (buffer.getInt == 0) true else false
+    val size = buffer.getInt
+    val bins = new mutable.HashMap[T, Long]
+    var i = 0
+    while (i < size) {
+      val key = getKey(buffer)
+      val value = buffer.getLong
+      bins.put(key, value)
+      i += 1
+    }
+    (bins, isInvalid)
+  }
+
+  def keyLen(key: T): Int
+  def putKey(key: T, buffer: ByteBuffer): Unit
+  def getKey(buffer: ByteBuffer): T
+}
+
+object MapDigest {
+  def deserialize(dataType: DataType, bytes: Array[Byte]): MapDigest = {
+    dataType match {
+      case StringType =>
+        val (bins, isInvalid) = StringMapDigest().deserialize(bytes)
+        new StringMapDigest(bins, isInvalid)
+      case _ =>
+        val (bins, isInvalid) = NumericMapDigest().deserialize(bytes)
+        new NumericMapDigest(bins, isInvalid)
     }
   }
 }
 
 // Digest class for column of string type.
 case class StringMapDigest(
-    bins: mutable.HashMap[UTF8String, Long] = mutable.HashMap.empty) extends MapDigest {
-  def this(bins: mutable.HashMap[UTF8String, Long], isInvalid: Boolean) = {
-    this(bins)
-    this.isInvalid = isInvalid
-  }
+    override val bins: mutable.HashMap[UTF8String, Long] = mutable.HashMap.empty,
+    override var isInvalid: Boolean = false) extends MapDigestBase[UTF8String] {
 
   override def update(dataType: DataType, value: Any, numBins: Int): Unit = {
-    updateMap(bins, value.asInstanceOf[UTF8String], numBins)
+    updateMap(value.asInstanceOf[UTF8String], numBins)
   }
 
-  override def merge(otherDigest: MapDigest, numBins: Int): Unit = {
-    mergeMap(baseMap = bins, otherMap = otherDigest.asInstanceOf[StringMapDigest].bins, numBins)
+  override def keyLen(key: UTF8String): Int = Ints.BYTES + key.getBytes.length
+
+  override def putKey(key: UTF8String, buffer: ByteBuffer): Unit = {
+    val bytes = key.getBytes
+    buffer.putInt(bytes.length)
+    buffer.put(bytes)
   }
 
-  override def clear(): Unit = bins.clear()
-}
-
-object StringMapDigest {
-
-  private final def length(obj: StringMapDigest): Int = {
-    // isInvalid, size of bins
-    var len: Int = Ints.BYTES + Ints.BYTES
-    obj.bins.foreach { case (key, value) =>
-      // length of key, key, value
-      len += Ints.BYTES + key.getBytes.length + Longs.BYTES
-    }
-    len
-  }
-
-  final def serialize(obj: StringMapDigest): Array[Byte] = {
-    val buffer = ByteBuffer.wrap(new Array(length(obj)))
-    buffer.putInt(if (obj.isInvalid) 0 else 1)
-    buffer.putInt(obj.bins.size)
-    obj.bins.foreach { case (key, value) =>
-      val bytes = key.getBytes
-      buffer.putInt(bytes.length)
-      buffer.put(bytes)
-      buffer.putLong(value)
-    }
-    buffer.array()
-  }
-
-  final def deserialize(bytes: Array[Byte]): StringMapDigest = {
-    val buffer = ByteBuffer.wrap(bytes)
-    val isInvalid = if (buffer.getInt == 0) true else false
-    val size = buffer.getInt
-    val bins = new mutable.HashMap[UTF8String, Long]
+  override def getKey(buffer: ByteBuffer): UTF8String = {
+    val keyLength = buffer.getInt
     var i = 0
-    while (i < size) {
-      val keyLength = buffer.getInt
-      var j = 0
-      val keyBytes = new Array[Byte](keyLength)
-      while (j < keyLength) {
-        keyBytes(j) = buffer.get()
-        j += 1
-      }
-      val value = buffer.getLong
-      bins.put(UTF8String.fromBytes(keyBytes), value)
+    val keyBytes = new Array[Byte](keyLength)
+    while (i < keyLength) {
+      keyBytes(i) = buffer.get()
       i += 1
     }
-    new StringMapDigest(bins, isInvalid)
+    UTF8String.fromBytes(keyBytes)
   }
 }
 
 // Digest class for column of numeric type.
 case class NumericMapDigest(
-    bins: mutable.HashMap[Double, Long] = mutable.HashMap.empty) extends MapDigest {
-  def this(bins: mutable.HashMap[Double, Long], isInvalid: Boolean) = {
-    this(bins)
-    this.isInvalid = isInvalid
-  }
+    override val bins: mutable.HashMap[Double, Long] = mutable.HashMap.empty,
+    override var isInvalid: Boolean = false) extends MapDigestBase[Double] {
 
   override def update(dataType: DataType, value: Any, numBins: Int): Unit = {
     // Use Double to represent endpoints (in histograms) for simplicity
@@ -282,51 +299,12 @@ case class NumericMapDigest(
       case t: TimestampType =>
         value.asInstanceOf[Long].toDouble
     }
-    updateMap(bins, doubleValue, numBins)
+    updateMap(doubleValue, numBins)
   }
 
-  override def merge(otherDigest: MapDigest, numBins: Int): Unit = {
-    mergeMap(baseMap = bins, otherMap = otherDigest.asInstanceOf[NumericMapDigest].bins, numBins)
-  }
+  override def keyLen(key: Double): Int = Doubles.BYTES
 
-  override def clear(): Unit = bins.clear()
-}
+  override def putKey(key: Double, buffer: ByteBuffer): Unit = buffer.putDouble(key)
 
-object NumericMapDigest {
-
-  private final def length(obj: NumericMapDigest): Int = {
-    // isInvalid, size of bins
-    var len: Int = Ints.BYTES + Ints.BYTES
-    obj.bins.foreach { case (key, value) =>
-      // key, value
-      len += Doubles.BYTES + Longs.BYTES
-    }
-    len
-  }
-
-  final def serialize(obj: NumericMapDigest): Array[Byte] = {
-    val buffer = ByteBuffer.wrap(new Array(length(obj)))
-    buffer.putInt(if (obj.isInvalid) 0 else 1)
-    buffer.putInt(obj.bins.size)
-    obj.bins.foreach { case (key, value) =>
-      buffer.putDouble(key)
-      buffer.putLong(value)
-    }
-    buffer.array()
-  }
-
-  final def deserialize(bytes: Array[Byte]): NumericMapDigest = {
-    val buffer = ByteBuffer.wrap(bytes)
-    val isInvalid = if (buffer.getInt == 0) true else false
-    val size = buffer.getInt
-    val bins = new mutable.HashMap[Double, Long]
-    var i = 0
-    while (i < size) {
-      val key = buffer.getDouble
-      val value = buffer.getLong
-      bins.put(key, value)
-      i += 1
-    }
-    new NumericMapDigest(bins, isInvalid)
-  }
+  override def getKey(buffer: ByteBuffer): Double = buffer.getDouble
 }
