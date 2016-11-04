@@ -248,15 +248,15 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
    * has not already been aggregated on the driver program
    */
   // For data property accumulators pending and processed updates.
-  // Pending and processed are keyed by TaskOutputId
-  private[spark] lazy val pending =
+  // PendingAccumulatorUpdatesForTask and CompletedOutputsForTask are keyed by TaskOutputId
+  private[spark] lazy val pendingAccumulatorUpdatesForTask =
     new mutable.HashMap[TaskOutputId, DataAccumulatorV2[IN, OUT]]()
-  // Completed contains the set of TaskOutputId that have been
+  // CompletedOutputsForTask contains the set of TaskOutputId that have been
   // fully processed on the worker side. This is used to determine if the updates should
   // be merged on the driver for a particular rdd/shuffle/partition combination.
-  // Some elements may be in pending which are not completed if a partition is only partially
-  // evaluated (e.g. `take(x)`).
-  private[spark] lazy val completed = new mutable.HashSet[TaskOutputId]()
+  // Some elements may be in pendingAccumulatorUpdatesForTask which are not completed if a
+  // partition is only partially evaluated (e.g. `take(x)`).
+  private[spark] lazy val completedOutputsForTask = new mutable.HashSet[TaskOutputId]()
   // rddProcessed is keyed by rdd id and the value is a bitset containing all partitions
   // for the given key which have been merged into the value. This is used on the driver.
   @transient private[spark] lazy val rddProcessed = new mutable.HashMap[Int, mutable.BitSet]()
@@ -296,12 +296,12 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
     addImpl(v)
     // Add to the pending updates for data property
     val taskOutputInfo = TaskContext.get().getTaskOutputInfo()
-    val updateForTask = pending.getOrElse(taskOutputInfo, copyAndReset())
+    val updateForTask = pendingAccumulatorUpdatesForTask.getOrElse(taskOutputInfo, copyAndReset())
     // Since we may have constructed a new accumulator, set atDriverSide to false as the default
     // new accumulators will have atDriverSide equal to true.
     updateForTask.atDriverSide = false
     updateForTask.addImpl(v)
-    pending(taskOutputInfo) = updateForTask
+    pendingAccumulatorUpdatesForTask(taskOutputInfo) = updateForTask
   }
 
   /**
@@ -311,7 +311,7 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
    */
   private[spark] override def markFullyProcessed(taskOutputId: TaskOutputId): Unit = {
     if (metadata.dataProperty) {
-      completed += taskOutputId
+      completedOutputsForTask += taskOutputId
     }
   }
 
@@ -358,7 +358,7 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
     ): Unit = {
       val partitionsAlreadyMerged = processed.getOrElseUpdate(outputId.id, new mutable.BitSet())
       // Only take updates for task outputs which were completed (e.g. skip partial evaluations)
-      if (otherDataProperty.completed.contains(outputId)) {
+      if (otherDataProperty.completedOutputsForTask.contains(outputId)) {
         // Only take updates for task outputs we haven't seen before.
         // So if this task computed two rdds, but one of them had been computed previously, only
         // take the accumulator updates from the other one.
@@ -368,7 +368,7 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
         }
       }
     }
-    otherDataProperty.pending.foreach {
+    otherDataProperty.pendingAccumulatorUpdatesForTask.foreach {
       // Apply all foreach partitions regardless - they can only be fully evaluated
       case (ForeachOutputId, v) =>
         mergeImpl(v)
