@@ -796,7 +796,7 @@ class SparseVector(Vector):
 
     def __getattr__(self, item):
         def wrapper(*args, **kwargs):
-            if _have_scip:
+            if _have_scipy:
                 csr = scipy.sparse.csr_matrix((np.append(self.values, 0),
                                                np.append(self.indices, self.size-1),
                                                [0, len(self.values)]))
