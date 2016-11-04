@@ -1444,7 +1444,7 @@ def repeat(col, n):
 @ignore_unicode_prefix
 def split(str, pattern):
     """
-    Splits str around pattern (pattern is a regularaa expression).
+    Splits str around pattern (pattern is a regular expression).
 
     .. note:: pattern is a string represent the regular expression.
 
