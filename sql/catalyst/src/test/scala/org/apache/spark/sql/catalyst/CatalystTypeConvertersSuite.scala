@@ -69,16 +69,12 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
     val intUnsafeArray = UnsafeArrayData.fromPrimitiveArray(intArray)
     val intArrayType = ArrayType(IntegerType, false)
     assert(CatalystTypeConverters.createToScalaConverter(intArrayType)(intUnsafeArray) === intArray)
-    assert(CatalystTypeConverters.createToCatalystConverter(intArrayType)(intArray)
-      == intUnsafeArray)
 
     val doubleArray = Array(1.1, 111.1, 11111.1)
     val doubleUnsafeArray = UnsafeArrayData.fromPrimitiveArray(doubleArray)
     val doubleArrayType = ArrayType(DoubleType, false)
     assert(CatalystTypeConverters.createToScalaConverter(doubleArrayType)(doubleUnsafeArray)
       === doubleArray)
-    assert(CatalystTypeConverters.createToCatalystConverter(doubleArrayType)(doubleArray)
-      == doubleUnsafeArray)
   }
 
   test("An array with null handling") {
