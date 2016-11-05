@@ -261,7 +261,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   }
 
   test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
-    val proxyBaseBeforeTest = System.getProperty("spark.ui.proxyBase")
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
     val page = new HistoryPage(server)
     val request = mock[HttpServletRequest]
@@ -269,7 +268,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // when
     System.setProperty("spark.ui.proxyBase", uiRoot)
     val response = page.render(request)
-    System.setProperty("spark.ui.proxyBase", Option(proxyBaseBeforeTest).getOrElse(""))
 
     // then
     val urls = response \\ "@href" map (_.toString)
@@ -278,8 +276,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   }
 
   test("ajax rendered relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
-
-    val proxyBaseBeforeTest = System.getProperty("spark.ui.proxyBase")
     val uiRoot = "/testwebproxybase"
     System.setProperty("spark.ui.proxyBase", uiRoot)
 
@@ -297,6 +293,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
     server.bind()
+
+    // the test browses to a web page that invokes an ajax call.
+    // this appears to make jetty wait for upto 30 seconds before
+    // the server.stop() call would return after this test.
+    // Here, instructing Jetty not to use this "graceful shutdown" timeout.
+    server.setStopTimeout(-1)
+
     val port = server.boundPort
 
     val servlet = new ProxyServlet {
@@ -306,7 +309,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         val sb = request.getRequestURL()
 
         if (request.getQueryString() != null) {
-          sb.append (s"?${request.getQueryString()}")
+          sb.append(s"?${request.getQueryString()}")
         }
 
         val proxyidx = sb.indexOf(uiRoot)
@@ -320,7 +323,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     contextHandler.addServlet(holder, "/")
     server.attachHandler(contextHandler)
 
-    implicit val webDriver: WebDriver = new HtmlUnitDriver (true) {
+    implicit val webDriver: WebDriver = new HtmlUnitDriver(true) {
       getWebClient.getOptions.setThrowExceptionOnScriptError(false)
     }
 
@@ -332,22 +335,20 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     implicitlyWait(org.scalatest.time.Span(5, org.scalatest.time.Seconds))
 
     // once this findAll call returns, we know the ajax load of the table completed
-    findAll (ClassNameQuery("odd"))
+    findAll(ClassNameQuery("odd"))
 
-    val links = findAll (TagNameQuery("a"))
-      .map (_.attribute("href"))
+    val links = findAll(TagNameQuery("a"))
+      .map(_.attribute("href"))
       .filter(_.isDefined)
-      .map (_.get)
+      .map(_.get)
       .filter(_.startsWith(url)).toList
-
-    System.setProperty("spark.ui.proxyBase", Option(proxyBaseBeforeTest).getOrElse(""))
 
     quit()
 
     // there are atleast some URL links that were generated via javascript,
     // and they all contain the spark.ui.proxyBase (uiRoot)
     links.length should be > 4
-    all (links) should startWith (url + uiRoot)
+    all(links) should startWith(url + uiRoot)
   }
 
   test("incomplete apps get refreshed") {

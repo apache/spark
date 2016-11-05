@@ -143,6 +143,12 @@ class HistoryServer(
     appCache.stop()
   }
 
+  // For testing - override stop timeout used by jetty
+  private[history] def setStopTimeout(timeout: Long): Unit = {
+    assert(serverInfo.isDefined, "HistoryServer must be bound before setting stop timeout")
+    serverInfo.get.server.setStopTimeout(timeout)
+  }
+
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
   override def attachSparkUI(
       appId: String,
