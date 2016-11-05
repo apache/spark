@@ -77,8 +77,11 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
    * Calculates the approximate quantiles of numerical columns of a DataFrame.
+   * @see [[DataFrameStatsFunctions.approxQuantile(col:Str* approxQuantile]] for
+   *     detailed description.
    *
-   * Note that rows containing any null values will be removed before calculation.
+   * Note that rows containing any null or NaN values values will be removed before
+   * calculation.
    * @param cols the names of the numerical columns
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].

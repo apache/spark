@@ -163,6 +163,12 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val dfNaN = Seq(Double.NaN, 1.0, Double.NaN, Double.NaN).toDF("input")
     val resNaN = dfNaN.stat.approxQuantile("input", Array(q1, q2), epsilons.head)
     assert(resNaN.count(_.isNaN) === 0)
+    // test approxQuantile on multi-column NaN values
+    val dfNaN2 = Seq((Double.NaN, 1.0), (1.0, 1.0), (-1.0, Double.NaN), (Double.NaN, Double.NaN))
+      .toDF("input1", "input2")
+    val resNaN2 = dfNaN2.stat.approxQuantile(Array("input1", "input2"),
+      Array(q1, q2), epsilons.head)
+    assert(resNaN2.flatten.count(_.isNaN) === 0)
   }
 
   test("crosstab") {
