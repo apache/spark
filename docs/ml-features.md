@@ -731,41 +731,38 @@ for more details on the API.
 
 ## Interaction
 
-`Interaction` is a `Transformer` which takes a list of vector/double columns, and generate a single vector column 
-that contains the interactions (multiplication) among them with proper handling of feature names.
+`Interaction` is a `Transformer` which takes a vector/double columns, and generate a single vector column that contains multiplication results of all combination of each vector/double values.
+
+For example, if you have two vector type columns each of which contains three double type values as input columns, then you'll get a vector with 9 double type values as the output column.
 
 **Examples**
 
-Assume that we have the following DataFrame with columns tree input column:
+Assume that we have the following DataFrame with the columns "id1", "vec1", and "vec2":
 
 ~~~~
-
-id1 | id2 | id3
-----|-----|-----
- 0  |  1  | 2
- 1  |  4  | 3
- 2  |  6  | 1
- 3  | 10  | 8
- 4  |  9  | 2
- 5  |  1  | 1
+  id1|vec1          |vec2          
+  ---|--------------|--------------
+  1  |[1.0,2.0,3.0] |[8.0,4.0,5.0] 
+  2  |[4.0,3.0,8.0] |[7.0,9.0,8.0] 
+  3  |[6.0,1.0,9.0] |[2.0,3.0,6.0] 
+  4  |[10.0,8.0,6.0]|[9.0,4.0,5.0] 
+  5  |[9.0,2.0,7.0] |[10.0,7.0,3.0]
+  6  |[1.0,1.0,4.0] |[2.0,8.0,4.0]     
 ~~~~
 
-Applying `Interaction` with `id1`, `id2`, `id3` as the input columns,
+Applying `Interaction` with those input columns,
 then `interactedCol` as the output column contains:
 
 ~~~~
-id1 | id2 | id3 | interactedCol
-----|-----|-----|---------------
- 0  |  1  | 2   |       [0.0]
- 1  |  4  | 3   |       [0.0]
- 2  |  6  | 1   |      [12.0]
- 3  | 10  | 8   |     [240.0]
- 4  |  9  | 2   |      [72.0]
- 5  |  1  | 1   |       [5.0]
-
+  id1|vec1          |vec2          |interactedCol                                         
+  ---|--------------|--------------|------------------------------------------------------
+  1  |[1.0,2.0,3.0] |[8.0,4.0,5.0] |[8.0,4.0,5.0,16.0,8.0,10.0,24.0,12.0,15.0]            
+  2  |[4.0,3.0,8.0] |[7.0,9.0,8.0] |[56.0,72.0,64.0,42.0,54.0,48.0,112.0,144.0,128.0]     
+  3  |[6.0,1.0,9.0] |[2.0,3.0,6.0] |[36.0,54.0,108.0,6.0,9.0,18.0,54.0,81.0,162.0]        
+  4  |[10.0,8.0,6.0]|[9.0,4.0,5.0] |[360.0,160.0,200.0,288.0,128.0,160.0,216.0,96.0,120.0]
+  5  |[9.0,2.0,7.0] |[10.0,7.0,3.0]|[450.0,315.0,135.0,100.0,70.0,30.0,350.0,245.0,105.0] 
+  6  |[1.0,1.0,4.0] |[2.0,8.0,4.0] |[12.0,48.0,24.0,12.0,48.0,24.0,48.0,192.0,96.0]       
 ~~~~
-
-Each vector represents the token counts of the document over the vocabulary.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
