@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
-import org.apache.spark.ml.optim.{NormalEquationSolver, WeightedLeastSquares}
+import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -165,6 +165,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * solution to the linear regression problem.
    * The default value is "auto" which means that the solver algorithm is
    * selected automatically.
+   *
+   * The Normal Equation solver is limited to a few thousand features; when needed,
+   * [[LinearRegression]] will automatically fall back to iterative optimization methods.
    *
    * @group setParam
    */
