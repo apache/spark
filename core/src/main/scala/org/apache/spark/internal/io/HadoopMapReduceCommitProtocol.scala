@@ -42,12 +42,23 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
   @transient private var committer: OutputCommitter = _
 
+  /**
+   * Tracks files staged by this task for absolute output paths. Unlike files staged by the
+   * OutputCommitter, we must manually move these to their final locations on task commit.
+   * TODO(ekl) it would be nice to provide better atomicity for this type of output.
+   */
+  @transient private var taskAbsPathOutputs: List[String] = Nil
+
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     context.getOutputFormatClass.newInstance().getOutputCommitter(context)
   }
 
   override def newTaskTempFile(
-      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
+      taskContext: TaskAttemptContext,
+      relativeDir: Option[String], absoluteDir: Option[String], ext: String): String = {
+    if (absoluteDir.isDefined) {
+      require(!relativeDir.isDefined, "Cannot specify both abs and relative output dirs.")
+    }
     // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
@@ -60,10 +71,18 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
       case _ => path
     }
 
-    dir.map { d =>
-      new Path(new Path(stagingDir, d), filename).toString
-    }.getOrElse {
-      new Path(stagingDir, filename).toString
+    absoluteDir match {
+      case Some(d) =>
+        val absOutputPath = new Path(d, filename).toString
+        taskAbsPathOutputs ::= absOutputPath
+        absOutputPath
+      case _ =>
+        relativeDir match {
+          case Some(d) =>
+            new Path(new Path(stagingDir, d), filename).toString
+          case _ =>
+            new Path(stagingDir, filename).toString
+        }
     }
   }
 

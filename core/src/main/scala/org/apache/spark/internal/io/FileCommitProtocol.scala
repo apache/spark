@@ -80,10 +80,18 @@ abstract class FileCommitProtocol {
    *  4. bucket id
    *  5. source specific file extension, e.g. ".snappy.parquet"
    *
-   * The "dir" parameter specifies 2, and "ext" parameter specifies both 4 and 5, and the rest
+   * The directory parameters specify 2, and "ext" parameter specifies both 4 and 5, and the rest
    * are left to the commit protocol implementation to decide.
+   *
+   * @param relativeDir relative path of the final output directory from the base path, or None
+   *                    if the file should be placed in the base path or an absolute path.
+   * @param absoluteDir absolute path of the final output directory. If specified, the base path
+   *                    will be ignored. This may not be specified if relativeDir is.
+   * @param ext extension of the final output file.
    */
-  def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
+  def newTaskTempFile(
+    taskContext: TaskAttemptContext,
+    relativeDir: Option[String], absoluteDir: Option[String], ext: String): String
 
   /**
    * Commits a task after the writes succeed. Must be called on the executors when running tasks.
