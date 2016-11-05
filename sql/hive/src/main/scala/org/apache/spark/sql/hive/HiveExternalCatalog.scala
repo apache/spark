@@ -196,7 +196,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     if (tableDefinition.tableType == VIEW) {
       client.createTable(tableDefinition, ignoreIfExists)
-    } else if (tableDefinition.provider.get == "hive") {
+    } else if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
       // Here we follow data source tables and put table metadata like provider, schema, etc. in
       // table properties, so that we can work around the Hive metastore issue about not case
       // preserving and make Hive serde table support mixed-case column names.
@@ -468,6 +468,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def updateLocationInStorageProps(
       table: CatalogTable,
       newPath: Option[String]): CatalogStorageFormat = {
+    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
+    // while `CatalogTable` should be serializable.
     val propsWithoutPath = table.storage.properties.filter {
       case (k, v) => k.toLowerCase != "path"
     }
@@ -508,7 +510,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     } else {
       val oldTableDef = getRawTable(db, withStatsProps.identifier.table)
 
-      val newStorage = if (tableDefinition.provider.get == "hive") {
+      val newStorage = if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
         tableDefinition.storage
       } else {
         // We can't alter the table storage of data source table directly for 2 reasons:
@@ -598,10 +600,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       getProviderFromTableProperties(table) match {
         // No provider in table properties, which means this table is created by Spark prior to 2.1,
         // or is created at Hive side.
-        case None => table.copy(provider = Some("hive"), tracksPartitionsInCatalog = true)
+        case None =>
+          table.copy(provider = Some(DDLUtils.HIVE_PROVIDER), tracksPartitionsInCatalog = true)
 
         // This is a Hive serde table created by Spark 2.1 or higher versions.
-        case Some("hive") => restoreHiveSerdeTable(table)
+        case Some(DDLUtils.HIVE_PROVIDER) => restoreHiveSerdeTable(table)
 
         // This is a regular data source table.
         case Some(provider) => restoreDataSourceTable(table, provider)
@@ -631,7 +634,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def restoreHiveSerdeTable(table: CatalogTable): CatalogTable = {
-    val hiveTable = table.copy(provider = Some("hive"), tracksPartitionsInCatalog = true)
+    val hiveTable = table.copy(
+      provider = Some(DDLUtils.HIVE_PROVIDER),
+      tracksPartitionsInCatalog = true)
 
     val schemaFromTableProps = getSchemaFromTableProperties(table)
     if (DataType.equalsIgnoreCaseAndNullability(schemaFromTableProps, table.schema)) {
@@ -644,6 +649,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // schema we read back is different(ignore case and nullability) from the one in table
       // properties which was written when creating table, we should respect the table schema
       // from hive.
+      logWarning(s"The table schema given by Hive metastore(${table.schema.simpleString}) is " +
+        "different from the schema when this table was created by Spark SQL" +
+        s"(${schemaFromTableProps.simpleString}). We have to trust the table schema from Hive " +
+        "metastore which is not case preserving.")
       hiveTable
     }
   }
