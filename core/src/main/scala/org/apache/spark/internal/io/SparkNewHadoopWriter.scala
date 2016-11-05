@@ -18,23 +18,23 @@
 package org.apache.spark.internal.io
 
 import java.text.SimpleDateFormat
-import java.util.{Locale, Date}
+import java.util.{Date, Locale}
+
+import scala.reflect.ClassTag
+import scala.util.DynamicVariable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.{JobConf, JobID}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+
+import org.apache.spark.{SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
-import org.apache.spark.rdd.RDD
-
-import org.apache.spark.{SparkConf, SparkException, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{Utils, SerializableConfiguration}
-
-import scala.reflect.ClassTag
-import scala.util.DynamicVariable
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * A helper object that saves an RDD using a Hadoop OutputFormat
@@ -75,13 +75,14 @@ object SparkNewHadoopWriter extends Logging {
     val jobAttemptId = new TaskAttemptID(jobTrackerId, stageId, TaskType.MAP, 0, 0)
     val jobContext = new TaskAttemptContextImpl(conf.value, jobAttemptId)
     val format = jobContext.getOutputFormatClass
-    committer.setupJob(jobContext)
 
     if (SparkNewHadoopWriterUtils.isOutputSpecValidationEnabled(rdd.conf)) {
       // FileOutputFormat ignores the filesystem parameter
       val jobFormat = format.newInstance
       jobFormat.checkOutputSpecs(jobContext)
     }
+
+    committer.setupJob(jobContext)
 
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
