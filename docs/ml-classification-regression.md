@@ -765,7 +765,7 @@ is treated as piecewise linear function. The rules for prediction therefore are:
   predictions of the two closest features. In case there are multiple values
   with the same feature then the same rules as in previous point are used.
 
-### Examples
+**Example**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
