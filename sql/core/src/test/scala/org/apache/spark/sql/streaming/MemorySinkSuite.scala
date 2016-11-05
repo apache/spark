@@ -187,6 +187,31 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     query.stop()
   }
 
+  test("MemoryPlan statistics for joining") {
+    val input = MemoryStream[Int]
+    val query = input.toDF()
+      .writeStream
+      .format("memory")
+      .queryName("memStream")
+      .start()
+
+    val memStream = spark.table("memStream").as[Int]
+
+    input.addData(1)
+    query.processAllAvailable()
+    checkDatasetUnorderly(
+      memStream.crossJoin(memStream.withColumnRenamed("value", "value2")).as[(Int, Int)],
+      (1, 1))
+
+    input.addData(2)
+    query.processAllAvailable()
+    checkDatasetUnorderly(
+      memStream.crossJoin(memStream.withColumnRenamed("value", "value2")).as[(Int, Int)],
+      (1, 1), (1, 2), (2, 1), (2, 2))
+
+    query.stop()
+  }
+
   ignore("stress test") {
     // Ignore the stress test as it takes several minutes to run
     (0 until 1000).foreach { _ =>
