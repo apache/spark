@@ -498,7 +498,9 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
   override def children: Seq[Expression] = child :: Nil
 
   override def eval(input: InternalRow): Any = {
-    try parser.parse(child.eval(input).toString).head catch {
+    val json = child.eval(input)
+    if (json == null) return null
+    try parser.parse(json.toString).head catch {
       case _: SparkSQLJsonProcessingException => null
     }
   }
