@@ -969,6 +969,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(dataset.collect() sameElements Array(resultValue, resultValue))
   }
 
+  test("SPARK-18284: Serializer should have correct nullable value") {
+    val df1 = sparkContext.parallelize(Seq(1, 2, 3, 4), 1).toDF()
+    assert(df1.schema(0).nullable == false)
+    val df2 = sparkContext.parallelize(Seq(Integer.valueOf(1), Integer.valueOf(2)), 1).toDF()
+    assert(df2.schema(0).nullable == true)
+  }
+
   Seq(true, false).foreach { eager =>
     def testCheckpointing(testName: String)(f: => Unit): Unit = {
       test(s"Dataset.checkpoint() - $testName (eager = $eager)") {

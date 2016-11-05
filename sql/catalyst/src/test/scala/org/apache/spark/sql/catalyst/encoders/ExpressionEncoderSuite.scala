@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -336,6 +336,18 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable === true)
       assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
     }
+  }
+
+  test("nullable of encoder serializer") {
+    def checkNullable[T: Encoder](nullable: Boolean*): Unit = {
+      assert(encoderFor[T].serializer.map(_.nullable) === nullable.toSeq)
+    }
+
+    // test for flat encoders
+    checkNullable[Int](false)
+    checkNullable[Option[Int]](true)
+    checkNullable[java.lang.Integer](true)
+    checkNullable[String](true)
   }
 
   test("null check for map key") {

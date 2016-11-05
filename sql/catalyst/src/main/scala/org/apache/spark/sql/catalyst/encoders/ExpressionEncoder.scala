@@ -50,7 +50,7 @@ object ExpressionEncoder {
     val cls = mirror.runtimeClass(tpe)
     val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
-    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = !cls.isPrimitive)
     val nullSafeInput = if (flat) {
       inputObject
     } else {
