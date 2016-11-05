@@ -127,10 +127,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     val numberOfComparisonsThreshold = 40
 
     if (ordering.size <= numberOfComparisonsThreshold) {
-      s"""
-         |  InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
-         |  ${comparisons(ordering)}
-      """.stripMargin
+      comparisons(ordering)
     } else {
       val groupedOrderingItr = ordering.grouped(numberOfComparisonsThreshold)
       val funcNamePrefix = ctx.freshName("compare")
@@ -180,6 +177,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
         ${ctx.declareAddedFunctions()}
 
         public int compare(InternalRow a, InternalRow b) {
+          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
           $comparisons
           return 0;
         }

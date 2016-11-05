@@ -537,6 +537,7 @@ class CodegenContext {
       val funcCode: String =
         s"""
           public int $compareFunc(InternalRow a, InternalRow b) {
+            InternalRow i = null;
             $comparisons
             return 0;
           }
