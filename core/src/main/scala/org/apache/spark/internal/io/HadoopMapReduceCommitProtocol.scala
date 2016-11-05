@@ -24,7 +24,6 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.SparkHadoopWriter
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
