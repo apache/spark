@@ -35,6 +35,8 @@ import org.apache.spark.sql.execution.command.RunnableCommand
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
+    staticPartitionKeys: TablePartitionSpec,
+    partitionLocationOverrides: Map[String, String],
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
@@ -43,6 +45,9 @@ case class InsertIntoHadoopFsRelationCommand(
     @transient query: LogicalPlan,
     mode: SaveMode)
   extends RunnableCommand {
+
+  println("static partition keys: " + staticPartitionKeys)
+  println("overrides: " + partitionLocationOverrides)
 
   override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -65,7 +70,23 @@ case class InsertIntoHadoopFsRelationCommand(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
+        val suffix = if (staticPartitionKeys.nonEmpty) {
+          "/" + partitionColumns.flatMap { p =>
+            staticPartitionKeys.get(p.name) match {
+              case Some(value) =>
+                Some(
+                  PartitioningUtils.escapePathName(p.name) + "=" +
+                  PartitioningUtils.escapePathName(value))
+              case None =>
+                None
+            }
+          }.mkString("/")
+        } else {
+          ""
+        }
+        val pathToDelete = qualifiedOutputPath.suffix(suffix)
+        println("path to delete: " + pathToDelete)
+        if (fs.exists(pathToDelete) && !fs.delete(pathToDelete, true /* recursively */)) {
           throw new IOException(s"Unable to clear output " +
             s"directory $qualifiedOutputPath prior to writing to it")
         }

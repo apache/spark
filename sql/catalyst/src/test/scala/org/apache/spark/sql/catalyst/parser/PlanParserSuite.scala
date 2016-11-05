@@ -185,9 +185,9 @@ class PlanParserSuite extends PlanTest {
         OverwriteOptions(
           overwrite,
           if (overwrite && partition.nonEmpty) {
-            Some(partition.map(kv => (kv._1, kv._2.get)))
+            partition.map(kv => (kv._1, kv._2.get))
           } else {
-            None
+            Map.empty
           }),
         ifNotExists)
 

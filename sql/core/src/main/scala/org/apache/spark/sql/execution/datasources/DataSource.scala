@@ -418,6 +418,8 @@ case class DataSource(
         val plan =
           InsertIntoHadoopFsRelationCommand(
             outputPath,
+            Map.empty,
+            Map.empty,
             columns,
             bucketSpec,
             format,

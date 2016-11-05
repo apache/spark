@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SimpleCatalogRelation}
@@ -146,6 +146,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     // values in the PARTITION clause (e.g. b in the above example).
     // dynamic_partitioning_columns are partitioning columns that do not assigned
     // values in the PARTITION clause (e.g. c in the above example).
+    // TODO(ekl) get rid of this and combine with static partition key arg for overwrite
     case insert @ logical.InsertIntoTable(
       relation @ LogicalRelation(t: HadoopFsRelation, _, _), parts, query, overwrite, false)
       if query.resolved && parts.exists(_._2.isDefined) =>
@@ -182,25 +183,19 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
           "Cannot overwrite a path that is also being read from.")
       }
 
-      val overwritingSinglePartition =
-        overwrite.specificPartition.isDefined &&
-        t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
-        l.catalogTable.get.tracksPartitionsInCatalog
+      val partitionLocationOverrides: Map[String, String] =
+        if (t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
+            l.catalogTable.get.tracksPartitionsInCatalog) {
+          getPartitionLocationOverrides(
+            t.sparkSession, l.catalogTable.get, outputPath, overwrite.staticPartitionKeys)
+        } else {
+          Map.empty
+        }
 
-      val effectiveOutputPath = if (overwritingSinglePartition) {
-        val partition = t.sparkSession.sessionState.catalog.getPartition(
-          l.catalogTable.get.identifier, overwrite.specificPartition.get)
-        new Path(partition.storage.locationUri.get)
-      } else {
-        outputPath
-      }
+      val partitionSchema = query.resolve(
+        t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
 
-      val effectivePartitionSchema = if (overwritingSinglePartition) {
-        Nil
-      } else {
-        query.resolve(t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
-      }
-
+      // TODO(ekl) move this into InsertIntoHadoopFsRelationCommand
       def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
         if (l.catalogTable.isDefined && updatedPartitions.nonEmpty &&
             l.catalogTable.get.partitionColumnNames.nonEmpty &&
@@ -215,8 +210,10 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       }
 
       val insertCmd = InsertIntoHadoopFsRelationCommand(
-        effectiveOutputPath,
-        effectivePartitionSchema,
+        outputPath,
+        if (overwrite.enabled) overwrite.staticPartitionKeys else Map.empty,
+        partitionLocationOverrides,
+        partitionSchema,
         t.bucketSpec,
         t.fileFormat,
         refreshPartitionsCallback,
@@ -225,6 +222,29 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         mode)
 
       insertCmd
+  }
+
+  private def getPartitionLocationOverrides(
+      spark: SparkSession,
+      table: CatalogTable,
+      basePath: Path,
+      staticPartitionKeys: TablePartitionSpec): Map[String, String] = {
+    val hadoopConf = spark.sessionState.newHadoopConf
+    val fs = basePath.getFileSystem(hadoopConf)
+    val qualifiedBasePath = basePath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    val partitions = spark.sessionState.catalog.listPartitions(
+      table.identifier, Some(staticPartitionKeys))
+    partitions.flatMap { p =>
+      val defaultLocation = qualifiedBasePath.suffix(
+        "/" + PartitioningUtils.getPathFragment(p.spec, table.partitionSchema)).toString
+      val catalogLocation = new Path(p.storage.locationUri.get).makeQualified(
+        fs.getUri, fs.getWorkingDirectory).toString
+      if (catalogLocation != defaultLocation) {
+        Some(defaultLocation -> catalogLocation)
+      } else {
+        None
+      }
+    }.toMap
   }
 }
 

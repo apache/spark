@@ -60,6 +60,7 @@ class PartitionProviderCompatibilitySuite
     }
   }
 
+/*
   test("convert partition provider to hive with repair table") {
     withTable("test") {
       withTempDir { dir =>
@@ -154,6 +155,7 @@ class PartitionProviderCompatibilitySuite
     }
   }
 
+*/
   test("insert overwrite partition of new datasource table overwrites just partition") {
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
       withTable("test") {
