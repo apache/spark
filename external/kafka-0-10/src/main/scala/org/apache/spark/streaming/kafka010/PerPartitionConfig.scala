@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Experimental
  * because they need tweaking on a per-partition basis,
  */
 @Experimental
-trait PerPartitionConfig extends Serializable {
+abstract class PerPartitionConfig() extends Serializable {
   /**
    *  Maximum rate (number of records per second) at which data will be read
    *  from each Kafka partition.
