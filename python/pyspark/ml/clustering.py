@@ -21,9 +21,10 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
 
-__all__ = ['BisectingKMeans', 'BisectingKMeansModel',
+__all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
+           'ClusteringSummary',
            'KMeans', 'KMeansModel',
-           'GaussianMixture', 'GaussianMixtureModel',
+           'GaussianMixture', 'GaussianMixtureModel', 'GaussianMixtureSummary',
            'LDA', 'LDAModel', 'LocalLDAModel', 'DistributedLDAModel']
 
 
