@@ -95,8 +95,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  private def requireTableExists(db: String, table: String): Unit = {
-    withClient { getTable(db, table) }
+  /**
+   * Get the raw table metadata from hive metastore directly. The raw table metadata may contains
+   * special data source properties and should not be exposed outside of `HiveExternalCatalog`. We
+   * should interpret these special data source properties and restore the original table metadata
+   * before returning it.
+   */
+  private def getRawTable(db: String, table: String): CatalogTable = withClient {
+    client.getTable(db, table)
   }
 
   /**
@@ -187,16 +193,32 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     if (tableExists(db, table) && !ignoreIfExists) {
       throw new TableAlreadyExistsException(db = db, table = table)
     }
-    // Before saving data source table metadata into Hive metastore, we should:
-    //  1. Put table metadata like provider, schema, etc. in table properties.
-    //  2. Check if this table is hive compatible
-    //    2.1  If it's not hive compatible, set location URI, schema, partition columns and bucket
-    //         spec to empty and save table metadata to Hive.
-    //    2.2  If it's hive compatible, set serde information in table metadata and try to save
-    //         it to Hive. If it fails, treat it as not hive compatible and go back to 2.1
-    if (DDLUtils.isDatasourceTable(tableDefinition)) {
+
+    if (tableDefinition.tableType == VIEW) {
+      client.createTable(tableDefinition, ignoreIfExists)
+    } else if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
+      // Here we follow data source tables and put table metadata like provider, schema, etc. in
+      // table properties, so that we can work around the Hive metastore issue about not case
+      // preserving and make Hive serde table support mixed-case column names.
+      val tableWithDataSourceProps = tableDefinition.copy(
+        properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
+      client.createTable(tableWithDataSourceProps, ignoreIfExists)
+    } else {
+      // To work around some hive metastore issues, e.g. not case-preserving, bad decimal type
+      // support, no column nullability, etc., we should do some extra works before saving table
+      // metadata into Hive metastore:
+      //  1. Put table metadata like provider, schema, etc. in table properties.
+      //  2. Check if this table is hive compatible.
+      //    2.1  If it's not hive compatible, set location URI, schema, partition columns and bucket
+      //         spec to empty and save table metadata to Hive.
+      //    2.2  If it's hive compatible, set serde information in table metadata and try to save
+      //         it to Hive. If it fails, treat it as not hive compatible and go back to 2.1
       val tableProperties = tableMetaToTableProps(tableDefinition)
 
+      // Ideally we should not create a managed table with location, but Hive serde table can
+      // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
+      // to create the table directory and write out data before we create this table, to avoid
+      // exposing a partial written table.
       val needDefaultTableLocation = tableDefinition.tableType == MANAGED &&
         tableDefinition.storage.locationUri.isEmpty
       val tableLocation = if (needDefaultTableLocation) {
@@ -304,8 +326,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           logWarning(message)
           saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
       }
-    } else {
-      client.createTable(tableDefinition, ignoreIfExists)
     }
   }
 
@@ -417,11 +437,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
-    val rawTable = client.getTable(db, oldName)
+    val rawTable = getRawTable(db, oldName)
 
-    val storageWithNewPath = if (rawTable.tableType == MANAGED) {
-      // If it's a managed table and we are renaming it, then the path option becomes inaccurate
-      // and we need to update it according to the new table name.
+    // Note that Hive serde tables don't use path option in storage properties to store the value
+    // of table location, but use `locationUri` field to store it directly. And `locationUri` field
+    // will be updated automatically in Hive metastore by the `alterTable` call at the end of this
+    // method. Here we only update the path option if the path option already exists in storage
+    // properties, to avoid adding a unnecessary path option for Hive serde tables.
+    val hasPathOption = new CaseInsensitiveMap(rawTable.storage.properties).contains("path")
+    val storageWithNewPath = if (rawTable.tableType == MANAGED && hasPathOption) {
+      // If it's a managed table with path option and we are renaming it, then the path option
+      // becomes inaccurate and we need to update it according to the new table name.
       val newTablePath = defaultTablePath(TableIdentifier(newName, Some(db)))
       updateLocationInStorageProps(rawTable, Some(newTablePath))
     } else {
@@ -442,7 +468,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def updateLocationInStorageProps(
       table: CatalogTable,
       newPath: Option[String]): CatalogStorageFormat = {
-    val propsWithoutPath = table.storage.properties.filterKeys(_.toLowerCase != "path")
+    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
+    // while `CatalogTable` should be serializable.
+    val propsWithoutPath = table.storage.properties.filter {
+      case (k, v) => k.toLowerCase != "path"
+    }
     table.storage.copy(properties = propsWithoutPath ++ newPath.map("path" -> _))
   }
 
@@ -475,18 +505,51 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       tableDefinition
     }
 
-    if (DDLUtils.isDatasourceTable(withStatsProps)) {
-      val oldTableDef = client.getTable(db, withStatsProps.identifier.table)
+    if (tableDefinition.tableType == VIEW) {
+      client.alterTable(withStatsProps)
+    } else {
+      val oldTableDef = getRawTable(db, withStatsProps.identifier.table)
 
-      val oldLocation = getLocationFromStorageProps(oldTableDef)
-      val newLocation = tableDefinition.storage.locationUri
-      // Only update the `locationUri` field if the location is really changed, because this table
-      // may be not Hive-compatible and can not set the `locationUri` field. We should respect the
-      // old `locationUri` even it's None.
-      val storageWithNewLocation = if (oldLocation == newLocation) {
-        oldTableDef.storage
+      val newStorage = if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
+        tableDefinition.storage
       } else {
-        updateLocationInStorageProps(oldTableDef, newLocation).copy(locationUri = newLocation)
+        // We can't alter the table storage of data source table directly for 2 reasons:
+        //   1. internally we use path option in storage properties to store the value of table
+        //      location, but the given `tableDefinition` is from outside and doesn't have the path
+        //      option, we need to add it manually.
+        //   2. this data source table may be created on a file, not a directory, then we can't set
+        //      the `locationUri` field and save it to Hive metastore, because Hive only allows
+        //      directory as table location.
+        //
+        // For example, an external data source table is created with a single file '/path/to/file'.
+        // Internally, we will add a path option with value '/path/to/file' to storage properties,
+        // and set the `locationUri` to a special value due to SPARK-15269(please see
+        // `saveTableIntoHive` for more details). When users try to get the table metadata back, we
+        // will restore the `locationUri` field from the path option and remove the path option from
+        // storage properties. When users try to alter the table storage, the given
+        // `tableDefinition` will have `locationUri` field with value `/path/to/file` and the path
+        // option is not set.
+        //
+        // Here we need 2 extra steps:
+        //   1. add path option to storage properties, to match the internal format, i.e. using path
+        //      option to store the value of table location.
+        //   2. set the `locationUri` field back to the old one from the existing table metadata,
+        //      if users don't want to alter the table location. This step is necessary as the
+        //      `locationUri` is not always same with the path option, e.g. in the above example
+        //      `locationUri` is a special value and we should respect it. Note that, if users
+        //       want to alter the table location to a file path, we will fail. This should be fixed
+        //       in the future.
+
+        val newLocation = tableDefinition.storage.locationUri
+        val storageWithPathOption = tableDefinition.storage.copy(
+          properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _))
+
+        val oldLocation = getLocationFromStorageProps(oldTableDef)
+        if (oldLocation == newLocation) {
+          storageWithPathOption.copy(locationUri = oldTableDef.storage.locationUri)
+        } else {
+          storageWithPathOption
+        }
       }
 
       val partitionProviderProp = if (tableDefinition.tracksPartitionsInCatalog) {
@@ -498,23 +561,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is. Also add old data source properties to table
       // properties, to retain the data source table format.
-      val oldDataSourceProps = oldTableDef.properties.filter(_._1.startsWith(SPARK_SQL_PREFIX))
+      val oldDataSourceProps = oldTableDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
       val newTableProps = oldDataSourceProps ++ withStatsProps.properties + partitionProviderProp
       val newDef = withStatsProps.copy(
-        storage = storageWithNewLocation,
+        storage = newStorage,
         schema = oldTableDef.schema,
         partitionColumnNames = oldTableDef.partitionColumnNames,
         bucketSpec = oldTableDef.bucketSpec,
         properties = newTableProps)
 
       client.alterTable(newDef)
-    } else {
-      client.alterTable(withStatsProps)
     }
   }
 
   override def getTable(db: String, table: String): CatalogTable = withClient {
-    restoreTableMetadata(client.getTable(db, table))
+    restoreTableMetadata(getRawTable(db, table))
   }
 
   override def getTableOption(db: String, table: String): Option[CatalogTable] = withClient {
@@ -536,28 +597,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val tableWithSchema = if (table.tableType == VIEW) {
       table
     } else {
-      getProviderFromTableProperties(table).map { provider =>
-        assert(provider != TABLE_PARTITION_PROVIDER_CATALOG,
-          "Hive serde table should not save provider in table properties.")
-        // Internally we store the table location in storage properties with key "path" for data
-        // source tables. Here we set the table location to `locationUri` field and filter out the
-        // path option in storage properties, to avoid exposing this concept externally.
-        val storageWithLocation = {
-          val tableLocation = getLocationFromStorageProps(table)
-          updateLocationInStorageProps(table, None).copy(locationUri = tableLocation)
-        }
-        val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
+      getProviderFromTableProperties(table) match {
+        // No provider in table properties, which means this table is created by Spark prior to 2.1,
+        // or is created at Hive side.
+        case None =>
+          table.copy(provider = Some(DDLUtils.HIVE_PROVIDER), tracksPartitionsInCatalog = true)
 
-        table.copy(
-          storage = storageWithLocation,
-          schema = getSchemaFromTableProperties(table),
-          provider = Some(provider),
-          partitionColumnNames = getPartitionColumnsFromTableProperties(table),
-          bucketSpec = getBucketSpecFromTableProperties(table),
-          tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG)
-        )
-      } getOrElse {
-        table.copy(provider = Some("hive"), tracksPartitionsInCatalog = true)
+        // This is a Hive serde table created by Spark 2.1 or higher versions.
+        case Some(DDLUtils.HIVE_PROVIDER) => restoreHiveSerdeTable(table)
+
+        // This is a regular data source table.
+        case Some(provider) => restoreDataSourceTable(table, provider)
       }
     }
 
@@ -581,6 +631,50 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     tableWithStats.copy(properties = getOriginalTableProperties(table))
+  }
+
+  private def restoreHiveSerdeTable(table: CatalogTable): CatalogTable = {
+    val hiveTable = table.copy(
+      provider = Some(DDLUtils.HIVE_PROVIDER),
+      tracksPartitionsInCatalog = true)
+
+    val schemaFromTableProps = getSchemaFromTableProperties(table)
+    if (DataType.equalsIgnoreCaseAndNullability(schemaFromTableProps, table.schema)) {
+      hiveTable.copy(
+        schema = schemaFromTableProps,
+        partitionColumnNames = getPartitionColumnsFromTableProperties(table),
+        bucketSpec = getBucketSpecFromTableProperties(table))
+    } else {
+      // Hive metastore may change the table schema, e.g. schema inference. If the table
+      // schema we read back is different(ignore case and nullability) from the one in table
+      // properties which was written when creating table, we should respect the table schema
+      // from hive.
+      logWarning(s"The table schema given by Hive metastore(${table.schema.simpleString}) is " +
+        "different from the schema when this table was created by Spark SQL" +
+        s"(${schemaFromTableProps.simpleString}). We have to fall back to the table schema from " +
+        "Hive metastore which is not case preserving.")
+      hiveTable
+    }
+  }
+
+  private def restoreDataSourceTable(table: CatalogTable, provider: String): CatalogTable = {
+    // Internally we store the table location in storage properties with key "path" for data
+    // source tables. Here we set the table location to `locationUri` field and filter out the
+    // path option in storage properties, to avoid exposing this concept externally.
+    val storageWithLocation = {
+      val tableLocation = getLocationFromStorageProps(table)
+      // We pass None as `newPath` here, to remove the path option in storage properties.
+      updateLocationInStorageProps(table, newPath = None).copy(locationUri = tableLocation)
+    }
+    val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
+
+    table.copy(
+      provider = Some(provider),
+      storage = storageWithLocation,
+      schema = getSchemaFromTableProperties(table),
+      partitionColumnNames = getPartitionColumnsFromTableProperties(table),
+      bucketSpec = getBucketSpecFromTableProperties(table),
+      tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG))
   }
 
   override def tableExists(db: String, table: String): Boolean = withClient {
@@ -623,7 +717,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
     getTable(db, table).partitionColumnNames.foreach { colName =>
-      orderedPartitionSpec.put(colName, partition(colName))
+      // Hive metastore is not case preserving and keeps partition columns with lower cased names,
+      // and Hive will validate the column names in partition spec to make sure they are partition
+      // columns. Here we Lowercase the column names before passing the partition spec to Hive
+      // client, to satisfy Hive.
+      orderedPartitionSpec.put(colName.toLowerCase, partition(colName))
     }
 
     client.loadPartition(
@@ -648,7 +746,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
     getTable(db, table).partitionColumnNames.foreach { colName =>
-      orderedPartitionSpec.put(colName, partition(colName))
+      // Hive metastore is not case preserving and keeps partition columns with lower cased names,
+      // and Hive will validate the column names in partition spec to make sure they are partition
+      // columns. Here we Lowercase the column names before passing the partition spec to Hive
+      // client, to satisfy Hive.
+      orderedPartitionSpec.put(colName.toLowerCase, partition(colName))
     }
 
     client.loadDynamicPartitions(
@@ -754,7 +856,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       table: String,
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withClient {
-    val rawTable = client.getTable(db, table)
+    val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
     val partitionColumnNames = catalogTable.partitionColumnNames.toSet
     val nonPartitionPruningPredicates = predicates.filterNot {

@@ -687,8 +687,10 @@ case class AlterTableSetLocationCommand(
 
 
 object DDLUtils {
+  val HIVE_PROVIDER = "hive"
+
   def isDatasourceTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get != "hive"
+    table.provider.isDefined && table.provider.get != HIVE_PROVIDER
   }
 
   /**

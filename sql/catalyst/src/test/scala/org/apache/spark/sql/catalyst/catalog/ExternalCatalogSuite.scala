@@ -270,6 +270,26 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(catalog.listTables("db2", "*1").toSet == Set("tbl1"))
   }
 
+  test("column names should be case-preserving and column nullability should be retained") {
+    val catalog = newBasicCatalog()
+    val tbl = CatalogTable(
+      identifier = TableIdentifier("tbl", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      schema = new StructType()
+        .add("HelLo", "int", nullable = false)
+        .add("WoRLd", "int", nullable = true),
+      provider = Some("hive"),
+      partitionColumnNames = Seq("WoRLd"),
+      bucketSpec = Some(BucketSpec(4, Seq("HelLo"), Nil)))
+    catalog.createTable(tbl, ignoreIfExists = false)
+
+    val readBack = catalog.getTable("db1", "tbl")
+    assert(readBack.schema == tbl.schema)
+    assert(readBack.partitionColumnNames == tbl.partitionColumnNames)
+    assert(readBack.bucketSpec == tbl.bucketSpec)
+  }
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------
