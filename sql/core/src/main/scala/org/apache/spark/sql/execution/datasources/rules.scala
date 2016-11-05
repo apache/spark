@@ -127,16 +127,21 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     }
   }
 
-  // TODO: do we really need to rename?
   def castAndRenameChildOutput(
       insert: InsertIntoTable,
       expectedOutput: Seq[Attribute]): InsertIntoTable = {
     val newChildOutput = expectedOutput.zip(insert.child.output).map {
       case (expected, actual) =>
-        if (expected.dataType.sameType(actual.dataType) && expected.name == actual.name) {
+        if (expected.dataType.sameType(actual.dataType) &&
+          expected.name == actual.name &&
+          expected.metadata == actual.metadata) {
           actual
         } else {
-          Alias(Cast(actual, expected.dataType), expected.name)()
+          // Renaming is needed for handling the following cases like
+          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
+          // 2) Target tables have column metadata
+          Alias(Cast(actual, expected.dataType), expected.name)(
+            explicitMetadata = Option(expected.metadata))
         }
     }
 
