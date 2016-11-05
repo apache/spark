@@ -104,3 +104,4 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String = "current_database"
 }
+
