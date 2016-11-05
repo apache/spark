@@ -47,6 +47,9 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 /** A helper object for writing FileFormat data out to a location. */
 object FileFormatWriter extends Logging {
 
+  /** Describes how output files should be placed in the filesystem. */
+  case class OutputSpec(outputPath: String, customPartitionLocations: Map[String, String])
+
   /** A shared job description for all the write tasks. */
   private class WriteJobDescription(
       val uuid: String,  // prevent collision between different (appending) write jobs
@@ -56,7 +59,8 @@ object FileFormatWriter extends Logging {
       val partitionColumns: Seq[Attribute],
       val nonPartitionColumns: Seq[Attribute],
       val bucketSpec: Option[BucketSpec],
-      val path: String)
+      val path: String,
+      val customPartitionLocations: Map[String, String])
     extends Serializable {
 
     assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ nonPartitionColumns),
@@ -83,7 +87,7 @@ object FileFormatWriter extends Logging {
       plan: LogicalPlan,
       fileFormat: FileFormat,
       committer: FileCommitProtocol,
-      outputPath: String,
+      outputSpec: OutputSpec,
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
@@ -93,7 +97,7 @@ object FileFormatWriter extends Logging {
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
     job.setOutputValueClass(classOf[InternalRow])
-    FileOutputFormat.setOutputPath(job, new Path(outputPath))
+    FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = plan.output.filterNot(partitionSet.contains)
@@ -111,7 +115,8 @@ object FileFormatWriter extends Logging {
       partitionColumns = partitionColumns,
       nonPartitionColumns = dataColumns,
       bucketSpec = bucketSpec,
-      path = outputPath)
+      path = outputSpec.outputPath,
+      customPartitionLocations = outputSpec.customPartitionLocations)
 
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       // This call shouldn't be put into the `try` block below because it only initializes and

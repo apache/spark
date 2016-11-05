@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.command.RunnableCommand
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
     staticPartitionKeys: TablePartitionSpec,
-    partitionLocationOverrides: Map[String, String],
+    customPartitionLocations: Map[String, String],
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
@@ -47,7 +47,7 @@ case class InsertIntoHadoopFsRelationCommand(
   extends RunnableCommand {
 
   println("static partition keys: " + staticPartitionKeys)
-  println("overrides: " + partitionLocationOverrides)
+  println("overrides: " + customPartitionLocations)
 
   override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -113,7 +113,8 @@ case class InsertIntoHadoopFsRelationCommand(
         plan = query,
         fileFormat = fileFormat,
         committer = committer,
-        outputPath = qualifiedOutputPath.toString,
+        outputSpec = FileFormatWriter.OutputSpec(
+          qualifiedOutputPath.toString, customPartitionLocations),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,

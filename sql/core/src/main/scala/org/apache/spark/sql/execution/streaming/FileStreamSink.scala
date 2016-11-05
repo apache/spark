@@ -80,7 +80,7 @@ class FileStreamSink(
         plan = data.logicalPlan,
         fileFormat = fileFormat,
         committer = committer,
-        outputPath = path,
+        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = None,
