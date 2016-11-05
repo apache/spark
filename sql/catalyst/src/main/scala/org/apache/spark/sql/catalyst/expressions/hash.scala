@@ -253,7 +253,7 @@ abstract class HashExpression[E] extends Expression {
     }
   }
 
-  override def eval(input: InternalRow): Any = {
+  override def eval(input: InternalRow = null): Any = {
     var hash = seed
     var i = 0
     val len = children.length
@@ -612,7 +612,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       $childrenHash""")
   }
 
-  override def eval(input: InternalRow): Int = {
+  override def eval(input: InternalRow = null): Int = {
     var hash = seed
     var i = 0
     val len = children.length
