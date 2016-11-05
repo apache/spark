@@ -281,8 +281,10 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
   /**
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
    * Developers should extend `addImpl` to customize the adding functionality.
+   * If you overload `add` directly you must ensure you dispatch to correct add implenentation (e.g.
+   * dataPropertyAdd or addImpl).
    */
-  final def add(v: IN): Unit = {
+  def add(v: IN): Unit = {
     if (metadata != null && metadata.dataProperty) {
       dataPropertyAdd(v)
     } else {
@@ -290,7 +292,7 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
     }
   }
 
-  protected def dataPropertyAdd(v: IN): Unit = {
+  protected final def dataPropertyAdd(v: IN): Unit = {
     // To allow the user to be able to access the current accumulated value from their process
     // worker side then we need to perform a "normal" add as well as the data property add.
     addImpl(v)
@@ -327,14 +329,17 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
    * When merging data property accumulators, the merge function must always be called on the local
    * (that is created driver side) accumulator with the accumulator passed in being created on the
    * workers.
+   *
+   * If you override merge you must ensure you dispatch to the correct merge function (e.g.
+   * `dataPropertyMerge` or `mergeImpl`).
    */
-  override final def merge(other: AccumulatorV2[IN, OUT]): Unit = {
+  override def merge(other: AccumulatorV2[IN, OUT]): Unit = {
     assert(isAtDriverSide)
     // Handle data property accumulators
     if (metadata != null && metadata.dataProperty) {
-      dataPropertyMerge _
+      dataPropertyMerge(other)
     } else {
-      mergeImpl _
+      mergeImpl(other)
     }
   }
 
@@ -506,6 +511,16 @@ class LongAccumulator extends DataAccumulatorV2[jl.Long, jl.Long] {
   }
 
   /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * Added for boxing.
+   * @since 2.1.0
+   */
+  def addImpl(v: Long): Unit = {
+    _sum += v
+    _count += 1
+  }
+
+  /**
    * Internally Adds v to the accumulator, i.e. increment sum by v and count by 1.
    * @since 2.0.0
    */
@@ -583,6 +598,16 @@ class DoubleAccumulator extends DataAccumulatorV2[jl.Double, jl.Double] {
     } else {
       addImpl(v)
     }
+  }
+
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * Added for boxing.
+   * @since 2.1.0
+   */
+  def addImpl(v: Double): Unit = {
+    _sum += v
+    _count += 1
   }
 
   /**
