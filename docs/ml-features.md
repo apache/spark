@@ -733,7 +733,7 @@ for more details on the API.
 
 `Interaction` is a `Transformer` which takes a vector/double columns, and generate a single vector column that contains multiplication results of all combination of each vector/double values.
 
-For example, if you have two vector type columns each of which contains three double type values as input columns, then you'll get a vector with 9 double type values as the output column.
+For example, if you have 2 vector type columns each of which has 3 dimensions as input columns, then then you'll get a 9-dimensional vector as the output column.
 
 **Examples**
 
