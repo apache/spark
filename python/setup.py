@@ -31,7 +31,7 @@ if sys.version_info < (2, 7):
 try:
     exec(open('pyspark/version.py').read())
 except IOError:
-    print("Failed to load PySpark version file for packaging you must be in Spark's python dir.",
+    print("Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
           file=sys.stderr)
     sys.exit(-1)
 VERSION = __version__
@@ -155,10 +155,6 @@ try:
             'License :: OSI Approved :: Apache Software License',
             'Programming Language :: Python :: 2.7',
             'Programming Language :: Python :: 3',
-            'Programming Language :: Python :: 3.0',
-            'Programming Language :: Python :: 3.1',
-            'Programming Language :: Python :: 3.2',
-            'Programming Language :: Python :: 3.3',
             'Programming Language :: Python :: 3.4',
             'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: Implementation :: CPython',
