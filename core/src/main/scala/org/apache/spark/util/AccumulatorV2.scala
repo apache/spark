@@ -512,6 +512,15 @@ class LongAccumulator extends DataAccumulatorV2[jl.Long, jl.Long] {
 
   /**
    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * Added for binary compatability.
+   * @since 2.1.0
+   */
+  override def add(v: jl.Long): Unit = {
+    super.add(v)
+  }
+
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
    * Added for boxing.
    * @since 2.1.0
    */
@@ -608,6 +617,15 @@ class DoubleAccumulator extends DataAccumulatorV2[jl.Double, jl.Double] {
   def addImpl(v: Double): Unit = {
     _sum += v
     _count += 1
+  }
+
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * Added for binary compatability.
+   * @since 2.1.0
+   */
+  override def add(v: jl.Double): Unit = {
+    super.add(v)
   }
 
   /**
