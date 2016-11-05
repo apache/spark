@@ -54,10 +54,10 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val acc = sc.longAccumulator(dataProperty = true)
 
     val a = sc.parallelize(1 to 20)
-    val b = a.foreach{x => acc.add(x); x}
+    val b = a.foreach { x => acc.add(x); x}
     acc.value should be (210)
     val c = a.map { x => acc.add(x); x}
-    c.foreach{x => acc.add(x)}
+    c.foreach { x => acc.add(x)}
     acc.value should be (3 * 210)
   }
 
@@ -331,7 +331,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val b = a.map { x => acc.add(x)}
     val futures = List(b, b).map(_.countAsync)
     futures.foreach(_.onComplete{_ => acc.value should be (210)})
-    futures.foreach{_.get()}
+    futures.foreach { _.get()}
     acc.value should be (210L)
   }
 
@@ -342,7 +342,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     val b = a.map { x => acc.add(x)}
     val futures = List(b, b).map(_.countAsync)
     futures.foreach(_.onComplete{_ => acc.value should be (210)})
-    futures.foreach{_.get()}
+    futures.foreach { _.get()}
     acc.value should be (210L)
   }
 
@@ -367,7 +367,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
       acc4.value should be (440L)
     })
     val futures = List(future1, future2)
-    futures.foreach{f => f.get()}
+    futures.foreach { f => f.get()}
     acc1.value should be (210L)
     acc2.value should be (1050L)
     acc3.value should be (420L)
