@@ -651,8 +651,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // from hive.
       logWarning(s"The table schema given by Hive metastore(${table.schema.simpleString}) is " +
         "different from the schema when this table was created by Spark SQL" +
-        s"(${schemaFromTableProps.simpleString}). We have to trust the table schema from Hive " +
-        "metastore which is not case preserving.")
+        s"(${schemaFromTableProps.simpleString}). We have to fall back to the table schema from " +
+        "Hive metastore which is not case preserving.")
       hiveTable
     }
   }
