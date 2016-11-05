@@ -232,8 +232,11 @@ private[csv] object CSVTypeCast {
       nullable: Boolean = true,
       options: CSVOptions = CSVOptions()): Any = {
 
-    val isNull = datum == options.nullValue || datum == null
-    if (nullable && isNull) {
+    // datum can be null if the number of fields found is less than the length of the schema
+    if (datum == options.nullValue || datum == null) {
+      if (!nullable) {
+        throw new RuntimeException("null value found but the field is not nullable.")
+      }
       null
     } else {
       castType match {

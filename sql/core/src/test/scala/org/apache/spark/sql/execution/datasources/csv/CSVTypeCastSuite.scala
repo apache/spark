@@ -90,14 +90,22 @@ class CSVTypeCastSuite extends SparkFunSuite {
       CSVTypeCast.castTo("-", StringType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
       CSVTypeCast.castTo(null, IntegerType, nullable = true, CSVOptions("nullValue", "-")))
+
+    // casting a null to not nullable field should throw an exception.
+    var message = intercept[RuntimeException] {
+      CSVTypeCast.castTo(null, IntegerType, nullable = false, CSVOptions("nullValue", "-"))
+    }.getMessage
+    assert(message.contains("null value found but the field is not nullable."))
+
+    message = intercept[RuntimeException] {
+      CSVTypeCast.castTo("-", StringType, nullable = false, CSVOptions("nullValue", "-"))
+    }.getMessage
+    assert(message.contains("null value found but the field is not nullable."))
   }
 
   test("String type should also respect `nullValue`") {
     assertNull(
       CSVTypeCast.castTo("", StringType, nullable = true, CSVOptions()))
-    assert(
-      CSVTypeCast.castTo("", StringType, nullable = false, CSVOptions()) ==
-        UTF8String.fromString(""))
 
     assert(
       CSVTypeCast.castTo("", StringType, nullable = true, CSVOptions("nullValue", "null")) ==
@@ -111,10 +119,10 @@ class CSVTypeCastSuite extends SparkFunSuite {
   }
 
   test("Throws exception for empty string with non null type") {
-    val exception = intercept[NumberFormatException]{
+    val exception = intercept[RuntimeException]{
       CSVTypeCast.castTo("", IntegerType, nullable = false, CSVOptions())
     }
-    assert(exception.getMessage.contains("For input string: \"\""))
+    assert(exception.getMessage.contains("null value found but the field is not nullable."))
   }
 
   test("Types are cast correctly") {
