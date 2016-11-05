@@ -49,7 +49,10 @@ object MimaExcludes {
       ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.getTaskOutputInfo"),
       // AccumulableInfo's constructor is internal and we added a new field
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.apply"),
-      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.copy")
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.AccumulableInfo.copy"),
+      // Merge and add haven't changed but MiMa still has issues
+      ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.util.AccumulatorV2.merge"),
+      ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.util.AccumulatorV2.add")
     ) ++ Seq(
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references"),
       // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
