@@ -231,8 +231,8 @@ private[csv] object CSVTypeCast {
       castType: DataType,
       nullable: Boolean = true,
       options: CSVOptions = CSVOptions()): Any = {
-
-    if (datum == null || nullable && datum == options.nullValue) {
+    val isNull = datum == options.nullValue || datum == null
+    if (nullable && isNull) {
       null
     } else {
       castType match {
