@@ -63,33 +63,30 @@ case class ReferenceToExpressions(result: Expression, children: Seq[Expression])
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childrenGen = children.map(_.genCode(ctx))
-    val (childrenVars, classChildrenVars) = childrenGen.zip(children).map {
+    val (classChildrenVars, initClassChildrenVars) = childrenGen.zip(children).map {
       case (childGen, child) =>
-        val childVar = LambdaVariable(childGen.value, childGen.isNull, child.dataType)
-
         // SPARK-18125: The children vars are local variables. If the result expression uses
         // splitExpression, those variables cannot be accessed so compilation fails.
         // To fix it, we use class variables to hold those local variables.
         val classChildVarName = ctx.freshName("classChildVar")
         val classChildVarIsNull = ctx.freshName("classChildVarIsNull")
-        ctx.addMutableState(ctx.javaType(childVar.dataType), classChildVarName, "")
+        ctx.addMutableState(ctx.javaType(child.dataType), classChildVarName, "")
         ctx.addMutableState("boolean", classChildVarIsNull, "")
+
         val classChildVar =
-          LambdaVariable(classChildVarName, classChildVarIsNull, childVar.dataType)
+          LambdaVariable(classChildVarName, classChildVarIsNull, child.dataType)
 
-        (childVar, classChildVar)
+        val initCode = s"${classChildVar.value} = ${childGen.value};\n" +
+          s"${classChildVar.isNull} = ${childGen.isNull};"
+
+        (classChildVar, initCode)
     }.unzip
-
-    val initClassChildrenVars = classChildrenVars.zipWithIndex.map { case (classChildrenVar, i) =>
-      s"${classChildrenVar.value} = ${childrenVars(i).value};\n" +
-        s"${classChildrenVar.isNull} = ${childrenVars(i).isNull};"
-    }.mkString("\n")
 
     val resultGen = result.transform {
       case b: BoundReference => classChildrenVars(b.ordinal)
     }.genCode(ctx)
 
-    ExprCode(code = childrenGen.map(_.code).mkString("\n") + "\n" + initClassChildrenVars +
+    ExprCode(code = childrenGen.map(_.code).mkString("\n") + initClassChildrenVars.mkString("\n") +
       resultGen.code, isNull = resultGen.isNull, value = resultGen.value)
   }
 }
