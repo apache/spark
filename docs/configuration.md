@@ -1664,7 +1664,7 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
-        <td><code>spark.ssl.<particular protocol>.port</code></td>
+        <td><code>spark.ssl.port</code></td>
         <td>0</td>
         <td>
             Port number to listen on for SSL connections. 
