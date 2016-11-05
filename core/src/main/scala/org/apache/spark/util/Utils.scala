@@ -2539,6 +2539,8 @@ private[util] object CallerContext extends Logging {
   val callerContextSupported: Boolean = {
     SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
       try {
+        // `Utils.classForName` will make `ReplSuite` fail with `ClassCircularityError` in
+        // master Maven build, so do not use it before resolving SPARK-17714.
         // scalastyle:off classforname
         Class.forName("org.apache.hadoop.ipc.CallerContext")
         Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
@@ -2604,6 +2606,8 @@ private[spark] class CallerContext(
   def setCurrentContext(): Unit = {
     if (CallerContext.callerContextSupported) {
       try {
+        // `Utils.classForName` will make `ReplSuite` fail with `ClassCircularityError` in
+        // master Maven build, so do not use it before resolving SPARK-17714.
         // scalastyle:off classforname
         val callerContext = Class.forName("org.apache.hadoop.ipc.CallerContext")
         val builder = Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
