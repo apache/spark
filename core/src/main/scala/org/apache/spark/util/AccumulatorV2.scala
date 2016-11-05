@@ -284,7 +284,7 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
    * If you overload `add` directly you must ensure you dispatch to correct add implenentation (e.g.
    * dataPropertyAdd or addImpl).
    */
-  def add(v: IN): Unit = {
+  override def add(v: IN): Unit = {
     if (metadata != null && metadata.dataProperty) {
       dataPropertyAdd(v)
     } else {
@@ -321,7 +321,7 @@ abstract class DataAccumulatorV2[IN, OUT] extends AccumulatorV2[IN, OUT] {
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
    * Developers should extend this to customize the adding functionality.
    */
-  protected[spark] def addImpl(v: IN)
+  protected def addImpl(v: IN)
 
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
