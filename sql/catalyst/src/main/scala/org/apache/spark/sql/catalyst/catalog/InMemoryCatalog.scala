@@ -64,12 +64,6 @@ class InMemoryCatalog(
     catalog(db).tables(table).partitions.contains(spec)
   }
 
-  private def requireTableExists(db: String, table: String): Unit = {
-    if (!tableExists(db, table)) {
-      throw new NoSuchTableException(db = db, table = table)
-    }
-  }
-
   private def requireTableNotExists(db: String, table: String): Unit = {
     if (tableExists(db, table)) {
       throw new TableAlreadyExistsException(db = db, table = table)

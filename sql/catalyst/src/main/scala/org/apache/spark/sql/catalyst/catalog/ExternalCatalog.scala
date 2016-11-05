@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
@@ -36,6 +36,12 @@ abstract class ExternalCatalog {
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
+    }
+  }
+
+  protected def requireTableExists(db: String, table: String): Unit = {
+    if (!tableExists(db, table)) {
+      throw new NoSuchTableException(db = db, table = table)
     }
   }
 
