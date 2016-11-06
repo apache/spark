@@ -41,20 +41,12 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * (from the newer mapreduce API, not the old mapred API).
  */
 private[spark]
-object SparkNewHadoopWriter extends Logging {
-
-  /** A shared job description for all the write tasks. */
-  private class WriteJobDescription[K, V](
-      val jobTrackerId: String,
-      val serializableHadoopConf: SerializableConfiguration,
-      val outputFormat: Class[_ <: OutputFormat[K, V]])
-    extends Serializable {
-  }
+object SparkHadoopMapReduceWriter extends Logging {
 
   /**
    * Basic work flow of this command is:
-   * 1. Driver side setup, including output committer initialization and data source specific
-   *    preparation work for the write job to be issued.
+   * 1. Driver side setup, prepare the data source and hadoop configuration for the write job to
+   *    be issued.
    * 2. Issues a write job consists of one or more executor side tasks, each of which writes all
    *    rows within an RDD partition.
    * 3. If no exception is thrown in a task, commits that task, otherwise aborts that task;  If any
@@ -63,30 +55,36 @@ object SparkNewHadoopWriter extends Logging {
    *    thrown during job commitment, also aborts the job.
    */
   def write[K, V: ClassTag](
-      sparkContext: SparkContext,
       rdd: RDD[(K, V)],
-      committer: HadoopMapReduceCommitProtocol,
-      stageId: Int,
       hadoopConf: Configuration): Unit = {
+    // Extract context and configuration from RDD.
+    val sparkContext = rdd.context
+    val stageId = rdd.id
+    val sparkConf = rdd.conf
     val conf = new SerializableConfiguration(hadoopConf)
 
     // Set up a job.
-    val jobTrackerId = SparkNewHadoopWriterUtils.createJobTrackerID(new Date())
+    val jobTrackerId = SparkHadoopWriterUtils.createJobTrackerID(new Date())
     val jobAttemptId = new TaskAttemptID(jobTrackerId, stageId, TaskType.MAP, 0, 0)
     val jobContext = new TaskAttemptContextImpl(conf.value, jobAttemptId)
     val format = jobContext.getOutputFormatClass
 
-    if (SparkNewHadoopWriterUtils.isOutputSpecValidationEnabled(rdd.conf)) {
+    if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(sparkConf)) {
       // FileOutputFormat ignores the filesystem parameter
       val jobFormat = format.newInstance
       jobFormat.checkOutputSpecs(jobContext)
     }
 
+    val committer = FileCommitProtocol.instantiate(
+      className = classOf[HadoopMapReduceCommitProtocol].getName,
+      jobId = stageId.toString,
+      outputPath = conf.value.get("mapred.output.dir"),
+      isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
     committer.setupJob(jobContext)
 
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
-    if (SparkNewHadoopWriterUtils.isSpeculationEnabled(rdd.conf) && committer.isDirectOutput) {
+    if (SparkHadoopWriterUtils.isSpeculationEnabled(sparkConf) && committer.isDirectOutput) {
       val warningMessage =
         s"$committer may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
@@ -95,22 +93,18 @@ object SparkNewHadoopWriter extends Logging {
       logWarning(warningMessage)
     }
 
-    // Generate shared job description.
-    val description = new WriteJobDescription[K, V](
-      jobTrackerId = jobTrackerId,
-      serializableHadoopConf = conf,
-      outputFormat = format.asInstanceOf[Class[OutputFormat[K, V]]])
-
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
         executeTask(
           context = context,
-          description = description,
+          jobTrackerId = jobTrackerId,
           sparkStageId = context.stageId,
           sparkPartitionId = context.partitionId,
           sparkAttemptNumber = context.attemptNumber,
           committer = committer,
+          hadoopConf = conf.value,
+          outputFormat = format.asInstanceOf[Class[OutputFormat[K, V]]],
           iterator = iter)
       })
 
@@ -126,25 +120,25 @@ object SparkNewHadoopWriter extends Logging {
   /** Write a RDD partition out in a single Spark task. */
   private def executeTask[K, V: ClassTag](
       context: TaskContext,
-      description: WriteJobDescription[K, V],
+      jobTrackerId: String,
       sparkStageId: Int,
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
+      hadoopConf: Configuration,
+      outputFormat: Class[_ <: OutputFormat[K, V]],
       iterator: Iterator[(K, V)]): Unit = {
-    val conf = description.serializableHadoopConf.value
-
     // Set up a task.
-    val attemptId = new TaskAttemptID(description.jobTrackerId, sparkStageId, TaskType.REDUCE,
+    val attemptId = new TaskAttemptID(jobTrackerId, sparkStageId, TaskType.REDUCE,
       sparkPartitionId, sparkAttemptNumber)
-    val taskContext = new TaskAttemptContextImpl(conf, attemptId)
+    val taskContext = new TaskAttemptContextImpl(hadoopConf, attemptId)
     committer.setupTask(taskContext)
 
     val outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)] =
-      SparkNewHadoopWriterUtils.initHadoopOutputMetrics(context)
+      SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
 
     // Initiate the writer.
-    val taskFormat = description.outputFormat.newInstance
+    val taskFormat = outputFormat.newInstance
     val writer = taskFormat.getRecordWriter(taskContext)
       .asInstanceOf[RecordWriter[K, V]]
     require(writer != null, "Unable to obtain RecordWriter")
@@ -158,7 +152,7 @@ object SparkNewHadoopWriter extends Logging {
           writer.write(pair._1, pair._2)
 
           // Update bytes written metric every few records
-          SparkNewHadoopWriterUtils.maybeUpdateOutputMetrics(
+          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(
             outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
@@ -181,7 +175,7 @@ object SparkNewHadoopWriter extends Logging {
 }
 
 private[spark]
-object SparkNewHadoopWriterUtils {
+object SparkHadoopWriterUtils {
   def createJobID(time: Date, id: Int): JobID = {
     val jobtrackerID = createJobTrackerID(time)
     new JobID(jobtrackerID, id)

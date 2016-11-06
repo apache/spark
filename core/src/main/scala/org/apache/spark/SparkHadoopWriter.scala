@@ -27,7 +27,7 @@ import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.SparkNewHadoopWriterUtils
+import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
 import org.apache.spark.util.SerializableJobConf
@@ -153,7 +153,7 @@ class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
     splitID = splitid
     attemptID = attemptid
 
-    jID = new SerializableWritable[JobID](SparkNewHadoopWriterUtils.createJobID(now, jobid))
+    jID = new SerializableWritable[JobID](SparkHadoopWriterUtils.createJobID(now, jobid))
     taID = new SerializableWritable[TaskAttemptID](
         new TaskAttemptID(new TaskID(jID.value, TaskType.MAP, splitID), attemptID))
   }

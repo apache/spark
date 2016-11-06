@@ -37,7 +37,7 @@ import org.apache.hadoop.mapreduce.TaskType
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.SparkNewHadoopWriterUtils
+import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -143,7 +143,7 @@ private[hive] class SparkHiveWriterContainer(
     splitID = splitId
     attemptID = attemptId
 
-    jID = new SerializableWritable[JobID](SparkNewHadoopWriterUtils.createJobID(now, jobId))
+    jID = new SerializableWritable[JobID](SparkHadoopWriterUtils.createJobID(now, jobId))
     taID = new SerializableWritable[TaskAttemptID](
       new TaskAttemptID(new TaskID(jID.value, TaskType.MAP, splitID), attemptID))
   }

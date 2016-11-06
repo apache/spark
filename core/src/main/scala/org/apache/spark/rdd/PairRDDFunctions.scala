@@ -38,7 +38,7 @@ import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
-import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol, SparkNewHadoopWriter, SparkNewHadoopWriterUtils}
+import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol, SparkHadoopMapReduceWriter, SparkHadoopWriterUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
@@ -1058,7 +1058,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     }
 
     FileOutputFormat.setOutputPath(hadoopConf,
-      SparkNewHadoopWriterUtils.createPathFromString(path, hadoopConf))
+      SparkHadoopWriterUtils.createPathFromString(path, hadoopConf))
     saveAsHadoopDataset(hadoopConf)
   }
 
@@ -1074,19 +1074,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * result of using direct output committer with speculation enabled.
    */
   def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = self.withScope {
-    val stageId = self.id
-
-    val committer = FileCommitProtocol.instantiate(
-      className = classOf[HadoopMapReduceCommitProtocol].getName,
-      jobId = stageId.toString,
-      outputPath = conf.get("mapred.output.dir"),
-      isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
-
-    SparkNewHadoopWriter.write(
-      sparkContext = self.context,
+    SparkHadoopMapReduceWriter.write(
       rdd = self,
-      committer = committer,
-      stageId = stageId,
       hadoopConf = conf)
   }
 
@@ -1116,7 +1105,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
 
-    if (SparkNewHadoopWriterUtils.isOutputSpecValidationEnabled(self.conf)) {
+    if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(self.conf)) {
       // FileOutputFormat ignores the filesystem parameter
       val ignoredFs = FileSystem.get(hadoopConf)
       hadoopConf.getOutputFormat.checkOutputSpecs(ignoredFs, hadoopConf)
@@ -1131,7 +1120,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
 
       val outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)] =
-        SparkNewHadoopWriterUtils.initHadoopOutputMetrics(context)
+        SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
 
       writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
@@ -1143,7 +1132,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
 
           // Update bytes written metric every few records
-          SparkNewHadoopWriterUtils.maybeUpdateOutputMetrics(
+          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(
             outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
