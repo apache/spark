@@ -37,6 +37,32 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
   lazy val nulStr = Literal(null, StringType)
   lazy val r1 = LocalRelation(a, b, c)
 
+  test("rollupExprs") {
+    val testRollup = (exprs: Seq[Expression], rollup: Seq[Seq[Expression]]) => {
+      val result = SimpleAnalyzer.ResolveGroupingAnalytics.rollupExprs(exprs)
+      assert(result.sortBy(_.hashCode) == rollup.sortBy(_.hashCode))
+    }
+
+    testRollup(Seq(a, b, c), Seq(Seq(), Seq(a), Seq(a, b), Seq(a, b, c)))
+    testRollup(Seq(c, b, a), Seq(Seq(), Seq(c), Seq(c, b), Seq(c, b, a)))
+    testRollup(Seq(a), Seq(Seq(), Seq(a)))
+    testRollup(Seq(), Seq(Seq()))
+  }
+
+  test("cubeExprs") {
+    val testCube = (exprs: Seq[Expression], cube: Seq[Seq[Expression]]) => {
+      val result = SimpleAnalyzer.ResolveGroupingAnalytics.cubeExprs(exprs)
+      assert(result.sortBy(_.hashCode) == cube.sortBy(_.hashCode))
+    }
+
+    testCube(Seq(a, b, c),
+      Seq(Seq(), Seq(a), Seq(b), Seq(c), Seq(a, b), Seq(a, c), Seq(b, c), Seq(a, b, c)))
+    testCube(Seq(c, b, a),
+      Seq(Seq(), Seq(a), Seq(b), Seq(c), Seq(c, b), Seq(c, a), Seq(b, a), Seq(c, b, a)))
+    testCube(Seq(a), Seq(Seq(), Seq(a)))
+    testCube(Seq(), Seq(Seq()))
+  }
+
   test("grouping sets") {
     val originalPlan = GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
       Seq(unresolved_a, unresolved_b), r1,

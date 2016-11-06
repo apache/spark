@@ -219,15 +219,7 @@ class Analyzer(
      *  We need to get all of its subsets for the rule described above, the subset is
      *  represented as sequence of expressions.
      */
-    def rollupExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = {
-      val buffer = ArrayBuffer.empty[Seq[Expression]]
-      var current = exprs
-      while (current.nonEmpty) {
-        buffer += current
-        current = current.init
-      }
-      buffer += Seq.empty
-    }
+    def rollupExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.inits.toSeq
 
     /*
      *  GROUP BY a, b, c WITH CUBE
