@@ -1,0 +1,70 @@
+# SparkR CRAN Release
+
+To release SparkR as a package to CRAN, we would use the `devtools` package. Please work with the
+`dev@spark.apache.org` community and R package maintainer on this.
+
+### Release
+
+First, check that the `Version:` field in the `pkg/DESCRIPTION` file is updated. Also, check for stale file not under source control.
+
+To upload a release, we would need to update the `cran-comments.md`. This should generally contain the results from running the `check-cran.sh` script along with comments on status of all `WARNING` (should not be any) or `NOTE`. As a part of `check-cran.sh` and the release process, the vignettes is build - make sure `SPARK_HOME` is set and Spark jars are accessible.
+
+Once everything is in place, run in R under the `SPARK_HOME/R` directory:
+
+```R
+paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); devtools::release(); .libPaths(paths)
+```
+
+For more information please refer to http://r-pkgs.had.co.nz/release.html#release-check
+
+### Testing: build package manually
+
+To build package manually such as to inspect the resulting `.tar.gz` file content, we would also use the `devtools` package.
+
+Source package is what get released to CRAN. CRAN would then build platform-specific binary packages from the source package.
+
+#### Build source package
+
+To build source package locally without releasing to CRAN, run in R under the `SPARK_HOME/R` directory:
+
+```R
+paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); devtools::build("pkg"); .libPaths(paths)
+```
+
+(http://r-pkgs.had.co.nz/vignettes.html#vignette-workflow-2)
+
+For example, this should be the content of the source package:
+
+```sh
+DESCRIPTION	R		inst		tests
+NAMESPACE	build		man		vignettes
+
+inst/doc/
+sparkr-vignettes.html
+sparkr-vignettes.Rmd
+sparkr-vignettes.Rman
+
+build/
+vignette.rds
+
+man/
+ *.Rd files...
+
+vignettes/
+sparkr-vignettes.Rmd
+```
+
+#### Build binary package
+
+To build binary package locally, run in R under the `SPARK_HOME/R` directory:
+
+```R
+paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); devtools::build("pkg", binary = TRUE); .libPaths(paths)
+```
+
+For example, this should be the content of the binary package:
+
+```sh
+DESCRIPTION	Meta		R		html		tests
+INDEX		NAMESPACE	help		profile		worker
+```
