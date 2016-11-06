@@ -34,11 +34,6 @@ if ! hash pip 2>/dev/null; then
   exit 0
 fi
 
-if [ -d ~/.cache/pip/wheels/ ]; then
-  echo "Cleaning up pip wheel cache so we install the fresh package"
-  rm -rf ~/.cache/pip/wheels/
-fi
-
 # Figure out which Python execs we should test pip installation with
 PYTHON_EXECS=()
 if hash python 2>/dev/null; then
@@ -76,7 +71,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     exit -1
   fi
   # Do the actual installation
-  pip install --upgrade --force-reinstall *.tar.gz
+  pip install --upgrade --no-cache-dir --force-reinstall *.tar.gz
 
   cd /
 
