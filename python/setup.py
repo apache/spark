@@ -83,15 +83,6 @@ try:
         if not os.path.exists(JARS_TARGET):
             print("To build packaging must be in the python directory under the SPARK_HOME.",
                   file=sys.stderr)
-        # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
-        # find it where expected. The rest of the files aren't copied because they are accessed
-        # using Python imports instead which will be resolved correctly.
-        try:
-            os.makedirs("pyspark/python/pyspark")
-        except OSError:
-            # Don't worry if the directory already exists.
-            True
-        copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if not os.path.isdir(SCRIPTS_TARGET):
         print("You must first create a source dist and install that source dist.", file=sys.stderr)
