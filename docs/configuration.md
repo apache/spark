@@ -1669,6 +1669,7 @@ Apart from these, the following properties are also available, and may be useful
         <td>
             Port number to listen on for SSL connections. 
             Default value of 0 means the port will be determined automatically.
+            Attention that the port should be separated for each particular protocols.
         </td>
     </tr>
     <tr>
