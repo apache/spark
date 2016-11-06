@@ -793,8 +793,12 @@ class SchedulerJob(BaseJob):
             self.logger.info("Examining DAG run {}".format(run))
             # don't consider runs that are executed in the future
             if run.execution_date > datetime.now():
-                self.logging.error("Execution date is in future: {}"
-                                   .format(run.execution_date))
+                self.logger.error("Execution date is in future: {}"
+                                  .format(run.execution_date))
+                continue
+
+            if len(active_dag_runs) >= dag.max_active_runs:
+                self.logger.info("Active dag runs > max_active_run.")
                 continue
 
             # skip backfill dagruns for now as long as they are not really scheduled
