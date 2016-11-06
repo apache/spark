@@ -1,1 +1,1 @@
-pyspark/shell.py
+./python/pyspark/shell.py
