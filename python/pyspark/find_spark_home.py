@@ -67,7 +67,7 @@ def _find_spark_home():
     try:
         return next(path for path in paths if is_spark_home(path))
     except StopIteration:
-        print("Could not find valid SPARK_HOME while searching %s" % paths, file=sys.stderr)
+        print("Could not find valid SPARK_HOME while searching %s".format(paths), file=sys.stderr)
 
 if __name__ == "__main__":
     print(_find_spark_home())

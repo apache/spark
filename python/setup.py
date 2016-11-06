@@ -38,17 +38,17 @@ VERSION = __version__
 # A temporary path so we can access above the Python project root and fetch scripts and jars we need
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
-JARS_PATH = "%s/assembly/target/scala-2.11/jars/" % SPARK_HOME
+JARS_PATH = os.path.join(SPARK_HOME, "assembly/target/scala-2.11/jars/")
 
 # Use the release jars path if we are in release mode.
 if (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1):
-    JARS_PATH = "%s/jars/" % SPARK_HOME
+    JARS_PATH = os.path.join(SPARK_HOME, "jars")
 
-EXAMPLES_PATH = "%s/examples/src/main/python" % SPARK_HOME
-SCRIPTS_PATH = "%s/bin" % SPARK_HOME
-SCRIPTS_TARGET = "%s/bin" % TEMP_PATH
-JARS_TARGET = "%s/jars" % TEMP_PATH
-EXAMPLES_TARGET = "%s/examples" % TEMP_PATH
+EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
+SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
+SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
+JARS_TARGET = os.path.join(TEMP_PATH, "jars")
+EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 # This is important because we only want to build the symlink farm while under Spark otherwise we
@@ -62,7 +62,8 @@ if (in_spark):
     try:
         os.mkdir(TEMP_PATH)
     except:
-        print("Temp path for symlink to parent already exists %s" % TEMP_PATH, file=sys.stderr)
+        print("Temp path for symlink to parent already exists {0}".format(TEMP_PATH),
+              file=sys.stderr)
         exit(-1)
 
 try:
@@ -168,11 +169,11 @@ finally:
     if (in_spark):
         # Depending on cleaning up the symlink farm or copied version
         if getattr(os, "symlink", None) is not None:
-            os.remove("%s/jars" % TEMP_PATH)
-            os.remove("%s/bin" % TEMP_PATH)
-            os.remove("%s/examples" % TEMP_PATH)
+            os.remove(os.path.join(TEMP_PATH, "jars"))
+            os.remove(os.path.join(TEMP_PATH, "bin"))
+            os.remove(os.path.join(TEMP_PATH, "examples"))
         else:
-            rmtree("%s/jars" % TEMP_PATH)
-            rmtree("%s/bin" % TEMP_PATH)
-            rmtree("%s/examples" % TEMP_PATH)
+            rmtree(os.path.join(TEMP_PATH, "jars"))
+            rmtree(os.path.join(TEMP_PATH, "bin"))
+            rmtree(os.path.join(TEMP_PATH, "examples"))
         os.rmdir(TEMP_PATH)

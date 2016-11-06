@@ -29,7 +29,7 @@ if __name__ == "__main__":
     rdd = sc.parallelize(range(100), 10)
     value = rdd.reduce(lambda x, y: x + y)
     if (value != 4950):
-        print("Value %d did not match expected value." % value, file=sys.stderr)
+        print("Value {0} did not match expected value.".format(value), file=sys.stderr)
         sys.exit(-1)
     print("Successfully ran pip sanity check")
 
