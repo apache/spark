@@ -120,12 +120,11 @@ object RowEncoder {
         inputObject :: Nil)
 
     case t @ ArrayType(et, cn) =>
-      val cls = inputObject.dataType.asInstanceOf[ObjectType].cls
       et match {
         case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
           StaticInvoke(
             classOf[ArrayData],
-            ObjectType(classOf[ArrayData]),
+            t,
             "toArrayData",
             inputObject :: Nil)
         case _ => MapObjects(

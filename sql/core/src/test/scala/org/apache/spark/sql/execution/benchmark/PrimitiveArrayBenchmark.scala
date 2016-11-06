@@ -27,7 +27,7 @@ import org.apache.spark.util.Benchmark
  * Benchmark [[PrimitiveArray]] for DataFrame and Dataset program using primitive array
  * To run this:
  *  1. replace ignore(...) with test(...)
- *  2. build/sbt "sql/test-only *benchmark.PrimitiveArrayDataBenchmark"
+ *  2. build/sbt "sql/test-only *benchmark.PrimitiveArrayBenchmark"
  *
  * Benchmarks in this file are skipped in normal builds.
  */
@@ -41,22 +41,23 @@ class PrimitiveArrayBenchmark extends BenchmarkBase {
     val sc = sparkSession.sparkContext
     val primitiveIntArray = Array.fill[Int](count)(65535)
     val dsInt = sc.parallelize(Seq(primitiveIntArray), 1).toDS
-    dsInt.count
+    dsInt.count  // force to build dataset
     val intArray = { i: Int =>
       var n = 0
+      var len = 0
       while (n < iters) {
-        dsInt.map(e => e).collect
+        len += dsInt.map(e => e).queryExecution.toRdd.collect.length
         n += 1
       }
     }
     val primitiveDoubleArray = Array.fill[Double](count)(65535.0)
     val dsDouble = sc.parallelize(Seq(primitiveDoubleArray), 1).toDS
-    dsDouble.count
+    dsDouble.count  // force to build dataset
     val doubleArray = { i: Int =>
       var n = 0
-      var sum = 0L
+      var len = 0
       while (n < iters) {
-        dsDouble.map(e => e).collect
+        len += dsDouble.map(e => e).queryExecution.toRdd.collect.length
         n += 1
       }
     }
@@ -70,8 +71,8 @@ class PrimitiveArrayBenchmark extends BenchmarkBase {
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Write an array in Dataset:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Int                                            280 /  302         30.0          33.4       1.0X
-    Double                                         503 /  519         16.7          60.0       0.6X
+    Int                                            352 /  401         23.8          42.0       1.0X
+    Double                                         821 /  885         10.2          97.9       0.4X
     */
   }
 

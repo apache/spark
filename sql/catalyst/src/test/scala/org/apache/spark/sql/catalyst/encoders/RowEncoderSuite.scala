@@ -191,7 +191,7 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(encoder.serializer.head.nullable == false)
   }
 
-  test("RowEncoder should support a primitive array") {
+  test("RowEncoder should support primitive arrays") {
     val schema = new StructType()
       .add("booleanPrimitiveArray", ArrayType(BooleanType, false))
       .add("bytePrimitiveArray", ArrayType(ByteType, false))
