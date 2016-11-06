@@ -605,7 +605,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       val childGen = child.genCode(ctx)
       childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, childHash, ctx)
-      } + s"${ev.value} = (31 * ${ev.value}) + $childHash;"
+      } + s"${ev.value} = (31 * ${ev.value}) + $childHash;" +
         s"\n$childHash = 0;"
     })
 
