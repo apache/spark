@@ -34,7 +34,8 @@ def _find_spark_home():
     def is_spark_home(path):
         """Takes a path and returns true if the provided path could be a reasonable SPARK_HOME"""
         return (os.path.isfile(os.path.join(path, "bin/spark-submit")) and
-                (os.path.isdir(os.path.join(path, "jars"))))
+                (os.path.isdir(os.path.join(path, "jars")) or
+                 os.path.isdir(os.path.join(path, "assembly"))))
 
     paths = ["../", os.path.join(os.path.dirname(sys.argv[0]), "../")]
 
@@ -42,14 +43,20 @@ def _find_spark_home():
     if sys.version < "3":
         import imp
         try:
-            paths.append(imp.find_module("pyspark")[1])
+            module_home = imp.find_module("pyspark")[1]
+            paths.append(module_home)
+            # If we are installed in edit mode also look two dirs up
+            paths.append(os.path.join(module_home, "../../"))
         except ImportError:
             # Not pip installed no worries
             True
     else:
         from importlib.util import find_spec
         try:
-            paths.append(os.path.dirname(find_spec("pyspark").origin))
+            module_home = os.path.dirname(find_spec("pyspark").origin)
+            paths.append(module_home)
+            # If we are installed in edit mode also look two dirs up
+            paths.append(os.path.join(module_home, "../../"))
         except ImportError:
             # Not pip installed no worries
             True
