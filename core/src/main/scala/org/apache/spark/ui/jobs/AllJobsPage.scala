@@ -461,6 +461,7 @@ private[ui] class JobDataSource(
     val ordering: Ordering[JobTableRowData] = sortColumn match {
       case "Job Id" | "Job Id (Job Group)" => Ordering.by(_.jobData.jobId)
       case "Description" => Ordering.by(x => (x.lastStageDescription, x.lastStageName))
+      case "User" => Ordering.by(_.jobData.user)
       case "Submitted" => Ordering.by(_.submissionTime)
       case "Duration" => Ordering.by(_.duration)
       case "Stages: Succeeded/Total" | "Tasks (for all stages): Succeeded/Total" =>
