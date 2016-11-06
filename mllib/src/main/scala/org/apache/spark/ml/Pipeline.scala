@@ -169,7 +169,7 @@ class Pipeline @Since("1.4.0") (
   override def copy(extra: ParamMap): Pipeline = {
     val map = extractParamMap(extra)
     val newStages = map(stages).map(_.copy(extra))
-    new Pipeline().setStages(newStages)
+    new Pipeline(uid).setStages(newStages)
   }
 
   @Since("1.2.0")
