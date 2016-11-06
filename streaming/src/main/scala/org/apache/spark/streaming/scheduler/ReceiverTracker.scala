@@ -106,7 +106,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   private val receiverInputStreams = ssc.graph.getReceiverInputStreams()
   private val receiverInputStreamIds = receiverInputStreams.map { _.id }
-  private var receivedBlockTracker: ReceivedBlockTracker = null
+  private val receivedBlockTracker = new ReceivedBlockTracker(
+    ssc.sparkContext.conf,
+    ssc.sparkContext.hadoopConfiguration,
+    receiverInputStreamIds,
+    ssc.scheduler.clock,
+    ssc.isCheckpointPresent,
+    Option(ssc.checkpointDir)
+  )
   private val listenerBus = ssc.scheduler.listenerBus
 
   /** Enumeration to identify current state of the ReceiverTracker */
@@ -146,18 +153,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     if (isTrackerStarted) {
       throw new SparkException("ReceiverTracker already started")
     }
-
-    require(endpoint == null)
-    require(receivedBlockTracker == null)
-
-    receivedBlockTracker = new ReceivedBlockTracker(
-      ssc.sparkContext.conf,
-      ssc.sparkContext.hadoopConfiguration,
-      receiverInputStreamIds,
-      ssc.scheduler.clock,
-      ssc.isCheckpointPresent,
-      Option(ssc.checkpointDir)
-    )
 
     if (!receiverInputStreams.isEmpty) {
       endpoint = ssc.env.rpcEnv.setupEndpoint(
@@ -200,7 +195,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       ssc.env.rpcEnv.stop(endpoint)
       endpoint = null
       receivedBlockTracker.stop()
-      receivedBlockTracker = null
       logInfo("ReceiverTracker stopped")
       trackerState = Stopped
     }
