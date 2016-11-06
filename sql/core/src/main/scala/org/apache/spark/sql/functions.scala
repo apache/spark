@@ -1117,7 +1117,8 @@ object functions {
   def not(e: Column): Column = !e
 
   /**
-   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   * Generate a random column with independent and identically distributed (i.i.d.) samples
+   * from U[0.0, 1.0].
    *
    * Note that this is indeterministic when data partitions are not fixed.
    *
@@ -1127,7 +1128,8 @@ object functions {
   def rand(seed: Long): Column = withExpr { Rand(seed) }
 
   /**
-   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   * Generate a random column with independent and identically distributed (i.i.d.) samples
+   * from U[0.0, 1.0].
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1135,7 +1137,8 @@ object functions {
   def rand(): Column = rand(Utils.random.nextLong)
 
   /**
-   * Generate a column with i.i.d. samples from the standard normal distribution.
+   * Generate a column with independent and identically distributed (i.i.d.) samples from
+   * the standard normal distribution.
    *
    * Note that this is indeterministic when data partitions are not fixed.
    *
@@ -1145,7 +1148,8 @@ object functions {
   def randn(seed: Long): Column = withExpr { Randn(seed) }
 
   /**
-   * Generate a column with i.i.d. samples from the standard normal distribution.
+   * Generate a column with independent and identically distributed (i.i.d.) samples from
+   * the standard normal distribution.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1153,7 +1157,7 @@ object functions {
   def randn(): Column = randn(Utils.random.nextLong)
 
   /**
-   * Partition ID of the Spark task.
+   * Partition ID.
    *
    * Note that this is indeterministic because it depends on data partitioning and task scheduling.
    *
@@ -1877,8 +1881,8 @@ object functions {
   def shiftLeft(e: Column, numBits: Int): Column = withExpr { ShiftLeft(e.expr, lit(numBits).expr) }
 
   /**
-   * Shift the given value numBits right. If the given value is a long value, it will return
-   * a long value else it will return an integer value.
+   * (Signed) shift the given value numBits right. If the given value is a long value, it will
+   * return a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -2203,7 +2207,7 @@ object functions {
    * Locate the position of the first occurrence of substr column in the given string.
    * Returns null if either of the arguments are null.
    *
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2238,7 +2242,7 @@ object functions {
 
   /**
    * Locate the position of the first occurrence of substr.
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2666,7 +2670,8 @@ object functions {
   }
 
   /**
-   * Assumes given timestamp is UTC and converts to given timezone.
+   * Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
+   * that corresponds to the same time of day in the given timezone.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2675,7 +2680,8 @@ object functions {
   }
 
   /**
-   * Assumes given timestamp is in given timezone and converts to UTC.
+   * Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
+   * another timestamp that corresponds to the same time of day in UTC.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2883,10 +2889,10 @@ object functions {
    * (Scala-specific) Parses a column containing a JSON string into a [[StructType]] with the
    * specified schema. Returns `null`, in the case of an unparseable string.
    *
+   * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
-   * @param e a string column containing JSON data.
    *
    * @group collection_funcs
    * @since 2.1.0
@@ -2936,6 +2942,48 @@ object functions {
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column =
     from_json(e, DataType.fromJson(schema).asInstanceOf[StructType], options)
 
+
+  /**
+   * (Scala-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a struct column.
+   * @param options options to control how the struct column is converted into a json string.
+   *                accepts the same options and the json data source.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column, options: Map[String, String]): Column = withExpr {
+    StructToJson(options, e.expr)
+  }
+
+  /**
+   * (Java-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a struct column.
+   * @param options options to control how the struct column is converted into a json string.
+   *                accepts the same options and the json data source.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column, options: java.util.Map[String, String]): Column =
+    to_json(e, options.asScala.toMap)
+
+  /**
+   * Converts a column containing a [[StructType]] into a JSON string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a struct column.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column): Column =
+    to_json(e, Map.empty[String, String])
+
   /**
    * Returns length of array or map.
    *
@@ -2954,7 +3002,7 @@ object functions {
   def sort_array(e: Column): Column = sort_array(e, asc = true)
 
   /**
-   * Sorts the input array for the given column in ascending / descending order,
+   * Sorts the input array for the given column in ascending or descending order,
    * according to the natural ordering of the array elements.
    *
    * @group collection_funcs

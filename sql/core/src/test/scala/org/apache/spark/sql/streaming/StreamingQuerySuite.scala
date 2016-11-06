@@ -290,7 +290,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     // A StreamingQueryListener that gets the query status after the first completed trigger
     val listener = new StreamingQueryListener {
       @volatile var firstStatus: StreamingQueryStatus = null
-      override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = { }
+      @volatile var queryStartedEvent = 0
+      override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = {
+        queryStartedEvent += 1
+      }
       override def onQueryProgress(queryProgress: QueryProgressEvent): Unit = {
        if (firstStatus == null) firstStatus = queryProgress.queryStatus
       }
@@ -303,6 +306,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       q.processAllAvailable()
       eventually(timeout(streamingTimeout)) {
         assert(listener.firstStatus != null)
+        // test if QueryStartedEvent callback is called for only once
+        assert(listener.queryStartedEvent === 1)
       }
       listener.firstStatus
     } finally {

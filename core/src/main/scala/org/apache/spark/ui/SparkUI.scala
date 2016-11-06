@@ -90,15 +90,8 @@ private[spark] class SparkUI private (
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop() {
     super.stop()
-    logInfo("Stopped Spark web UI at %s".format(appUIAddress))
+    logInfo(s"Stopped Spark web UI at $webUrl")
   }
-
-  /**
-   * Return the application UI host:port. This does not include the scheme (http://).
-   */
-  private[spark] def appUIHostPort = publicHostName + ":" + boundPort
-
-  private[spark] def appUIAddress = s"http://$appUIHostPort"
 
   def getSparkUI(appId: String): Option[SparkUI] = {
     if (appId == this.appId) Some(this) else None
@@ -132,7 +125,7 @@ private[spark] class SparkUI private (
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   extends WebUITab(parent, prefix) {
 
-  def appName: String = parent.getAppName
+  def appName: String = parent.appName
 
 }
 

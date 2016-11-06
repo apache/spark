@@ -56,6 +56,10 @@ private[r] object RWrappers extends MLReader[Object] {
         ALSWrapper.load(path)
       case "org.apache.spark.ml.r.LogisticRegressionWrapper" =>
         LogisticRegressionWrapper.load(path)
+      case "org.apache.spark.ml.r.RandomForestRegressorWrapper" =>
+        RandomForestRegressorWrapper.load(path)
+      case "org.apache.spark.ml.r.RandomForestClassifierWrapper" =>
+        RandomForestClassifierWrapper.load(path)
       case _ =>
         throw new SparkException(s"SparkR read.ml does not support load $className")
     }

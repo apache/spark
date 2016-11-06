@@ -264,7 +264,9 @@ object QuantileSummaries {
     res.prepend(head)
     // If necessary, add the minimum element:
     val currHead = currentSamples.head
-    if (currHead.value < head.value) {
+    // don't add the minimum element if `currentSamples` has only one element (both `currHead` and
+    // `head` point to the same element)
+    if (currHead.value <= head.value && currentSamples.length > 1) {
       res.prepend(currentSamples.head)
     }
     res.toArray
