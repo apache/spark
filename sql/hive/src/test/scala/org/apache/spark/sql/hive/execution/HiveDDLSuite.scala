@@ -1154,6 +1154,12 @@ class HiveDDLSuite
       // Hive's behaviour or stick with our existing behaviour later.
       sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
       assert(spark.table("partTable").count() == data.count())
+
+      // throw exception if the column in partition spec is not a partition column.
+      val e = intercept[AnalysisException] {
+        sql("TRUNCATE TABLE partTable PARTITION (unknown=1)")
+      }
+      assert(e.message.contains("unknown is not a valid partition column"))
     }
   }
 }

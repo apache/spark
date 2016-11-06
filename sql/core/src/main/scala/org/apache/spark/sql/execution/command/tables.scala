@@ -346,6 +346,8 @@ case class TruncateTableCommand(
       if (table.partitionColumnNames.isEmpty) {
         Seq(table.storage.locationUri)
       } else {
+        // Here we diverge from Hive when the given partition spec contains all partition columns
+        // but no partition is matched: Hive will throw an exception and we just do nothing.
         val normalizedSpec = partitionSpec.map { spec =>
           PartitioningUtils.normalizePartitionSpec(
             spec,
