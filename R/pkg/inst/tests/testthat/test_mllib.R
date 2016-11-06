@@ -65,13 +65,14 @@ test_that("spark.glm and predict", {
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 
   # binomial family
-  training <- training[training$Species %in% c("versicolor", "virginica"), ]
-  model <- spark.glm(training, Species ~ Sepal_Length + Sepal_Width,
+  binomialTraining <- training[training$Species %in% c("versicolor", "virginica"), ]
+  model <- spark.glm(binomialTraining, Species ~ Sepal_Length + Sepal_Width,
     family = binomial(link = "logit"))
-  prediction <- predict(model, training)
+  prediction <- predict(model, binomialTraining)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "character")
-  expected <- c("versicolor", "versicolor", "versicolor", "versicolor", "versicolor")
-  expect_equal(as.list(take(select(prediction, "prediction"), 5))[[1]], expected)
+  expected <- c("virginica", "virginica", "virginica", "versicolor", "virginica",
+    "versicolor", "virginica", "versicolor", "virginica", "versicolor")
+  expect_equal(as.list(take(select(prediction, "prediction"), 10))[[1]], expected)
 
   # poisson family
   model <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
@@ -137,10 +138,10 @@ test_that("spark.glm summary", {
   expect_equal(stats$aic, rStats$aic)
 
   # Test spark.glm works with weighted dataset
-  a1 <- c(0, 1, 2, 3)
-  a2 <- c(5, 2, 1, 3)
-  w <- c(1, 2, 3, 4)
-  b <- c(1, 0, 1, 0)
+  a1 <- c(0, 1, 2, 3, 4)
+  a2 <- c(5, 2, 1, 3, 2)
+  w <- c(1, 2, 3, 4, 5)
+  b <- c(1, 0, 1, 0, 0)
   data <- as.data.frame(cbind(a1, a2, w, b))
   df <- createDataFrame(data)
 

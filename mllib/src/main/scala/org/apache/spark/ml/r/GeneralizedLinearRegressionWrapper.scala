@@ -26,8 +26,13 @@ import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.regression._
+import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 private[r] class GeneralizedLinearRegressionWrapper private (
     val pipeline: PipelineModel,
@@ -56,6 +61,7 @@ private[r] class GeneralizedLinearRegressionWrapper private (
   def transform(dataset: Dataset[_]): DataFrame = {
     if (rFamily == "binomial") {
       pipeline.transform(dataset)
+        .drop(PREDICTED_LABEL_PROB_COL)
         .drop(PREDICTED_LABEL_INDEX_COL)
         .drop(glm.getFeaturesCol)
     } else {
@@ -71,6 +77,7 @@ private[r] class GeneralizedLinearRegressionWrapper private (
 private[r] object GeneralizedLinearRegressionWrapper
   extends MLReadable[GeneralizedLinearRegressionWrapper] {
 
+  val PREDICTED_LABEL_PROB_COL = "pred_label_prob"
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
@@ -89,9 +96,6 @@ private[r] object GeneralizedLinearRegressionWrapper
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
     val schema = rFormulaModel.transform(data).schema
-    val labelAttr = Attribute.fromStructField(schema(rFormulaModel.getLabelCol))
-      .asInstanceOf[NominalAttribute]
-    val labels = labelAttr.values.get
     val featureAttrs = AttributeGroup.fromStructField(schema(rFormula.getFeaturesCol))
       .attributes.get
     val features = featureAttrs.map(_.name.get)
@@ -106,12 +110,22 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
     val pipeline = if (family == "binomial") {
+      // Convert prediction from probability to label index.
+      val probToPred = new ProbabilityToPrediction()
+        .setInputCol(PREDICTED_LABEL_PROB_COL)
+        .setOutputCol(PREDICTED_LABEL_INDEX_COL)
+      // Convert prediction from label index to original label.
+      val labelAttr = Attribute.fromStructField(schema(rFormulaModel.getLabelCol))
+        .asInstanceOf[NominalAttribute]
+      val labels = labelAttr.values.get
       val idxToStr = new IndexToString()
         .setInputCol(PREDICTED_LABEL_INDEX_COL)
         .setOutputCol(PREDICTED_LABEL_COL)
         .setLabels(labels)
+
       new Pipeline()
-        .setStages(Array(rFormulaModel, glr.setPredictionCol(PREDICTED_LABEL_INDEX_COL), idxToStr))
+        .setStages(Array(rFormulaModel, glr.setPredictionCol(PREDICTED_LABEL_PROB_COL),
+          probToPred, idxToStr))
         .fit(data)
     } else {
       new Pipeline().setStages(Array(rFormulaModel, glr)).fit(data)
@@ -222,4 +236,28 @@ private[r] object GeneralizedLinearRegressionWrapper
         rAic, rNumIterations, isLoaded = true)
     }
   }
+}
+
+/**
+ * This utility transformer converts the predicted value of GeneralizedLinearRegressionModel
+ * with "binomial" family from probability to prediction according to threshold 0.5.
+ */
+private[r] class ProbabilityToPrediction private[r] (override val uid: String)
+  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+
+  def this() = this(Identifiable.randomUID("probToPred"))
+
+  def setInputCol(value: String): this.type = set(inputCol, value)
+
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  override def transformSchema(schema: StructType): StructType = {
+    StructType(schema.fields :+ StructField($(outputCol), DoubleType))
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    dataset.withColumn($(outputCol), round(col($(inputCol))))
+  }
+
+  override def copy(extra: ParamMap): ProbabilityToPrediction = defaultCopy(extra)
 }
