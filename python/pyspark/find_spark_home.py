@@ -55,7 +55,7 @@ def _find_spark_home():
             True
 
     # Normalize the paths
-    paths = map(lambda path: os.path.abspath(path), paths)
+    paths = [os.path.abspath(p) for p in paths]
 
     try:
         return next(path for path in paths if is_spark_home(path))
