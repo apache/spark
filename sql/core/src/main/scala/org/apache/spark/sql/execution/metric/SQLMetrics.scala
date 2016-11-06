@@ -50,6 +50,20 @@ class SQLMetric(val metricType: String, initValue: Long = 0L)
 
   override def isZero(): Boolean = _value == _zeroValue
 
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * Added for simplicity with adding java Longs, Ints & boxing.
+   * @since 2.1.0
+   */
+  override def add(v: Long): Unit = {
+    // Note: This is based on the add method in [[AccumulatorV2]] but copied to avoid boxing.
+    if (metadata != null && metadata.dataProperty) {
+      dataPropertyAdd(v)
+    } else {
+      addImpl(v)
+    }
+  }
+
   override def addImpl(v: Long): Unit = _value += v
 
   def +=(v: Long): Unit = add(v)
