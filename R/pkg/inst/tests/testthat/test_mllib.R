@@ -64,6 +64,15 @@ test_that("spark.glm and predict", {
   rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 
+  # binomial family
+  training <- training[training$Species %in% c("versicolor", "virginica"), ]
+  model <- spark.glm(training, Species ~ Sepal_Length + Sepal_Width,
+    family = binomial(link = "logit"))
+  prediction <- predict(model, training)
+  expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "character")
+  expected <- c("versicolor", "versicolor", "versicolor", "versicolor", "versicolor")
+  expect_equal(as.list(take(select(prediction, "prediction"), 5))[[1]], expected)
+
   # poisson family
   model <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
   family = poisson(link = identity))

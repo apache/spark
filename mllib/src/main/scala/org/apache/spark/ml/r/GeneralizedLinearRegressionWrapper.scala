@@ -23,8 +23,8 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
+import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
@@ -42,6 +42,8 @@ private[r] class GeneralizedLinearRegressionWrapper private (
     val rNumIterations: Int,
     val isLoaded: Boolean = false) extends MLWritable {
 
+  import GeneralizedLinearRegressionWrapper._
+
   private val glm: GeneralizedLinearRegressionModel =
     pipeline.stages(1).asInstanceOf[GeneralizedLinearRegressionModel]
 
@@ -52,7 +54,14 @@ private[r] class GeneralizedLinearRegressionWrapper private (
   def residuals(residualsType: String): DataFrame = glm.summary.residuals(residualsType)
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(glm.getFeaturesCol)
+    if (rFamily == "binomial") {
+      pipeline.transform(dataset)
+        .drop(PREDICTED_LABEL_INDEX_COL)
+        .drop(glm.getFeaturesCol)
+    } else {
+      pipeline.transform(dataset)
+        .drop(glm.getFeaturesCol)
+    }
   }
 
   override def write: MLWriter =
@@ -61,6 +70,9 @@ private[r] class GeneralizedLinearRegressionWrapper private (
 
 private[r] object GeneralizedLinearRegressionWrapper
   extends MLReadable[GeneralizedLinearRegressionWrapper] {
+
+  val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
+  val PREDICTED_LABEL_COL = "prediction"
 
   def fit(
       formula: String,
@@ -71,12 +83,15 @@ private[r] object GeneralizedLinearRegressionWrapper
       maxIter: Int,
       weightCol: String,
       regParam: Double): GeneralizedLinearRegressionWrapper = {
-    val rFormula = new RFormula()
-      .setFormula(formula)
+    val rFormula = new RFormula().setFormula(formula)
+    if (family == "binomial") rFormula.setForceIndexLabel(true)
     RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
     val schema = rFormulaModel.transform(data).schema
+    val labelAttr = Attribute.fromStructField(schema(rFormulaModel.getLabelCol))
+      .asInstanceOf[NominalAttribute]
+    val labels = labelAttr.values.get
     val featureAttrs = AttributeGroup.fromStructField(schema(rFormula.getFeaturesCol))
       .attributes.get
     val features = featureAttrs.map(_.name.get)
@@ -90,9 +105,17 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setWeightCol(weightCol)
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
-    val pipeline = new Pipeline()
-      .setStages(Array(rFormulaModel, glr))
-      .fit(data)
+    val pipeline = if (family == "binomial") {
+      val idxToStr = new IndexToString()
+        .setInputCol(PREDICTED_LABEL_INDEX_COL)
+        .setOutputCol(PREDICTED_LABEL_COL)
+        .setLabels(labels)
+      new Pipeline()
+        .setStages(Array(rFormulaModel, glr.setPredictionCol(PREDICTED_LABEL_INDEX_COL), idxToStr))
+        .fit(data)
+    } else {
+      new Pipeline().setStages(Array(rFormulaModel, glr)).fit(data)
+    }
 
     val glm: GeneralizedLinearRegressionModel =
       pipeline.stages(1).asInstanceOf[GeneralizedLinearRegressionModel]
