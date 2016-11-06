@@ -492,7 +492,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val permanentFuncName = "myUpper"
     val permanentFuncClass =
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
-    val builtInFuncName = "abs"
+    val builtInFuncNameInLowerCase = "abs"
+    val builtInFuncNameInMixedCase = "aBs"
     val hiveFuncName = "histogram_numeric"
 
     withUserDefinedFunction(permanentFuncName -> false) {
@@ -506,7 +507,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
                  |CREATE $viewMode view1
                  |AS SELECT
                  |$permanentFuncName(str),
-                 |$builtInFuncName(id),
+                 |$builtInFuncNameInLowerCase(id),
+                 |$builtInFuncNameInMixedCase(id) as aBs,
                  |$hiveFuncName(id, 5) over()
                  |FROM tab1
                """.stripMargin)
