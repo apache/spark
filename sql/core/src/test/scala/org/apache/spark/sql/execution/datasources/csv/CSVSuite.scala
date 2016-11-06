@@ -53,6 +53,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val numbersFile = "test-data/numbers.csv"
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
+  private val emptyStringValuesFile = "test-data/emptystring.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -888,6 +889,69 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         val expectedSchema = StructType(fields)
         assert(actualSchema == expectedSchema)
       }
+    }
+  }
+
+  test("SPARK-17916 load data with empty strings and null values") {
+    val rows = spark.read
+      .format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .option("nullValue", "-")
+      .load(testFile(emptyStringValuesFile))
+
+    val expectedRows = Seq(Row(1, null), Row(2, ""), Row(3, null), Row(4, "A"))
+    checkAnswer(rows, expectedRows)
+  }
+
+  test("save and load data with empty strings using all quotes option") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val data = Seq((1, "", "abcd"), (2, null, "xyz"))
+      val df = spark.createDataFrame(data)
+      df.coalesce(1).write
+        .format("csv")
+        .option("quoteAll", "true")
+        .option("nullValue", "NUL")
+        .save(csvDir)
+      val results = spark.read.format("text").load(csvDir).collect()
+      val expected = Seq(Seq("\"1\",\"\",\"abcd\""), Seq("\"2\",\"NUL\",\"xyz\""))
+      assert(results.toSeq.map(_.toSeq) === expected)
+
+      val rows = spark.read
+        .format("csv")
+        .option("nullValue", "NUL")
+        .option("inferSchema", "true")
+        .load(csvDir)
+
+      val expectedRows = Seq(Row(1, "", "abcd"), Row(2, null, "xyz"))
+      checkAnswer(rows, expectedRows)
+    }
+  }
+
+  test("save and load data using the user specified emptyValue option") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val data = Seq((1, "", "abcd"), (2, null, "xyz"))
+      val df = spark.createDataFrame(data)
+      df.coalesce(1).write
+        .format("csv")
+        .option("nullValue", "NUL")
+        .option("emptyValue", "<EMPTY>")
+        .save(csvDir)
+      val results = spark.read.format("text").load(csvDir).collect()
+      val expected = Seq(Seq("1,<EMPTY>,abcd"), Seq("2,NUL,xyz"))
+      assert(results.toSeq.map(_.toSeq) === expected)
+
+      val rows = spark.read
+        .format("csv")
+        .option("nullValue", "NUL")
+        .option("emptyValue", "<EMPTY>")
+        .option("inferSchema", "true")
+        .load(csvDir)
+
+      val expectedRows = Seq(Row(1, "", "abcd"), Row(2, null, "xyz"))
+      checkAnswer(rows, expectedRows)
     }
   }
 }

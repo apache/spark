@@ -280,7 +280,8 @@ private[csv] object CSVTypeCast {
               // compatibility.
               DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
             }
-        case _: StringType => UTF8String.fromString(datum)
+        case _: StringType =>
+          if (datum == options.emptyValue) UTF8String.EMPTY_UTF8 else UTF8String.fromString(datum)
         case udt: UserDefinedType[_] => castTo(datum, udt.sqlType, nullable, options)
         case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
       }
