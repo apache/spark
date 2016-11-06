@@ -168,7 +168,7 @@ test_that("spark.glm summary", {
   data <- as.data.frame(cbind(a1, a2, b))
   df <- suppressWarnings(createDataFrame(data))
   regStats <- summary(spark.glm(df, b ~ a1 + a2, regParam = 1.0))
-  expect_equal(regStats$aic, 13.32836, tolerance = 1e-4) # 13.32836 is from summary() result
+  expect_equal(regStats$aic, 14.00976, tolerance = 1e-4) # 14.00976 is from summary() result
 })
 
 test_that("spark.glm save/load", {
