@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -970,10 +970,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-18284: Serializer should have correct nullable value") {
-    val df1 = sparkContext.parallelize(Seq(1, 2, 3, 4), 1).toDF()
+    val df1 = sparkContext.parallelize(Seq(1, 2, 3, 4), 1).toDF
     assert(df1.schema(0).nullable == false)
-    val df2 = sparkContext.parallelize(Seq(Integer.valueOf(1), Integer.valueOf(2)), 1).toDF()
+    val df2 = sparkContext.parallelize(Seq(Integer.valueOf(1), Integer.valueOf(2)), 1).toDF
     assert(df2.schema(0).nullable == true)
+
+    val df3 = sparkContext.parallelize(Seq(Seq(1, 2), Seq(3, 4)), 1).toDF()
+    assert(df3.schema(0).nullable == true)
+    assert(df3.schema(0).dataType.asInstanceOf[ArrayType].containsNull == false)
+    val df4 = sparkContext.parallelize(Seq(Seq("a", "b"), Seq("c", "d")), 1).toDF()
+    assert(df4.schema(0).nullable == true)
+    assert(df4.schema(0).dataType.asInstanceOf[ArrayType].containsNull == true)
   }
 
   Seq(true, false).foreach { eager =>
