@@ -221,7 +221,7 @@ class TrainValidationSplitModel private[ml] (
       uid,
       bestModel.copy(extra).asInstanceOf[Model[_]],
       validationMetrics.clone())
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(parent)
   }
 
   @Since("2.0.0")
