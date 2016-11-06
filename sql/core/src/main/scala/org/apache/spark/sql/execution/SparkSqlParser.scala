@@ -331,7 +331,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
-    if (provider.toLowerCase == "hive") {
+    if (provider.toLowerCase == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Cannot create hive serde table with CREATE TABLE USING")
     }
     val schema = Option(ctx.colTypeList()).map(createSchema)
@@ -1034,7 +1034,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       tableType = tableType,
       storage = storage,
       schema = schema,
-      provider = Some("hive"),
+      provider = Some(DDLUtils.HIVE_PROVIDER),
       partitionColumnNames = partitionCols.map(_.name),
       properties = properties,
       comment = comment)
