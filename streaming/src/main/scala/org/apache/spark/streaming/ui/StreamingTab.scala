@@ -41,7 +41,7 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
   attachPage(new StreamingPage(this))
   attachPage(new BatchPage(this))
   
-  parent.attachHandler(StreamingApiRootResource.getServletHandler(parent));
+  parent.attachHandler(StreamingApiRootResource.getServletHandler(parent,listener));
 
   def attach() {
     getSparkUI(ssc).attachTab(this)
