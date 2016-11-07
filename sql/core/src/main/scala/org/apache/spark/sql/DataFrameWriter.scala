@@ -24,10 +24,10 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Union}
-import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
-import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, CreateTable, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, OverwriteOptions}
+import org.apache.spark.sql.execution.command.{AlterTableRecoverPartitionsCommand, DDLUtils}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -259,7 +259,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
         child = df.logicalPlan,
-        overwrite = mode == SaveMode.Overwrite,
+        overwrite = OverwriteOptions(mode == SaveMode.Overwrite),
         ifNotExists = false)).toRdd
   }
 
@@ -359,7 +359,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    if (source.toLowerCase == "hive") {
+    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
     }
 
@@ -373,7 +373,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
-        val tableType = if (new CaseInsensitiveMap(extraOptions.toMap).contains("path")) {
+        val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+        val tableType = if (storage.locationUri.isDefined) {
           CatalogTableType.EXTERNAL
         } else {
           CatalogTableType.MANAGED
@@ -382,7 +383,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         val tableDesc = CatalogTable(
           identifier = tableIdent,
           tableType = tableType,
-          storage = CatalogStorageFormat.empty.copy(properties = extraOptions.toMap),
+          storage = storage,
           schema = new StructType,
           provider = Some(source),
           partitionColumnNames = partitioningColumns.getOrElse(Nil),

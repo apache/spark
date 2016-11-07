@@ -343,4 +343,21 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null
     )
   }
+
+  test("from_json null input column") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal(null)),
+      null
+    )
+  }
+
+  test("to_json") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(1), schema)
+    checkEvaluation(
+      StructToJson(Map.empty, struct),
+      """{"a":1}"""
+    )
+  }
 }

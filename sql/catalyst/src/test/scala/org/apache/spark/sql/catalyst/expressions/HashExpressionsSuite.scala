@@ -26,7 +26,7 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.types._
 
-class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("md5") {
     checkEvaluation(Md5(Literal("ABC".getBytes(StandardCharsets.UTF_8))),
@@ -67,23 +67,6 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       2180413220L)
     checkEvaluation(Crc32(Literal.create(null, BinaryType)), null)
     checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
-  }
-
-  test("assert_true") {
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(false, BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Cast(Literal(0), BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
-    }
-    checkEvaluation(AssertTrue(Literal.create(true, BooleanType)), null)
-    checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
   }
 
   private val structOfString = new StructType().add("str", StringType)

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 
 
@@ -133,11 +133,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   private def makeFunction(funcIdent: FunctionIdentifier): Function = {
     val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
     new Function(
-      name = funcIdent.identifier,
-      database = funcIdent.database.orNull,
+      name = metadata.getName,
+      database = metadata.getDb,
       description = null, // for now, this is always undefined
       className = metadata.getClassName,
-      isTemporary = funcIdent.database.isEmpty)
+      isTemporary = metadata.getDb == null)
   }
 
   /**
@@ -354,7 +354,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val tableDesc = CatalogTable(
       identifier = tableIdent,
       tableType = CatalogTableType.EXTERNAL,
-      storage = CatalogStorageFormat.empty.copy(properties = options),
+      storage = DataSource.buildStorageFormatFromOptions(options),
       schema = schema,
       provider = Some(source)
     )

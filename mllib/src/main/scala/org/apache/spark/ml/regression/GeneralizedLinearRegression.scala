@@ -255,7 +255,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
         case Row(label: Double, weight: Double, features: Vector) =>
           Instance(label, weight, features)
       }
@@ -776,8 +776,10 @@ class GeneralizedLinearRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): GeneralizedLinearRegressionModel = {
-    copyValues(new GeneralizedLinearRegressionModel(uid, coefficients, intercept), extra)
-      .setParent(parent)
+    val copied = copyValues(new GeneralizedLinearRegressionModel(uid, coefficients, intercept),
+      extra)
+    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
+    copied.setParent(parent)
   }
 
   /**

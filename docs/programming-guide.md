@@ -59,6 +59,8 @@ Spark {{site.SPARK_VERSION}} works with Java 7 and higher. If you are using Java
 for concisely writing functions, otherwise you can use the classes in the
 [org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.
 
+Note that support for Java 7 is deprecated as of Spark 2.0.0 and may be removed in Spark 2.2.0.
+
 To write a Spark application in Java, you need to add a dependency on Spark. Spark is available through Maven Central at:
 
     groupId = org.apache.spark
@@ -86,6 +88,8 @@ import org.apache.spark.SparkConf
 
 Spark {{site.SPARK_VERSION}} works with Python 2.6+ or Python 3.4+. It can use the standard CPython interpreter,
 so C libraries like NumPy can be used. It also works with PyPy 2.3+.
+
+Note that support for Python 2.6 is deprecated as of Spark 2.0.0, and may be removed in Spark 2.2.0.
 
 To run Spark applications in Python, use the `bin/spark-submit` script located in the Spark directory.
 This script will load Spark's Java/Scala libraries and allow you to submit applications to a cluster.
