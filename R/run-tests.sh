@@ -48,7 +48,8 @@ if [[ $FAILED != 0 || $NUM_TEST_WARNING != 0 ]]; then
 else
     # We have 2 existing NOTEs for new maintainer, attach()
     # We have one more NOTE in Jenkins due to "No repository set"
-    if [[ $NUM_CRAN_WARNING != 0 || $NUM_CRAN_ERROR != 0 || $NUM_CRAN_NOTES -gt 3 ]]; then
+    # We have one warning on ‘qpdf’ is needed for checks on size reduction of PDFs
+    if [[ $NUM_CRAN_WARNING != 1 || $NUM_CRAN_ERROR != 0 || $NUM_CRAN_NOTES -gt 3 ]]; then
       cat $CRAN_CHECK_LOG_FILE
       echo -en "\033[31m"  # Red
       echo "Had CRAN check errors; see logs."

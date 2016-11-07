@@ -20,7 +20,7 @@
 # Script to create API docs and vignettes for SparkR
 # This requires `devtools`, `knitr` and `rmarkdown` to be installed on the machine.
 
-# After running this script the html docs can be found in 
+# After running this script the html docs can be found in
 # $SPARK_HOME/R/pkg/html
 # The vignettes can be found in
 # $SPARK_HOME/R/pkg/vignettes/sparkr_vignettes.html
@@ -52,21 +52,28 @@ Rscript -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knit
 
 popd
 
-# Find Spark jars.
-if [ -f "${SPARK_HOME}/RELEASE" ]; then
-  SPARK_JARS_DIR="${SPARK_HOME}/jars"
+if [ -n "$NO_VIGNETTES" ]
+then
+  echo "Skipping R vignettes"
 else
-  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"
-fi
 
-# Only create vignettes if Spark JARs exist
-if [ -d "$SPARK_JARS_DIR" ]; then
-  # render creates SparkR vignettes
-  Rscript -e 'library(rmarkdown); paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); render("pkg/vignettes/sparkr-vignettes.Rmd"); .libPaths(paths)'
+  # Find Spark jars.
+  if [ -f "${SPARK_HOME}/RELEASE" ]; then
+    SPARK_JARS_DIR="${SPARK_HOME}/jars"
+  else
+    SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"
+  fi
 
-  find pkg/vignettes/. -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
-else
-  echo "Skipping R vignettes as Spark JARs not found in $SPARK_HOME"
+  # Only create vignettes if Spark JARs exist
+  if [ -d "$SPARK_JARS_DIR" ]; then
+    # render creates SparkR vignettes
+    Rscript -e 'library(rmarkdown); paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); render("pkg/vignettes/sparkr-vignettes.Rmd"); .libPaths(paths)'
+
+    find pkg/vignettes/. -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
+  else
+    echo "Skipping R vignettes as Spark JARs not found in $SPARK_HOME"
+  fi
+
 fi
 
 popd

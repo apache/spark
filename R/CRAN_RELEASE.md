@@ -7,6 +7,8 @@ To release SparkR as a package to CRAN, we would use the `devtools` package. Ple
 
 First, check that the `Version:` field in the `pkg/DESCRIPTION` file is updated. Also, check for stale file not under source control.
 
+Note that while `check-cran.sh` is running `R CMD check`, it is doing so with `--no-manual --no-vignettes`, which skips a few vignettes or PDF checks - therefore it will be preferred to run `R CMD check` on the source package built manually before uploading a release.
+
 To upload a release, we would need to update the `cran-comments.md`. This should generally contain the results from running the `check-cran.sh` script along with comments on status of all `WARNING` (should not be any) or `NOTE`. As a part of `check-cran.sh` and the release process, the vignettes is build - make sure `SPARK_HOME` is set and Spark jars are accessible.
 
 Once everything is in place, run in R under the `SPARK_HOME/R` directory:
@@ -32,6 +34,8 @@ paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::f
 ```
 
 (http://r-pkgs.had.co.nz/vignettes.html#vignette-workflow-2)
+
+Similarly, the source package is also created by `check-cran.sh` with `R CMD build pkg`.
 
 For example, this should be the content of the source package:
 
