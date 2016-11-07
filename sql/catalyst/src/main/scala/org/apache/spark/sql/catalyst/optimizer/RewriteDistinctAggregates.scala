@@ -115,11 +115,12 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     }
 
     // Extract distinct aggregate expressions.
-    val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy{
+    val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy {
       e =>
-        if (e.aggregateFunction.children.exists(!_.foldable)) {
+        val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
+        if (unfoldableChildren.nonEmpty) {
           // Only expand the unfoldable children
-          e.aggregateFunction.children.filter(!_.foldable).toSet
+          unfoldableChildren
         } else {
           // If aggregateFunction's children are all foldable
           // we must expand at least one of the children (here we take the first child),
