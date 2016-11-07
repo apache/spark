@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import java.nio.charset.StandardCharsets
 
 import org.apache.commons.codec.digest.DigestUtils
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -123,6 +124,19 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("structOfArrayAndMap",
         new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
+
+  test("SPARK-18207: Compute hash for a lot of String expressions") {
+    val N = 1000
+    val wideRow = new GenericInternalRow(
+      (1 to N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
+    val schema = StructType((1 to N).map(i => StructField("", StringType)))
+
+    val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
+      BoundReference(i, f.dataType, true)
+    }
+    val hashExpr = Murmur3Hash(exprs, 42)
+    GenerateMutableProjection.generate(Seq(hashExpr))
+  }
 
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get

@@ -1728,23 +1728,3 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
     assert(df.filter($"array1" === $"array2").count() == 1)
   }
-
-  test("SPARK-18207: Compute hash for wider table") {
-    import org.apache.spark.sql.types.{StructType, StringType}
-
-    val COLMAX = 1000
-    val schema: StructType = (1 to COLMAX)
-      .foldLeft(new StructType())((s, i) => s.add(s"g$i", StringType, nullable = true))
-    val rdds = spark.sparkContext.parallelize(Seq(Row.fromSeq((1 to COLMAX).map(_.toString))))
-    val wideDF = spark.createDataFrame(rdds, schema)
-
-    val widePlus = wideDF.withColumn("d_rank", lit(1))
-    widePlus.createOrReplaceTempView("wide_plus")
-    val widePlus2 = widePlus.withColumn("d_rank", lit(0))
-    widePlus2.createOrReplaceTempView("wide_plus2")
-
-    // HashAggregate operation in this SQL union operator involves computation of hash for a row
-    val df = spark.sqlContext.sql("select * from wide_plus union select * from wide_plus2")
-    df.count
-  }
-}
