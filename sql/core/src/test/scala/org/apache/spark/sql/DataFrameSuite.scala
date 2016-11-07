@@ -1743,6 +1743,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val widePlus2 = widePlus.withColumn("d_rank", lit(0))
     widePlus2.createOrReplaceTempView("wide_plus2")
 
+    // union operation in this SQL involves computation of hash for a row
     val df = spark.sqlContext.sql("select * from wide_plus union select * from wide_plus2")
     df.count
   }
