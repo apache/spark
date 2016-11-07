@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming.test
 
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
@@ -466,5 +467,38 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     val sq = df.writeStream.format("console").start()
     sq.stop()
+  }
+
+  test("MemorySink can recover from a checkpoint in Complete Mode") {
+    val df = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load("/test")
+    val checkpointLoc = newMetadataDir
+    val checkpointDir = new File(checkpointLoc, "offsets")
+    checkpointDir.mkdirs()
+    assert(checkpointDir.exists())
+    // no exception here
+    val q = df
+      .groupBy("a")
+      .count()
+      .writeStream
+      .format("memory")
+      .queryName("test")
+      .option("checkpointLocation", checkpointLoc)
+      .outputMode("complete")
+      .start()
+
+    q.stop()
+
+    val e = intercept[AnalysisException] {
+      val q2 = df.writeStream
+        .format("memory")
+        .queryName("test")
+        .option("checkpointLocation", checkpointLoc)
+        .outputMode("append")
+        .start()
+    }
+    assert(e.getMessage.contains("does not support recovering"))
+    assert(e.getMessage.contains("checkpoint location"))
   }
 }
