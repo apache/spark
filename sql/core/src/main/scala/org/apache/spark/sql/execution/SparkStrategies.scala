@@ -394,8 +394,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if (shuffle) {
           ShuffleExchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
         } else {
-          execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
+          execution.CoalesceExec(numPartitions, planLater(child), None) :: Nil
         }
+      case logical.PartitionCoalesce(numPartitions, partitionCoalescer, child) =>
+        execution.CoalesceExec(numPartitions, planLater(child), partitionCoalescer) :: Nil
       case logical.Sort(sortExprs, global, child) =>
         execution.SortExec(sortExprs, global, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>

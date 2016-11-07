@@ -21,7 +21,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
-import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
+import org.apache.spark.rdd.{EmptyRDD, PartitionCoalescer, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
@@ -571,7 +571,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * current upstream partitions will be executed in parallel (per whatever
  * the current partitioning is).
  */
-case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecNode {
+case class CoalesceExec(
+    numPartitions: Int,
+    child: SparkPlan,
+    partitionCoalescer: Option[PartitionCoalescer]) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = {
@@ -580,7 +583,7 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().coalesce(numPartitions, shuffle = false)
+    child.execute().coalesce(numPartitions, shuffle = false, partitionCoalescer)
   }
 }
 
