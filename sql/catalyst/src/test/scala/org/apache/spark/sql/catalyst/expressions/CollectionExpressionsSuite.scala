@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
-
-class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Array and Map Size") {
     val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
