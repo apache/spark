@@ -487,11 +487,26 @@ class InMemoryCatalog(
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
-    if (partialSpec.nonEmpty) {
-      throw new UnsupportedOperationException(
-        "listPartition with partial partition spec is not implemented")
+
+    partialSpec match {
+      case None => catalog(db).tables(table).partitions.values.toSeq
+      case Some(partial) =>
+        catalog(db).tables(table).partitions.toSeq.collect {
+          case (spec, partition) if isPartialPartitionSpec(partial, spec) => partition
+        }
     }
-    catalog(db).tables(table).partitions.values.toSeq
+  }
+
+  /**
+   * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
+   * partial partition spec w.r.t. PARTITION (a=1,b=2).
+   */
+  private def isPartialPartitionSpec(
+      spec1: TablePartitionSpec,
+      spec2: TablePartitionSpec): Boolean = {
+    spec1.forall {
+      case (partitionColumn, value) => spec2(partitionColumn) == value
+    }
   }
 
   override def listPartitionsByFilter(
