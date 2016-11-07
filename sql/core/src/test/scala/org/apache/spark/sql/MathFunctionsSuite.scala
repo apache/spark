@@ -23,13 +23,13 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 import org.apache.spark.sql.test.SharedSQLContext
 
-private object MathExpressionsTestData {
+private object MathFunctionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
   case class NullDoubles(a: java.lang.Double)
 }
 
-class MathExpressionsSuite extends QueryTest with SharedSQLContext {
-  import MathExpressionsTestData._
+class MathFunctionsSuite extends QueryTest with SharedSQLContext {
+  import MathFunctionsTestData._
   import testImplicits._
 
   private lazy val doubleData = (1 to 10).map(i => DoubleData(i * 0.2 - 1, i * -0.2 + 1)).toDF()

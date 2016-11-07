@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
 
-class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   import IntegralLiteralTestUtils._
 
