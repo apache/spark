@@ -1805,6 +1805,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     // will be re-processed after recovery
     List<List<Integer>> finalResult = JavaCheckpointTestUtils.runStreams(ssc, 2, 3);
     assertOrderInvariantEquals(expectedFinal, finalResult.subList(1, 3));
+    ssc.stop();
     Utils.deleteRecursively(tempDir);
   }
 
