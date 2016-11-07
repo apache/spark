@@ -74,6 +74,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
     // Verify state after updating
     put(store, "a", 1)
+    assert(store.numKeys() === 1)
     intercept[IllegalStateException] {
       store.iterator()
     }
@@ -85,7 +86,9 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     // Make updates, commit and then verify state
     put(store, "b", 2)
     put(store, "aa", 3)
+    assert(store.numKeys() === 3)
     remove(store, _.startsWith("a"))
+    assert(store.numKeys() === 1)
     assert(store.commit() === 1)
 
     assert(store.hasCommitted)
@@ -107,7 +110,9 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val reloadedProvider = new HDFSBackedStateStoreProvider(
       store.id, keySchema, valueSchema, StateStoreConf.empty, new Configuration)
     val reloadedStore = reloadedProvider.getStore(1)
+    assert(reloadedStore.numKeys() === 1)
     put(reloadedStore, "c", 4)
+    assert(reloadedStore.numKeys() === 2)
     assert(reloadedStore.commit() === 2)
     assert(rowsToSet(reloadedStore.iterator()) === Set("b" -> 2, "c" -> 4))
     assert(getDataFromFiles(provider) === Set("b" -> 2, "c" -> 4))
@@ -362,7 +367,10 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
+      // Make maintenance thread do snapshots and cleanups very fast
       .set(StateStore.MAINTENANCE_INTERVAL_CONFIG, "10ms")
+      // Make sure that when SparkContext stops, the StateStore maintenance thread 'quickly'
+      // fails to talk to the StateStoreCoordinator and unloads all the StateStores
       .set("spark.rpc.numRetries", "1")
     val opId = 0
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
@@ -372,35 +380,47 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val provider = new HDFSBackedStateStoreProvider(
       storeId, keySchema, valueSchema, storeConf, hadoopConf)
 
+    var latestStoreVersion = 0
+
+    def generateStoreVersions() {
+      for (i <- 1 to 20) {
+        val store = StateStore.get(
+          storeId, keySchema, valueSchema, latestStoreVersion, storeConf, hadoopConf)
+        put(store, "a", i)
+        store.commit()
+        latestStoreVersion += 1
+      }
+    }
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           require(!StateStore.isMaintenanceRunning, "StateStore is unexpectedly running")
 
-          for (i <- 1 to 20) {
-            val store = StateStore.get(
-              storeId, keySchema, valueSchema, i - 1, storeConf, hadoopConf)
-            put(store, "a", i)
-            store.commit()
-          }
+          // Generate sufficient versions of store for snapshots
+          generateStoreVersions()
 
           eventually(timeout(10 seconds)) {
+            // Store should have been reported to the coordinator
             assert(coordinatorRef.getLocation(storeId).nonEmpty, "active instance was not reported")
-          }
 
-          // Background maintenance should clean up and generate snapshots
-          assert(StateStore.isMaintenanceRunning, "Maintenance task is not running")
-
-          eventually(timeout(10 seconds)) {
-            // Earliest delta file should get cleaned up
-            assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
+            // Background maintenance should clean up and generate snapshots
+            assert(StateStore.isMaintenanceRunning, "Maintenance task is not running")
 
             // Some snapshots should have been generated
-            val snapshotVersions = (0 to 20).filter { version =>
+            val snapshotVersions = (1 to latestStoreVersion).filter { version =>
               fileExists(provider, version, isSnapshot = true)
             }
             assert(snapshotVersions.nonEmpty, "no snapshot file found")
+          }
+
+          // Generate more versions such that there is another snapshot and
+          // the earliest delta file will be cleaned up
+          generateStoreVersions()
+
+          // Earliest delta file should get cleaned up
+          eventually(timeout(10 seconds)) {
+            assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
           }
 
           // If driver decides to deactivate all instances of the store, then this instance
@@ -411,7 +431,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, keySchema, valueSchema, 20, storeConf, hadoopConf)
+          StateStore.get(storeId, keySchema, valueSchema, latestStoreVersion, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
 
           // If some other executor loads the store, then this instance should be unloaded
@@ -421,14 +441,14 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           }
 
           // Reload the store and verify
-          StateStore.get(storeId, keySchema, valueSchema, 20, storeConf, hadoopConf)
+          StateStore.get(storeId, keySchema, valueSchema, latestStoreVersion, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
         }
       }
 
       // Verify if instance is unloaded if SparkContext is stopped
-      require(SparkEnv.get === null)
       eventually(timeout(10 seconds)) {
+        require(SparkEnv.get === null)
         assert(!StateStore.isLoaded(storeId))
         assert(!StateStore.isMaintenanceRunning)
       }

@@ -21,26 +21,35 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.catalyst.dsl.expressions._
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
  */
 class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
-  private val client: HiveClient = {
-    // We create a metastore at a temp location to avoid any potential
-    // conflict of having multiple connections to a single derby instance.
-    HiveUtils.newClientForExecution(new SparkConf, new Configuration)
+  private val externalCatalog: HiveExternalCatalog = {
+    val catalog = new HiveExternalCatalog(new SparkConf, new Configuration)
+    catalog.client.reset()
+    catalog
   }
 
   protected override val utils: CatalogTestUtils = new CatalogTestUtils {
     override val tableInputFormat: String = "org.apache.hadoop.mapred.SequenceFileInputFormat"
     override val tableOutputFormat: String = "org.apache.hadoop.mapred.SequenceFileOutputFormat"
-    override def newEmptyCatalog(): ExternalCatalog =
-      new HiveExternalCatalog(client, new Configuration())
+    override def newEmptyCatalog(): ExternalCatalog = externalCatalog
   }
 
-  protected override def resetState(): Unit = client.reset()
+  protected override def resetState(): Unit = {
+    externalCatalog.client.reset()
+  }
 
+  import utils._
+
+  test("list partitions by filter") {
+    val catalog = newBasicCatalog()
+    val selectedPartitions = catalog.listPartitionsByFilter("db2", "tbl2", Seq('a.int === 1))
+    assert(selectedPartitions.length == 1)
+    assert(selectedPartitions.head.spec == part1.spec)
+  }
 }

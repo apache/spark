@@ -40,8 +40,8 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Size(m1), 0)
     checkEvaluation(Size(m2), 1)
 
-    checkEvaluation(Literal.create(null, MapType(StringType, StringType)), null)
-    checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
+    checkEvaluation(Size(Literal.create(null, MapType(StringType, StringType))), -1)
+    checkEvaluation(Size(Literal.create(null, ArrayType(StringType))), -1)
   }
 
   test("MapKeys/MapValues") {

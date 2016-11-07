@@ -200,6 +200,7 @@ This file is divided into 3 sections:
       // scalastyle:off awaitresult
       Await.result(...)
       // scalastyle:on awaitresult
+      If your codes use ThreadLocal and may run in threads created by the user, use ThreadUtils.awaitResultInForkJoinSafely instead.
     ]]></customMessage>
   </check>
 
@@ -214,6 +215,12 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
     <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
+  </check>
+
+  <check customId="extractopt" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">extractOpt</parameter></parameters>
+    <customMessage>Use Utils.jsonOption(x).map(.extract[T]) instead of .extractOpt[T], as the latter
+    is slower.  </customMessage>
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.ImportOrderChecker" enabled="true">

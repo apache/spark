@@ -29,8 +29,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JdbcUtils}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -84,7 +83,7 @@ class JDBCSuite extends SparkFunSuite
         |CREATE TEMPORARY TABLE fetchtwo
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
-        |         ${JdbcUtils.JDBC_BATCH_FETCH_SIZE} '2')
+        |         ${JDBCOptions.JDBC_BATCH_FETCH_SIZE} '2')
       """.stripMargin.replaceAll("\n", " "))
 
     sql(
@@ -289,7 +288,7 @@ class JDBCSuite extends SparkFunSuite
     assert(names(2).equals("mary"))
   }
 
-  test("SELECT first field when fetchSize is two") {
+  test("SELECT first field when fetchsize is two") {
     val names = sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
     assert(names.size === 3)
     assert(names(0).equals("fred"))
@@ -305,7 +304,7 @@ class JDBCSuite extends SparkFunSuite
     assert(ids(2) === 3)
   }
 
-  test("SELECT second field when fetchSize is two") {
+  test("SELECT second field when fetchsize is two") {
     val ids = sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
     assert(ids.size === 3)
     assert(ids(0) === 1)
@@ -352,10 +351,10 @@ class JDBCSuite extends SparkFunSuite
       urlWithUserAndPass, "TEST.PEOPLE", new Properties()).collect().length === 3)
   }
 
-  test("Basic API with illegal FetchSize") {
+  test("Basic API with illegal fetchsize") {
     val properties = new Properties()
-    properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "-1")
-    val e = intercept[SparkException] {
+    properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "-1")
+    val e = intercept[IllegalArgumentException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
     }.getMessage
     assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
@@ -364,7 +363,7 @@ class JDBCSuite extends SparkFunSuite
   test("Basic API with FetchSize") {
     (0 to 4).foreach { size =>
       val properties = new Properties()
-      properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, size.toString)
+      properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, size.toString)
       assert(spark.read.jdbc(
         urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
     }
@@ -788,7 +787,7 @@ class JDBCSuite extends SparkFunSuite
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
+    val schema = JdbcUtils.schemaString(df.schema, "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
   }
 }

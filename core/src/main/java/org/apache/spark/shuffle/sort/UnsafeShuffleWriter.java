@@ -56,7 +56,7 @@ import org.apache.spark.util.Utils;
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
-  private final Logger logger = LoggerFactory.getLogger(UnsafeShuffleWriter.class);
+  private static final Logger logger = LoggerFactory.getLogger(UnsafeShuffleWriter.class);
 
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
@@ -210,15 +210,21 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
     final File tmp = Utils.tempFileWith(output);
     try {
-      partitionLengths = mergeSpills(spills, tmp);
-    } finally {
-      for (SpillInfo spill : spills) {
-        if (spill.file.exists() && ! spill.file.delete()) {
-          logger.error("Error while deleting spill file {}", spill.file.getPath());
+      try {
+        partitionLengths = mergeSpills(spills, tmp);
+      } finally {
+        for (SpillInfo spill : spills) {
+          if (spill.file.exists() && ! spill.file.delete()) {
+            logger.error("Error while deleting spill file {}", spill.file.getPath());
+          }
         }
       }
+      shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
+    } finally {
+      if (tmp.exists() && !tmp.delete()) {
+        logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
+      }
     }
-    shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 
@@ -465,8 +471,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           }
           return Option.apply(mapStatus);
         } else {
-          // The map task failed, so delete our output data.
-          shuffleBlockResolver.removeDataByMap(shuffleId, mapId);
           return Option.apply(null);
         }
       }

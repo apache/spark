@@ -88,7 +88,7 @@ public class UnsafeExternalSorterSuite {
 
   private final long pageSizeBytes = new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "4m");
 
-  private static final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
+  private static final class WrapStream extends AbstractFunction1<OutputStream, OutputStream> {
     @Override
     public OutputStream apply(OutputStream stream) {
       return stream;
@@ -128,7 +128,7 @@ public class UnsafeExternalSorterSuite {
           (File) args[1],
           (SerializerInstance) args[2],
           (Integer) args[3],
-          new CompressStream(),
+          new WrapStream(),
           false,
           (ShuffleWriteMetrics) args[4],
           (BlockId) args[0]

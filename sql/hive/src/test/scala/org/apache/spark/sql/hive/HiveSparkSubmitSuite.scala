@@ -152,7 +152,8 @@ class HiveSparkSubmitSuite
       case v if v.startsWith("2.10") || v.startsWith("2.11") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
-    val testJar = s"sql/hive/src/test/resources/regression-test-SPARK-8489/test-$version.jar"
+    val jarDir = getTestResourcePath("regression-test-SPARK-8489")
+    val testJar = s"$jarDir/test-$version.jar"
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
@@ -378,10 +379,9 @@ object SetMetastoreURLTest extends Logging {
         s"spark.sql.test.expectedMetastoreURL should be set.")
     }
 
-    // HiveSharedState is used when Hive support is enabled.
+    // HiveExternalCatalog is used when Hive support is enabled.
     val actualMetastoreURL =
-      spark.sharedState.asInstanceOf[HiveSharedState]
-        .metadataHive
+      spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         .getConf("javax.jdo.option.ConnectionURL", "this_is_a_wrong_URL")
     logInfo(s"javax.jdo.option.ConnectionURL is $actualMetastoreURL")
 
@@ -591,7 +591,9 @@ object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
+    val hiveWarehouseLocation = Utils.createTempDir()
     conf.set("spark.ui.enabled", "false")
+    conf.set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString)
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -700,11 +702,13 @@ object SPARK_9757 extends QueryTest {
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
+    val hiveWarehouseLocation = Utils.createTempDir()
     val sparkContext = new SparkContext(
       new SparkConf()
         .set("spark.sql.hive.metastore.version", "0.13.1")
         .set("spark.sql.hive.metastore.jars", "maven")
-        .set("spark.ui.enabled", "false"))
+        .set("spark.ui.enabled", "false")
+        .set("spark.sql.warehouse.dir", hiveWarehouseLocation.toString))
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession

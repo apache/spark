@@ -478,6 +478,14 @@ class SparseVector(Vector):
         SparseVector(4, {1: 1.0, 3: 5.5})
         >>> SparseVector(4, [1, 3], [1.0, 5.5])
         SparseVector(4, {1: 1.0, 3: 5.5})
+        >>> SparseVector(4, {1:1.0, 6:2.0})
+        Traceback (most recent call last):
+        ...
+        AssertionError: Index 6 is out of the the size of vector with size=4
+        >>> SparseVector(4, {-1:1.0})
+        Traceback (most recent call last):
+        ...
+        AssertionError: Contains negative index -1
         """
         self.size = int(size)
         """ Size of the vector. """
@@ -510,6 +518,13 @@ class SparseVector(Vector):
                     raise TypeError(
                         "Indices %s and %s are not strictly increasing"
                         % (self.indices[i], self.indices[i + 1]))
+
+        if self.indices.size > 0:
+            assert np.max(self.indices) < self.size, \
+                "Index %d is out of the the size of vector with size=%d" \
+                % (np.max(self.indices), self.size)
+            assert np.min(self.indices) >= 0, \
+                "Contains negative index %d" % (np.min(self.indices))
 
     def numNonzeros(self):
         """
@@ -698,7 +713,7 @@ class SparseVector(Vector):
                 "Indices must be of type integer, got type %s" % type(index))
 
         if index >= self.size or index < -self.size:
-            raise ValueError("Index %d out of bounds." % index)
+            raise IndexError("Index %d out of bounds." % index)
         if index < 0:
             index += self.size
 
@@ -945,10 +960,10 @@ class DenseMatrix(Matrix):
     def __getitem__(self, indices):
         i, j = indices
         if i < 0 or i >= self.numRows:
-            raise ValueError("Row index %d is out of range [0, %d)"
+            raise IndexError("Row index %d is out of range [0, %d)"
                              % (i, self.numRows))
         if j >= self.numCols or j < 0:
-            raise ValueError("Column index %d is out of range [0, %d)"
+            raise IndexError("Column index %d is out of range [0, %d)"
                              % (j, self.numCols))
 
         if self.isTransposed:
@@ -1075,10 +1090,10 @@ class SparseMatrix(Matrix):
     def __getitem__(self, indices):
         i, j = indices
         if i < 0 or i >= self.numRows:
-            raise ValueError("Row index %d is out of range [0, %d)"
+            raise IndexError("Row index %d is out of range [0, %d)"
                              % (i, self.numRows))
         if j < 0 or j >= self.numCols:
-            raise ValueError("Column index %d is out of range [0, %d)"
+            raise IndexError("Column index %d is out of range [0, %d)"
                              % (j, self.numCols))
 
         # If a CSR matrix is given, then the row index should be searched

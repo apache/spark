@@ -21,12 +21,13 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, OverwriteOptions}
+import org.apache.spark.sql.execution.command.{AlterTableRecoverPartitionsCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, HadoopFsRelation}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -35,6 +36,7 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 1.4.0
  */
+@InterfaceStability.Stable
 final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()
@@ -257,7 +259,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
         child = df.logicalPlan,
-        overwrite = mode == SaveMode.Overwrite,
+        overwrite = OverwriteOptions(mode == SaveMode.Overwrite),
         ifNotExists = false)).toRdd
   }
 
@@ -357,6 +359,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+      throw new AnalysisException("Cannot create hive serde table with saveAsTable API")
+    }
 
     val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 
@@ -368,17 +373,30 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
+        val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+        val tableType = if (storage.locationUri.isDefined) {
+          CatalogTableType.EXTERNAL
+        } else {
+          CatalogTableType.MANAGED
+        }
+
         val tableDesc = CatalogTable(
           identifier = tableIdent,
-          tableType = CatalogTableType.EXTERNAL,
-          storage = CatalogStorageFormat.empty.copy(properties = extraOptions.toMap),
+          tableType = tableType,
+          storage = storage,
           schema = new StructType,
           provider = Some(source),
           partitionColumnNames = partitioningColumns.getOrElse(Nil),
           bucketSpec = getBucketSpec
         )
-        val cmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
-        df.sparkSession.sessionState.executePlan(cmd).toRdd
+        df.sparkSession.sessionState.executePlan(
+          CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
+        if (tableDesc.partitionColumnNames.nonEmpty &&
+            df.sparkSession.sqlContext.conf.manageFilesourcePartitions) {
+          // Need to recover partitions into the metastore so our saved data is visible.
+          df.sparkSession.sessionState.executePlan(
+            AlterTableRecoverPartitionsCommand(tableDesc.identifier)).toRdd
+        }
     }
   }
 
@@ -391,7 +409,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * your external database systems.
    *
    * You can set the following JDBC-specific option(s) for storing JDBC:
+   * <ul>
    * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
+   * </ul>
    *
    * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
    * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
@@ -414,65 +434,33 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
-
-    val props = new Properties()
-    extraOptions.foreach { case (key, value) =>
-      props.put(key, value)
-    }
-    // connectionProperties should override settings in extraOptions
-    props.putAll(connectionProperties)
-    val conn = JdbcUtils.createConnectionFactory(url, props)()
-
-    try {
-      var tableExists = JdbcUtils.tableExists(conn, url, table)
-
-      if (mode == SaveMode.Ignore && tableExists) {
-        return
-      }
-
-      if (mode == SaveMode.ErrorIfExists && tableExists) {
-        sys.error(s"Table $table already exists.")
-      }
-
-      if (mode == SaveMode.Overwrite && tableExists) {
-        if (extraOptions.getOrElse("truncate", "false").toBoolean &&
-            JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
-          JdbcUtils.truncateTable(conn, table)
-        } else {
-          JdbcUtils.dropTable(conn, table)
-          tableExists = false
-        }
-      }
-
-      // Create the table if the table didn't exist.
-      if (!tableExists) {
-        val schema = JdbcUtils.schemaString(df, url)
-        val sql = s"CREATE TABLE $table ($schema)"
-        val statement = conn.createStatement
-        try {
-          statement.executeUpdate(sql)
-        } finally {
-          statement.close()
-        }
-      }
-    } finally {
-      conn.close()
-    }
-
-    JdbcUtils.saveTable(df, url, table, props)
+    // connectionProperties should override settings in extraOptions.
+    this.extraOptions = this.extraOptions ++ connectionProperties.asScala
+    // explicit url and dbtable should override all
+    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    format("jdbc").save()
   }
 
   /**
-   * Saves the content of the [[DataFrame]] in JSON format at the specified path.
+   * Saves the content of the [[DataFrame]] in JSON format ([[http://jsonlines.org/ JSON Lines text
+   * format or newline-delimited JSON]]) at the specified path.
    * This is equivalent to:
    * {{{
    *   format("json").save(path)
    * }}}
    *
    * You can set the following JSON-specific option(s) for writing JSON files:
+   * <ul>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
+   * date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * indicates a timestamp format. Custom date formats follow the formats at
+   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -488,10 +476,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following Parquet-specific option(s) for writing Parquet files:
+   * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
    * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
    * `spark.sql.parquet.compression.codec`.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -507,9 +497,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
+   * <ul>
    * <li>`compression` (default `snappy`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
    * This will override `orc.compress`.</li>
+   * </ul>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support
@@ -531,9 +523,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following option(s) for writing text files:
+   * <ul>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * </ul>
    *
    * @since 1.6.0
    */
@@ -549,6 +543,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following CSV-specific option(s) for writing CSV files:
+   * <ul>
    * <li>`sep` (default `,`): sets the single character as a separator for each
    * field and value.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
@@ -565,6 +560,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
+   * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
+   * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
+   * date type.</li>
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * indicates a timestamp format. Custom date formats follow the formats at
+   * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
