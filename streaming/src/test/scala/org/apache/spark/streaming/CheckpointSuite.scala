@@ -56,6 +56,8 @@ class CheckpointInputDStream(_ssc: StreamingContext) extends InputDStream[Int](_
     @transient
     var restoredTimes = 0
     override def restore() {
+      val inputInfo = StreamInputInfo(0, 100L)
+      ssc.scheduler.inputInfoTracker.reportInfo(Time(0), inputInfo)
       restoredTimes += 1
       super.restore()
     }
@@ -596,6 +598,23 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       assert(RateTestReceiver.getActive().get.getDefaultBlockGeneratorRateLimit() === 200)
     }
     ssc.stop()
+  }
+
+  test("SPARK-13356: report informations when recovering from dirver failure") {
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      ssc.checkpoint(checkpointDir)
+      val inputDStream = new CheckpointInputDStream(ssc)
+      val mappedDStream = inputDStream.map(_ + 100)
+      val outputStream = new TestOutputStreamWithPartitions(mappedDStream)
+      outputStream.register()
+      val batchDurationMillis = ssc.progressListener.batchDuration
+      generateOutput(ssc, Time(batchDurationMillis), checkpointDir, stopSparkContext = true)
+    }
+    logInfo("*********** RESTARTING ************")
+    withStreamingContext(new StreamingContext(checkpointDir)) { ssc =>
+      // Verify get input info successfully after recovered StreamingContext from checkpoint
+      assert(ssc.scheduler.inputInfoTracker.getInfo(Time(0)).size === 1)
+    }
   }
 
   // This tests whether file input stream remembers what files were seen before
