@@ -142,15 +142,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       "Unable to convert column a of type calendarinterval to JSON."))
   }
 
-  test("to_json and from_json roundtrip") {
-    val dfOne = Seq(Some(Tuple1(Tuple1(1))), None).toDF("a")
-    val readBackOne = dfOne.select(to_json($"a").as("b"))
-      .select(from_json($"b", dfOne.schema.head.dataType.asInstanceOf[StructType]))
+  test("roundtrip in to_json and from_json") {
+    val dfOne = Seq(Some(Tuple1(Tuple1(1))), None).toDF("struct")
+    val schemaOne = dfOne.schema(0).dataType.asInstanceOf[StructType]
+    val readBackOne = dfOne.select(to_json($"struct").as("json"))
+      .select(from_json($"json", schemaOne).as("struct"))
     checkAnswer(dfOne, readBackOne)
 
-    val dfTwo = Seq(Some("""{"a":1}"""), None).toDF("value")
-    val schema = new StructType().add("a", IntegerType)
-    val readBackTwo = dfTwo.select(from_json($"value", schema).as("b")).select(to_json($"b"))
+    val dfTwo = Seq(Some("""{"a":1}"""), None).toDF("json")
+    val schemaTwo = new StructType().add("a", IntegerType)
+    val readBackTwo = dfTwo.select(from_json($"json", schemaTwo).as("struct"))
+      .select(to_json($"struct").as("json"))
     checkAnswer(dfTwo, readBackTwo)
   }
 }
