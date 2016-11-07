@@ -523,7 +523,7 @@ case class AlterTableRecoverPartitionsCommand(
     // Updates the table to indicate that its partition metadata is stored in the Hive metastore.
     // This is always the case for Hive format tables, but is not true for Datasource tables created
     // before Spark 2.1 unless they are converted via `msck repair table`.
-    spark.sessionState.catalog.alterTable(table.copy(partitionProviderIsHive = true))
+    spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
     catalog.refreshTable(tableName)
     logInfo(s"Recovered all partitions ($total).")
     Seq.empty[Row]
@@ -687,8 +687,10 @@ case class AlterTableSetLocationCommand(
 
 
 object DDLUtils {
+  val HIVE_PROVIDER = "hive"
+
   def isDatasourceTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get != "hive"
+    table.provider.isDefined && table.provider.get != HIVE_PROVIDER
   }
 
   /**
@@ -702,7 +704,7 @@ object DDLUtils {
         s"$action is not allowed on $tableName since filesource partition management is " +
           "disabled (spark.sql.hive.manageFilesourcePartitions = false).")
     }
-    if (!table.partitionProviderIsHive && isDatasourceTable(table)) {
+    if (!table.tracksPartitionsInCatalog && isDatasourceTable(table)) {
       throw new AnalysisException(
         s"$action is not allowed on $tableName since its partition metadata is not stored in " +
           "the Hive metastore. To import this information into the metastore, run " +

@@ -152,7 +152,7 @@ class FileStreamSinkSuite extends StreamTest {
   }
 
   test("FileStreamSink - json") {
-    testFormat(Some("text"))
+    testFormat(Some("json"))
   }
 
   def testFormat(format: Option[String]): Unit = {

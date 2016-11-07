@@ -343,13 +343,19 @@ case class TruncateTableCommand(
       DDLUtils.verifyPartitionProviderIsHive(spark, table, "TRUNCATE TABLE ... PARTITION")
     }
     val locations =
-      // TODO: The `InMemoryCatalog` doesn't support listPartition with partial partition spec.
-      if (spark.conf.get(CATALOG_IMPLEMENTATION) == "in-memory") {
-        Seq(table.storage.locationUri)
-      } else if (table.partitionColumnNames.isEmpty) {
+      if (table.partitionColumnNames.isEmpty) {
         Seq(table.storage.locationUri)
       } else {
-        catalog.listPartitions(table.identifier, partitionSpec).map(_.storage.locationUri)
+        // Here we diverge from Hive when the given partition spec contains all partition columns
+        // but no partition is matched: Hive will throw an exception and we just do nothing.
+        val normalizedSpec = partitionSpec.map { spec =>
+          PartitioningUtils.normalizePartitionSpec(
+            spec,
+            table.partitionColumnNames,
+            table.identifier.quotedString,
+            spark.sessionState.conf.resolver)
+        }
+        catalog.listPartitions(table.identifier, normalizedSpec).map(_.storage.locationUri)
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
     locations.foreach { location =>
@@ -467,7 +473,7 @@ case class DescribeTableCommand(
 
     if (table.tableType == CatalogTableType.VIEW) describeViewInfo(table, buffer)
 
-    if (DDLUtils.isDatasourceTable(table) && table.partitionProviderIsHive) {
+    if (DDLUtils.isDatasourceTable(table) && table.tracksPartitionsInCatalog) {
       append(buffer, "Partition Provider:", "Hive", "")
     }
   }

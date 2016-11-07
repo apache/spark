@@ -108,8 +108,9 @@ class KMeansModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
-    val copied = new KMeansModel(uid, parentModel)
-    copyValues(copied, extra)
+    val copied = copyValues(new KMeansModel(uid, parentModel), extra)
+    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
+    copied.setParent(this.parent)
   }
 
   /** @group setParam */

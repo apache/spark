@@ -521,7 +521,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val catalogTable =
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
-      case LogicalRelation(r: HadoopFsRelation, _, Some(table)) =>
+      case LogicalRelation(r: HadoopFsRelation, _, _) =>
         if (!isDataSourceTable) {
           fail(
             s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
@@ -529,7 +529,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(table.storage.locationUri.get === location)
+            assert(r.options("path") === location)
           case None => // OK.
         }
         assert(catalogTable.provider.get === format)
@@ -1570,26 +1570,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   ignore("SPARK-10562: partition by column with mixed case name") {
-    def runOnce() {
-      withTable("tbl10562") {
-        val df = Seq(2012 -> "a").toDF("Year", "val")
-        df.write.partitionBy("Year").saveAsTable("tbl10562")
-        checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
-        checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
-        checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
-        checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
-        checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
-      }
-    }
-    try {
-      runOnce()
-    } catch {
-      case t: Throwable =>
-        // Retry to gather more test data. TODO(ekl) revert this once we deflake this test.
-        runOnce()
-        runOnce()
-        runOnce()
-        throw t
+    withTable("tbl10562") {
+      val df = Seq(2012 -> "a").toDF("Year", "val")
+      df.write.partitionBy("Year").saveAsTable("tbl10562")
+      checkAnswer(sql("SELECT year FROM tbl10562"), Row(2012))
+      checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
+      checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
+// TODO(ekl) this is causing test flakes [SPARK-18167], but we think the issue is derby specific
+//      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
+      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
     }
   }
 
