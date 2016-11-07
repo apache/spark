@@ -37,7 +37,7 @@ def _find_spark_home():
                 (os.path.isdir(os.path.join(path, "jars")) or
                  os.path.isdir(os.path.join(path, "assembly"))))
 
-    paths = ["../", os.path.join(os.path.dirname(sys.argv[0]), "../")]
+    paths = ["../", os.path.dirname(os.path.realpath(__file__))]
 
     # Add the path of the PySpark module if it exists
     if sys.version < "3":
@@ -49,7 +49,7 @@ def _find_spark_home():
             paths.append(os.path.join(module_home, "../../"))
         except ImportError:
             # Not pip installed no worries
-            True
+            pass
     else:
         from importlib.util import find_spec
         try:
@@ -59,7 +59,7 @@ def _find_spark_home():
             paths.append(os.path.join(module_home, "../../"))
         except ImportError:
             # Not pip installed no worries
-            True
+            pass
 
     # Normalize the paths
     paths = [os.path.abspath(p) for p in paths]
@@ -67,7 +67,7 @@ def _find_spark_home():
     try:
         return next(path for path in paths if is_spark_home(path))
     except StopIteration:
-        print("Could not find valid SPARK_HOME while searching %s".format(paths), file=sys.stderr)
+        print("Could not find valid SPARK_HOME while searching {0}".format(paths), file=sys.stderr)
 
 if __name__ == "__main__":
     print(_find_spark_home())

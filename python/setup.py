@@ -74,7 +74,7 @@ try:
         os.makedirs("pyspark/python/pyspark")
     except OSError:
         # Don't worry if the directory already exists.
-        True
+        pass
     copyfile("pyspark/shell.py", "pyspark/python/pyspark/shell.py")
 
     if (in_spark):
