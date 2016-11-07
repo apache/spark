@@ -650,7 +650,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #  Get the summary of a k-means model
 
 #' @param object a fitted k-means model.
-#' @return \code{summary} returns the model's coefficients, size and cluster.
+#' @return \code{summary} returns the model's features, coefficients, k, size and cluster.
 #' @rdname spark.kmeans
 #' @export
 #' @note summary(KMeansModel) since 2.0.0
@@ -807,8 +807,10 @@ setMethod("predict", signature(object = "LogisticRegressionModel"),
 #  Get the summary of an LogisticRegressionModel
 
 #' @param object an LogisticRegressionModel fitted by \code{spark.logit}
-#' @return \code{summary} returns the Binary Logistic regression results of a given model as lists. Note that
-#'                        Multinomial logistic regression summary is not available now.
+#' @return \code{summary} returns the Binary Logistic regression results of a given model as list,
+#'         including roc, areaUnderROC, pr, fMeasureByThreshold, precisionByThreshold,
+#'         recallByThreshold, totalIterations, objectiveHistory. Note that Multinomial logistic
+#'         regression summary is not available now.
 #' @rdname spark.logit
 #' @aliases summary,LogisticRegressionModel-method
 #' @export
@@ -1283,7 +1285,7 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
 # similarly to R's summary().
 
 #' @param object a fitted AFT survival regression model.
-#' @return \code{summary} returns a list containing the model's coefficients,
+#' @return \code{summary} returns a list containing the model's features, coefficients,
 #' intercept and log(scale)
 #' @rdname spark.survreg
 #' @export
@@ -1371,7 +1373,7 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
 #  Get the summary of a multivariate gaussian mixture model
 
 #' @param object a fitted gaussian mixture model.
-#' @return \code{summary} returns the model's lambda, mu, sigma and posterior.
+#' @return \code{summary} returns the model's lambda, mu, sigma, k, dim and posterior.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
 #' @export
@@ -1814,6 +1816,7 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
             write_internal(object, path, overwrite)
           })
 
+# Create the summary of a tree ensemble model (eg. Random Forest, GBT)
 summary.treeEnsemble <- function(model) {
   jobj <- model@jobj
   formula <- callJMethod(jobj, "formula")
@@ -1831,10 +1834,11 @@ summary.treeEnsemble <- function(model) {
        jobj = jobj)
 }
 
-#  Get the summary of an RandomForestRegressionModel model
+#  Get the summary of a Random Forest Regression Model
 
-#' @return \code{summary} returns the model's features as lists, depth and number of nodes
-#'                        or number of classes.
+#' @return \code{summary} returns a summary object of the fitted model, a list of components
+#'         including formula, number of features, list of features, feature importances, number of
+#'         trees, and tree weights
 #' @rdname spark.randomForest
 #' @aliases summary,RandomForestRegressionModel-method
 #' @export
@@ -1846,7 +1850,7 @@ setMethod("summary", signature(object = "RandomForestRegressionModel"),
             ans
           })
 
-#  Get the summary of an RandomForestClassificationModel model
+#  Get the summary of a Random Forest Classification Model
 
 #' @rdname spark.randomForest
 #' @aliases summary,RandomForestClassificationModel-method
@@ -1859,7 +1863,7 @@ setMethod("summary", signature(object = "RandomForestClassificationModel"),
             ans
           })
 
-#  Prints the summary of Random Forest Regression Model
+#  Prints the summary of tree ensemble models (eg. Random Forest, GBT)
 print.summary.treeEnsemble <- function(x) {
   jobj <- x$jobj
   cat("Formula: ", x$formula)
@@ -1873,6 +1877,8 @@ print.summary.treeEnsemble <- function(x) {
   cat("\n", summaryStr, "\n")
   invisible(x)
 }
+
+#  Prints the summary of Random Forest Regression Model
 
 #' @param x summary object of Random Forest regression model or classification model
 #'          returned by \code{summary}.
@@ -2052,8 +2058,11 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
             write_internal(object, path, overwrite)
           })
 
-#' @return \code{summary} returns the model's features as lists, depth and number of nodes
-#'                        or number of classes.
+#  Get the summary of a Gradient Boosted Tree Regression Model
+
+#' @return \code{summary} returns a summary object of the fitted model, a list of components
+#'         including formula, number of features, list of features, feature importances, number of
+#'         trees, and tree weights
 #' @rdname spark.gbt
 #' @aliases summary,GBTRegressionModel-method
 #' @export
@@ -2065,7 +2074,7 @@ setMethod("summary", signature(object = "GBTRegressionModel"),
             ans
           })
 
-#  Get the summary of a GBTClassificationModel model
+#  Get the summary of a Gradient Boosted Tree Classification Model
 
 #' @rdname spark.gbt
 #' @aliases summary,GBTClassificationModel-method
@@ -2077,6 +2086,8 @@ setMethod("summary", signature(object = "GBTClassificationModel"),
             class(ans) <- "summary.GBTClassificationModel"
             ans
           })
+
+#  Prints the summary of Gradient Boosted Tree Regression Model
 
 #' @param x summary object of Gradient Boosted Tree regression model or classification model
 #'          returned by \code{summary}.

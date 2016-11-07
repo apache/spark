@@ -951,6 +951,9 @@ test_that("spark.gbt", {
                tolerance = 1e-4)
   stats <- summary(model)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$formula, "Employed ~ .")
+  expect_equal(stats$numFeatures, 6)
+  expect_equal(length(stats$treeWeights), 20)
 
   modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
   write.ml(model, modelPath)
@@ -1000,6 +1003,8 @@ test_that("spark.gbt", {
   s <- summary(m)
   # test numeric prediction values
   expect_equal(iris2$NumericSpecies, as.double(collect(predict(m, df))$prediction))
+  expect_equal(s$numFeatures, 5)
+  expect_equal(s$numTrees, 20)
 })
 
 sparkR.session.stop()
