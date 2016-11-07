@@ -988,7 +988,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("array") {
+  test("identity map for primitive array") {
     val arrayByte = Array(1.toByte, 2.toByte, 3.toByte)
     val arrayInt = Array(1, 2, 3)
     val arrayLong = Array(1.toLong, 2.toLong, 3.toLong)
