@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.rdd.PartitionCoalescer
+import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
@@ -861,6 +863,17 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 }
+
+/**
+  * Returns a new RDD that has exactly `numPartitions` partitions.
+  */
+case class CoalesceLogical(numPartitions: Int, partitionCoalescer: Option[PartitionCoalescer],
+                    child: LogicalPlan)
+  extends UnaryNode {
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+  override def output: Seq[Attribute] = child.output
+}
+
 
 /**
  * This method repartitions data using [[Expression]]s into `numPartitions`, and receives
