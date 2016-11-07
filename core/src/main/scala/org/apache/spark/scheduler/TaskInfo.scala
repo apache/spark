@@ -52,7 +52,13 @@ class TaskInfo(
    * accumulable to be updated multiple times in a single task or for two accumulables with the
    * same name but different IDs to exist in a task.
    */
-  var accumulables: List[AccumulableInfo] = Nil
+  def accumulables: Seq[AccumulableInfo] = _accumulables
+
+  private[this] var _accumulables: Seq[AccumulableInfo] = Nil
+
+  private[spark] def setAccumulables(newAccumulables: Seq[AccumulableInfo]): Unit = {
+    _accumulables = newAccumulables
+  }
 
   /**
    * The time when the task has completed successfully (including the time to remotely fetch

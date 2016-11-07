@@ -713,7 +713,7 @@ private[spark] object JsonProtocol {
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed
     taskInfo.killed = killed
-    taskInfo.accumulables = accumulables.toList
+    taskInfo.setAccumulables(accumulables)
     taskInfo
   }
 
