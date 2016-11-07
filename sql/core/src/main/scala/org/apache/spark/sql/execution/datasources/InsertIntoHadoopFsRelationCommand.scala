@@ -106,9 +106,10 @@ case class InsertIntoHadoopFsRelationCommand(
   }
 
   /**
-   * Deletes all partitions that match the specified static prefix. Partitions with custom
+   * Deletes all partition files that match the specified static prefix. Partitions with custom
    * locations are also cleared based on the custom locations map given to this class.
    */
+  // TODO(ekl) also delete partition metadata from the catalog
   private def deleteMatchingPartitions(fs: FileSystem, qualifiedOutputPath: Path): Unit = {
     val staticPartitionPrefix = if (staticPartitionKeys.nonEmpty) {
       "/" + partitionColumns.flatMap { p =>

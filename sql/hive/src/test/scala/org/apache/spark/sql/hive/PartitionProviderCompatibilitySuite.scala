@@ -246,7 +246,6 @@ class PartitionProviderCompatibilitySuite
           assert(spark.sql("select * from test").count() == 243)
           spark.sql("insert overwrite table test select id, 1, 1 from range(10)")
           assert(spark.sql("select * from test").count() == 10)
-          spark.sql("show partitions test").show()
         }
       }
     }
