@@ -18,7 +18,6 @@
 package org.apache.spark.examples.ml;
 
 // $example on$
-
 import org.apache.spark.ml.feature.MinHash;
 import org.apache.spark.ml.feature.MinHashModel;
 import org.apache.spark.ml.linalg.Vector;

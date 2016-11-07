@@ -18,7 +18,6 @@
 package org.apache.spark.examples.ml;
 
 // $example on$
-
 import org.apache.spark.ml.feature.RandomProjection;
 import org.apache.spark.ml.feature.RandomProjectionModel;
 import org.apache.spark.ml.linalg.Vector;
