@@ -294,12 +294,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server.initialize()
     server.bind()
 
-    // the test browses to a web page that invokes an ajax call.
-    // this appears to make jetty wait for upto 30 seconds before
-    // the server.stop() call would return after this test.
-    // Here, instructing Jetty not to use this "graceful shutdown" timeout.
-    server.setStopTimeout(-1)
-
     val port = server.boundPort
 
     val servlet = new ProxyServlet {
@@ -343,6 +337,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .map(_.get)
       .filter(_.startsWith(url)).toList
 
+    contextHandler.stop()
     quit()
 
     // there are atleast some URL links that were generated via javascript,
