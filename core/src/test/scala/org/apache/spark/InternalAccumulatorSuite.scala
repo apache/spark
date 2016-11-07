@@ -66,7 +66,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       assert(stageAccum.value.get.asInstanceOf[Long] === numPartitions)
       // The accumulator should be updated locally on each task
       val taskAccumValues = taskInfos.map { taskInfo =>
-        val taskAccum = findTestAccum(taskInfo._accumulables)
+        val taskAccum = findTestAccum(taskInfo.accumulables)
         assert(taskAccum.update.isDefined)
         assert(taskAccum.update.get.asInstanceOf[Long] === 1L)
         taskAccum.value.get.asInstanceOf[Long]

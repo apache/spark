@@ -596,7 +596,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(info1.gettingResultTime === info2.gettingResultTime)
     assert(info1.finishTime === info2.finishTime)
     assert(info1.failed === info2.failed)
-    assert(info1._accumulables === info2._accumulables)
+    assert(info1.accumulables === info2.accumulables)
   }
 
   private def assertEquals(info1: ExecutorInfo, info2: ExecutorInfo) {
@@ -788,7 +788,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
     val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
       speculative)
-    taskInfo._accumulables =
+    taskInfo.accumulables =
       List(makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true))
     taskInfo
   }

@@ -403,9 +403,9 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       internal = false,
       countFailedValues = false,
       metadata = None)
-    taskInfo._accumulables = List(internalAccum, sqlAccum, userAccum)
+    taskInfo.accumulables = List(internalAccum, sqlAccum, userAccum)
 
     val newTaskInfo = TaskUIData.dropInternalAndSQLAccumulables(taskInfo)
-    assert(newTaskInfo._accumulables === Seq(userAccum))
+    assert(newTaskInfo.accumulables === Seq(userAccum))
   }
 }

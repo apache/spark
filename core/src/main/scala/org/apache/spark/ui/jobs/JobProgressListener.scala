@@ -361,7 +361,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         new StageUIData
       })
 
-      for (accumulableInfo <- info._accumulables) {
+      for (accumulableInfo <- info.accumulables) {
         stageData.accumulables(accumulableInfo.id) = accumulableInfo
       }
 
