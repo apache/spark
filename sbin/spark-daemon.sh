@@ -27,6 +27,7 @@
 #   SPARK_PID_DIR   The pid files are stored. /tmp by default.
 #   SPARK_IDENT_STRING   A string representing this instance of spark. $USER by default
 #   SPARK_NICENESS The scheduling priority for daemons. Defaults to 0.
+#   SPARK_NO_DAEMONIZE   If set, will run the proposed command in the foreground. It will not output a PID file.
 ##
 
 usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop|submit|status) <spark-command> <spark-instance-number> <args...>"
@@ -122,6 +123,35 @@ if [ "$SPARK_NICENESS" = "" ]; then
     export SPARK_NICENESS=0
 fi
 
+execute_command() {
+  local command="$@"
+  if [ -z ${SPARK_NO_DAEMONIZE+set} ]; then
+      nohup -- $command >> $log 2>&1 < /dev/null &
+      newpid="$!"
+
+      echo "$newpid" > "$pid"
+
+      # Poll for up to 5 seconds for the java process to start
+      for i in {1..10}
+      do
+        if [[ $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
+           break
+        fi
+        sleep 0.5
+      done
+
+      sleep 2
+      # Check if the process has died; in that case we'll tail the log so the user can see
+      if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
+        echo "failed to launch $command:"
+        tail -2 "$log" | sed 's/^/  /'
+        echo "full log in $log"
+      fi
+  else
+      $command
+  fi
+}
+
 run_command() {
   mode="$1"
   shift
@@ -146,13 +176,11 @@ run_command() {
 
   case "$mode" in
     (class)
-      nohup nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
-      newpid="$!"
+      execute_command nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class $command $@
       ;;
 
     (submit)
-      nohup nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-submit --class $command "$@" >> "$log" 2>&1 < /dev/null &
-      newpid="$!"
+      execute_command nice -n "$SPARK_NICENESS" bash "${SPARK_HOME}"/bin/spark-submit --class $command $@
       ;;
 
     (*)
@@ -161,24 +189,6 @@ run_command() {
       ;;
   esac
 
-  echo "$newpid" > "$pid"
-  
-  #Poll for up to 5 seconds for the java process to start
-  for i in {1..10}
-  do
-    if [[ $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
-       break
-    fi
-    sleep 0.5
-  done
-
-  sleep 2
-  # Check if the process has died; in that case we'll tail the log so the user can see
-  if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
-    echo "failed to launch $command:"
-    tail -2 "$log" | sed 's/^/  /'
-    echo "full log in $log"
-  fi
 }
 
 case $option in

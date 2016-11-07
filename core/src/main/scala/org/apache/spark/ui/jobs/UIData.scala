@@ -23,7 +23,6 @@ import scala.collection.mutable.{HashMap, LinkedHashMap}
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ShuffleReadMetrics, ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
-import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -81,6 +80,7 @@ private[spark] object UIData {
     var numKilledTasks: Int = _
 
     var executorRunTime: Long = _
+    var executorCpuTime: Long = _
 
     var inputBytes: Long = _
     var inputRecords: Long = _
@@ -138,14 +138,15 @@ private[spark] object UIData {
       metrics.map { m =>
         TaskMetricsUIData(
           executorDeserializeTime = m.executorDeserializeTime,
+          executorDeserializeCpuTime = m.executorDeserializeCpuTime,
           executorRunTime = m.executorRunTime,
+          executorCpuTime = m.executorCpuTime,
           resultSize = m.resultSize,
           jvmGCTime = m.jvmGCTime,
           resultSerializationTime = m.resultSerializationTime,
           memoryBytesSpilled = m.memoryBytesSpilled,
           diskBytesSpilled = m.diskBytesSpilled,
           peakExecutionMemory = m.peakExecutionMemory,
-          updatedBlockStatuses = m.updatedBlockStatuses.toList,
           inputMetrics = InputMetricsUIData(m.inputMetrics.bytesRead, m.inputMetrics.recordsRead),
           outputMetrics =
             OutputMetricsUIData(m.outputMetrics.bytesWritten, m.outputMetrics.recordsWritten),
@@ -179,21 +180,17 @@ private[spark] object UIData {
     }
   }
 
-  class ExecutorUIData(
-      val startTime: Long,
-      var finishTime: Option[Long] = None,
-      var finishReason: Option[String] = None)
-
   case class TaskMetricsUIData(
       executorDeserializeTime: Long,
+      executorDeserializeCpuTime: Long,
       executorRunTime: Long,
+      executorCpuTime: Long,
       resultSize: Long,
       jvmGCTime: Long,
       resultSerializationTime: Long,
       memoryBytesSpilled: Long,
       diskBytesSpilled: Long,
       peakExecutionMemory: Long,
-      updatedBlockStatuses: Seq[(BlockId, BlockStatus)],
       inputMetrics: InputMetricsUIData,
       outputMetrics: OutputMetricsUIData,
       shuffleReadMetrics: ShuffleReadMetricsUIData,

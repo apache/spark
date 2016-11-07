@@ -25,9 +25,11 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -57,14 +59,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val rdd = baseRdd(sparkSession, csvOptions, paths)
     val firstLine = findFirstLine(csvOptions, rdd)
     val firstRow = new CsvReader(csvOptions).parseLine(firstLine)
-
-    val header = if (csvOptions.headerFlag) {
-      firstRow.zipWithIndex.map { case (value, index) =>
-        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
-      }
-    } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
-    }
+    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val header = makeSafeHeader(firstRow, csvOptions, caseSensitive)
 
     val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
     val schema = if (csvOptions.inferSchemaFlag) {
@@ -72,11 +68,49 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
-        StructField(fieldName.toString, StringType, nullable = true)
+        StructField(fieldName, StringType, nullable = true)
       }
       StructType(schemaFields)
     }
     Some(schema)
+  }
+
+  /**
+   * Generates a header from the given row which is null-safe and duplicate-safe.
+   */
+  private def makeSafeHeader(
+      row: Array[String],
+      options: CSVOptions,
+      caseSensitive: Boolean): Array[String] = {
+    if (options.headerFlag) {
+      val duplicates = {
+        val headerNames = row.filter(_ != null)
+          .map(name => if (caseSensitive) name else name.toLowerCase)
+        headerNames.diff(headerNames.distinct).distinct
+      }
+
+      row.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == options.nullValue) {
+          // When there are empty strings or the values set in `nullValue`, put the
+          // index as the suffix.
+          s"_c$index"
+        } else if (!caseSensitive && duplicates.contains(value.toLowerCase)) {
+          // When there are case-insensitive duplicates, put the index as the suffix.
+          s"$value$index"
+        } else if (duplicates.contains(value)) {
+          // When there are duplicates, put the index as the suffix.
+          s"$value$index"
+        } else {
+          value
+        }
+      }
+    } else {
+      row.zipWithIndex.map { case (_, index) =>
+        // Uses default column names, "_c#" where # is its position of fields
+        // when header option is disabled.
+        s"_c$index"
+      }
+    }
   }
 
   override def prepareWrite(
@@ -112,7 +146,9 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     (file: PartitionedFile) => {
       val lineIterator = {
         val conf = broadcastedHadoopConf.value.value
-        new HadoopFileLinesReader(file, conf).map { line =>
+        val linesReader = new HadoopFileLinesReader(file, conf)
+        Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+        linesReader.map { line =>
           new String(line.getBytes, 0, line.getLength, csvOptions.charset)
         }
       }

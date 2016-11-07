@@ -75,6 +75,7 @@ private[r] object IsotonicRegressionWrapper
       .setIsotonic(isotonic)
       .setFeatureIndex(featureIndex)
       .setWeightCol(weightCol)
+      .setFeaturesCol(rFormula.getFeaturesCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, isotonicRegression))

@@ -69,10 +69,10 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     val inputFiles = fs.listStatus(cpath)
       .map(_.getPath)
       .filter(_.getName.startsWith("part-"))
-      .sortBy(_.toString)
+      .sortBy(_.getName.stripPrefix("part-").toInt)
     // Fail fast if input files are invalid
     inputFiles.zipWithIndex.foreach { case (path, i) =>
-      if (!path.toString.endsWith(ReliableCheckpointRDD.checkpointFileName(i))) {
+      if (path.getName != ReliableCheckpointRDD.checkpointFileName(i)) {
         throw new SparkException(s"Invalid checkpoint file: $path")
       }
     }
