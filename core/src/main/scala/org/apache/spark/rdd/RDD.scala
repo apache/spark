@@ -821,6 +821,17 @@ abstract class RDD[T: ClassTag](
       preservesPartitioning)
   }
 
+  def mapPartitionsWithIndexPreserveLocations[U: ClassTag](
+      f: (Int, Iterator[T]) => Iterator[U],
+      p: (Int) => Seq[String],
+      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+    val cleanedF = sc.clean(f)
+    new PreserveLocationsRDD(
+      this,
+      (context: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(index, iter),
+      preservesPartitioning, p)
+  }
+
   /**
    * Zips this RDD with another one, returning key-value pairs with the first element in each RDD,
    * second element in each RDD, etc. Assumes that the two RDDs have the *same number of
