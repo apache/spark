@@ -415,7 +415,6 @@ private[spark] class ApplicationMaster(
           throw new IllegalStateException("SparkContext is null but app is still running!")
         }
       }
-      userClassThread.join()
     } catch {
       case e: SparkException if e.getCause().isInstanceOf[TimeoutException] =>
         logError(
@@ -665,6 +664,7 @@ private[spark] class ApplicationMaster(
     userThread.setContextClassLoader(userClassLoader)
     userThread.setName("Driver")
     userThread.start()
+    userThread.join()
     userThread
   }
 
