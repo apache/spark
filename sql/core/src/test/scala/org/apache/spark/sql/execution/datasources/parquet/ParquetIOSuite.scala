@@ -736,6 +736,32 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-16544 Support Parquet schema compatibility with numeric types") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withTempPath { file =>
+        val data = (1 to 4).map(i => (i.toByte, i.toShort, i, i.toLong, i.toFloat))
+
+        spark.createDataFrame(data).toDF("a", "b", "c", "d", "e")
+          .write.parquet(file.getCanonicalPath)
+
+        val schema = StructType(
+          StructField("a", ShortType, true) ::
+          StructField("b", IntegerType, true) ::
+          StructField("c", LongType, true) ::
+          StructField("d", FloatType, true) ::
+          StructField("e", DoubleType, true) :: Nil)
+
+        val df = spark.read.schema(schema).parquet(file.getAbsolutePath)
+
+        val expectedDf = data.map { case (a, b, c, d, e) =>
+          (a.toShort, b.toInt, c.toLong, d.toFloat, e.toDouble)
+        }.toDF("a", "b", "c", "d", "e")
+
+        checkAnswer(df, expectedDf)
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
