@@ -111,7 +111,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // The modification time of the newest log detected during the last scan.   Currently only
   // used for logging msgs (logs are re-scanned based on file size, rather than modtime)
-  private val lastScanTime = new java.util.concurrent.atomic.AtomicLong (-1)
+  private val lastScanTime = new java.util.concurrent.atomic.AtomicLong(-1)
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
@@ -123,7 +123,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // List of application logs to be deleted by event log cleaner.
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
 
-  private val pendingReplayTasksCount = new java.util.concurrent.atomic.AtomicInteger (0)
+  private val pendingReplayTasksCount = new java.util.concurrent.atomic.AtomicInteger(0)
 
   /**
    * Return a runnable that performs the given operation on the event logs.
@@ -352,7 +352,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           logError(s"Exception while submitting event log for replay", e)
       }
 
-      pendingReplayTasksCount.addAndGet (tasks.size)
+      pendingReplayTasksCount.addAndGet(tasks.size)
 
       tasks.foreach { task =>
         try {
