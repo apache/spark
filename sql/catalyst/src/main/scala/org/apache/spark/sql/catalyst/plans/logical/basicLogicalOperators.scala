@@ -357,9 +357,9 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 case class OverwriteOptions(
     enabled: Boolean,
     staticPartitionKeys: CatalogTypes.TablePartitionSpec = Map.empty) {
-  if (staticPartitionKeys.nonEmpty) {
-    assert(enabled, "Overwrite must be enabled when specifying specific partitions.")
-  }
+//  if (staticPartitionKeys.nonEmpty) {
+//    assert(enabled, "Overwrite must be enabled when specifying specific partitions.")
+//  }
 }
 
 /**

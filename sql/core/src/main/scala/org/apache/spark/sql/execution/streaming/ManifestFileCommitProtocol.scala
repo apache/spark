@@ -78,7 +78,12 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
   }
 
   override def newTaskTempFile(
-      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
+      taskContext: TaskAttemptContext,
+      relativeDir: Option[String], absoluteDir: Option[String], ext: String): String = {
+    if (absoluteDir.isDefined) {
+      throw new UnsupportedOperationException(
+        "absolute output path not supported by manifest commit protocol")
+    }
     // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
@@ -86,7 +91,7 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     val uuid = UUID.randomUUID.toString
     val filename = f"part-$split%05d-$uuid$ext"
 
-    val file = dir.map { d =>
+    val file = relativeDir.map { d =>
       new Path(new Path(path, d), filename).toString
     }.getOrElse {
       new Path(path, filename).toString

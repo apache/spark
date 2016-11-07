@@ -60,7 +60,6 @@ class PartitionProviderCompatibilitySuite
     }
   }
 
-/*
   test("convert partition provider to hive with repair table") {
     withTable("test") {
       withTempDir { dir =>
@@ -136,7 +135,7 @@ class PartitionProviderCompatibilitySuite
     }
   }
 
-  test("insert overwrite partition of legacy datasource table overwrites entire table") {
+  test("insert overwrite partition of legacy datasource table") {
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
       withTable("test") {
         withTempDir { dir =>
@@ -145,9 +144,9 @@ class PartitionProviderCompatibilitySuite
             """insert overwrite table test
               |partition (partCol=1)
               |select * from range(100)""".stripMargin)
-          assert(spark.sql("select * from test").count() == 100)
+          assert(spark.sql("select * from test").count() == 104)
 
-          // Dynamic partitions case
+          // Overwriting entire table
           spark.sql("insert overwrite table test select id, id from range(10)".stripMargin)
           assert(spark.sql("select * from test").count() == 10)
         }
@@ -155,7 +154,6 @@ class PartitionProviderCompatibilitySuite
     }
   }
 
-*/
   test("insert overwrite partition of new datasource table overwrites just partition") {
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
       withTable("test") {
@@ -184,6 +182,71 @@ class PartitionProviderCompatibilitySuite
                 |select * from range(20)""".stripMargin)
             assert(sql("select * from test").count() == 24)
           }
+        }
+      }
+    }
+  }
+
+  test("insert into and overwrite new datasource tables with partial specs and custom locs") {
+    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
+      withTable("test") {
+        withTempDir { dir =>
+          spark.range(5).selectExpr("id", "id as p1", "id as p2").write
+            .partitionBy("p1", "p2")
+            .mode("overwrite")
+            .parquet(dir.getAbsolutePath)
+          spark.sql(s"""
+            |create table test (id long, p1 int, p2 int)
+            |using parquet
+            |options (path "${dir.getAbsolutePath}")
+            |partitioned by (p1, p2)""".stripMargin)
+          spark.sql("msck repair table test")
+          assert(spark.sql("select * from test").count() == 5)
+
+          // dynamic append with partial spec, existing dir
+          spark.sql("insert into test partition (p1=1, p2) select id, id from range(10)")
+          assert(spark.sql("select * from test where p1=1").count() == 11)
+          assert(spark.sql("select * from test where p1=1 and p2=1").count() == 2)
+
+          // dynamic append with full spec, existing dir
+          spark.sql("insert into test partition (p1=1, p2=1) select id from range(10)")
+          assert(spark.sql("select * from test where p1=1").count() == 21)
+          assert(spark.sql("select * from test where p1=1 and p2=1").count() == 12)
+
+          // dynamic append with partial spec, new dir
+          spark.sql("insert into test partition (p1=100, p2) select id, id from range(10)")
+          assert(spark.sql("select * from test where p1=100").count() == 10)
+
+          // dynamic append with full spec, new dir
+          spark.sql("insert into test partition (p1=100, p2=100) select id from range(10)")
+          assert(spark.sql("select * from test where p1=100").count() == 20)
+
+          // dynamic overwrite with partial spec, existing dir
+          spark.sql(
+            "insert overwrite table test partition (p1=1, p2) select id, id from range(100)")
+          assert(spark.sql("select * from test where p1=1").count() == 100)
+
+          // dynamic overwrite with full spec, existing dir
+          spark.sql(
+            "insert overwrite table test partition (p1=1, p2=1) select id from range(100)")
+          assert(spark.sql("select * from test where p1=1").count() == 199)
+          assert(spark.sql("select * from test where p1=1 and p2=1").count() == 100)
+
+          // dynamic overwrite with partial spec, new dir
+          spark.sql(
+            "insert overwrite table test partition (p1=500, p2) select id, id from range(10)")
+          assert(spark.sql("select * from test where p1=500").count() == 10)
+
+          // dynamic overwrite with full spec, new dir
+          spark.sql(
+            "insert overwrite table test partition (p1=500, p2=500) select id from range(10)")
+          assert(spark.sql("select * from test where p1=500 and p2=500").count() == 10)
+
+          // overwrite entire table
+          assert(spark.sql("select * from test").count() == 243)
+          spark.sql("insert overwrite table test select id, 1, 1 from range(10)")
+          assert(spark.sql("select * from test").count() == 10)
+          spark.sql("show partitions test").show()
         }
       }
     }

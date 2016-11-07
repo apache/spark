@@ -48,7 +48,8 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 object FileFormatWriter extends Logging {
 
   /** Describes how output files should be placed in the filesystem. */
-  case class OutputSpec(outputPath: String, customPartitionLocations: Map[String, String])
+  case class OutputSpec(
+    outputPath: String, customPartitionLocations: Map[TablePartitionSpec, String])
 
   /** A shared job description for all the write tasks. */
   private class WriteJobDescription(
@@ -60,7 +61,7 @@ object FileFormatWriter extends Logging {
       val nonPartitionColumns: Seq[Attribute],
       val bucketSpec: Option[BucketSpec],
       val path: String,
-      val customPartitionLocations: Map[String, String])
+      val customPartitionLocations: Map[TablePartitionSpec, String])
     extends Serializable {
 
     assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ nonPartitionColumns),
@@ -229,6 +230,7 @@ object FileFormatWriter extends Logging {
       val tmpFilePath = committer.newTaskTempFile(
         taskAttemptContext,
         None,
+        None,
         description.outputWriterFactory.getFileExtension(taskAttemptContext))
 
       val outputWriter = description.outputWriterFactory.newInstance(
@@ -313,7 +315,17 @@ object FileFormatWriter extends Logging {
       }
       val ext = bucketId + description.outputWriterFactory.getFileExtension(taskAttemptContext)
 
-      val path = committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+      val customPath = partDir match {
+        case Some(dir) =>
+          description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
+        case _ =>
+          None
+      }
+      val path = if (customPath.isDefined) {
+        committer.newTaskTempFile(taskAttemptContext, None, customPath, ext)
+      } else {
+        committer.newTaskTempFile(taskAttemptContext, partDir, None, ext)
+      }
       val newWriter = description.outputWriterFactory.newInstance(
         path = path,
         dataSchema = description.nonPartitionColumns.toStructType,

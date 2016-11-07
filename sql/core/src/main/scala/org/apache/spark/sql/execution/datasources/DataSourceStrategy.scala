@@ -183,10 +183,10 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
           "Cannot overwrite a path that is also being read from.")
       }
 
-      val partitionLocationOverrides: Map[String, String] =
+      val customPartitionLocations: Map[TablePartitionSpec, String] =
         if (t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
             l.catalogTable.get.tracksPartitionsInCatalog) {
-          getPartitionLocationOverrides(
+          getCustomPartitionLocations(
             t.sparkSession, l.catalogTable.get, outputPath, overwrite.staticPartitionKeys)
         } else {
           Map.empty
@@ -212,7 +212,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       val insertCmd = InsertIntoHadoopFsRelationCommand(
         outputPath,
         if (overwrite.enabled) overwrite.staticPartitionKeys else Map.empty,
-        partitionLocationOverrides,
+        customPartitionLocations,
         partitionSchema,
         t.bucketSpec,
         t.fileFormat,
@@ -224,11 +224,11 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       insertCmd
   }
 
-  private def getPartitionLocationOverrides(
+  private def getCustomPartitionLocations(
       spark: SparkSession,
       table: CatalogTable,
       basePath: Path,
-      staticPartitionKeys: TablePartitionSpec): Map[String, String] = {
+      staticPartitionKeys: TablePartitionSpec): Map[TablePartitionSpec, String] = {
     val hadoopConf = spark.sessionState.newHadoopConf
     val fs = basePath.getFileSystem(hadoopConf)
     val qualifiedBasePath = basePath.makeQualified(fs.getUri, fs.getWorkingDirectory)
@@ -240,7 +240,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       val catalogLocation = new Path(p.storage.locationUri.get).makeQualified(
         fs.getUri, fs.getWorkingDirectory).toString
       if (catalogLocation != defaultLocation) {
-        Some(defaultLocation -> catalogLocation)
+        Some(p.spec -> catalogLocation)
       } else {
         None
       }

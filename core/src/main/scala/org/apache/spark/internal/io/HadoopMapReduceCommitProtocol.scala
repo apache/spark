@@ -19,6 +19,8 @@ package org.apache.spark.internal.io
 
 import java.util.Date
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
@@ -47,7 +49,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
    * OutputCommitter, we must manually move these to their final locations on task commit.
    * TODO(ekl) it would be nice to provide better atomicity for this type of output.
    */
-  @transient private var taskAbsPathOutputs: List[String] = Nil
+  @transient private var taskAbsPathOutputs: ArrayBuffer[String] = _
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     context.getOutputFormatClass.newInstance().getOutputCommitter(context)
@@ -74,7 +76,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     absoluteDir match {
       case Some(d) =>
         val absOutputPath = new Path(d, filename).toString
-        taskAbsPathOutputs ::= absOutputPath
+        taskAbsPathOutputs += absOutputPath
         absOutputPath
       case _ =>
         relativeDir match {
@@ -115,6 +117,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
     committer = setupCommitter(taskContext)
     committer.setupTask(taskContext)
+    taskAbsPathOutputs = new ArrayBuffer[String]
   }
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
