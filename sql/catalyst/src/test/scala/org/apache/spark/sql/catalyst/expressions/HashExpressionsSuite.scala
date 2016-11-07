@@ -129,7 +129,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-18207: Compute hash for a lot of expressions") {
     val N = 1000
     val wideRow = new GenericInternalRow(
-      (1 to N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
+      Seq.tabulate(N)(i => UTF8String.fromString(i.toString)).toArray[Any])
     val schema = StructType((1 to N).map(i => StructField("", StringType)))
 
     val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
