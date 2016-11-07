@@ -233,7 +233,6 @@ private[sql] class HiveSessionCatalog(
   // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
   // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
   private val hiveFunctions = Seq(
-    "hash",
     "histogram_numeric",
     "percentile"
   )
