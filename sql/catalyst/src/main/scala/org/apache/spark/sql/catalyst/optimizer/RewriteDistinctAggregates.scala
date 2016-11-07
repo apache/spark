@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPl
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.IntegerType
 
-/*
+/**
  * This rule rewrites an aggregate query with distinct aggregations into an expanded double
  * aggregation in which the regular aggregation expressions and every distinct clause is aggregated
  * in a separate group. The results are then combined in a second aggregate.
@@ -125,6 +125,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // we must expand at least one of the children (here we take the first child),
           // or If we don't, we will get the wrong result, for example:
           // count(distinct 1) will be explained to count(1) after the rewrite function.
+          // Generally, the distinct aggregateFunction should not run
+          // foldable TypeCheck for the first child.
           e.aggregateFunction.children.take(1).toSet
         }
     }
@@ -144,8 +146,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Functions used to modify aggregate functions and their inputs.
       def evalWithinGroup(id: Literal, e: Expression) = If(EqualTo(gid, id), e, nullify(e))
-      def patchAggregateFunctionChildren(af: AggregateFunction)(
-        attrs: Expression => Option[Expression]): AggregateFunction = {
+      def patchAggregateFunctionChildren(
+          af: AggregateFunction)(
+          attrs: Expression => Option[Expression]): AggregateFunction = {
         val newChildren = af.children.map(c => attrs(c).getOrElse(c))
         af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
       }
@@ -251,8 +254,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Construct the second aggregate
       val transformations: Map[Expression, Expression] =
-      (distinctAggOperatorMap.flatMap(_._2) ++
-        regularAggOperatorMap.map(e => (e._1, e._3))).toMap
+        (distinctAggOperatorMap.flatMap(_._2) ++
+          regularAggOperatorMap.map(e => (e._1, e._3))).toMap
 
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
@@ -275,9 +278,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
   private def nullify(e: Expression) = Literal.create(null, e.dataType)
 
   private def expressionAttributePair(e: Expression) =
-  // We are creating a new reference here instead of reusing the attribute in case of a
-  // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
-  // children, in this case attribute reuse causes the input of the regular aggregate to bound to
-  // the (nulled out) input of the distinct aggregate.
+    // We are creating a new reference here instead of reusing the attribute in case of a
+    // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
+    // children, in this case attribute reuse causes the input of the regular aggregate to bound to
+    // the (nulled out) input of the distinct aggregate.
     e -> AttributeReference(e.sql, e.dataType, nullable = true)()
 }
