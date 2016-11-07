@@ -29,10 +29,11 @@ import org.apache.hadoop.mapred.{JobConf, JobID}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -95,7 +96,7 @@ object SparkHadoopMapReduceWriter extends Logging {
 
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
-      sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
+      val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
         executeTask(
           context = context,
           jobTrackerId = jobTrackerId,
@@ -108,7 +109,7 @@ object SparkHadoopMapReduceWriter extends Logging {
           iterator = iter)
       })
 
-      committer.commitJob(jobContext, Seq.empty)
+      committer.commitJob(jobContext, ret)
       logInfo(s"Job ${jobContext.getJobID} committed.")
     } catch { case cause: Throwable =>
       logError(s"Aborting job ${jobContext.getJobID}.", cause)
@@ -127,7 +128,7 @@ object SparkHadoopMapReduceWriter extends Logging {
       committer: FileCommitProtocol,
       hadoopConf: Configuration,
       outputFormat: Class[_ <: OutputFormat[K, V]],
-      iterator: Iterator[(K, V)]): Unit = {
+      iterator: Iterator[(K, V)]): TaskCommitMessage = {
     // Set up a task.
     val attemptId = new TaskAttemptID(jobTrackerId, sparkStageId, TaskType.REDUCE,
       sparkPartitionId, sparkAttemptNumber)
@@ -165,11 +166,11 @@ object SparkHadoopMapReduceWriter extends Logging {
     } catch {
       case t: Throwable =>
         throw new SparkException("Task failed while writing rows", t)
-    }
-
-    outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
-      om.setBytesWritten(callback())
-      om.setRecordsWritten(recordsWritten)
+    } finally {
+      outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
+        om.setBytesWritten(callback())
+        om.setRecordsWritten(recordsWritten)
+      }
     }
   }
 }
