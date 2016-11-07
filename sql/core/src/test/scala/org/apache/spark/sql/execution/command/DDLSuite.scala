@@ -1628,29 +1628,62 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("truncate table - datasource table") {
     import testImplicits._
-    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
 
+    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
     // Test both a Hive compatible and incompatible code path.
     Seq("json", "parquet").foreach { format =>
       withTable("rectangles") {
         data.write.format(format).saveAsTable("rectangles")
         assume(spark.table("rectangles").collect().nonEmpty,
           "bad test; table was empty to begin with")
+
         sql("TRUNCATE TABLE rectangles")
         assert(spark.table("rectangles").collect().isEmpty)
+
+        // not supported since the table is not partitioned
+        assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
       }
     }
+  }
 
-    withTable("rectangles", "rectangles2") {
-      data.write.saveAsTable("rectangles")
-      data.write.partitionBy("length").saveAsTable("rectangles2")
+  test("truncate partitioned table - datasource table") {
+    import testImplicits._
 
-      // not supported since the table is not partitioned
-      assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
+    val data = (1 to 10).map { i => (i % 3, i % 5, i) }.toDF("width", "length", "height")
 
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
       // supported since partitions are stored in the metastore
-      sql("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
-      assert(spark.table("rectangles2").collect().isEmpty)
+      sql("TRUNCATE TABLE partTable PARTITION (width=1, length=1)")
+      assert(spark.table("partTable").filter($"width" === 1).collect().nonEmpty)
+      assert(spark.table("partTable").filter($"width" === 1 && $"length" === 1).collect().isEmpty)
+    }
+
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
+      // support partial partition spec
+      sql("TRUNCATE TABLE partTable PARTITION (width=1)")
+      assert(spark.table("partTable").collect().nonEmpty)
+      assert(spark.table("partTable").filter($"width" === 1).collect().isEmpty)
+    }
+
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
+      // do nothing if no partition is matched for the given partial partition spec
+      sql("TRUNCATE TABLE partTable PARTITION (width=100)")
+      assert(spark.table("partTable").count() == data.count())
+
+      // do nothing if no partition is matched for the given non-partial partition spec
+      // TODO: This behaviour is different from Hive, we should decide whether we need to follow
+      // Hive's behaviour or stick with our existing behaviour later.
+      sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
+      assert(spark.table("partTable").count() == data.count())
+
+      // throw exception if the column in partition spec is not a partition column.
+      val e = intercept[AnalysisException] {
+        sql("TRUNCATE TABLE partTable PARTITION (unknown=1)")
+      }
+      assert(e.message.contains("unknown is not a valid partition column"))
     }
   }
 
