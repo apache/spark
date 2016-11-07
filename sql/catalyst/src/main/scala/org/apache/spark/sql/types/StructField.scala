@@ -79,6 +79,6 @@ case class StructField(
    * Return the full description of the StructField.
    */
   def getDesc(): String = {
-    s"StructField($name,$dataType,$nullable$metadata)"
+    s"StructField($name,$dataType,$nullable,$metadata)"
   }
 }

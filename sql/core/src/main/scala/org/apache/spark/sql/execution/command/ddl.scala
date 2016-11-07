@@ -274,6 +274,68 @@ case class AlterTableUnsetPropertiesCommand(
 
 }
 
+
+/**
+ * A command to change the columns for a table, only support change column comment for now.
+ * This function creates a [[AlterTableChangeColumnsCommand]] logical plan.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   ALTER (TABLE | VIEW) table_identifier
+ *   CHANGE (COLUMN) column_name column_name column_dataType column_comment
+ *   (FIRST | AFTER column_name);
+ * }}}
+ */
+case class AlterTableChangeColumnsCommand(
+    tableName: TableIdentifier,
+    columns: Map[String, StructField],
+    isView: Boolean) extends RunnableCommand {
+
+  // TODO: support change column name/dataType/metadata/position.
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    // If this is a temp view, throw an [[AnalysisException]] because we don't change the schema
+    // of a temp view.
+    if (catalog.isTemporaryTable(tableName)) {
+      throw new AnalysisException(
+        s"ALTER TABLE CHANGE COLUMN can't apply to a temporary view ${tableName}.")
+    } else {
+      val table = catalog.getTableMetadata(tableName)
+      DDLUtils.verifyAlterTableType(catalog, table, isView)
+      // Assert we only alter the column's comment, other fields e.g. name/dataType remain
+      // unchanged.
+      columns.foreach { pair =>
+        val originColumn = table.schema.collectFirst {
+          case field if field.name == pair._1 => field
+        }
+        val newColumn = pair._2
+        val unchanged = originColumn.map(equalIgnoreComment(_, newColumn)).getOrElse(true)
+        if (!unchanged) {
+          throw new AnalysisException(
+            s"ALTER TABLE CHANGE COLUMN don't support change column " +
+              s"'${originColumn.get.getDesc}' to '${newColumn.getDesc}'")
+        }
+      }
+
+      // Create map from columns to new comments.
+      val columnComments = columns.map {
+        case (col, field: StructField) if field.getComment().isDefined =>
+          (col, field.getComment.get)
+      }
+      catalog.alterColumnComments(tableName, columnComments)
+    }
+
+    Seq.empty[Row]
+  }
+
+  // Compare a [[StructField]] to another, return true if they have equal values except for
+  // comment.
+  private def equalIgnoreComment(field: StructField, other: StructField): Boolean = {
+    field.withComment("") == other.withComment("")
+  }
+
+}
+
 /**
  * A command that sets the serde class and/or serde properties of a table/view.
  *

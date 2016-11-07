@@ -892,9 +892,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val isView = ctx.VIEW != null
 
     val columns = ctx.expandColTypeList.expandColType.asScala.map { col =>
-      if (col.colIndex != null) {
+      if (col.colPosition != null) {
         throw new AnalysisException(
-          s"Specifying column index in ALTER TABLE CHANGE COLUMN is not supported yet.")
+          s"Specifying column position in ALTER TABLE CHANGE COLUMN is not supported yet.")
       }
       col.identifier.getText -> visitColType(col.colType)
     }.toMap
