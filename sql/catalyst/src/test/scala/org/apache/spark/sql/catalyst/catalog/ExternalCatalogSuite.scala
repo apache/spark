@@ -320,6 +320,17 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     catalog.createPartitions("db2", "tbl2", Seq(part1), ignoreIfExists = true)
   }
 
+  test("list partitions with partial partition spec") {
+    val catalog = newBasicCatalog()
+    val parts = catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "1")))
+    assert(parts.length == 1)
+    assert(parts.head.spec == part1.spec)
+
+    // if no partition is matched for the given partition spec, an empty list should be returned.
+    assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown", "b" -> "1"))).isEmpty)
+    assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
+  }
+
   test("drop partitions") {
     val catalog = newBasicCatalog()
     assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part1, part2)))
