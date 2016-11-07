@@ -125,7 +125,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
 
-  test("SPARK-18207: Compute hash for a lot of String expressions") {
+  test("SPARK-18207: Compute hash for a lot of expressions") {
     val N = 1000
     val wideRow = new GenericInternalRow(
       (1 to N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
@@ -134,8 +134,11 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
     }
-    val hashExpr = Murmur3Hash(exprs, 42)
-    GenerateMutableProjection.generate(Seq(hashExpr))
+    val murmur3HashExpr = Murmur3Hash(exprs, 42)
+    GenerateMutableProjection.generate(Seq(murmur3HashExpr))
+
+    val hiveHashExpr = HiveHash(exprs)
+    GenerateMutableProjection.generate(Seq(hiveHashExpr))
   }
 
   private def testHash(inputSchema: StructType): Unit = {
