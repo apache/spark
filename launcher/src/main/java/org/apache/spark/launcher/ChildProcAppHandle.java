@@ -49,7 +49,12 @@ class ChildProcAppHandle extends AbstractSparkAppHandle {
         try {
           childProc.destroy();
         } catch (Exception inner) {
-          // no-op
+          try {
+            Method destroy = childProc.getClass().getMethod("destroyForcibly");
+            destroy.invoke(childProc);
+          } catch (Exception inEx){
+            // no-op.
+          }
         }
       } finally {
         childProc = null;
