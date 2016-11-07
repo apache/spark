@@ -69,9 +69,11 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     val v1 = Vectors.sparse(10, Seq((2, 1.0), (3, 1.0), (5, 1.0), (7, 1.0)))
     val v2 = Vectors.sparse(10, Seq((1, 1.0), (3, 1.0), (5, 1.0), (7, 1.0), (9, 1.0)))
     val keyDist = model.keyDistance(v1, v2)
-    val hashDist = model.hashDistance(Vectors.dense(-5, 5), Vectors.dense(1, 2))
+    val hashDist1 = model.hashDistance(Vectors.dense(1, 2), Vectors.dense(3, 4))
+    val hashDist2 = model.hashDistance(Vectors.dense(1, 2), Vectors.dense(3, 2))
     assert(keyDist === 0.5)
-    assert(hashDist === 3)
+    assert(hashDist1 === 1.0)
+    assert(hashDist2 === 0.0)
   }
 
   test("MinHash: test of LSH property") {
