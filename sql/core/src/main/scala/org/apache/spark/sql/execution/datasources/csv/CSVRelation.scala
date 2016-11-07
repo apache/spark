@@ -124,6 +124,7 @@ object CSVRelation extends Logging {
             // value is not stored in the row.
             val value = CSVTypeCast.castTo(
               indexSafeTokens(index),
+              field.name,
               field.dataType,
               field.nullable,
               params)

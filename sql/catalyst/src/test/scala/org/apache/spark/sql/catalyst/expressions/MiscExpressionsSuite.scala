@@ -17,25 +17,26 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.scalatest.Matchers._
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types._
 
-class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
+class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("random") {
-    checkDoubleEvaluation(Rand(30), 0.31429268272540556 +- 0.001)
-    checkDoubleEvaluation(Randn(30), -0.4798519469521663 +- 0.001)
-
-    checkDoubleEvaluation(
-      new Rand(Literal.create(null, LongType)), 0.8446490682263027 +- 0.001)
-    checkDoubleEvaluation(
-      new Randn(Literal.create(null, IntegerType)), 1.1164209726833079 +- 0.001)
+  test("assert_true") {
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(false, BooleanType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Cast(Literal(0), BooleanType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
+    }
+    checkEvaluation(AssertTrue(Literal.create(true, BooleanType)), null)
+    checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
   }
 
-  test("SPARK-9127 codegen with long seed") {
-    checkDoubleEvaluation(Rand(5419823303878592871L), 0.2304755080444375 +- 0.001)
-    checkDoubleEvaluation(Randn(5419823303878592871L), -1.2824262718225607 +- 0.001)
-  }
 }
