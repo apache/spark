@@ -38,48 +38,48 @@ import org.apache.spark.sql.types.StructType;
 // $example off$
 
 public class JavaApproxNearestNeighborExample {
-    public static void main(String[] args) {
-        SparkSession spark = SparkSession
-                .builder()
-                .appName("JavaApproxNearestNeighborExample")
-                .getOrCreate();
+  public static void main(String[] args) {
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaApproxNearestNeighborExample")
+      .getOrCreate();
 
-        // $example on$
-        List<Row> data = Arrays.asList(
-                RowFactory.create(0, Vectors.sparse(6, new int[]{0, 1, 2}, new double[]{1.0, 1.0, 1.0})),
-                RowFactory.create(1, Vectors.sparse(6, new int[]{2, 3, 4}, new double[]{1.0, 1.0, 1.0})),
-                RowFactory.create(2, Vectors.sparse(6, new int[]{0, 2, 4}, new double[]{1.0, 1.0, 1.0}))
-        );
+    // $example on$
+    List<Row> data = Arrays.asList(
+      RowFactory.create(0, Vectors.sparse(6, new int[]{0, 1, 2}, new double[]{1.0, 1.0, 1.0})),
+      RowFactory.create(1, Vectors.sparse(6, new int[]{2, 3, 4}, new double[]{1.0, 1.0, 1.0})),
+      RowFactory.create(2, Vectors.sparse(6, new int[]{0, 2, 4}, new double[]{1.0, 1.0, 1.0}))
+    );
 
-        StructType schema = new StructType(new StructField[]{
-                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-                new StructField("keys", new VectorUDT(), false, Metadata.empty())
-        });
-        Dataset<Row> dataFrame = spark.createDataFrame(data, schema);
+    StructType schema = new StructType(new StructField[]{
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+      new StructField("keys", new VectorUDT(), false, Metadata.empty())
+    });
+    Dataset<Row> dataFrame = spark.createDataFrame(data, schema);
 
-        MinHash mh = new MinHash()
-                .setOutputDim(5)
-                .setInputCol("keys")
-                .setOutputCol("values");
+    MinHash mh = new MinHash()
+      .setOutputDim(5)
+      .setInputCol("keys")
+      .setOutputCol("values");
 
-        Vector key1 = Vectors.sparse(6, new int[]{1, 3}, new double[]{1.0, 1.0, 1.0});
-        Vector key2 = Vectors.sparse(6, new int[]{5}, new double[]{1.0, 1.0, 1.0});
+    Vector key1 = Vectors.sparse(6, new int[]{1, 3}, new double[]{1.0, 1.0, 1.0});
+    Vector key2 = Vectors.sparse(6, new int[]{5}, new double[]{1.0, 1.0, 1.0});
 
-        MinHashModel model = mh.fit(dataFrame);
-        model.approxNearestNeighbors(dataFrame, key1, 2).show();
+    MinHashModel model = mh.fit(dataFrame);
+    model.approxNearestNeighbors(dataFrame, key1, 2).show();
 
-        System.out.println("Difference between single probing and multi probing:");
+    System.out.println("Difference between single probing and multi probing:");
 
-        System.out.println("Single probing sometimes returns less than k rows");
-        model.approxNearestNeighbors(dataFrame, key2, 3, true, "distCol").show();
+    System.out.println("Single probing sometimes returns less than k rows");
+    model.approxNearestNeighbors(dataFrame, key2, 3, true, "distCol").show();
 
-        System.out.println("Multi probing returns exact k rows whenever possible");
-        model.approxNearestNeighbors(dataFrame, key2, 3, false, "distCol").show();
+    System.out.println("Multi probing returns exact k rows whenever possible");
+    model.approxNearestNeighbors(dataFrame, key2, 3, false, "distCol").show();
 
-        System.out.println("Multi probing returns the whole dataset when there are not enough rows");
-        model.approxNearestNeighbors(dataFrame, key2, 4, false, "distCol").show();
-        // $example off$
+    System.out.println("Multi probing returns the whole dataset when there are not enough rows");
+    model.approxNearestNeighbors(dataFrame, key2, 4, false, "distCol").show();
+    // $example off$
 
-        spark.stop();
-    }
+    spark.stop();
+  }
 }

@@ -37,36 +37,36 @@ import org.apache.spark.sql.types.StructType;
 // $example off$
 
 public class JavaRandomProjectionExample {
-    public static void main(String[] args) {
-        SparkSession spark = SparkSession
-                .builder()
-                .appName("JavaMinHashExample")
-                .getOrCreate();
+  public static void main(String[] args) {
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaRandomProjectionExample")
+      .getOrCreate();
 
-        // $example on$
-        List<Row> data = Arrays.asList(
-                RowFactory.create(0, Vectors.dense(1.0, 1.0)),
-                RowFactory.create(1, Vectors.dense(1.0, -1.0)),
-                RowFactory.create(2, Vectors.dense(-1.0, -1.0)),
-                RowFactory.create(3, Vectors.dense(-1.0, 1.0))
-        );
+    // $example on$
+    List<Row> data = Arrays.asList(
+      RowFactory.create(0, Vectors.dense(1.0, 1.0)),
+      RowFactory.create(1, Vectors.dense(1.0, -1.0)),
+      RowFactory.create(2, Vectors.dense(-1.0, -1.0)),
+      RowFactory.create(3, Vectors.dense(-1.0, 1.0))
+    );
 
-        StructType schema = new StructType(new StructField[]{
-                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-                new StructField("keys", new VectorUDT(), false, Metadata.empty())
-        });
-        Dataset<Row> dataFrame = spark.createDataFrame(data, schema);
+    StructType schema = new StructType(new StructField[]{
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+      new StructField("keys", new VectorUDT(), false, Metadata.empty())
+    });
+    Dataset<Row> dataFrame = spark.createDataFrame(data, schema);
 
-        RandomProjection mh = new RandomProjection()
-                .setBucketLength(2.0)
-                .setOutputDim(1)
-                .setInputCol("keys")
-                .setOutputCol("values");
+    RandomProjection mh = new RandomProjection()
+      .setBucketLength(2.0)
+      .setOutputDim(1)
+      .setInputCol("keys")
+      .setOutputCol("values");
 
-        RandomProjectionModel model = mh.fit(dataFrame);
-        model.transform(dataFrame).show();
-        // $example off$
+    RandomProjectionModel model = mh.fit(dataFrame);
+    model.transform(dataFrame).show();
+    // $example off$
 
-        spark.stop();
-    }
+    spark.stop();
+  }
 }

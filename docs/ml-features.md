@@ -1398,7 +1398,17 @@ for more details on the API.
 </div>
 
 # Locality Sensitive Hashing
-[Locality Sensitive Hashing(LSH)](https://en.wikipedia.org/wiki/Locality-sensitive_hashing) is a class of dimension reduction hash families, which can be used as both feature transformation and machine-learned ranking. Difference distance metric has its own LSH family class in `spark.ml`, which can transform feature columns to hash values as new columns. Besides feature transforming, `spark.ml` also implemented approximate nearest neighbor algorithm and approximate similarity join algorithm using LSH.
+[Locality Sensitive Hashing(LSH)](https://en.wikipedia.org/wiki/Locality-sensitive_hashing) Locality Sensitive Hashing(LSH) is an important class of hashing techniques, which is commonly used in clustering and outlier detection with large datasets. 
+
+The general idea of LSH is to use a family of functions (we call them LSH families) to hash data points into buckets, so that the data points which are close to each other are in the same buckets with high probability, while data points that are far away from each other are very likely in different buckets. A formal definition of LSH family is as follows:
+
+In a metric space `(M, d)`, an LSH family is a family of functions `h` that satisfy the following properties:
+`\[
+\forall p, q \in M,\\
+d(p,q) < r1 \Rightarrow Pr(h(p)=h(q)) \geq p1\\
+d(p,q) > r2 \Rightarrow Pr(h(p)=h(q)) \leq p1
+\]`
+This LSH family is called `(r1, r2, p1, p2)`-sensitive.
 
 In this section, we call a pair of input features a false positive if the two features are hashed into the same hash bucket but they are far away in distance, and we define false negative as the pair of features when their distance are close but they are not in the same hash bucket.
 
@@ -1413,11 +1423,9 @@ Its LSH family projects features onto a random unit vector and divide the projec
 `\[
 h(\mathbf{x}) = \lfloor \frac{\mathbf{x} \cdot \mathbf{v}}{r} \rfloor
 \]`
-where `v` is a normalized random unit vector and `r` is user-defined bucket length.
+where `v` is a normalized random unit vector and `r` is user-defined bucket length. The bucket length can be used to control the average size of hash buckets. A larger bucket length means higher probability for features to be in the same bucket.
 
 The input features in Euclidean space are represented in vectors. Both sparse and dense vectors are supported.
-
-The bucket length can be used to trade off the performance of random projection. A larger bucket lowers the false negative rate but usually increases running time and false positive rate.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1495,6 +1503,8 @@ Approximate similarity join takes two datasets, and approximately returns row pa
 
 Approximate similarity join allows users to cache the transformed columns when necessary: If the `outputCol` is missing, the method will transform the data; if the `outputCol` exists, it will use the `outputCol` directly.
 
+A distance column will be added in the output dataset of approximate similarity join to show the distance between each output row pairs.
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -1511,6 +1521,8 @@ Approximate similarity join allows users to cache the transformed columns when n
 Approximate nearest neighbor search takes a dataset and a key, and approximately returns a number of rows in the dataset that are closest to the key. The number of rows to return are defined by user.
 
 Approximate nearest neighbor search allows users to cache the transformed columns when necessary: If the `outputCol` is missing, the method will transform the data; if the `outputCol` exists, it will use the `outputCol` directly.
+
+A distance column will be added in the output dataset of approximate nearest neighbor search to show the distance between each output row and the searched key.
 
 There are two methods of approximate nearest neighbor search implemented in `spark.ml`:
 * Single probing search: Only the hash bucket(s) where the key is hashed are searched. This method is time efficient but might return less than k rows.

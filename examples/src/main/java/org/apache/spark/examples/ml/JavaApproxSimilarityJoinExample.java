@@ -37,49 +37,49 @@ import org.apache.spark.sql.types.StructType;
 // $example off$
 
 public class JavaApproxSimilarityJoinExample {
-    public static void main(String[] args) {
-        SparkSession spark = SparkSession
-                .builder()
-                .appName("JavaApproxNearestNeighborExample")
-                .getOrCreate();
+  public static void main(String[] args) {
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaApproxNearestNeighborExample")
+      .getOrCreate();
 
-        // $example on$
-        List<Row> dataA = Arrays.asList(
-                RowFactory.create(0, Vectors.sparse(6, new int[]{0, 1, 2}, new double[]{1.0, 1.0, 1.0})),
-                RowFactory.create(1, Vectors.sparse(6, new int[]{2, 3, 4}, new double[]{1.0, 1.0, 1.0})),
-                RowFactory.create(2, Vectors.sparse(6, new int[]{0, 2, 4}, new double[]{1.0, 1.0, 1.0}))
-        );
+    // $example on$
+    List<Row> dataA = Arrays.asList(
+      RowFactory.create(0, Vectors.sparse(6, new int[]{0, 1, 2}, new double[]{1.0, 1.0, 1.0})),
+      RowFactory.create(1, Vectors.sparse(6, new int[]{2, 3, 4}, new double[]{1.0, 1.0, 1.0})),
+      RowFactory.create(2, Vectors.sparse(6, new int[]{0, 2, 4}, new double[]{1.0, 1.0, 1.0}))
+    );
 
-        List<Row> dataB = Arrays.asList(
-                RowFactory.create(0, Vectors.sparse(6, new int[]{1, 3, 5}, new double[]{1.0, 1.0, 1.0})),
-                RowFactory.create(1, Vectors.sparse(6, new int[]{2, 3, 5}, new double[]{1.0, 1.0, 1.0})),
-                RowFactory.create(2, Vectors.sparse(6, new int[]{1, 2, 4}, new double[]{1.0, 1.0, 1.0}))
-        );
+    List<Row> dataB = Arrays.asList(
+      RowFactory.create(0, Vectors.sparse(6, new int[]{1, 3, 5}, new double[]{1.0, 1.0, 1.0})),
+      RowFactory.create(1, Vectors.sparse(6, new int[]{2, 3, 5}, new double[]{1.0, 1.0, 1.0})),
+      RowFactory.create(2, Vectors.sparse(6, new int[]{1, 2, 4}, new double[]{1.0, 1.0, 1.0}))
+    );
 
-        StructType schema = new StructType(new StructField[]{
-                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-                new StructField("keys", new VectorUDT(), false, Metadata.empty())
-        });
-        Dataset<Row> dfA = spark.createDataFrame(dataA, schema);
-        Dataset<Row> dfB = spark.createDataFrame(dataB, schema);
+    StructType schema = new StructType(new StructField[]{
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+      new StructField("keys", new VectorUDT(), false, Metadata.empty())
+    });
+    Dataset<Row> dfA = spark.createDataFrame(dataA, schema);
+    Dataset<Row> dfB = spark.createDataFrame(dataB, schema);
 
-        MinHash mh = new MinHash()
-                .setOutputDim(5)
-                .setInputCol("keys")
-                .setOutputCol("values");
+    MinHash mh = new MinHash()
+      .setOutputDim(5)
+      .setInputCol("keys")
+      .setOutputCol("values");
 
-        MinHashModel model = mh.fit(dfA);
-        model.approxSimilarityJoin(dfA, dfB, 0.6).show();
+    MinHashModel model = mh.fit(dfA);
+    model.approxSimilarityJoin(dfA, dfB, 0.6).show();
 
-        // Cache the transformed columns
-        Dataset<Row> transformedA = model.transform(dfA);
-        Dataset<Row> transformedB = model.transform(dfB);
-        model.approxSimilarityJoin(transformedA, transformedB, 0.6).show();
+    // Cache the transformed columns
+    Dataset<Row> transformedA = model.transform(dfA);
+    Dataset<Row> transformedB = model.transform(dfB);
+    model.approxSimilarityJoin(transformedA, transformedB, 0.6).show();
 
-        // Self Join
-        model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id").show();
-        // $example off$
+    // Self Join
+    model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id").show();
+    // $example off$
 
-        spark.stop();
-    }
+    spark.stop();
+  }
 }

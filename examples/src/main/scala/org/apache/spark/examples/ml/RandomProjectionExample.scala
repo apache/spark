@@ -29,7 +29,7 @@ object RandomProjectionExample {
     // Creates a SparkSession
     val spark = SparkSession
       .builder
-      .appName("MinHashExample")
+      .appName("RandomProjectionExample")
       .getOrCreate()
 
     // $example on$
