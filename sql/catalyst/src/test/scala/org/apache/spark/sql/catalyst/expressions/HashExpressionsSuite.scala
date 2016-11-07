@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.nio.charset.StandardCharsets
 
 import org.apache.commons.codec.digest.DigestUtils
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
@@ -135,10 +136,12 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       BoundReference(i, f.dataType, true)
     }
     val murmur3HashExpr = Murmur3Hash(exprs, 42)
-    GenerateMutableProjection.generate(Seq(murmur3HashExpr))
+    val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
+    assert(murmur3HashPlan(wideRow).getInt(0) == 58499324)
 
     val hiveHashExpr = HiveHash(exprs)
-    GenerateMutableProjection.generate(Seq(hiveHashExpr))
+    val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))
+    assert(hiveHashPlan(wideRow).getInt(0) == 117331003)
   }
 
   private def testHash(inputSchema: StructType): Unit = {
