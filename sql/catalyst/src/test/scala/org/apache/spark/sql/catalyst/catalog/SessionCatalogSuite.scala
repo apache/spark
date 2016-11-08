@@ -919,6 +919,34 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.lookupFunction(FunctionIdentifier("temp1"), arguments) === Literal(arguments.length))
   }
 
+  test("isTemporaryFunction") {
+    val externalCatalog = newBasicCatalog()
+    val sessionCatalog = new SessionCatalog(externalCatalog)
+
+    // Returns false when the function does not exist
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("temp1")))
+
+    val tempFunc1 = (e: Seq[Expression]) => e.head
+    val info1 = new ExpressionInfo("tempFunc1", "temp1")
+    sessionCatalog.createTempFunction("temp1", info1, tempFunc1, ignoreIfExists = false)
+
+    // Returns true when the function is temporary
+    assert(sessionCatalog.isTemporaryFunction(FunctionIdentifier("temp1")))
+
+    // Returns false when the function is permanent
+    assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func1"))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("func1", Some("db2"))))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("db2.func1")))
+    sessionCatalog.setCurrentDatabase("db2")
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("func1")))
+
+    // Returns false when the function is built-in or hive
+    assert(FunctionRegistry.builtin.functionExists("sum"))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("sum")))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("histogram_numeric")))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("percentile")))
+  }
+
   test("drop function") {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
