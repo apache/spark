@@ -17,8 +17,9 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.collection.mutable.ArrayBuffer
+import com.esotericsoftware.kryo.serializers.VersionFieldSerializer.Since
 
+import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
@@ -414,6 +415,8 @@ object KMeans {
   val RANDOM = "random"
   @Since("0.8.0")
   val K_MEANS_PARALLEL = "k-means||"
+  @Since("2.1.0")
+  val K_MEANS_INITIAL_MODEL = "initialModel"
 
   /**
    * Trains a k-means model using the given set of parameters.
