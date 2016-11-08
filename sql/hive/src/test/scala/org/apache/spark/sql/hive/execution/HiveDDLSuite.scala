@@ -23,11 +23,10 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -1149,11 +1148,10 @@ class HiveDDLSuite
       sql("TRUNCATE TABLE partTable PARTITION (width=100)")
       assert(spark.table("partTable").count() == data.count())
 
-      // do nothing if no partition is matched for the given non-partial partition spec
-      // TODO: This behaviour is different from Hive, we should decide whether we need to follow
-      // Hive's behaviour or stick with our existing behaviour later.
-      sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
-      assert(spark.table("partTable").count() == data.count())
+      // throw exception if no partition is matched for the given non-partial partition spec.
+      intercept[NoSuchPartitionException] {
+        sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
+      }
 
       // throw exception if the column in partition spec is not a partition column.
       val e = intercept[AnalysisException] {
