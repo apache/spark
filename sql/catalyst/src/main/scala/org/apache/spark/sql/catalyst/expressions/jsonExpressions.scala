@@ -484,7 +484,7 @@ case class JsonTuple(children: Seq[Expression])
  * Converts an json input string to a [[StructType]] with the specified schema.
  */
 case class JsonToStruct(schema: StructType, options: Map[String, String], child: Expression)
-  extends Expression with CodegenFallback with ExpectsInputTypes {
+  extends UnaryExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
 
   @transient
@@ -495,11 +495,8 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
       new JSONOptions(options ++ Map("mode" -> ParseModes.FAIL_FAST_MODE)))
 
   override def dataType: DataType = schema
-  override def children: Seq[Expression] = child :: Nil
 
-  override def eval(input: InternalRow): Any = {
-    val json = child.eval(input)
-    if (json == null) return null
+  override def nullSafeEval(json: Any): Any = {
     try parser.parse(json.toString).head catch {
       case _: SparkSQLJsonProcessingException => null
     }
@@ -512,7 +509,7 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
  * Converts a [[StructType]] to a json output string.
  */
 case class StructToJson(options: Map[String, String], child: Expression)
-  extends Expression with CodegenFallback with ExpectsInputTypes {
+  extends UnaryExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
 
   @transient
@@ -523,7 +520,6 @@ case class StructToJson(options: Map[String, String], child: Expression)
     new JacksonGenerator(child.dataType.asInstanceOf[StructType], writer)
 
   override def dataType: DataType = StringType
-  override def children: Seq[Expression] = child :: Nil
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (StructType.acceptsType(child.dataType)) {
@@ -540,8 +536,8 @@ case class StructToJson(options: Map[String, String], child: Expression)
     }
   }
 
-  override def eval(input: InternalRow): Any = {
-    gen.write(child.eval(input).asInstanceOf[InternalRow])
+  override def nullSafeEval(row: Any): Any = {
+    gen.write(row.asInstanceOf[InternalRow])
     gen.flush()
     val json = writer.toString
     writer.reset()
