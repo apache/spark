@@ -37,14 +37,9 @@ function makeIdNumeric(id) {
   return resl;
 }
 
-function formatDate(timestamp) {
-  if (timestamp <= 0) return "-";
-  else {
-    var offset = new Date().getTimezoneOffset()
-    var localTime = timestamp - offset * 60 * 1000
-    var date = new Date(localTime)
-    return date.toJSON().split(".")[0].replace("T", " ");
-  }
+function formatDate(date) {
+  if (date <= 0) return "-";
+  else return date;
 }
 
 function getParameterByName(name, searchString) {
@@ -116,9 +111,9 @@ $(document).ready(function() {
         var num = app["attempts"].length;
         for (j in app["attempts"]) {
           var attempt = app["attempts"][j];
-          attempt["startTime"] = formatDate(attempt["startTimeEpoch"]);
-          attempt["endTime"] = formatDate(attempt["endTimeEpoch"]);
-          attempt["lastUpdated"] = formatDate(attempt["lastUpdatedEpoch"]);
+          attempt["startTime"] = formatDate(attempt["startTime"]);
+          attempt["endTime"] = formatDate(attempt["endTime"]);
+          attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
           var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
           array.push(app_clone);
         }
