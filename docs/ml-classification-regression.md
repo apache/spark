@@ -46,7 +46,7 @@ parameter to select between these two algorithms, or leave it unset and Spark wi
 
 For more background and more details about the implementation of binomial logistic regression, refer to the documentation of [logistic regression in `spark.mllib`](mllib-linear-methods.html#logistic-regression). 
 
-**Example**
+**Examples**
 
 The following example shows how to train binomial and multinomial logistic regression 
 models for binary classification with elastic net regularization. `elasticNetParam` corresponds to
@@ -137,7 +137,7 @@ We minimize the weighted negative log-likelihood, using a multinomial response m
 
 For a detailed derivation please see [here](https://en.wikipedia.org/wiki/Multinomial_logistic_regression#As_a_log-linear_model).
 
-**Example**
+**Examples**
 
 The following example shows how to train a multiclass logistic regression 
 model with elastic net regularization.
@@ -164,7 +164,7 @@ model with elastic net regularization.
 Decision trees are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on decision trees](#decision-trees).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
@@ -201,7 +201,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 Random forests are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on random forests](#random-forests).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
@@ -234,7 +234,7 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 Gradient-boosted trees (GBTs) are a popular classification and regression method using ensembles of decision trees. 
 More information about the `spark.ml` implementation can be found further in the [section on GBTs](#gradient-boosted-trees-gbts).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
@@ -284,7 +284,7 @@ The number of nodes `$N$` in the output layer corresponds to the number of class
 
 MLPC employs backpropagation for learning the model. We use the logistic loss function for optimization and L-BFGS as an optimization routine.
 
-**Example**
+**Examples**
 
 <div class="codetabs">
 
@@ -311,7 +311,7 @@ MLPC employs backpropagation for learning the model. We use the logistic loss fu
 
 Predictions are done by evaluating each binary classifier and the index of the most confident classifier is output as label.
 
-**Example**
+**Examples**
 
 The example below demonstrates how to load the
 [Iris dataset](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/multiclass/iris.scale), parse it as a DataFrame and perform multiclass classification using `OneVsRest`. The test error is calculated to measure the algorithm accuracy.
@@ -348,7 +348,7 @@ naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-c
 and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
 More information can be found in the section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
 
-**Example**
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -383,7 +383,7 @@ summaries is similar to the logistic regression case.
 
   > When fitting LinearRegressionModel without intercept on dataset with constant nonzero column by "l-bfgs" solver, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.
 
-**Example**
+**Examples**
 
 The following
 example demonstrates training an elastic net regularized linear
@@ -511,7 +511,7 @@ others.
   </tbody>
 </table>
 
-**Example**
+**Examples**
 
 The following example demonstrates training a GLM with a Gaussian response and identity link
 function and extracting model summary statistics.
@@ -544,7 +544,7 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 Decision trees are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on decision trees](#decision-trees).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
@@ -579,7 +579,7 @@ More details on parameters can be found in the [Python API documentation](api/py
 Random forests are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on random forests](#random-forests).
 
-**Example**
+**Examples**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
@@ -612,7 +612,7 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 Gradient-boosted trees (GBTs) are a popular regression method using ensembles of decision trees. 
 More information about the `spark.ml` implementation can be found further in the [section on GBTs](#gradient-boosted-trees-gbts).
 
-**Example**
+**Examples**
 
 Note: For this example dataset, `GBTRegressor` actually only needs 1 iteration, but that will not
 be true in general.
@@ -700,7 +700,7 @@ The implementation matches the result from R's survival function
 
   > When fitting AFTSurvivalRegressionModel without intercept on dataset with constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is different from R survival::survreg.
 
-**Example**
+**Examples**
 
 <div class="codetabs">
 
@@ -765,7 +765,7 @@ is treated as piecewise linear function. The rules for prediction therefore are:
   predictions of the two closest features. In case there are multiple values
   with the same feature then the same rules as in previous point are used.
 
-### Examples
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

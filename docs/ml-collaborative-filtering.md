@@ -59,7 +59,7 @@ This approach is named "ALS-WR" and discussed in the paper
 It makes `regParam` less dependent on the scale of the dataset, so we can apply the
 best parameter learned from a sampled subset to the full dataset and expect similar performance.
 
-## Examples
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

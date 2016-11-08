@@ -112,6 +112,8 @@ can then be used as features for prediction, document similarity calculations, e
 Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#word2vec) for more
 details.
 
+**Examples**
+
 In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
 
 <div class="codetabs">
@@ -220,6 +222,8 @@ for more details on the API.
  Alternatively, users can set parameter "gaps" to false indicating the regex "pattern" denotes
  "tokens" rather than splitting gaps, and find all matching occurrences as the tokenization result.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -321,6 +325,8 @@ An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (t
 
 `NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](ml-features.html#tokenizer)).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains fewer than `n` strings, no output is produced.
 
+**Examples**
+
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
@@ -358,6 +364,8 @@ for binarization. Feature values greater than the threshold are binarized to 1.0
 to or less than the threshold are binarized to 0.0. Both Vector and Double types are supported
 for `inputCol`.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -388,6 +396,8 @@ for more details on the API.
 
 [PCA](http://en.wikipedia.org/wiki/Principal_component_analysis) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components. A [PCA](api/scala/index.html#org.apache.spark.ml.feature.PCA) class trains a model to project vectors to a low-dimensional space using PCA. The example below shows how to project 5-dimensional feature vectors into 3-dimensional principal components.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -417,6 +427,8 @@ for more details on the API.
 ## PolynomialExpansion
 
 [Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -457,6 +469,8 @@ and scaling the result by $1/\sqrt{2}$ such that the representing matrix
 for the transform is unitary. No shift is applied to the transformed
 sequence (e.g. the $0$th element of the transformed sequence is the
 $0$th DCT coefficient and _not_ the $N/2$th).
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -663,6 +677,8 @@ for more details on the API.
 
 [One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -700,6 +716,8 @@ It can both automatically decide which features are categorical and convert orig
 4. Index categorical features and transform original feature values to indices.
 
 Indexing categorical features allows algorithms such as Decision Trees and Tree Ensembles to treat categorical features appropriately, improving performance.
+
+**Examples**
 
 In the example below, we read in a dataset of labeled points and then use `VectorIndexer` to decide which features should be treated as categorical.  We transform the categorical feature values to their indices.  This transformed data could then be passed to algorithms such as `DecisionTreeRegressor` that handle categorical features.
 
@@ -786,6 +804,8 @@ for more details on the API.
 
 `Normalizer` is a `Transformer` which transforms a dataset of `Vector` rows, normalizing each `Vector` to have unit norm.  It takes parameter `p`, which specifies the [p-norm](http://en.wikipedia.org/wiki/Norm_%28mathematics%29#p-norm) used for normalization.  ($p = 2$ by default.)  This normalization can help standardize your input data and improve the behavior of learning algorithms.
 
+**Examples**
+
 The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^1$ norm and unit $L^\infty$ norm.
 
 <div class="codetabs">
@@ -825,6 +845,8 @@ for more details on the API.
 `StandardScaler` is an `Estimator` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
 
 Note that if the standard deviation of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
+
+**Examples**
 
 The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
 
@@ -871,6 +893,8 @@ For the case `$E_{max} == E_{min}$`, `$Rescaled(e_i) = 0.5 * (max + min)$`
 
 Note that since zero values will probably be transformed to non-zero values, output of the transformer will be `DenseVector` even for sparse input.
 
+**Examples**
+
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
 
 <div class="codetabs">
@@ -911,6 +935,8 @@ data, and thus does not destroy any sparsity.
 
 `MaxAbsScaler` computes summary statistics on a data set and produces a `MaxAbsScalerModel`. The 
 model can then transform each feature individually to range [-1, 1].
+
+**Examples**
 
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [-1, 1].
 
@@ -954,6 +980,8 @@ Note that if you have no idea of the upper and lower bounds of the targeted colu
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
 More details can be found in the API docs for [Bucketizer](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer).
+
+**Examples**
 
 The following example demonstrates how to bucketize a column of `Double`s into another index-wised column.
 
@@ -1002,6 +1030,8 @@ v_N
   v_N w_N
   \end{pmatrix}
 \]`
+
+**Examples**
 
 This example below demonstrates how to transform vectors using a transforming vector value.
 
