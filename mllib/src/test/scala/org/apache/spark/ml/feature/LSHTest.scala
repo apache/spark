@@ -83,6 +83,7 @@ private[ml] object LSHTest {
    * @param dataset the dataset to look for the key
    * @param key The key to hash for the item
    * @param k The maximum number of items closest to the key
+   * @param singleProbe True for using single-probe; false for multi-probe
    * @tparam T The class type of lsh
    * @return A tuple of two doubles, representing precision and recall rate
    */
@@ -91,7 +92,7 @@ private[ml] object LSHTest {
       dataset: Dataset[_],
       key: Vector,
       k: Int,
-      singleProbing: Boolean): (Double, Double) = {
+      singleProbe: Boolean): (Double, Double) = {
     val model = lsh.fit(dataset)
 
     // Compute expected
@@ -99,14 +100,14 @@ private[ml] object LSHTest {
     val expected = dataset.sort(distUDF(col(model.getInputCol))).limit(k)
 
     // Compute actual
-    val actual = model.approxNearestNeighbors(dataset, key, k, singleProbing, "distCol")
+    val actual = model.approxNearestNeighbors(dataset, key, k, singleProbe, "distCol")
 
     assert(actual.schema.sameType(model
       .transformSchema(dataset.schema)
       .add("distCol", DataTypes.DoubleType))
     )
 
-    if (!singleProbing) {
+    if (!singleProbe) {
       assert(actual.count() == k)
     }
 

@@ -84,6 +84,14 @@ class MinHashModel private[ml] (
   }
 
   @Since("2.1.0")
+  override protected[this] def checkNearestNeighbor(singleProbe: Boolean) = {
+    if (!singleProbe) {
+      log.warn("Multi-probe for MinHash will run brute force nearest neighbor when there " +
+        "aren't enough candidates.")
+    }
+  }
+
+  @Since("2.1.0")
   override def copy(extra: ParamMap): this.type = defaultCopy(extra)
 
   @Since("2.1.0")
