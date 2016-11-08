@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * Params for KMeans
  */
 
-private[clustering] trait KMeansParams extends KMeansModelParams with HasInitialModel[KMeansModel] {
+private[clustering] trait KMeansInitialModelParams extends HasInitialModel[KMeansModel] {
   /**
    * Param for KMeansModel to use for warm start.
    * Whenever initialModel is set:
@@ -58,7 +58,7 @@ private[clustering] trait KMeansParams extends KMeansModelParams with HasInitial
 /**
  * Params for KMeansModel
  */
-private[clustering] trait KMeansModelParams extends Params with HasMaxIter with HasFeaturesCol
+private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
   with HasSeed with HasPredictionCol with HasTol {
 
   /**
@@ -127,7 +127,7 @@ private[clustering] trait KMeansModelParams extends Params with HasMaxIter with 
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private[ml] val parentModel: MLlibKMeansModel)
-  extends Model[KMeansModel] with KMeansModelParams with MLWritable {
+  extends Model[KMeansModel] with KMeansParams with MLWritable {
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
@@ -283,7 +283,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
 @Experimental
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
-  extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
+  extends Estimator[KMeansModel]
+    with KMeansParams with KMeansInitialModelParams with DefaultParamsWritable {
 
   setDefault(
     k -> 2,
