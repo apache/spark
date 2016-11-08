@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import java.io.File
-import java.net.URI
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -173,23 +170,6 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     intercept[TableAlreadyExistsException] {
       catalog.createTable(table, ignoreIfExists = false)
     }
-  }
-
-  test("create managed table without table location") {
-    val catalog = newBasicCatalog()
-    val table = CatalogTable(
-      identifier = TableIdentifier("myTable", Some("db1")),
-      tableType = CatalogTableType.MANAGED,
-      storage = storageFormat,
-      schema = new StructType()
-        .add("col1", "int")
-        .add("col2", "string"),
-      provider = Some("hive"))
-    catalog.createTable(table, ignoreIfExists = false)
-
-    val tableLocation = new Path(catalog.getTable("db1", "myTable").location)
-    val defaultTableLocation = new Path(catalog.getDatabase("db1").locationUri, "myTable")
-    assert(tableLocation == defaultTableLocation)
   }
 
   test("drop table") {
@@ -673,7 +653,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     val db = catalog.getDatabase("db1")
     val table = CatalogTable(
-      identifier = TableIdentifier("myTable", Some("db1")),
+      identifier = TableIdentifier("my_table", Some("db1")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
       schema = new StructType().add("a", "int").add("b", "string"),
@@ -681,17 +661,17 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     )
 
     catalog.createTable(table, ignoreIfExists = false)
-    assert(exists(db.locationUri, "myTable"))
+    assert(exists(db.locationUri, "my_table"))
 
-    catalog.renameTable("db1", "myTable", "yourTable")
-    assert(!exists(db.locationUri, "myTable"))
-    assert(exists(db.locationUri, "yourTable"))
+    catalog.renameTable("db1", "my_table", "your_table")
+    assert(!exists(db.locationUri, "my_table"))
+    assert(exists(db.locationUri, "your_table"))
 
-    catalog.dropTable("db1", "yourTable", ignoreIfNotExists = false, purge = false)
-    assert(!exists(db.locationUri, "yourTable"))
+    catalog.dropTable("db1", "your_table", ignoreIfNotExists = false, purge = false)
+    assert(!exists(db.locationUri, "your_table"))
 
     val externalTable = CatalogTable(
-      identifier = TableIdentifier("externalTable", Some("db1")),
+      identifier = TableIdentifier("external_table", Some("db1")),
       tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat(
         Some(Utils.createTempDir().getAbsolutePath),
@@ -700,7 +680,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       provider = Some("hive")
     )
     catalog.createTable(externalTable, ignoreIfExists = false)
-    assert(!exists(db.locationUri, "externalTable"))
+    assert(!exists(db.locationUri, "external_table"))
   }
 
   test("create/drop/rename partitions should create/delete/rename the directory") {
