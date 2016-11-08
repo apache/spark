@@ -570,9 +570,9 @@ class LogisticRegression @Since("1.2.0") (
            The coefficients are trained in the scaled space; we're converting them back to
            the original space.
 
-           Additionally, the coefficients are laid out in column major order during training to
-           avoid extra computation when performing feature standardization. Here, we convert them
-           back to row major before passing them to the model.
+           Additionally, since the coefficients were laid out in column major order during training
+           to avoid extra computation, we convert them back to row major before passing them to the
+           model.
 
            Note that the intercept in scaled space and original space is the same;
            as a result, no scaling is needed.
@@ -1391,6 +1391,12 @@ class BinaryLogisticRegressionSummary private[classification] (
  *       e^{\vec{x}_i \cdot \vec{\beta}_{k'} - maxMargin}} - I_{y=k}\right)
  *    $$
  * </blockquote></p>
+ *
+ * @note In order to avoid unnecessary computation during calculation of the gradient updates
+ *       we lay out the coefficients in column major order during training. This allows us to
+ *       perform feature standardization once, while still retaining sequential memory access
+ *       for speed. We convert back to row major order when we create the model,
+ *       since this form is optimal for the matrix operations used for prediction.
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
