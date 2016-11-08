@@ -695,14 +695,6 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
   }
 
-  test("alter table: change partition name/type/position/comment (not allowed)") {
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
-       |COMMENT 'col_comment' AFTER column_name CASCADE
-      """.stripMargin)
-  }
-
   test("alter table: add/replace columns (not allowed)") {
     assertUnsupported(
       """
