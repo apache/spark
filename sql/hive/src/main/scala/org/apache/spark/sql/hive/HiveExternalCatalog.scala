@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types._
 
 
 /**
