@@ -20,9 +20,10 @@ package org.apache.spark.graphx
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.SparkException
 import org.apache.spark.graphx.lib._
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkException
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -389,6 +390,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def personalizedPageRank(src: VertexId, tol: Double,
     resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.runUntilConvergenceWithOptions(graph, tol, resetProb, Some(src))
+  }
+
+  /**
+   * Run parallel personalized PageRank for a given array of source vertices, such
+   * that all random walks are started relative to the source vertices
+   */
+  def staticParallelPersonalizedPageRank(sources: Array[VertexId], numIter: Int,
+    resetProb: Double = 0.15) : Graph[Vector, Double] = {
+    PageRank.runParallelPersonalizedPageRank(graph, numIter, resetProb, sources)
   }
 
   /**

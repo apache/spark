@@ -91,15 +91,6 @@ case class CartesianProductExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  protected override def doPrepare(): Unit = {
-    if (!sqlContext.conf.crossJoinEnabled) {
-      throw new AnalysisException("Cartesian joins could be prohibitively expensive and are " +
-        "disabled by default. To explicitly enable them, please set " +
-        s"${SQLConf.CROSS_JOINS_ENABLED.key} = true")
-    }
-    super.doPrepare()
-  }
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -107,15 +98,15 @@ case class CartesianProductExec(
     val rightResults = right.execute().asInstanceOf[RDD[UnsafeRow]]
 
     val pair = new UnsafeCartesianRDD(leftResults, rightResults, right.output.size)
-    pair.mapPartitionsInternal { iter =>
+    pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {
-        val boundCondition: (InternalRow) => Boolean =
-          newPredicate(condition.get, left.output ++ right.output)
+        val boundCondition = newPredicate(condition.get, left.output ++ right.output)
+        boundCondition.initialize(index)
         val joined = new JoinedRow
 
         iter.filter { r =>
-          boundCondition(joined(r._1, r._2))
+          boundCondition.eval(joined(r._1, r._2))
         }
       } else {
         iter

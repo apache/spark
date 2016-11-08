@@ -24,7 +24,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
 
@@ -38,7 +38,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     val checks = Map(
       NULL -> 0, BOOLEAN -> 1, BYTE -> 1, SHORT -> 2, INT -> 4, LONG -> 8,
       FLOAT -> 4, DOUBLE -> 8, COMPACT_DECIMAL(15, 10) -> 8, LARGE_DECIMAL(20, 10) -> 12,
-      STRING -> 8, BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 16, MAP_TYPE -> 32)
+      STRING -> 8, BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 28, MAP_TYPE -> 68)
 
     checks.foreach { case (columnType, expectedSize) =>
       assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
@@ -54,7 +54,7 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
         expected: Int): Unit = {
 
       assertResult(expected, s"Wrong actualSize for $columnType") {
-        val row = new GenericMutableRow(1)
+        val row = new GenericInternalRow(1)
         row.update(0, CatalystTypeConverters.convertToCatalyst(value))
         val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
         columnType.actualSize(proj(row), 0)
@@ -73,8 +73,8 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     checkActualSize(BINARY, Array.fill[Byte](4)(0.toByte), 4 + 4)
     checkActualSize(COMPACT_DECIMAL(15, 10), Decimal(0, 15, 10), 8)
     checkActualSize(LARGE_DECIMAL(20, 10), Decimal(0, 20, 10), 5)
-    checkActualSize(ARRAY_TYPE, Array[Any](1), 16)
-    checkActualSize(MAP_TYPE, Map(1 -> "a"), 29)
+    checkActualSize(ARRAY_TYPE, Array[Any](1), 4 + 8 + 8 + 8)
+    checkActualSize(MAP_TYPE, Map(1 -> "a"), 4 + (8 + 8 + 8 + 8) + (8 + 8 + 8 + 8))
     checkActualSize(STRUCT_TYPE, Row("hello"), 28)
   }
 
@@ -101,14 +101,15 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   def testColumnType[JvmType](columnType: ColumnType[JvmType]): Unit = {
 
-    val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).order(ByteOrder.nativeOrder())
     val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
     val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
     val seq = (0 until 4).map(_ => proj(makeRandomRow(columnType)).copy())
+    val totalSize = seq.map(_.getSizeInBytes).sum
+    val bufferSize = Math.max(DEFAULT_BUFFER_SIZE, totalSize)
 
     test(s"$columnType append/extract") {
-      buffer.rewind()
-      seq.foreach(columnType.append(_, 0, buffer))
+      val buffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.nativeOrder())
+      seq.foreach(r => columnType.append(columnType.getField(r, 0), buffer))
 
       buffer.rewind()
       seq.foreach { row =>

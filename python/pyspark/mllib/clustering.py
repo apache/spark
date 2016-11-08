@@ -306,7 +306,7 @@ class KMeans(object):
     @classmethod
     @since('0.9.0')
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
-              seed=None, initializationSteps=5, epsilon=1e-4, initialModel=None):
+              seed=None, initializationSteps=2, epsilon=1e-4, initialModel=None):
         """
         Train a k-means clustering model.
 
@@ -330,9 +330,9 @@ class KMeans(object):
           (default: None)
         :param initializationSteps:
           Number of steps for the k-means|| initialization mode.
-          This is an advanced setting -- the default of 5 is almost
+          This is an advanced setting -- the default of 2 is almost
           always enough.
-          (default: 5)
+          (default: 2)
         :param epsilon:
           Distance threshold within which a center will be considered to
           have converged. If all centers move less than this Euclidean

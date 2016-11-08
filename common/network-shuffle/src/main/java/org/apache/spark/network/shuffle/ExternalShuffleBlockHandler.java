@@ -54,7 +54,7 @@ import org.apache.spark.network.util.TransportConf;
  * level shuffle block.
  */
 public class ExternalShuffleBlockHandler extends RpcHandler {
-  private final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
 
   @VisibleForTesting
   final ExternalShuffleBlockResolver blockManager;

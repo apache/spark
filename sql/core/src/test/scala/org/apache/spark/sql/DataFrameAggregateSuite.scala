@@ -477,6 +477,18 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(error.message.contains("collect_set() cannot have map type data"))
   }
 
+  test("SPARK-17641: collect functions should not collect null values") {
+    val df = Seq(("1", 2), (null, 2), ("1", 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(collect_list($"a"), collect_list($"b")),
+      Seq(Row(Seq("1", "1"), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), collect_set($"b")),
+      Seq(Row(Seq("1"), Seq(2, 4)))
+    )
+  }
+
   test("SPARK-14664: Decimal sum/avg over window should work.") {
     checkAnswer(
       spark.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),
@@ -484,5 +496,21 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       spark.sql("select avg(a) over () from values 1.0, 2.0, 3.0 T(a)"),
       Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
+  }
+
+  test("SQL decimal test (used for catching certain demical handling bugs in aggregates)") {
+    checkAnswer(
+      decimalData.groupBy('a cast DecimalType(10, 2)).agg(avg('b cast DecimalType(10, 2))),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.5)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(1.5))))
+  }
+
+  test("SPARK-17616: distinct aggregate combined with a non-partial aggregate") {
+    val df = Seq((1, 3, "a"), (1, 2, "b"), (3, 4, "c"), (3, 4, "c"), (3, 5, "d"))
+      .toDF("x", "y", "z")
+    checkAnswer(
+      df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
+      Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
   }
 }

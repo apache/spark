@@ -164,8 +164,8 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
     // data transformation
     val size = outputAttrGroup.size
     val oneValue = Array(1.0)
-    val emptyValues = Array[Double]()
-    val emptyIndices = Array[Int]()
+    val emptyValues = Array.empty[Double]
+    val emptyIndices = Array.empty[Int]
     val encode = udf { label: Double =>
       if (label < size) {
         Vectors.sparse(size, Array(label.toInt), oneValue)

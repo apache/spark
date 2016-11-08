@@ -250,6 +250,7 @@ object FunctionRegistry {
     expression[Average]("mean"),
     expression[Min]("min"),
     expression[Skewness]("skewness"),
+    expression[ApproximatePercentile]("percentile_approx"),
     expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
@@ -356,7 +357,7 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
-    expression[CreateStruct]("struct"),
+    CreateStruct.registryEntry,
 
     // misc functions
     expression[AssertTrue]("assert_true"),
@@ -494,7 +495,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended())
+      new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }

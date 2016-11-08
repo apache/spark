@@ -135,6 +135,31 @@ object SparkSQLExample {
     // |  19| Justin|
     // +----+-------+
     // $example off:run_sql$
+
+    // $example on:global_temp_view$
+    // Register the DataFrame as a global temporary view
+    df.createGlobalTempView("people")
+
+    // Global temporary view is tied to a system preserved database `global_temp`
+    spark.sql("SELECT * FROM global_temp.people").show()
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
+
+    // Global temporary view is cross-session
+    spark.newSession().sql("SELECT * FROM global_temp.people").show()
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
+    // $example off:global_temp_view$
   }
 
   private def runDatasetCreationExample(spark: SparkSession): Unit = {
@@ -203,7 +228,7 @@ object SparkSQLExample {
     // No pre-defined encoders for Dataset[Map[K,V]], define explicitly
     implicit val mapEncoder = org.apache.spark.sql.Encoders.kryo[Map[String, Any]]
     // Primitive types and case classes can be also defined as
-    implicit val stringIntMapEncoder: Encoder[Map[String, Int]] = ExpressionEncoder()
+    // implicit val stringIntMapEncoder: Encoder[Map[String, Any]] = ExpressionEncoder()
 
     // row.getValuesMap[T] retrieves multiple columns at once into a Map[String, T]
     teenagersDF.map(teenager => teenager.getValuesMap[Any](List("name", "age"))).collect()

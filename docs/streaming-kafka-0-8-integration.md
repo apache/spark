@@ -139,7 +139,7 @@ Next, we discuss how to use this approach in your streaming application.
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 		// Hold a reference to the current offset ranges, so it can be used downstream
-		var offsetRanges = Array[OffsetRange]()
+		var offsetRanges = Array.empty[OffsetRange]
 
 		directKafkaStream.transform { rdd =>
 		  offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
@@ -195,8 +195,8 @@ Next, we discuss how to use this approach in your streaming application.
 		    for o in offsetRanges:
 		        print "%s %s %s %s" % (o.topic, o.partition, o.fromOffset, o.untilOffset)
 
-		directKafkaStream\
-		    .transform(storeOffsetRanges)\
+		directKafkaStream \
+		    .transform(storeOffsetRanges) \
 		    .foreachRDD(printOffsetRanges)
 	</div>
 	</div>

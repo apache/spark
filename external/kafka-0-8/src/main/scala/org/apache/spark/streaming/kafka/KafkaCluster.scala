@@ -108,7 +108,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
       } else {
         val missing = topicAndPartitions.diff(leaderMap.keySet)
         val err = new Err
-        err.append(new SparkException(s"Couldn't find leaders for ${missing}"))
+        err += new SparkException(s"Couldn't find leaders for ${missing}")
         Left(err)
       }
     }
@@ -139,7 +139,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
         respErrs.foreach { m =>
           val cause = ErrorMapping.exceptionFor(m.errorCode)
           val msg = s"Error getting partition metadata for '${m.topic}'. Does the topic exist?"
-          errs.append(new SparkException(msg, cause))
+          errs += new SparkException(msg, cause)
         }
       }
     }
@@ -205,11 +205,11 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
                   LeaderOffset(consumer.host, consumer.port, off)
                 }
               } else {
-                errs.append(new SparkException(
-                  s"Empty offsets for ${tp}, is ${before} before log beginning?"))
+                errs += new SparkException(
+                  s"Empty offsets for ${tp}, is ${before} before log beginning?")
               }
             } else {
-              errs.append(ErrorMapping.exceptionFor(por.error))
+              errs += ErrorMapping.exceptionFor(por.error)
             }
           }
         }
@@ -218,7 +218,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
         }
       }
       val missing = topicAndPartitions.diff(result.keySet)
-      errs.append(new SparkException(s"Couldn't find leader offsets for ${missing}"))
+      errs += new SparkException(s"Couldn't find leader offsets for ${missing}")
       Left(errs)
     }
   }
@@ -274,7 +274,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
           if (ome.error == ErrorMapping.NoError) {
             result += tp -> ome
           } else {
-            errs.append(ErrorMapping.exceptionFor(ome.error))
+            errs += ErrorMapping.exceptionFor(ome.error)
           }
         }
       }
@@ -283,7 +283,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
       }
     }
     val missing = topicAndPartitions.diff(result.keySet)
-    errs.append(new SparkException(s"Couldn't find consumer offsets for ${missing}"))
+    errs += new SparkException(s"Couldn't find consumer offsets for ${missing}")
     Left(errs)
   }
 
@@ -330,7 +330,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
           if (err == ErrorMapping.NoError) {
             result += tp -> err
           } else {
-            errs.append(ErrorMapping.exceptionFor(err))
+            errs += ErrorMapping.exceptionFor(err)
           }
         }
       }
@@ -339,7 +339,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
       }
     }
     val missing = topicAndPartitions.diff(result.keySet)
-    errs.append(new SparkException(s"Couldn't set offsets for ${missing}"))
+    errs += new SparkException(s"Couldn't set offsets for ${missing}")
     Left(errs)
   }
 
@@ -353,7 +353,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
         fn(consumer)
       } catch {
         case NonFatal(e) =>
-          errs.append(e)
+          errs += e
       } finally {
         if (consumer != null) {
           consumer.close()

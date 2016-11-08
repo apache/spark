@@ -24,8 +24,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.log4j.{Level, LogManager}
 import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.internal.config._
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
 class ReplSuite extends SparkFunSuite {
@@ -399,9 +399,18 @@ class ReplSuite extends SparkFunSuite {
   test("replicating blocks of object with class defined in repl") {
     val output = runInterpreter("local-cluster[2,1,1024]",
       """
+        |val timeout = 60000 // 60 seconds
+        |val start = System.currentTimeMillis
+        |while(sc.getExecutorStorageStatus.size != 3 &&
+        |    (System.currentTimeMillis - start) < timeout) {
+        |  Thread.sleep(10)
+        |}
+        |if (System.currentTimeMillis - start >= timeout) {
+        |  throw new java.util.concurrent.TimeoutException("Executors were not up in 60 seconds")
+        |}
         |import org.apache.spark.storage.StorageLevel._
         |case class Foo(i: Int)
-        |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_ONLY_2)
+        |val ret = sc.parallelize((1 to 100).map(Foo), 10).persist(MEMORY_AND_DISK_2)
         |ret.count()
         |sc.getExecutorStorageStatus.map(s => s.rddBlocksById(ret.id).size).sum
       """.stripMargin)

@@ -88,6 +88,34 @@ setClass("GaussianMixtureModel", representation(jobj = "jobj"))
 #' @note ALSModel since 2.1.0
 setClass("ALSModel", representation(jobj = "jobj"))
 
+#' S4 class that represents an KSTest
+#'
+#' @param jobj a Java object reference to the backing Scala KSTestWrapper
+#' @export
+#' @note KSTest since 2.1.0
+setClass("KSTest", representation(jobj = "jobj"))
+
+#' S4 class that represents an LogisticRegressionModel
+#'
+#' @param jobj a Java object reference to the backing Scala LogisticRegressionModel
+#' @export
+#' @note LogisticRegressionModel since 2.1.0
+setClass("LogisticRegressionModel", representation(jobj = "jobj"))
+
+#' S4 class that represents a RandomForestRegressionModel
+#'
+#' @param jobj a Java object reference to the backing Scala RandomForestRegressionModel
+#' @export
+#' @note RandomForestRegressionModel since 2.1.0
+setClass("RandomForestRegressionModel", representation(jobj = "jobj"))
+
+#' S4 class that represents a RandomForestClassificationModel
+#'
+#' @param jobj a Java object reference to the backing Scala RandomForestClassificationModel
+#' @export
+#' @note RandomForestClassificationModel since 2.1.0
+setClass("RandomForestClassificationModel", representation(jobj = "jobj"))
+
 #' Saves the MLlib model to the input path
 #'
 #' Saves the MLlib model to the input path. For more information, see the specific
@@ -97,7 +125,8 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.lda}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
+#' @seealso \link{spark.randomForest}, \link{spark.survreg},
 #' @seealso \link{read.ml}
 NULL
 
@@ -110,7 +139,8 @@ NULL
 #' @export
 #' @seealso \link{spark.glm}, \link{glm},
 #' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.isoreg}, \link{spark.kmeans},
-#' @seealso \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
+#' @seealso \link{spark.randomForest}, \link{spark.survreg}
 NULL
 
 write_internal <- function(object, path, overwrite = FALSE) {
@@ -138,10 +168,11 @@ predict_internal <- function(object, newData) {
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
-#'                  weights as 1.0.
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
+#' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
+#'                  weights as 1.0.
+#' @param regParam regularization parameter for L2 regularization.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model
@@ -171,7 +202,8 @@ predict_internal <- function(object, newData) {
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL) {
+          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
+                   regParam = 0.0) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
             }
@@ -190,7 +222,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
-                                tol, as.integer(maxIter), as.character(weightCol))
+                                tol, as.integer(maxIter), as.character(weightCol), regParam)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -638,6 +670,165 @@ setMethod("predict", signature(object = "KMeansModel"),
             predict_internal(object, newData)
           })
 
+#' Logistic Regression Model
+#'
+#' Fits an logistic regression model against a Spark DataFrame. It supports "binomial": Binary logistic regression
+#' with pivoting; "multinomial": Multinomial logistic (softmax) regression without pivoting, similar to glmnet.
+#' Users can print, make predictions on the produced model and save the model to the input path.
+#'
+#' @param data SparkDataFrame for training
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param regParam the regularization parameter. Default is 0.0.
+#' @param elasticNetParam the ElasticNet mixing parameter. For alpha = 0.0, the penalty is an L2 penalty.
+#'                        For alpha = 1.0, it is an L1 penalty. For 0.0 < alpha < 1.0, the penalty is a combination
+#'                        of L1 and L2. Default is 0.0 which is an L2 penalty.
+#' @param maxIter maximum iteration number.
+#' @param tol convergence tolerance of iterations.
+#' @param fitIntercept whether to fit an intercept term. Default is TRUE.
+#' @param family the name of family which is a description of the label distribution to be used in the model.
+#'               Supported options: Default is "auto".
+#'                 \itemize{
+#'                   \item{"auto": Automatically select the family based on the number of classes:
+#'                           If number of classes == 1 || number of classes == 2, set to "binomial".
+#'                           Else, set to "multinomial".}
+#'                   \item{"binomial": Binary logistic regression with pivoting.}
+#'                   \item{"multinomial": Multinomial logistic (softmax) regression without pivoting.}
+#'                 }
+#' @param standardization whether to standardize the training features before fitting the model. The coefficients
+#'                        of models will be always returned on the original scale, so it will be transparent for
+#'                        users. Note that with/without standardization, the models should be always converged
+#'                        to the same solution when no regularization is applied. Default is TRUE, same as glmnet.
+#' @param thresholds in binary classification, in range [0, 1]. If the estimated probability of class label 1
+#'                  is > threshold, then predict 1, else 0. A high threshold encourages the model to predict 0
+#'                  more often; a low threshold encourages the model to predict 1 more often. Note: Setting this with
+#'                  threshold p is equivalent to setting thresholds c(1-p, p). In multiclass (or binary) classification to adjust the probability of
+#'                  predicting each class. Array must have length equal to the number of classes, with values > 0,
+#'                  excepting that at most one value may be 0. The class with largest value p/t is predicted, where p
+#'                  is the original probability of that class and t is the class's threshold. Default is 0.5.
+#' @param weightCol The weight column name.
+#' @param aggregationDepth depth for treeAggregate (>= 2). If the dimensions of features or the number of partitions
+#'                         are large, this param could be adjusted to a larger size. Default is 2.
+#' @param probabilityCol column name for predicted class conditional probabilities. Default is "probability".
+#' @param ... additional arguments passed to the method.
+#' @return \code{spark.logit} returns a fitted logistic regression model
+#' @rdname spark.logit
+#' @aliases spark.logit,SparkDataFrame,formula-method
+#' @name spark.logit
+#' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' # binary logistic regression
+#' label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
+#' feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
+#' binary_data <- as.data.frame(cbind(label, feature))
+#' binary_df <- createDataFrame(binary_data)
+#' blr_model <- spark.logit(binary_df, label ~ feature, thresholds = 1.0)
+#' blr_predict <- collect(select(predict(blr_model, binary_df), "prediction"))
+#'
+#' # summary of binary logistic regression
+#' blr_summary <- summary(blr_model)
+#' blr_fmeasure <- collect(select(blr_summary$fMeasureByThreshold, "threshold", "F-Measure"))
+#' # save fitted model to input path
+#' path <- "path/to/model"
+#' write.ml(blr_model, path)
+#'
+#' # can also read back the saved model and predict
+#' # Note that summary deos not work on loaded model
+#' savedModel <- read.ml(path)
+#' blr_predict2 <- collect(select(predict(savedModel, binary_df), "prediction"))
+#'
+#' # multinomial logistic regression
+#'
+#' label <- c(0.0, 1.0, 2.0, 0.0, 0.0)
+#' feature1 <- c(4.845940, 5.64480, 7.430381, 6.464263, 5.555667)
+#' feature2 <- c(2.941319, 2.614812, 2.162451, 3.339474, 2.970987)
+#' feature3 <- c(1.322733, 1.348044, 3.861237, 9.686976, 3.447130)
+#' feature4 <- c(1.3246388, 0.5510444, 0.9225810, 1.2147881, 1.6020842)
+#' data <- as.data.frame(cbind(label, feature1, feature2, feature3, feature4))
+#' df <- createDataFrame(data)
+#'
+#' # Note that summary of multinomial logistic regression is not implemented yet
+#' model <- spark.logit(df, label ~ ., family = "multinomial", thresholds = c(0, 1, 1))
+#' predict1 <- collect(select(predict(model, df), "prediction"))
+#' }
+#' @note spark.logit since 2.1.0
+setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
+                   tol = 1E-6, fitIntercept = TRUE, family = "auto", standardization = TRUE,
+                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
+                   probabilityCol = "probability") {
+            formula <- paste0(deparse(formula), collapse = "")
+
+            if (is.null(weightCol)) {
+              weightCol <- ""
+            }
+
+            jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
+                                data@sdf, formula, as.numeric(regParam),
+                                as.numeric(elasticNetParam), as.integer(maxIter),
+                                as.numeric(tol), as.logical(fitIntercept),
+                                as.character(family), as.logical(standardization),
+                                as.array(thresholds), as.character(weightCol),
+                                as.integer(aggregationDepth), as.character(probabilityCol))
+            new("LogisticRegressionModel", jobj = jobj)
+          })
+
+#  Predicted values based on an LogisticRegressionModel model
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns the predicted values based on an LogisticRegressionModel.
+#' @rdname spark.logit
+#' @aliases predict,LogisticRegressionModel,SparkDataFrame-method
+#' @export
+#' @note predict(LogisticRegressionModel) since 2.1.0
+setMethod("predict", signature(object = "LogisticRegressionModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+#  Get the summary of an LogisticRegressionModel
+
+#' @param object an LogisticRegressionModel fitted by \code{spark.logit}
+#' @return \code{summary} returns the Binary Logistic regression results of a given model as lists. Note that
+#'                        Multinomial logistic regression summary is not available now.
+#' @rdname spark.logit
+#' @aliases summary,LogisticRegressionModel-method
+#' @export
+#' @note summary(LogisticRegressionModel) since 2.1.0
+setMethod("summary", signature(object = "LogisticRegressionModel"),
+          function(object) {
+            jobj <- object@jobj
+            is.loaded <- callJMethod(jobj, "isLoaded")
+
+            if (is.loaded) {
+              stop("Loaded model doesn't have training summary.")
+            }
+
+            roc <- dataFrame(callJMethod(jobj, "roc"))
+
+            areaUnderROC <- callJMethod(jobj, "areaUnderROC")
+
+            pr <- dataFrame(callJMethod(jobj, "pr"))
+
+            fMeasureByThreshold <- dataFrame(callJMethod(jobj, "fMeasureByThreshold"))
+
+            precisionByThreshold <- dataFrame(callJMethod(jobj, "precisionByThreshold"))
+
+            recallByThreshold <- dataFrame(callJMethod(jobj, "recallByThreshold"))
+
+            totalIterations <- callJMethod(jobj, "totalIterations")
+
+            objectiveHistory <- callJMethod(jobj, "objectiveHistory")
+
+            list(roc = roc, areaUnderROC = areaUnderROC, pr = pr,
+                 fMeasureByThreshold = fMeasureByThreshold,
+                 precisionByThreshold = precisionByThreshold,
+                 recallByThreshold = recallByThreshold,
+                 totalIterations = totalIterations, objectiveHistory = objectiveHistory)
+          })
+
 #' Multilayer Perceptron Classification Model
 #'
 #' \code{spark.mlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
@@ -656,6 +847,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param tol convergence tolerance of iterations.
 #' @param stepSize stepSize parameter.
 #' @param seed seed parameter for weights initialization.
+#' @param initialWeights initialWeights parameter for weights initialization, it should be a
+#' numeric vector.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
@@ -668,8 +861,9 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 #'
 #' # fit a Multilayer Perceptron Classification Model
-#' model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs",
-#'                    maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
+#' model <- spark.mlp(df, blockSize = 128, layers = c(4, 3), solver = "l-bfgs",
+#'                    maxIter = 100, tol = 0.5, stepSize = 1, seed = 1,
+#'                    initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
 #'
 #' # get the summary of the model
 #' summary(model)
@@ -685,12 +879,25 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' }
 #' @note spark.mlp since 2.1.0
 setMethod("spark.mlp", signature(data = "SparkDataFrame"),
-          function(data, blockSize = 128, layers = c(3, 5, 2), solver = "l-bfgs", maxIter = 100,
-                   tol = 0.5, stepSize = 1, seed = 1) {
+          function(data, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
+                   tol = 1E-6, stepSize = 0.03, seed = NULL, initialWeights = NULL) {
+            if (is.null(layers)) {
+              stop ("layers must be a integer vector with length > 1.")
+            }
+            layers <- as.integer(na.omit(layers))
+            if (length(layers) <= 1) {
+              stop ("layers must be a integer vector with length > 1.")
+            }
+            if (!is.null(seed)) {
+              seed <- as.character(as.integer(seed))
+            }
+            if (!is.null(initialWeights)) {
+              initialWeights <- as.array(as.numeric(na.omit(initialWeights)))
+            }
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
                                 "fit", data@sdf, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
-                                as.numeric(stepSize), as.integer(seed))
+                                as.numeric(stepSize), seed, initialWeights)
             new("MultilayerPerceptronClassificationModel", jobj = jobj)
           })
 
@@ -711,8 +918,9 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 # Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
 #' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @return \code{summary} returns a list containing \code{layers}, the label distribution, and
-#'         \code{tables}, conditional probabilities given the target label.
+#' @return \code{summary} returns a list containing \code{labelCount}, \code{layers}, and
+#'         \code{weights}. For \code{weights}, it is a numeric vector with length equal to
+#'         the expected given the architecture (i.e., for 8-10-2 network, 100 connection weights).
 #' @rdname spark.mlp
 #' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
@@ -723,7 +931,6 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
             labelCount <- callJMethod(jobj, "labelCount")
             layers <- unlist(callJMethod(jobj, "layers"))
             weights <- callJMethod(jobj, "weights")
-            weights <- matrix(weights, nrow = length(weights))
             list(labelCount = labelCount, layers = layers, weights = weights)
           })
 
@@ -863,6 +1070,21 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
             write_internal(object, path, overwrite)
           })
 
+#  Save fitted LogisticRegressionModel to the input path
+
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.logit
+#' @aliases write.ml,LogisticRegressionModel,character-method
+#' @export
+#' @note write.ml(LogisticRegression, character) since 2.1.0
+setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
 #  Save fitted MLlib model to the input path
 
 #' @param path the directory where the model is saved.
@@ -913,6 +1135,12 @@ read.ml <- function(path) {
     new("GaussianMixtureModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.ALSWrapper")) {
     new("ALSModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LogisticRegressionWrapper")) {
+    new("LogisticRegressionModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.RandomForestRegressorWrapper")) {
+    new("RandomForestRegressionModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.RandomForestClassifierWrapper")) {
+    new("RandomForestClassificationModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
   }
@@ -994,18 +1222,22 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @export
 #' @examples
 #' \dontrun{
-#' text <- read.df("path/to/data", source = "libsvm")
+#' # nolint start
+#' # An example "path/to/file" can be
+#' # paste0(Sys.getenv("SPARK_HOME"), "/data/mllib/sample_lda_libsvm_data.txt")
+#' # nolint end
+#' text <- read.df("path/to/file", source = "libsvm")
 #' model <- spark.lda(data = text, optimizer = "em")
 #'
 #' # get a summary of the model
 #' summary(model)
 #'
 #' # compute posterior probabilities
-#' posterior <- spark.posterior(model, df)
+#' posterior <- spark.posterior(model, text)
 #' showDF(posterior)
 #'
 #' # compute perplexity
-#' perplexity <- spark.perplexity(model, df)
+#' perplexity <- spark.perplexity(model, text)
 #'
 #' # save and load the model
 #' path <- "path/to/model"
@@ -1228,7 +1460,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @note spark.als since 2.1.0
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
-                   rank = 10, reg = 1.0, maxIter = 10, nonnegative = FALSE,
+                   rank = 10, reg = 0.1, maxIter = 10, nonnegative = FALSE,
                    implicitPrefs = FALSE, alpha = 1.0, numUserBlocks = 10, numItemBlocks = 10,
                    checkpointInterval = 10, seed = 0) {
 
@@ -1304,3 +1536,332 @@ setMethod("write.ml", signature(object = "ALSModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             write_internal(object, path, overwrite)
           })
+
+#' (One-Sample) Kolmogorov-Smirnov Test
+#'
+#' @description
+#' \code{spark.kstest} Conduct the two-sided Kolmogorov-Smirnov (KS) test for data sampled from a
+#' continuous distribution.
+#'
+#' By comparing the largest difference between the empirical cumulative
+#' distribution of the sample data and the theoretical distribution we can provide a test for the
+#' the null hypothesis that the sample data comes from that theoretical distribution.
+#'
+#' Users can call \code{summary} to obtain a summary of the test, and \code{print.summary.KSTest}
+#' to print out a summary result.
+#'
+#' @param data a SparkDataFrame of user data.
+#' @param testCol column name where the test data is from. It should be a column of double type.
+#' @param nullHypothesis name of the theoretical distribution tested against. Currently only
+#'                       \code{"norm"} for normal distribution is supported.
+#' @param distParams parameters(s) of the distribution. For \code{nullHypothesis = "norm"},
+#'                   we can provide as a vector the mean and standard deviation of
+#'                   the distribution. If none is provided, then standard normal will be used.
+#'                   If only one is provided, then the standard deviation will be set to be one.
+#' @param ... additional argument(s) passed to the method.
+#' @return \code{spark.kstest} returns a test result object.
+#' @rdname spark.kstest
+#' @aliases spark.kstest,SparkDataFrame-method
+#' @name spark.kstest
+#' @seealso \href{http://spark.apache.org/docs/latest/mllib-statistics.html#hypothesis-testing}{
+#'          MLlib: Hypothesis Testing}
+#' @export
+#' @examples
+#' \dontrun{
+#' data <- data.frame(test = c(0.1, 0.15, 0.2, 0.3, 0.25))
+#' df <- createDataFrame(data)
+#' test <- spark.ktest(df, "test", "norm", c(0, 1))
+#'
+#' # get a summary of the test result
+#' testSummary <- summary(test)
+#' testSummary
+#'
+#' # print out the summary in an organized way
+#' print.summary.KSTest(test)
+#' }
+#' @note spark.kstest since 2.1.0
+setMethod("spark.kstest", signature(data = "SparkDataFrame"),
+          function(data, testCol = "test", nullHypothesis = c("norm"), distParams = c(0, 1)) {
+            tryCatch(match.arg(nullHypothesis),
+                     error = function(e) {
+                       msg <- paste("Distribution", nullHypothesis, "is not supported.")
+                       stop(msg)
+                     })
+            if (nullHypothesis == "norm") {
+              distParams <- as.numeric(distParams)
+              mu <- ifelse(length(distParams) < 1, 0, distParams[1])
+              sigma <- ifelse(length(distParams) < 2, 1, distParams[2])
+              jobj <- callJStatic("org.apache.spark.ml.r.KSTestWrapper",
+                                  "test", data@sdf, testCol, nullHypothesis,
+                                  as.array(c(mu, sigma)))
+              new("KSTest", jobj = jobj)
+            }
+})
+
+#  Get the summary of Kolmogorov-Smirnov (KS) Test.
+#' @param object test result object of KSTest by \code{spark.kstest}.
+#' @return \code{summary} returns a list containing the p-value, test statistic computed for the
+#'         test, the null hypothesis with its parameters tested against
+#'         and degrees of freedom of the test.
+#' @rdname spark.kstest
+#' @aliases summary,KSTest-method
+#' @export
+#' @note summary(KSTest) since 2.1.0
+setMethod("summary", signature(object = "KSTest"),
+          function(object) {
+            jobj <- object@jobj
+            pValue <- callJMethod(jobj, "pValue")
+            statistic <- callJMethod(jobj, "statistic")
+            nullHypothesis <- callJMethod(jobj, "nullHypothesis")
+            distName <- callJMethod(jobj, "distName")
+            distParams <- unlist(callJMethod(jobj, "distParams"))
+            degreesOfFreedom <- callJMethod(jobj, "degreesOfFreedom")
+
+            ans <- list(p.value = pValue, statistic = statistic, nullHypothesis = nullHypothesis,
+                        nullHypothesis.name = distName, nullHypothesis.parameters = distParams,
+                        degreesOfFreedom = degreesOfFreedom, jobj = jobj)
+            class(ans) <- "summary.KSTest"
+            ans
+          })
+
+#  Prints the summary of KSTest
+
+#' @rdname spark.kstest
+#' @param x summary object of KSTest returned by \code{summary}.
+#' @export
+#' @note print.summary.KSTest since 2.1.0
+print.summary.KSTest <- function(x, ...) {
+  jobj <- x$jobj
+  summaryStr <- callJMethod(jobj, "summary")
+  cat(summaryStr, "\n")
+  invisible(x)
+}
+
+#' Random Forest Model for Regression and Classification
+#'
+#' \code{spark.randomForest} fits a Random Forest Regression model or Classification model on
+#' a SparkDataFrame. Users can call \code{summary} to get a summary of the fitted Random Forest
+#' model, \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
+#' save/load fitted models.
+#' For more details, see
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html}{Random Forest}
+#'
+#' @param data a SparkDataFrame for training.
+#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', ':', '+', and '-'.
+#' @param type type of model, one of "regression" or "classification", to fit
+#' @param maxDepth Maximum depth of the tree (>= 0). (default = 5)
+#' @param maxBins Maximum number of bins used for discretizing continuous features and for choosing
+#'                how to split on features at each node. More bins give higher granularity. Must be
+#'                >= 2 and >= number of categories in any categorical feature. (default = 32)
+#' @param numTrees Number of trees to train (>= 1).
+#' @param impurity Criterion used for information gain calculation.
+#'                 For regression, must be "variance". For classification, must be one of
+#'                 "entropy" and "gini". (default = gini)
+#' @param minInstancesPerNode Minimum number of instances each child must have after split.
+#' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
+#' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#' @param featureSubsetStrategy The number of features to consider for splits at each tree node.
+#'        Supported options: "auto", "all", "onethird", "sqrt", "log2", (0.0-1.0], [1-n].
+#' @param seed integer seed for random number generation.
+#' @param subsamplingRate Fraction of the training data used for learning each decision tree, in
+#'                        range (0, 1]. (default = 1.0)
+#' @param probabilityCol column name for predicted class conditional probabilities, only for
+#'                       classification. (default = "probability")
+#' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
+#' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
+#'                     nodes.
+#' @param ... additional arguments passed to the method.
+#' @aliases spark.randomForest,SparkDataFrame,formula-method
+#' @return \code{spark.randomForest} returns a fitted Random Forest model.
+#' @rdname spark.randomForest
+#' @name spark.randomForest
+#' @export
+#' @examples
+#' \dontrun{
+#' # fit a Random Forest Regression Model
+#' df <- createDataFrame(longley)
+#' model <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 5, maxBins = 16)
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#'
+#' # fit a Random Forest Classification Model
+#' df <- createDataFrame(iris)
+#' model <- spark.randomForest(df, Species ~ Petal_Length + Petal_Width, "classification")
+#' }
+#' @note spark.randomForest since 2.1.0
+setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, type = c("regression", "classification"),
+                   maxDepth = 5, maxBins = 32, numTrees = 20, impurity = NULL,
+                   minInstancesPerNode = 1, minInfoGain = 0.0, checkpointInterval = 10,
+                   featureSubsetStrategy = "auto", seed = NULL, subsamplingRate = 1.0,
+                   probabilityCol = "probability", maxMemoryInMB = 256, cacheNodeIds = FALSE) {
+            type <- match.arg(type)
+            formula <- paste(deparse(formula), collapse = "")
+            if (!is.null(seed)) {
+              seed <- as.character(as.integer(seed))
+            }
+            switch(type,
+                   regression = {
+                     if (is.null(impurity)) impurity <- "variance"
+                     impurity <- match.arg(impurity, "variance")
+                     jobj <- callJStatic("org.apache.spark.ml.r.RandomForestRegressorWrapper",
+                                         "fit", data@sdf, formula, as.integer(maxDepth),
+                                         as.integer(maxBins), as.integer(numTrees),
+                                         impurity, as.integer(minInstancesPerNode),
+                                         as.numeric(minInfoGain), as.integer(checkpointInterval),
+                                         as.character(featureSubsetStrategy), seed,
+                                         as.numeric(subsamplingRate),
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                     new("RandomForestRegressionModel", jobj = jobj)
+                   },
+                   classification = {
+                     if (is.null(impurity)) impurity <- "gini"
+                     impurity <- match.arg(impurity, c("gini", "entropy"))
+                     jobj <- callJStatic("org.apache.spark.ml.r.RandomForestClassifierWrapper",
+                                         "fit", data@sdf, formula, as.integer(maxDepth),
+                                         as.integer(maxBins), as.integer(numTrees),
+                                         impurity, as.integer(minInstancesPerNode),
+                                         as.numeric(minInfoGain), as.integer(checkpointInterval),
+                                         as.character(featureSubsetStrategy), seed,
+                                         as.numeric(subsamplingRate), as.character(probabilityCol),
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                     new("RandomForestClassificationModel", jobj = jobj)
+                   }
+            )
+          })
+
+# Makes predictions from a Random Forest Regression model or Classification model
+
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
+#' "prediction"
+#' @rdname spark.randomForest
+#' @aliases predict,RandomForestRegressionModel-method
+#' @export
+#' @note predict(randomForestRegressionModel) since 2.1.0
+setMethod("predict", signature(object = "RandomForestRegressionModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+#' @rdname spark.randomForest
+#' @aliases predict,RandomForestClassificationModel-method
+#' @export
+#' @note predict(randomForestClassificationModel) since 2.1.0
+setMethod("predict", signature(object = "RandomForestClassificationModel"),
+          function(object, newData) {
+            predict_internal(object, newData)
+          })
+
+# Save the Random Forest Regression or Classification model to the input path.
+
+#' @param object A fitted Random Forest regression model or classification model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @aliases write.ml,RandomForestRegressionModel,character-method
+#' @rdname spark.randomForest
+#' @export
+#' @note write.ml(RandomForestRegressionModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "RandomForestRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#' @aliases write.ml,RandomForestClassificationModel,character-method
+#' @rdname spark.randomForest
+#' @export
+#' @note write.ml(RandomForestClassificationModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "RandomForestClassificationModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            write_internal(object, path, overwrite)
+          })
+
+#  Get the summary of an RandomForestRegressionModel model
+summary.randomForest <- function(model) {
+  jobj <- model@jobj
+  formula <- callJMethod(jobj, "formula")
+  numFeatures <- callJMethod(jobj, "numFeatures")
+  features <-  callJMethod(jobj, "features")
+  featureImportances <- callJMethod(callJMethod(jobj, "featureImportances"), "toString")
+  numTrees <- callJMethod(jobj, "numTrees")
+  treeWeights <- callJMethod(jobj, "treeWeights")
+  list(formula = formula,
+       numFeatures = numFeatures,
+       features = features,
+       featureImportances = featureImportances,
+       numTrees = numTrees,
+       treeWeights = treeWeights,
+       jobj = jobj)
+}
+
+#' @return \code{summary} returns the model's features as lists, depth and number of nodes
+#'                        or number of classes.
+#' @rdname spark.randomForest
+#' @aliases summary,RandomForestRegressionModel-method
+#' @export
+#' @note summary(RandomForestRegressionModel) since 2.1.0
+setMethod("summary", signature(object = "RandomForestRegressionModel"),
+          function(object) {
+            ans <- summary.randomForest(object)
+            class(ans) <- "summary.RandomForestRegressionModel"
+            ans
+          })
+
+#  Get the summary of an RandomForestClassificationModel model
+
+#' @rdname spark.randomForest
+#' @aliases summary,RandomForestClassificationModel-method
+#' @export
+#' @note summary(RandomForestClassificationModel) since 2.1.0
+setMethod("summary", signature(object = "RandomForestClassificationModel"),
+          function(object) {
+            ans <- summary.randomForest(object)
+            class(ans) <- "summary.RandomForestClassificationModel"
+            ans
+          })
+
+#  Prints the summary of Random Forest Regression Model
+print.summary.randomForest <- function(x) {
+  jobj <- x$jobj
+  cat("Formula: ", x$formula)
+  cat("\nNumber of features: ", x$numFeatures)
+  cat("\nFeatures: ", unlist(x$features))
+  cat("\nFeature importances: ", x$featureImportances)
+  cat("\nNumber of trees: ", x$numTrees)
+  cat("\nTree weights: ", unlist(x$treeWeights))
+
+  summaryStr <- callJMethod(jobj, "summary")
+  cat("\n", summaryStr, "\n")
+  invisible(x)
+}
+
+#' @param x summary object of Random Forest regression model or classification model
+#'          returned by \code{summary}.
+#' @rdname spark.randomForest
+#' @export
+#' @note print.summary.RandomForestRegressionModel since 2.1.0
+print.summary.RandomForestRegressionModel <- function(x, ...) {
+  print.summary.randomForest(x)
+}
+
+#  Prints the summary of Random Forest Classification Model
+
+#' @rdname spark.randomForest
+#' @export
+#' @note print.summary.RandomForestClassificationModel since 2.1.0
+print.summary.RandomForestClassificationModel <- function(x, ...) {
+  print.summary.randomForest(x)
+}

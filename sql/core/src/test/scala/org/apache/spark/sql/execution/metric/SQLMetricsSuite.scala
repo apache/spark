@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
@@ -83,6 +84,22 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       // them.
       logWarning("Due to a race condition, we miss some jobs and cannot verify the metric values")
     }
+  }
+
+  test("LocalTableScanExec computes metrics in collect and take") {
+    val df1 = spark.createDataset(Seq(1, 2, 3))
+    val logical = df1.queryExecution.logical
+    require(logical.isInstanceOf[LocalRelation])
+    df1.collect()
+    val metrics1 = df1.queryExecution.executedPlan.collectLeaves().head.metrics
+    assert(metrics1.contains("numOutputRows"))
+    assert(metrics1("numOutputRows").value === 3)
+
+    val df2 = spark.createDataset(Seq(1, 2, 3)).limit(2)
+    df2.collect()
+    val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
+    assert(metrics2.contains("numOutputRows"))
+    assert(metrics2("numOutputRows").value === 2)
   }
 
   test("Filter metrics") {
