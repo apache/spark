@@ -326,15 +326,17 @@ class GaussianMixture @Since("2.0.0") (
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  // number of samples per cluster to use when initializing Gaussians
-  private val nSamples = 5
+  /**
+   * Number of samples per cluster to use when initializing Gaussians.
+   */
+  private val numSamples = 5
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
     transformSchema(dataset.schema, logging = true)
 
     val sc = dataset.sparkSession.sparkContext
-    val _k = $(k)
+    val numClusters = $(k)
 
     val instances: RDD[Vector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(features: Vector) => features
@@ -346,56 +348,17 @@ class GaussianMixture @Since("2.0.0") (
     val instr = Instrumentation.create(this, instances)
     instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
 
-    val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(_k, numFeatures)
+    val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(
+      numClusters, numFeatures)
 
-    // Determine initial weights and corresponding Gaussians.
-    // We start with uniform weights, a random mean from the data, and
-    // diagonal covariance matrices using component variances
-    // derived from the samples.
     // TODO: Support users supplied initial GMM.
-    val samples = instances.takeSample(withReplacement = true, _k * nSamples, $(seed))
-    val weights: Array[Double] = Array.fill(_k)(1.0 / _k)
-    /**
-     * Since the covariance matrix of multivariate gaussian distribution is symmetric,
-     * only the upper triangular part of the matrix will be stored as a dense vector
-     * in order to reduce the shuffled data size.
-     */
-    val gaussians: Array[(DenseVector, DenseVector)] = Array.tabulate(_k) { i =>
-      val slice = samples.view(i * nSamples, (i + 1) * nSamples)
-      val mean = {
-        val v = new DenseVector(Array.fill[Double](numFeatures)(0.0))
-        var i = 0
-        while (i < nSamples) {
-          BLAS.axpy(1.0, slice(i), v)
-          i += 1
-        }
-        BLAS.scal(1.0 / nSamples, v)
-        v
-      }
-      /**
-       * Construct matrix where diagonal entries are element-wise
-       * variance of input vectors (computes biased variance).
-       */
-      val cov = {
-        val ss = new DenseVector(Array.fill[Double](numFeatures)(0)).asBreeze
-        slice.foreach(xi => ss += (xi.asBreeze - mean.asBreeze) :^ 2.0)
-        val diagVec = Vectors.fromBreeze(ss)
-        BLAS.scal(1.0 / nSamples, diagVec)
-        val covVec = new DenseVector(Array.fill[Double](
-          numFeatures * (numFeatures + 1) / 2)(0.0))
-        diagVec.toArray.zipWithIndex.foreach { case (v: Double, i: Int) =>
-          covVec.values(i + i * (i + 1) / 2) = v
-        }
-        covVec
-      }
-      (mean, cov)
-    }
+    val (weights, gaussians) = initRandom(instances, numClusters, numFeatures)
 
-    var llh = Double.MinValue // current log-likelihood
-    var llhp = 0.0            // previous log-likelihood
+    var logLikelihood = Double.MinValue
+    var logLikelihoodPrev = 0.0
 
     var iter = 0
-    while (iter < $(maxIter) && math.abs(llh - llhp) > $(tol)) {
+    while (iter < $(maxIter) && math.abs(logLikelihood - logLikelihoodPrev) > $(tol)) {
 
       val bcWeights = instances.sparkContext.broadcast(weights)
       val bcGaussians = instances.sparkContext.broadcast(gaussians)
@@ -413,15 +376,15 @@ class GaussianMixture @Since("2.0.0") (
       bcWeights.destroy(blocking = false)
       bcGaussians.destroy(blocking = false)
 
-      /**
-       * Create new distributions based on the partial assignments
-       * (often referred to as the "M" step in literature)
+      /*
+         Create new distributions based on the partial assignments
+         (often referred to as the "M" step in literature)
        */
       val sumWeights = sums.weights.sum
 
       if (shouldDistributeGaussians) {
-        val numPartitions = math.min(_k, 1024)
-        val tuples = Seq.tabulate(_k) { i =>
+        val numPartitions = math.min(numClusters, 1024)
+        val tuples = Seq.tabulate(numClusters) { i =>
           (sums.means(i), sums.covs(i), sums.weights(i))
         }
         val (ws, gs) = sc.parallelize(tuples, numPartitions).map { case (mean, cov, weight) =>
@@ -431,7 +394,7 @@ class GaussianMixture @Since("2.0.0") (
         Array.copy(gs.toArray, 0, gaussians, 0, gs.length)
       } else {
         var i = 0
-        while (i < _k) {
+        while (i < numClusters) {
           val (weight, gaussian) = GaussianMixture.updateWeightsAndGaussians(
             sums.means(i), sums.covs(i), sums.weights(i), sumWeights)
           weights(i) = weight
@@ -440,8 +403,8 @@ class GaussianMixture @Since("2.0.0") (
         }
       }
 
-      llhp = llh  // current becomes previous
-      llh = sums.logLikelihood  // this is the freshly computed log-likelihood
+      logLikelihoodPrev = logLikelihood   // current becomes previous
+      logLikelihood = sums.logLikelihood  // this is the freshly computed log-likelihood
       iter += 1
     }
 
@@ -464,6 +427,61 @@ class GaussianMixture @Since("2.0.0") (
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  /**
+   * Initialize weights and corresponding gaussians at random.
+   *
+   * We start with uniform weights, a random mean from the data, and diagonal covariance matrices
+   * using component variances derived from the samples.
+   *
+   * @param instances The instances of training data.
+   * @param numClusters The number of clusters.
+   * @param numFeatures The number of features in training data.
+   * @return The initialized weights and corresponding gaussians. Note the covariance matrix of
+   *         multivariate gaussian distribution is symmetric and we only save the upper triangular
+   *         part as a dense vector.
+   */
+  private def initRandom(
+      instances: RDD[Vector],
+      numClusters: Int,
+      numFeatures: Int): (Array[Double], Array[(DenseVector, DenseVector)]) = {
+    val samples = instances.takeSample(withReplacement = true, numClusters * numSamples, $(seed))
+    val weights: Array[Double] = Array.fill(numClusters)(1.0 / numClusters)
+    val gaussians: Array[(DenseVector, DenseVector)] = Array.tabulate(numClusters) { i =>
+      val slice = samples.view(i * numSamples, (i + 1) * numSamples)
+      val mean = {
+        val v = new DenseVector(new Array[Double](numFeatures))
+        var i = 0
+        while (i < numSamples) {
+          BLAS.axpy(1.0, slice(i), v)
+          i += 1
+        }
+        BLAS.scal(1.0 / numSamples, v)
+        v
+      }
+      /*
+         Construct matrix where diagonal entries are element-wise
+         variance of input vectors (computes biased variance).
+         Since the covariance matrix of multivariate gaussian distribution is symmetric,
+         only the upper triangular part of the matrix will be saved as a dense vector
+         in order to reduce the shuffled data size.
+       */
+      val cov = {
+        val ss = new DenseVector(new Array[Double](numFeatures)).asBreeze
+        slice.foreach(xi => ss += (xi.asBreeze - mean.asBreeze) :^ 2.0)
+        val diagVec = Vectors.fromBreeze(ss)
+        BLAS.scal(1.0 / numSamples, diagVec)
+        val covVec = new DenseVector(Array.fill[Double](
+          numFeatures * (numFeatures + 1) / 2)(0.0))
+        diagVec.toArray.zipWithIndex.foreach { case (v: Double, i: Int) =>
+          covVec.values(i + i * (i + 1) / 2) = v
+        }
+        covVec
+      }
+      (mean, cov)
+    }
+    (weights, gaussians)
+  }
 }
 
 @Since("2.0.0")
@@ -474,36 +492,55 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
 
   /**
    * Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
-   * d > 25 except for when k is very small.
+   * numFeatures > 25 except for when numClusters is very small.
    *
-   * @param k  Number of topics
-   * @param d  Number of features
+   * @param numClusters  Number of clusters
+   * @param numFeatures  Number of features
    */
-  private[clustering] def shouldDistributeGaussians(k: Int, d: Int): Boolean = {
-    ((k - 1.0) / k) * d > 25
+  private[clustering] def shouldDistributeGaussians(
+      numClusters: Int,
+      numFeatures: Int): Boolean = {
+    ((numClusters - 1.0) / numClusters) * numFeatures > 25.0
   }
 
   /**
-   * Unpack upper triangular part of a symmetric matrix.
+   * Convert an n * (n + 1) / 2 dimension array representing the upper triangular part of a matrix
+   * into an n * n array representing the full symmetric matrix.
+   *
    * @param n The order of the n by n matrix.
-   * @param triangular The upper triangular part of the matrix packed in an array (column major).
+   * @param triangularValues The upper triangular part of the matrix packed in an array
+   *                         (column major).
    * @return An array which represents the symmetric matrix in column major.
    */
   private[clustering] def unpackUpperTriangularMatrix(
       n: Int,
-      triangular: Array[Double]): Array[Double] = {
-    val symmetric = Array.fill(n * n)(0.0)
+      triangularValues: Array[Double]): Array[Double] = {
+    val symmetricValues = new Array[Double](n * n)
     var r = 0
-    for (i <- 0 until n) {
-      for (j <- 0 to i) {
-        symmetric(i * n + j) = triangular(r)
-        symmetric(j * n + i) = triangular(r)
+    var i = 0
+    while(i < n) {
+      var j = 0
+      while (j <= i) {
+        symmetricValues(i * n + j) = triangularValues(r)
+        symmetricValues(j * n + i) = triangularValues(r)
         r += 1
+        j += 1
       }
+      i += 1
     }
-    symmetric
+    symmetricValues
   }
 
+  /**
+   * Update the weight, mean and covariance of gaussian distribution.
+   *
+   * @param mean The mean of the gaussian distribution.
+   * @param cov The covariance matrix of the gaussian distribution. Note we only
+   *            save the upper triangular part as a dense vector.
+   * @param weight The weight of the gaussian distribution.
+   * @param sumWeights The sum of weights of all clusters.
+   * @return The updated weight, mean and covariance.
+   */
   private[clustering] def updateWeightsAndGaussians(
       mean: DenseVector,
       cov: DenseVector,
@@ -536,7 +573,7 @@ private class ExpectationAggregator(
   private val k: Int = bcWeights.value.length
   private var totalCnt: Long = 0L
   private var newLogLikelihood: Double = 0.0
-  private val newWeights: Array[Double] = Array.fill(k)(0.0)
+  private val newWeights: Array[Double] = new Array[Double](k)
   private val newMeans: Array[DenseVector] = Array.fill(k)(
     new DenseVector(Array.fill[Double](numFeatures)(0.0)))
   private val newCovs: Array[DenseVector] = Array.fill(k)(
@@ -561,26 +598,36 @@ private class ExpectationAggregator(
   def covs: Array[DenseVector] = newCovs
 
   /**
-   * Add a new training data to this ExpectationAggregator, and update the log likelihood,
-   * weights for each distribution, means and covariances for all distributions.
+   * Add a new training instance to this ExpectationAggregator, update the weights,
+   * means and covariances for each distributions, and update the log likelihood.
    *
-   * @param data The instance of data point to be added.
+   * @param instance The instance of data point to be added.
    * @return This ExpectationAggregator object.
    */
-  def add(data: Vector): this.type = {
+  def add(instance: Vector): this.type = {
     val localWeights = bcWeights.value
+    val localOldGaussians = oldGaussians
 
-    val p = localWeights.zip(oldGaussians).map { case (weight, gaussian) =>
-      EPSILON + weight * gaussian.pdf(data)
-    }
-    val pSum = p.sum
-    newLogLikelihood += math.log(pSum)
+    val prob = new Array[Double](k)
+    var probSum = 0.0
     var i = 0
     while(i < k) {
-      p(i) /= pSum
-      newWeights(i) += p(i)
-      BLAS.axpy(p(i), data, newMeans(i))
-      BLAS.spr(p(i), data, newCovs(i))
+      val p = EPSILON + localWeights(i) * localOldGaussians(i).pdf(instance)
+      prob(i) = p
+      probSum += p
+      i += 1
+    }
+
+    newLogLikelihood += math.log(probSum)
+    val localNewWeights = newWeights
+    val localNewMeans = newMeans
+    val localNewCovs = newCovs
+    i = 0
+    while(i < k) {
+      prob(i) /= probSum
+      localNewWeights(i) += prob(i)
+      BLAS.axpy(prob(i), instance, localNewMeans(i))
+      BLAS.spr(prob(i), instance, localNewCovs(i))
       i += 1
     }
 
@@ -589,8 +636,9 @@ private class ExpectationAggregator(
   }
 
   /**
-   * Merge another ExpectationAggregator, and update the log likelihood,
-   * weights for each distribution, means and covariances for all distributions.
+   * Merge another ExpectationAggregator, update the weights, means and covariances
+   * for each distributions, and update the log likelihood.
+   * (Note that it's in place merging; as a result, `this` object will be modified.)
    *
    * @param other The other ExpectationAggregator to be merged.
    * @return This ExpectationAggregator object.
@@ -599,11 +647,17 @@ private class ExpectationAggregator(
     if (other.count != 0) {
       totalCnt += other.totalCnt
 
+      val localThisNewWeights = this.newWeights
+      val localOtherNewWeights = other.newWeights
+      val localThisNewMeans = this.newMeans
+      val localOtherNewMeans = other.newMeans
+      val localThisNewCovs = this.newCovs
+      val localOtherNewCovs = other.newCovs
       var i = 0
       while(i < k) {
-        newWeights(i) += other.newWeights(i)
-        BLAS.axpy(1.0, other.newMeans(i), newMeans(i))
-        BLAS.axpy(1.0, other.newCovs(i), newCovs(i))
+        localThisNewWeights(i) += localOtherNewWeights(i)
+        BLAS.axpy(1.0, localOtherNewMeans(i), localThisNewMeans(i))
+        BLAS.axpy(1.0, localOtherNewCovs(i), localThisNewCovs(i))
         i += 1
       }
       newLogLikelihood += other.newLogLikelihood
