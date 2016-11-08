@@ -80,43 +80,38 @@ class PrimitiveArrayBenchmark extends BenchmarkBase {
     writeDatasetArray(4)
   }
 
-  def writeArray(iters: Int): Unit = {
+  def readDataFrameArray(iters: Int): Unit = {
     import sparkSession.implicits._
+    val n = 1500
+    val rows = 3
 
-    val iters = 5
-    val n = 1024 * 1024
-    val rows = 15
+    val intStatement = (0 to n - 1).map(i => s"value + $i").mkString("Array(", ",", ")")
+    val ints = Array.tabulate(rows)(i => i)
+    val intDF = sparkSession.sparkContext.parallelize(ints, 1).toDF
 
-    val benchmark = new Benchmark("Write an array in Dataframe", n)
+    val doubleStatement = (0 to n - 1).map(i => s"value + $i.0d").mkString("Array(", ",", ")")
+    val doubles = Array.tabulate(rows)(i => i.toDouble)
+    val doubleDF = sparkSession.sparkContext.parallelize(doubles, 1).toDF
 
-    val intDF = sparkSession.sparkContext.parallelize(0 until rows, 1)
-      .map(i => Array.tabulate(n)(i => i)).toDF()
-    intDF.count() // force to create df
-
-    benchmark.addCase(s"Write int array in DataFrame", numIters = iters)(iter => {
-      intDF.selectExpr("value as a").collect
+    val benchmark = new Benchmark("Read a primitive array in DataFrame", n * iters)
+    benchmark.addCase(s"Int   ", numIters = iters)(iter => {
+      intDF.selectExpr(intStatement).queryExecution.toRdd.collect.length
     })
-
-    val doubleDF = sparkSession.sparkContext.parallelize(0 until rows, 1)
-      .map(i => Array.tabulate(n)(i => i.toDouble)).toDF()
-    doubleDF.count() // force to create df
-
-    benchmark.addCase(s"Write double array in DataFrame", numIters = iters)(iter => {
-      doubleDF.selectExpr("value as a").collect
+    benchmark.addCase(s"Double", numIters = iters)(iter => {
+      doubleDF.selectExpr(doubleStatement).queryExecution.toRdd.collect.length
     })
-
-    benchmark.run()
+    benchmark.run
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Read primitive array:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Read a primitive array in DataFrame:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Write int array in DataFrame                  1290 / 1748          0.8        1230.1       1.0X
-    Write double array in DataFrame               1761 / 2236          0.6        1679.0       0.7X
+    Int                                            241 /  340          0.0       32140.2       1.0X
+    Double                                         212 /  220          0.0       28319.2       1.1X
     */
   }
 
-  ignore("Write an array in DataFrame") {
-    writeArray(1)
+  test("Read an array in DataFrame") {
+    readDataFrameArray(5)
   }
 }
