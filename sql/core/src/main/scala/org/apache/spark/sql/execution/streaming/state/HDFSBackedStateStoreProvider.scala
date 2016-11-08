@@ -254,7 +254,9 @@ private[state] class HDFSBackedStateStoreProvider(
   private def commitUpdates(newVersion: Long, map: MapType, tempDeltaFile: Path): Path = {
     synchronized {
       val finalDeltaFile = deltaFile(newVersion)
-      fs.rename(tempDeltaFile, finalDeltaFile)
+      if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
+        throw new IOException(s"Failed to rename $tempDeltaFile to $finalDeltaFile")
+      }
       loadedMaps.put(newVersion, map)
       finalDeltaFile
     }
