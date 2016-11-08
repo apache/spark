@@ -38,11 +38,22 @@ VERSION = __version__
 # A temporary path so we can access above the Python project root and fetch scripts and jars we need
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
-JARS_PATH = os.path.join(SPARK_HOME, "assembly/target/scala-2.11/jars/")
 
-# Use the release jars path if we are in release mode.
-if (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1):
+# Figure out where the jars are we need to package with PySpark.
+JARS_PATH = glob.glob(os.path.join(SPARK_HOME, "assembly/target/scala-*/jars/"))
+
+if len(JARS_PATH) == 1:
+    JARS_PATH = JARS_PATH[0]
+elif (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1):
+    # Release mode puts the jars in a jars directory
     JARS_PATH = os.path.join(SPARK_HOME, "jars")
+elif len(JARS_PATH) > 1:
+    print("Assembly jars exist for multiple scalas, please cleanup assembly/target",
+          file=sys.stderr)
+    sys.exit(-1)
+elif len(JARS_PATH) == 0 and not os.path.exists("deps"):
+    print("Assembly jars missing, please build Spark before packaging Python", file=sys.stderr)
+    sys.exit(-1)
 
 EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
 SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
@@ -56,6 +67,9 @@ EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
 # partially built sdist) we should error and have the user sort it out.
 in_spark = (os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.scala") or
             (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1))
+
+def _supports_symlinks():
+    return getattr(os, "symlink", None) is not None
 
 if (in_spark):
     # Construct links for setup
@@ -80,7 +94,7 @@ try:
     if (in_spark):
         # Construct the symlink farm - this is necessary since we can't refer to the path above the
         # package root and we need to copy the jars and scripts which are up above the python root.
-        if getattr(os, "symlink", None) is not None:
+        if _supports_symlinks():
             os.symlink(JARS_PATH, JARS_TARGET)
             os.symlink(SCRIPTS_PATH, SCRIPTS_TARGET)
             os.symlink(EXAMPLES_PATH, EXAMPLES_TARGET)
@@ -168,7 +182,7 @@ finally:
     # packaging.
     if (in_spark):
         # Depending on cleaning up the symlink farm or copied version
-        if getattr(os, "symlink", None) is not None:
+        if _supports_symlinks():
             os.remove(os.path.join(TEMP_PATH, "jars"))
             os.remove(os.path.join(TEMP_PATH, "bin"))
             os.remove(os.path.join(TEMP_PATH, "examples"))
