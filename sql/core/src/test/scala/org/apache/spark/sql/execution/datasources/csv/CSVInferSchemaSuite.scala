@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import scala.util.Random
+
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
@@ -92,17 +97,23 @@ class CSVInferSchemaSuite extends SparkFunSuite {
   }
 
   test("Null fields are handled properly when a nullValue is specified") {
-    var options = new CSVOptions(Map("nullValue" -> "null"), "GMT")
-    assert(CSVInferSchema.inferField(NullType, "null", options) == NullType)
-    assert(CSVInferSchema.inferField(StringType, "null", options) == StringType)
-    assert(CSVInferSchema.inferField(LongType, "null", options) == LongType)
+    val types = Seq(NullType, StringType, LongType, IntegerType,
+      DoubleType, TimestampType, BooleanType, DecimalType(1, 1))
+    types.foreach { t =>
+      Seq("null", "\\N").foreach { v =>
+        val options = new CSVOptions(Map("nullValue" -> v), "GMT")
+        assert(CSVInferSchema.inferField(t, v, options) == t)
+      }
+    }
 
-    options = new CSVOptions(Map("nullValue" -> "\\N"), "GMT")
-    assert(CSVInferSchema.inferField(IntegerType, "\\N", options) == IntegerType)
-    assert(CSVInferSchema.inferField(DoubleType, "\\N", options) == DoubleType)
-    assert(CSVInferSchema.inferField(TimestampType, "\\N", options) == TimestampType)
-    assert(CSVInferSchema.inferField(BooleanType, "\\N", options) == BooleanType)
-    assert(CSVInferSchema.inferField(DecimalType(1, 1), "\\N", options) == DecimalType(1, 1))
+    // nullable field with multiple nullValue option.
+    val nullValues = Seq("abc", "", "123", "null")
+    val nullValuesStr = compact(render(nullValues))
+    types.foreach { t =>
+      val options = new CSVOptions(Map("nullValue" -> nullValuesStr), "GMT")
+      val nullVal = nullValues(Random.nextInt(nullValues.length))
+      assert(CSVInferSchema.inferField(t, nullVal, options) == t)
+    }
   }
 
   test("Merging Nulltypes should yield Nulltype.") {

@@ -23,6 +23,8 @@ import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -587,6 +589,21 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * the property value based on whether its a string, integer, boolean or decimal literal.
    */
   override def visitTablePropertyValue(value: TablePropertyValueContext): String = {
+    if (value == null) {
+      null
+    } else if (value.propertyValue != null) {
+      visitPropertyValue(value.propertyValue)
+    } else if (value.propertyArrayValue != null) {
+      val values = value.propertyArrayValue.propertyValue.asScala.map { v =>
+        visitPropertyValue(v)
+      }
+      compact(render(values))
+    } else {
+      value.getText
+    }
+  }
+
+  override def visitPropertyValue(value: PropertyValueContext): String = {
     if (value == null) {
       null
     } else if (value.STRING != null) {

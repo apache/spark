@@ -596,6 +596,35 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
+  test("multiple nullValue option for reading") {
+    val cars = spark.read
+      .format("csv")
+      .option("header", "true")
+      .option("nullValue", Seq("2012", "Tesla", "null"))
+      .load(testFile(carsNullFile))
+
+    verifyCars(cars, withHeader = true, checkValues = false)
+    val results = cars.collect()
+    assert(results(0).toSeq === Array(null, null, "S", null, null))
+    assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
+  }
+
+  test("DDL multiple nullValue option for reading") {
+    spark.sql(
+      s"""
+         |CREATE TEMPORARY TABLE carsTable USING csv
+         |OPTIONS (path "${testFile(carsNullFile)}", header "true",
+         |nullValue [2012, 'Tesla', 'null'])
+      """.stripMargin.replaceAll("\n", " "))
+
+    val cars = spark.sql("SELECT * FROM carsTable")
+
+    verifyCars(cars, withHeader = true, checkValues = false)
+    val results = cars.collect()
+    assert(results(0).toSeq === Array(null, null, "S", null, null))
+    assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
+  }
+
   test("save csv with compression codec option") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath

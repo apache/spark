@@ -21,6 +21,9 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
@@ -109,6 +112,22 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   def option(key: String, value: Double): DataStreamReader = option(key, value.toString)
 
   /**
+   * (Scala-specific) Adds an input option for the underlying data source.
+   *
+   * @since 2.2.0
+   */
+  def option(key: String, value: Seq[String]): DataStreamReader = {
+    option(key, compact(render(value)))
+  }
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.2.0
+   */
+  def option(key: String, value: Array[String]): DataStreamReader = option(key, value.toSeq)
+
+  /**
    * (Scala-specific) Adds input options for the underlying data source.
    *
    * You can set the following option(s):
@@ -140,6 +159,15 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     this
   }
 
+  /**
+   * Un-sets an input option for the underlying data source.
+   *
+   * @since 2.2.0
+   */
+  def unsetOption(key: String): DataStreamReader = {
+    this.extraOptions.remove(key)
+    this
+  }
 
   /**
    * Loads input data stream in as a `DataFrame`, for data streams that don't require a path
@@ -259,7 +287,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`ignoreTrailingWhiteSpace` (default `false`): a flag indicating whether or not trailing
    * whitespaces from values being read should be skipped.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value. Since
-   * 2.0.1, this applies to all supported types including the string type.</li>
+   * 2.0.1, this applies to all supported types including the string type.
+   * An array of strings to represent null values can be set for this option. For example,
+   * `spark.readStream.format("csv").option("nullValue", Seq("", "null"))`.</li>
    * <li>`nanValue` (default `NaN`): sets the string representation of a non-number" value.</li>
    * <li>`positiveInf` (default `Inf`): sets the string representation of a positive infinity
    * value.</li>

@@ -21,6 +21,8 @@ import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
@@ -188,11 +190,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         .option("opt1", "1")
         .options(Map("opt2" -> "2"))
         .options(map)
+        .option("opt4", "4")
+        .unsetOption("opt4")
         .load()
 
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
     assert(LastOptions.parameters("opt3") == "3")
+    assert(!LastOptions.parameters.contains("opt4"))
 
     LastOptions.clear()
 
@@ -201,11 +206,34 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       .option("opt1", "1")
       .options(Map("opt2" -> "2"))
       .options(map)
+      .option("opt4", "4")
+      .unsetOption("opt4")
       .save()
 
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
     assert(LastOptions.parameters("opt3") == "3")
+    assert(!LastOptions.parameters.contains("opt4"))
+  }
+
+  test("options - array") {
+    val expected = compact(render(Seq("1", "0.1", "TRUE", "e")))
+
+    val df = spark.read
+      .format("org.apache.spark.sql.test")
+      .option("opt1", Seq("1", "0.1", "TRUE", "e"))
+      .load()
+
+    assert(LastOptions.parameters("opt1") == expected)
+
+    LastOptions.clear()
+
+    df.write
+      .format("org.apache.spark.sql.test")
+      .option("opt1", Seq("1", "0.1", "TRUE", "e"))
+      .save()
+
+    assert(LastOptions.parameters("opt1") == expected)
   }
 
   test("save mode") {

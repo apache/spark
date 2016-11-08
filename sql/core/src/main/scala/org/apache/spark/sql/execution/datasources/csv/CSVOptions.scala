@@ -20,8 +20,12 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.nio.charset.StandardCharsets
 import java.util.{Locale, TimeZone}
 
+import scala.util.Try
+
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 import org.apache.commons.lang3.time.FastDateFormat
+import org.json4s._
+import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
@@ -104,7 +108,17 @@ class CSVOptions(
   val columnNameOfCorruptRecord =
     parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
 
-  val nullValue = parameters.getOrElse("nullValue", "")
+  val nullValue: Array[String] = parameters.get("nullValue").map { str =>
+    Try {
+      implicit val formats = DefaultFormats
+      val arr = parse(str).extract[Array[String]]
+      // If the input is just a string not formatted as a json array, it can be an empty array.
+      // In this case throws an exception so that the string value is used as is for backwards
+      // compatibility.
+      require(arr.nonEmpty)
+      arr
+    }.getOrElse(Array(str))
+  }.getOrElse(Array(""))
 
   val nanValue = parameters.getOrElse("nanValue", "NaN")
 
@@ -151,8 +165,8 @@ class CSVOptions(
     format.setComment(comment)
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
-    writerSettings.setNullValue(nullValue)
-    writerSettings.setEmptyValue(nullValue)
+    writerSettings.setNullValue(nullValue(0))
+    writerSettings.setEmptyValue(nullValue(0))
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
@@ -171,7 +185,7 @@ class CSVOptions(
     settings.setReadInputOnSeparateThread(false)
     settings.setInputBufferSize(inputBufferSize)
     settings.setMaxColumns(maxColumns)
-    settings.setNullValue(nullValue)
+    settings.setNullValue(nullValue(0))
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
     settings

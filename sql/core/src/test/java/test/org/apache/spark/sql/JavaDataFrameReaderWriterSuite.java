@@ -70,6 +70,7 @@ public class JavaDataFrameReaderWriterSuite {
         .option("b", 1)
         .option("c", 1.0)
         .option("d", true)
+        .option("e", new String[]{"1", "2"})
         .options(map)
         .text()
         .write()
@@ -77,6 +78,7 @@ public class JavaDataFrameReaderWriterSuite {
         .option("b", 1)
         .option("c", 1.0)
         .option("d", true)
+        .option("e", new String[]{"1", "2"})
         .options(map)
         .format("org.apache.spark.sql.test")
         .save();

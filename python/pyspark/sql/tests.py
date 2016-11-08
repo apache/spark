@@ -1369,7 +1369,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.spark.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
         csvpath = os.path.join(tempfile.mkdtemp(), 'data')
-        df.write.option('quote', None).format('csv').save(csvpath)
+        df.write.unsetOption('quote').format('csv').save(csvpath)
 
         shutil.rmtree(tmpPath)
 

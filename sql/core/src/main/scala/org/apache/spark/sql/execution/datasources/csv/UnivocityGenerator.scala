@@ -65,7 +65,7 @@ private[csv] class UnivocityGenerator(
       if (!row.isNullAt(i)) {
         values(i) = valueConverters(i).apply(row, i)
       } else {
-        values(i) = options.nullValue
+        values(i) = options.nullValue(0)
       }
       i += 1
     }
