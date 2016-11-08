@@ -613,7 +613,7 @@ private[state] object StateStoreSuite {
   }
 }
 
-/** 
+/**
  * Fake FileSystem to test that the StateStore throws an exception while committing the
  * delta file, when `fs.rename` returns `false`.
  */
