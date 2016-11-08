@@ -171,6 +171,7 @@ case class CatalogTable(
     throw new AnalysisException(s"table $identifier did not specify database")
   }
 
+  /** Return the table location, assuming it is specified. */
   def location: String = storage.locationUri.getOrElse {
     throw new AnalysisException(s"table $identifier did not specify locationUri")
   }

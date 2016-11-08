@@ -30,7 +30,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
@@ -61,6 +60,9 @@ object PartitioningUtils {
   {
     require(columnNames.size == literals.size)
   }
+
+  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
+  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.unescapePathName
 
   /**
    * Given a group of qualified paths, tries to parse them and returns a partition specification.
@@ -373,14 +375,14 @@ object PartitioningUtils {
         .orElse(Try(Literal(JTimestamp.valueOf(unescapePathName(raw)))))
         // Then falls back to string
         .getOrElse {
-          if (raw == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
+          if (raw == DEFAULT_PARTITION_NAME) {
             Literal.create(null, NullType)
           } else {
             Literal.create(unescapePathName(raw), StringType)
           }
         }
     } else {
-      if (raw == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
+      if (raw == DEFAULT_PARTITION_NAME) {
         Literal.create(null, NullType)
       } else {
         Literal.create(unescapePathName(raw), StringType)
@@ -442,33 +444,5 @@ object PartitioningUtils {
     literals.map { case l @ Literal(_, dataType) =>
       Literal.create(Cast(l, desiredType).eval(), desiredType)
     }
-  }
-
-  def unescapePathName(path: String): String = {
-    val sb = new StringBuilder
-    var i = 0
-
-    while (i < path.length) {
-      val c = path.charAt(i)
-      if (c == '%' && i + 2 < path.length) {
-        val code: Int = try {
-          Integer.parseInt(path.substring(i + 1, i + 3), 16)
-        } catch {
-          case _: Exception => -1
-        }
-        if (code >= 0) {
-          sb.append(code.asInstanceOf[Char])
-          i += 3
-        } else {
-          sb.append(c)
-          i += 1
-        }
-      } else {
-        sb.append(c)
-        i += 1
-      }
-    }
-
-    sb.toString()
   }
 }

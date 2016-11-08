@@ -72,6 +72,35 @@ object ExternalCatalogUtils {
     builder.toString()
   }
 
+
+  def unescapePathName(path: String): String = {
+    val sb = new StringBuilder
+    var i = 0
+
+    while (i < path.length) {
+      val c = path.charAt(i)
+      if (c == '%' && i + 2 < path.length) {
+        val code: Int = try {
+          Integer.parseInt(path.substring(i + 1, i + 3), 16)
+        } catch {
+          case _: Exception => -1
+        }
+        if (code >= 0) {
+          sb.append(code.asInstanceOf[Char])
+          i += 3
+        } else {
+          sb.append(c)
+          i += 1
+        }
+      } else {
+        sb.append(c)
+        i += 1
+      }
+    }
+
+    sb.toString()
+  }
+
   def generatePartitionPath(
       spec: TablePartitionSpec,
       partitionColumnNames: Seq[String],
