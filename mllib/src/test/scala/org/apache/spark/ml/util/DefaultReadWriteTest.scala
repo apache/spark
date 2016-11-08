@@ -92,13 +92,16 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       testParams: Map[String, Any],
       testFunctions: Map[String, (Any, Any) => Unit]): Unit = {
     testParams.foreach { case (p, v) =>
-      val param = stage.getParam(p)
-      val paramVal = stage.get(param).get
-      val paramVal2 = stage2.get(param).get
-      if (testFunctions.contains(p)) {
-        testFunctions(p)(paramVal, paramVal2)
-      } else {
-        assert(paramVal === paramVal2)
+      if (stage.hasParam(p)) {
+        assert(stage2.hasParam(p))
+        val param = stage.getParam(p)
+        val paramVal = stage.get(param).get
+        val paramVal2 = stage2.get(param).get
+        if (testFunctions.contains(p)) {
+          testFunctions(p)(paramVal, paramVal2)
+        } else {
+          assert(paramVal === paramVal2)
+        }
       }
     }
   }

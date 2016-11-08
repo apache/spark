@@ -17,9 +17,8 @@
 
 package org.apache.spark.mllib.clustering
 
-import com.esotericsoftware.kryo.serializers.VersionFieldSerializer.Since
-
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
@@ -592,6 +591,7 @@ object KMeans {
     initMode match {
       case KMeans.RANDOM => true
       case KMeans.K_MEANS_PARALLEL => true
+      case KMeans.K_MEANS_INITIAL_MODEL => true
       case _ => false
     }
   }
