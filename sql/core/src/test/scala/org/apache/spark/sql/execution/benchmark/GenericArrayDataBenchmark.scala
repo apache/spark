@@ -32,79 +32,7 @@ import org.apache.spark.util.Benchmark
  */
 class GenericArrayDataBenchmark extends BenchmarkBase {
 
-  def allocateGenericIntArray(iters: Int): Unit = {
-    val count = 1024 * 1024
-    var array: GenericArrayData = null
-
-    val primitiveIntArray = new Array[Int](count)
-    val specializedIntArray = { i: Int =>
-      var n = 0
-      while (n < iters) {
-        array = new GenericArrayData(primitiveIntArray)
-        n += 1
-      }
-    }
-    val anyArray = primitiveIntArray.toArray[Any]
-    val genericIntArray = { i: Int =>
-      var n = 0
-      while (n < iters) {
-        array = new GenericArrayData(anyArray)
-        n += 1
-      }
-    }
-
-    val benchmark = new Benchmark("Allocate GenericArrayData for int", count * iters,
-      minNumIters = 10, minTime = 1.milliseconds)
-    benchmark.addCase("Generic    ")(genericIntArray)
-    benchmark.addCase("Specialized")(specializedIntArray)
-    benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Allocate GenericArrayData for int:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Generic                                          0 /    0   46500044.3           0.0       1.0X
-    Specialized                                      0 /    0  170500162.6           0.0       3.7X
-    */
-  }
-
-  def allocateGenericDoubleArray(iters: Int): Unit = {
-    val count = 1024 * 1024
-    var array: GenericArrayData = null
-
-    val primitiveDoubleArray = new Array[Int](count)
-    val specializedDoubleArray = { i: Int =>
-      var n = 0
-      while (n < iters) {
-        array = new GenericArrayData(primitiveDoubleArray)
-        n += 1
-      }
-    }
-    val anyArray = primitiveDoubleArray.toArray[Any]
-    val genericDoubleArray = { i: Int =>
-      var n = 0
-      while (n < iters) {
-        array = new GenericArrayData(anyArray)
-        n += 1
-      }
-    }
-
-    val benchmark = new Benchmark("Allocate GenericArrayData for double", count * iters,
-      minNumIters = 10, minTime = 1.milliseconds)
-    benchmark.addCase("Generic    ")(genericDoubleArray)
-    benchmark.addCase("Specialized")(specializedDoubleArray)
-    benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Allocate GenericArrayData for double:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Generic                                          0 /    0   55627374.0           0.0       1.0X
-    Specialized                                      0 /    0  177724745.8           0.0       3.2X
-    */
-  }
-
-  def getPrimitiveIntArray(iters: Int): Unit = {
+    def getPrimitiveIntArray(iters: Int): Unit = {
     val count = 1024 * 1024 * 8
 
     val anyArray: GenericArrayData = new GenericArrayData(new Array[Int](count).toArray[Any])
@@ -134,8 +62,8 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Get int primitive array:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Generic                                        334 /  382        502.4           2.0       1.0X
-    Specialized                                    282 /  314        595.4           1.7       1.2X
+    Generic                                        277 /  366        605.0           1.7       1.0X
+    Specialized                                    214 /  251        785.1           1.3       1.3X
     */
   }
 
@@ -169,8 +97,8 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Get double primitive array:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Generic                                       1720 / 1883         97.6          10.3       1.0X
-    Specialized                                    703 / 1117        238.7           4.2       2.4X
+    Generic                                       1976 / 1991         84.9          11.8       1.0X
+    Specialized                                    589 / 1050        285.1           3.5       3.4X
     */
   }
 
@@ -219,8 +147,8 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Read GenericArrayData Int:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Generic                                        206 /  212       1017.6           1.0       1.0X
-    Specialized                                    161 /  167       1301.0           0.8       1.3X
+    Generic                                        208 /  214       1008.3           1.0       1.0X
+    Specialized                                    142 /  158       1471.7           0.7       1.5X
     */
   }
 
@@ -269,14 +197,9 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Read GenericArrayData Double:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Generic                                        547 /  581        383.3           2.6       1.0X
-    Specialized                                    237 /  260        884.0           1.1       2.3X
+    Generic                                        621 /  683        337.7           3.0       1.0X
+    Specialized                                    265 /  297        790.4           1.3       2.3X
     */
-  }
-
-  ignore("allocate GenericArrayData") {
-    allocateGenericIntArray(20)
-    allocateGenericDoubleArray(20)
   }
 
   ignore("get primitive array") {
