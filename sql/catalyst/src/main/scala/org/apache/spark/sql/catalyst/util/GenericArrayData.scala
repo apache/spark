@@ -23,27 +23,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-object GenericArrayData {
-  def allocate(array: Array[Any]): GenericRefArrayData = new GenericRefArrayData(array)
-  def allocate(seq: Seq[Any]): GenericRefArrayData = new GenericRefArrayData(seq)
-  def allocate(list: java.util.List[Any]): GenericRefArrayData = new GenericRefArrayData(list)
-  def allocate(seqOrArray: Any): GenericRefArrayData = new GenericRefArrayData(seqOrArray)
-  def allocate(primitiveArray: Array[Int]): GenericIntArrayData =
-    new GenericIntArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Long]): GenericLongArrayData =
-    new GenericLongArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Float]): GenericFloatArrayData =
-    new GenericFloatArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Double]): GenericDoubleArrayData =
-    new GenericDoubleArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Short]): GenericShortArrayData =
-    new GenericShortArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Byte]): GenericByteArrayData =
-    new GenericByteArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Boolean]): GenericBooleanArrayData =
-    new GenericBooleanArrayData(primitiveArray)
-}
-
 private object GenericArrayData {
 
   // SPARK-16634: Workaround for JVM bug present in some 1.7 versions.
@@ -80,7 +59,7 @@ class GenericArrayData(val array: Array[Any],
 
   def this(array: Array[Any]) = this(array, null, null, null, null, null, null, null)
 
-  def this(seqOrArray: Any) = this(GenericRefArrayData.anyToSeq(seqOrArray))
+  def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
 
   override def copy(): ArrayData = {
     if (booleanArray != null) new GenericArrayData(booleanArray.clone())
