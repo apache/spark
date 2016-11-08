@@ -26,22 +26,21 @@ import io.netty.buffer.ByteBuf;
 
 public class ByteArrayReadableChannel implements ReadableByteChannel {
   private final LinkedList<ByteBuf> buffers = new LinkedList<>();
+  private int remain = 0;
 
   public int readableBytes() {
-    if (!buffers.isEmpty()) {
-      return buffers.getFirst().readableBytes();
-    } else {
-      return 0;
-    }
+    return remain;
   }
 
   public void feedData(ByteBuf buf) {
+    remain += buf.readableBytes();
     buffers.add(buf);
   }
 
   @Override
   public int read(ByteBuffer dst) throws IOException {
-    if (!buffers.isEmpty()) {
+    int totalRead = 0;
+    while (!buffers.isEmpty() && dst.remaining() > 0) {
       ByteBuf first = buffers.getFirst();
       int bytesToRead = Math.min(first.readableBytes(), dst.remaining());
       ByteBuffer src = first.readSlice(bytesToRead).nioBuffer();
@@ -51,10 +50,12 @@ public class ByteArrayReadableChannel implements ReadableByteChannel {
         buffers.removeFirst().release();
       }
 
-      return bytesToRead;
+      totalRead += bytesToRead;
     }
 
-    return 0;
+    remain -= totalRead;
+
+    return totalRead;
   }
 
   @Override
