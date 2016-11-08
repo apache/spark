@@ -146,7 +146,6 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     // values in the PARTITION clause (e.g. b in the above example).
     // dynamic_partitioning_columns are partitioning columns that do not assigned
     // values in the PARTITION clause (e.g. c in the above example).
-    // TODO(ekl) get rid of this and combine with static partition key arg for overwrite
     case insert @ logical.InsertIntoTable(
       relation @ LogicalRelation(t: HadoopFsRelation, _, _), parts, query, overwrite, false)
       if query.resolved && parts.exists(_._2.isDefined) =>

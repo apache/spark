@@ -246,6 +246,34 @@ class PartitionProviderCompatibilitySuite
           assert(spark.sql("select * from test").count() == 243)
           spark.sql("insert overwrite table test select id, 1, 1 from range(10)")
           assert(spark.sql("select * from test").count() == 10)
+
+          // dynamic append to custom location
+          withTempDir { a =>
+            spark.sql(
+              s"alter table test partition (p1=1, p2=2) set location '${a.getAbsolutePath}'"
+            ).count()
+            spark.sql("insert into test partition (p1=1, p2) select id, id from range(100)")
+            spark.sql("insert into test partition (p1=1, p2) select id, id from range(100)")
+            assert(spark.sql("select * from test where p1=1").count() == 210)
+            assert(spark.sql("select * from test where p1=1 and p2=2").count() == 2)
+          }
+          sql("refresh table test")
+          assert(spark.sql("select * from test where p1=1 and p2=2").count() == 0)
+
+          // dynamic overwrite of custom locations
+          withTempDir { a =>
+            spark.sql(
+              s"alter table test partition (p1=1, p2=2) set location '${a.getAbsolutePath}'"
+            ).count()
+            spark.sql(
+              "insert overwrite table test partition (p1=1, p2) select id, id from range(100)")
+            spark.sql(
+              "insert overwrite table test partition (p1=1, p2) select id, id from range(100)")
+            assert(spark.sql("select * from test where p1=1").count() == 100)
+            assert(spark.sql("select * from test where p1=1 and p2=2").count() == 1)
+          }
+          sql("refresh table test")
+          assert(spark.sql("select * from test where p1=1 and p2=2").count() == 0)
         }
       }
     }

@@ -184,7 +184,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       UnresolvedRelation(tableIdent, None),
       partitionKeys,
       query,
-      OverwriteOptions(overwrite, staticPartitionKeys),
+      OverwriteOptions(overwrite, if (overwrite) staticPartitionKeys else Map.empty),
       ctx.EXISTS != null)
   }
 
