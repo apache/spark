@@ -35,9 +35,6 @@ public class ByteArrayReadableChannel implements ReadableByteChannel {
     }
   }
 
-  public ByteArrayReadableChannel() {
-  }
-
   public void feedData(ByteBuf buf) {
     buffers.add(buf);
   }

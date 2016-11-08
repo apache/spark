@@ -1451,11 +1451,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.authenticate.encryption.aes.cipher.class</code></td>
-  <td>org.apache.commons.crypto.cipher.OpenSslCipher</td>
+  <td>null</td>
   <td>
-    Specify the underlying implementation class of crypto cipher. In order to use
-    OpenSslCipher users should install openssl. Currently, there are two cipher classes
-    available in Commons Crypto library:
+    Specify the underlying implementation class of crypto cipher. Set null here to use default.
+    In order to use OpenSslCipher users should install openssl. Currently, there are two cipher
+    classes available in Commons Crypto library:
         org.apache.commons.crypto.cipher.OpenSslCipher
         org.apache.commons.crypto.cipher.JceCipher
   </td>

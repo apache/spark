@@ -187,8 +187,7 @@ public class TransportConf {
    * The implementation class for crypto cipher
    */
   public String aesCipherClass() {
-    return conf.get("spark.authenticate.encryption.aes.cipher.class",
-      CryptoCipherFactory.CipherProvider.OPENSSL.getClassName());
+    return conf.get("spark.authenticate.encryption.aes.cipher.class", null);
   }
 
   /**

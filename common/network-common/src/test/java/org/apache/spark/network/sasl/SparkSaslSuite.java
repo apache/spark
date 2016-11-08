@@ -376,7 +376,7 @@ public class SparkSaslSuite {
   }
 
   @Test
-  public void testSaslEncryptionAes() throws Exception {
+  public void testAesEncryption() throws Exception {
     final AtomicReference<ManagedBuffer> response = new AtomicReference<>();
     final File file = File.createTempFile("sasltest", ".txt");
     SaslTestCtx ctx = null;

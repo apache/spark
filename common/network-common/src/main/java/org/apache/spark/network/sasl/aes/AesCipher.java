@@ -57,7 +57,7 @@ public class AesCipher {
   private final IvParameterSpec inIvSpec;
   private final SecretKeySpec outKeySpec;
   private final IvParameterSpec outIvSpec;
-  private Properties properties;
+  private final Properties properties;
 
   public AesCipher(
       Properties properties,
@@ -115,7 +115,7 @@ public class AesCipher {
    */
   public static AesConfigMessage createConfigMessage(TransportConf conf) {
     int keySize = conf.aesCipherKeySize();
-    Properties properties = getProperties(conf);
+    Properties properties = CryptoStreamUtils.toCryptoConf(conf);
 
     try {
       int paramLen = CryptoCipherFactory.getCryptoCipher(AesCipher.TRANSFORM, properties)
@@ -138,10 +138,14 @@ public class AesCipher {
     }
   }
 
-  private static Properties getProperties(TransportConf conf) {
-    Properties props = new Properties();
-    props.setProperty(CryptoCipherFactory.CLASSES_KEY, conf.aesCipherClass());
-    return props;
+  private static class CryptoStreamUtils {
+    public static Properties toCryptoConf(TransportConf conf) {
+      Properties props = new Properties();
+      if (conf.aesCipherClass() != null) {
+        props.setProperty(CryptoCipherFactory.CLASSES_KEY, conf.aesCipherClass());
+      }
+      return props;
+    }
   }
 
   private static class AesEncryptHandler extends ChannelOutboundHandlerAdapter {
@@ -224,9 +228,9 @@ public class AesCipher {
       this.buf = isByteBuf ? (ByteBuf) msg : null;
       this.region = isByteBuf ? null : (FileRegion) msg;
       this.transferred = 0;
-      byteRawChannel = new ByteArrayWritableChannel(AesCipher.STREAM_BUFFER_SIZE);
+      this.byteRawChannel = new ByteArrayWritableChannel(AesCipher.STREAM_BUFFER_SIZE);
       this.cos = cos;
-      byteEncChannel = ch;
+      this.byteEncChannel = ch;
     }
 
     @Override
