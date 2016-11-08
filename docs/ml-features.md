@@ -1450,7 +1450,7 @@ for more details on the API.
 `\[
 d(\mathbf{A}, \mathbf{B}) = 1 - \frac{|\mathbf{A} \cap \mathbf{B}|}{|\mathbf{A} \cup \mathbf{B}|}
 \]`
-As its LSH family, MinHash applies a random [perfect hash function](https://en.wikipedia.org/wiki/Perfect_hash_function) `g` to each elements in the set and take the minimum of all hashed values:
+As its LSH family, MinHash applies a random perfect hash function `g` to each elements in the set and take the minimum of all hashed values:
 `\[
 h(\mathbf{A}) = \min_{a \in \mathbf{A}}(g(a))
 \]`
@@ -1525,9 +1525,12 @@ Approximate nearest neighbor search allows users to cache the transformed column
 A distance column will be added in the output dataset of approximate nearest neighbor search to show the distance between each output row and the searched key.
 
 There are two methods of approximate nearest neighbor search implemented in `spark.ml`:
-* Single probing search: Only the hash bucket(s) where the key is hashed are searched. This method is time efficient but might return less than k rows.
-* Multi probing search: All nearby hash buckets are searched to ensure exactly k rows are returned when possible, but this method can take more time.
-The example code will show the difference between single and multi probing.
+* Single-probe search: Only the hash bucket(s) where the key is hashed are searched. This method is time efficient but might return less than k rows.
+* [Multi-probe search](http://www.cs.princeton.edu/cass/papers/mplsh_vldb07.pdf): All nearby hash buckets are searched to ensure exactly k rows are returned when possible, but this method can take more time.
+
+**Note:** Multi-probe search will run brute force nearest neighbor for MinHash when there aren't enough candidates.
+
+The example code will show the difference between single and multi-probe search.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
