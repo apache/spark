@@ -111,10 +111,11 @@ object SparkHadoopMapReduceWriter extends Logging {
 
       committer.commitJob(jobContext, ret)
       logInfo(s"Job ${jobContext.getJobID} committed.")
-    } catch { case cause: Throwable =>
-      logError(s"Aborting job ${jobContext.getJobID}.", cause)
-      committer.abortJob(jobContext)
-      throw new SparkException("Job aborted.", cause)
+    } catch {
+      case cause: Throwable =>
+        logError(s"Aborting job ${jobContext.getJobID}.", cause)
+        committer.abortJob(jobContext)
+        throw new SparkException("Job aborted.", cause)
     }
   }
 
@@ -147,7 +148,7 @@ object SparkHadoopMapReduceWriter extends Logging {
 
     // Write all rows in RDD partition.
     try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks {
+      val ret = Utils.tryWithSafeFinallyAndFailureCallbacks {
         while (iterator.hasNext) {
           val pair = iterator.next()
           writer.write(pair._1, pair._2)
@@ -163,20 +164,26 @@ object SparkHadoopMapReduceWriter extends Logging {
         committer.abortTask(taskContext)
         logError(s"Task ${taskContext.getTaskAttemptID} aborted.")
       }, finallyBlock = writer.close(taskContext))
+
+      outputMetricsAndBytesWrittenCallback.foreach {
+        case (om, callback) =>
+          om.setBytesWritten(callback())
+          om.setRecordsWritten(recordsWritten)
+      }
+
+      ret
     } catch {
       case t: Throwable =>
         throw new SparkException("Task failed while writing rows", t)
-    } finally {
-      outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
-        om.setBytesWritten(callback())
-        om.setRecordsWritten(recordsWritten)
-      }
     }
   }
 }
 
 private[spark]
 object SparkHadoopWriterUtils {
+
+  private val RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES = 256
+
   def createJobID(time: Date, id: Int): JobID = {
     val jobtrackerID = createJobTrackerID(time)
     new JobID(jobtrackerID, id)
@@ -226,14 +233,13 @@ object SparkHadoopWriterUtils {
       outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)],
       recordsWritten: Long): Unit = {
     if (recordsWritten % RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
-      outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
-        om.setBytesWritten(callback())
-        om.setRecordsWritten(recordsWritten)
+      outputMetricsAndBytesWrittenCallback.foreach {
+        case (om, callback) =>
+          om.setBytesWritten(callback())
+          om.setRecordsWritten(recordsWritten)
       }
     }
   }
-
-  val RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES = 256
 
   /**
    * Allows for the `spark.hadoop.validateOutputSpecs` checks to be disabled on a case-by-case
