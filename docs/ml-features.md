@@ -729,6 +729,58 @@ for more details on the API.
 </div>
 </div>
 
+## Interaction
+
+`Interaction` is a `Transformer` which takes vector or double-valued columns, and generates a single vector column that contains the product of all combinations of one value from each input column.
+
+For example, if you have 2 vector type columns each of which has 3 dimensions as input columns, then then you'll get a 9-dimensional vector as the output column.
+
+**Examples**
+
+Assume that we have the following DataFrame with the columns "id1", "vec1", and "vec2":
+
+~~~~
+  id1|vec1          |vec2          
+  ---|--------------|--------------
+  1  |[1.0,2.0,3.0] |[8.0,4.0,5.0] 
+  2  |[4.0,3.0,8.0] |[7.0,9.0,8.0] 
+  3  |[6.0,1.0,9.0] |[2.0,3.0,6.0] 
+  4  |[10.0,8.0,6.0]|[9.0,4.0,5.0] 
+  5  |[9.0,2.0,7.0] |[10.0,7.0,3.0]
+  6  |[1.0,1.0,4.0] |[2.0,8.0,4.0]     
+~~~~
+
+Applying `Interaction` with those input columns,
+then `interactedCol` as the output column contains:
+
+~~~~
+  id1|vec1          |vec2          |interactedCol                                         
+  ---|--------------|--------------|------------------------------------------------------
+  1  |[1.0,2.0,3.0] |[8.0,4.0,5.0] |[8.0,4.0,5.0,16.0,8.0,10.0,24.0,12.0,15.0]            
+  2  |[4.0,3.0,8.0] |[7.0,9.0,8.0] |[56.0,72.0,64.0,42.0,54.0,48.0,112.0,144.0,128.0]     
+  3  |[6.0,1.0,9.0] |[2.0,3.0,6.0] |[36.0,54.0,108.0,6.0,9.0,18.0,54.0,81.0,162.0]        
+  4  |[10.0,8.0,6.0]|[9.0,4.0,5.0] |[360.0,160.0,200.0,288.0,128.0,160.0,216.0,96.0,120.0]
+  5  |[9.0,2.0,7.0] |[10.0,7.0,3.0]|[450.0,315.0,135.0,100.0,70.0,30.0,350.0,245.0,105.0] 
+  6  |[1.0,1.0,4.0] |[2.0,8.0,4.0] |[12.0,48.0,24.0,12.0,48.0,24.0,48.0,192.0,96.0]       
+~~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Interaction Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Interaction)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/InteractionExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Interaction Java docs](api/java/org/apache/spark/ml/feature/Interaction.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaInteractionExample.java %}
+</div>
+</div>
 
 ## Normalizer
 
