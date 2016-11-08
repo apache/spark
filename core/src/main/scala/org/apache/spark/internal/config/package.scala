@@ -210,4 +210,17 @@ package object config {
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .stringConf
     .createOptional
+
+  private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
+    .doc("The maximum number of bytes to pack into a single partition when reading files.")
+    .longConf
+    .createWithDefault(128 * 1024 * 1024)
+
+  private[spark] val FILES_OPEN_COST_IN_BYTES = ConfigBuilder("spark.files.openCostInBytes")
+    .doc("The estimated cost to open a file, measured by the number of bytes could be scanned in" +
+      " the same time. This is used when putting multiple files into a partition. It's better to" +
+      " over estimate, then the partitions with small files will be faster than partitions with" +
+      " bigger files.")
+    .longConf
+    .createWithDefault(4 * 1024 * 1024)
 }
