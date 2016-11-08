@@ -49,7 +49,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
    * OutputCommitter, we must manually move these to their final locations on task commit.
    * TODO(ekl) it would be nice to provide better atomicity for this type of output.
    */
-  @transient private var taskAbsPathOutputs: ArrayBuffer[String] = _
+  @transient private var addedExternalFiles: ArrayBuffer[String] = _
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     context.getOutputFormatClass.newInstance().getOutputCommitter(context)
@@ -76,7 +76,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     absoluteDir match {
       case Some(d) =>
         val absOutputPath = new Path(d, filename).toString
-        taskAbsPathOutputs += absOutputPath
+        addedExternalFiles += absOutputPath
         absOutputPath
       case _ =>
         relativeDir match {
@@ -117,7 +117,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
     committer = setupCommitter(taskContext)
     committer.setupTask(taskContext)
-    taskAbsPathOutputs = new ArrayBuffer[String]
+    addedExternalFiles = new ArrayBuffer[String]
   }
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {

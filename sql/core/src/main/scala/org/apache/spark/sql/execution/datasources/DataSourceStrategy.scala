@@ -238,6 +238,13 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       insertCmd
   }
 
+  /**
+   * Given a set of input partitions, returns those that have locations that differ from the
+   * Hive default (e.g. /k1=v1/k2=v2). These partitions were manually assigned locations by
+   * the user.
+   *
+   * @return a mapping from partition specs to their custom locations
+   */
   private def getCustomPartitionLocations(
       spark: SparkSession,
       table: CatalogTable,
