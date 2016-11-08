@@ -226,6 +226,21 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(gmm.gaussians(0).cov ~== cov(0) absTol 1E-3)
     assert(gmm.gaussians(1).cov ~== cov(1) absTol 1E-3)
   }
+
+  test("upper triangular matrix unpacking") {
+    /*
+       The full symmetric matrix is as follows:
+       1.0 2.5 3.8 0.9
+       2.5 2.0 7.2 3.8
+       3.8 7.2 3.0 1.0
+       0.9 3.8 1.0 4.0
+     */
+    val triangularValues = Array(1.0, 2.5, 2.0, 3.8, 7.2, 3.0, 0.9, 3.8, 1.0, 4.0)
+    val symmetricValues = Array(1.0, 2.5, 3.8, 0.9, 2.5, 2.0, 7.2, 3.8,
+      3.8, 7.2, 3.0, 1.0, 0.9, 3.8, 1.0, 4.0)
+    val expected = GaussianMixture.unpackUpperTriangularMatrix(4, triangularValues)
+    assert(symmetricValues === expected)
+  }
 }
 
 object GaussianMixtureSuite {
