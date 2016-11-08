@@ -138,6 +138,9 @@ public class AesCipher {
     }
   }
 
+  /**
+   * CryptoStreamUtils is used to convert config from TransportConf to AES Crypto config.
+   */
   private static class CryptoStreamUtils {
     public static Properties toCryptoConf(TransportConf conf) {
       Properties props = new Properties();
