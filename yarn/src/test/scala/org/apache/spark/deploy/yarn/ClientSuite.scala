@@ -322,6 +322,23 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     intercept[IllegalArgumentException] {
       clientArchives.prepareLocalResources(new Path(tempDirForArchives.getAbsolutePath()), Nil)
     }
+
+    // Case 4: FILES_TO_DISTRIBUTE can have unique file.
+    val sparkConfFilesUniq = new SparkConfWithEnv(Map("SPARK_HOME" -> libs.getAbsolutePath))
+      .set(FILES_TO_DISTRIBUTE, Seq(testJar.getPath))
+
+    val clientFilesUniq = createClient(sparkConfFilesUniq)
+    val tempDirForFilesUniq = Utils.createTempDir()
+    clientFilesUniq.prepareLocalResources(new Path(tempDirForFilesUniq.getAbsolutePath()), Nil)
+
+    // Case 5: ARCHIVES_TO_DISTRIBUTE can have unique file.
+    val sparkConfArchivesUniq = new SparkConfWithEnv(Map("SPARK_HOME" -> libs.getAbsolutePath))
+      .set(ARCHIVES_TO_DISTRIBUTE, Seq(testJar.getPath))
+
+    val clientArchivesUniq = createClient(sparkConfArchivesUniq)
+    val tempDirArchivesUniq = Utils.createTempDir()
+    clientArchivesUniq.prepareLocalResources(new Path(tempDirArchivesUniq.getAbsolutePath()), Nil)
+
   }
 
   test("distribute local spark jars") {
