@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.IOException
 import java.util
 
 import scala.util.control.NonFatal
@@ -26,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -843,17 +844,25 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val tableMeta = getTable(db, table)
     val partitionColumnNames = tableMeta.partitionColumnNames
     // Hive metastore is not case preserving and keeps partition columns with lower cased names.
-    // When Hive rename partition for managed tables, it will update the partition location with
-    // a default value generate by the new spec and lower cased partition column names. This is
-    // unexpected and we need to call `alterPartitions` to fix the partition location.
+    // When Hive rename partition for managed tables, it will create the partition location with
+    // a default path generate by the new spec with lower cased partition column names. This is
+    // unexpected and we need to rename them manually and alter the partition location.
     val hasUpperCasePartitionColumn = partitionColumnNames.exists(col => col.toLowerCase != col)
     if (tableMeta.tableType == MANAGED && hasUpperCasePartitionColumn) {
       val tablePath = new Path(tableMeta.location)
+      val fs = tablePath.getFileSystem(hadoopConf)
       val newParts = newSpecs.map { spec =>
         val partition = client.getPartition(db, table, lowerCasePartitionSpec(spec))
-        val partitionPath = ExternalCatalogUtils.generatePartitionPath(
+        val wrongPath = new Path(partition.storage.locationUri.get)
+        val rightPath = ExternalCatalogUtils.generatePartitionPath(
           spec, partitionColumnNames, tablePath)
-        partition.copy(storage = partition.storage.copy(locationUri = Some(partitionPath.toString)))
+        try {
+          fs.rename(wrongPath, rightPath)
+        } catch {
+          case e: IOException =>
+            throw new SparkException(s"Unable to rename partition path $wrongPath", e)
+        }
+        partition.copy(storage = partition.storage.copy(locationUri = Some(rightPath.toString)))
       }
       alterPartitions(db, table, newParts)
     }
