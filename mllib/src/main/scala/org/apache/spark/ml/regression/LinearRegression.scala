@@ -409,7 +409,8 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
 
   /**
    * When using [[LinearRegression.solver]] == "normal", the solver must limit the number of
-   * features to at most this number.
+   * features to at most this number.  The entire covariance matrix X^T^X will be collected
+   * to the driver. This limit helps prevent memory overflow errors.
    */
   @Since("2.1.0")
   val MAX_FEATURES_FOR_NORMAL_SOLVER: Int = WeightedLeastSquares.MAX_NUM_FEATURES
