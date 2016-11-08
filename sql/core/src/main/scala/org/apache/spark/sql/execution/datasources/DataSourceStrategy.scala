@@ -184,17 +184,20 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
       val partitionSchema = query.resolve(
         t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
+      val partitionsTrackedByCatalog =
+        t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
+        l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
+        l.catalogTable.get.tracksPartitionsInCatalog
 
-      var allStaticPartitions: Seq[TablePartitionSpec] = Nil
+      var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
       var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
 
       // When partitions are tracked by the catalog, compute all custom partition locations that
       // may be relevant to the insertion job.
-      if (t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
-          l.catalogTable.get.tracksPartitionsInCatalog) {
+      if (partitionsTrackedByCatalog) {
         val matchingPartitions = t.sparkSession.sessionState.catalog.listPartitions(
           l.catalogTable.get.identifier, Some(overwrite.staticPartitionKeys))
-        allStaticPartitions = matchingPartitions.map(_.spec)
+        initialMatchingPartitions = matchingPartitions.map(_.spec)
         customPartitionLocations = getCustomPartitionLocations(
           t.sparkSession, l.catalogTable.get, outputPath, matchingPartitions)
       }
@@ -202,17 +205,15 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       // Callback for updating metastore partition metadata after the insertion job completes.
       // TODO(ekl) consider moving this into InsertIntoHadoopFsRelationCommand
       def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
-        if (l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
-            t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
-            l.catalogTable.get.tracksPartitionsInCatalog) {
-          if (updatedPartitions.nonEmpty) {
+        if (partitionsTrackedByCatalog) {
+          val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
+          if (newPartitions.nonEmpty) {
             AlterTableAddPartitionCommand(
-              l.catalogTable.get.identifier,
-              updatedPartitions.map(p => (p, None)),
+              l.catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
               ifNotExists = true).run(t.sparkSession)
           }
           if (overwrite.enabled) {
-            val deletedPartitions = allStaticPartitions.toSet -- updatedPartitions
+            val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
             if (deletedPartitions.nonEmpty) {
               AlterTableDropPartitionCommand(
                 l.catalogTable.get.identifier, deletedPartitions.toSeq,

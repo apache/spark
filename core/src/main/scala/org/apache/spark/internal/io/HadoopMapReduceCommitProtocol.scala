@@ -50,6 +50,8 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
    */
   @transient private var addedAbsPathFiles: mutable.Map[String, String] = null
 
+  private def absPathStagingDir: Path = new Path(path, "_temporary-" + jobId)
+
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     context.getOutputFormatClass.newInstance().getOutputCommitter(context)
   }
@@ -75,7 +77,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
     val filename = getFilename(taskContext, ext)
     val absOutputPath = new Path(absoluteDir, filename).toString
-    val tmpOutputPath = new Path(path, "_temporary-" + jobId + "/" + filename).toString
+    val tmpOutputPath = new Path(absPathStagingDir, filename).toString
     addedAbsPathFiles(tmpOutputPath) = absOutputPath
     tmpOutputPath
   }
@@ -111,15 +113,17 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     committer.commitJob(jobContext)
     val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]]).reduce(_ ++ _)
     logDebug(s"Committing staged files with absolute locations $filesToMove")
+    val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
     for ((src, dst) <- filesToMove) {
-      val tmp = new Path(src)
-      val fs = tmp.getFileSystem(jobContext.getConfiguration)
-      fs.rename(tmp, new Path(dst))
+      fs.rename(new Path(src), new Path(dst))
     }
+    fs.delete(absPathStagingDir, true)
   }
 
   override def abortJob(jobContext: JobContext): Unit = {
     committer.abortJob(jobContext, JobStatus.State.FAILED)
+    val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
+    fs.delete(absPathStagingDir, true)
   }
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
