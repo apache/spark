@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.regex.Pattern
-
 import org.apache.spark.internal.config._
-import org.apache.spark.sql.AnalysisException
 
 /**
  * A helper class that enables substitution using syntax like
@@ -37,6 +34,7 @@ class VariableSubstitution(conf: SQLConf) {
   private val reader = new ConfigReader(provider)
     .bind("spark", provider)
     .bind("sparkconf", provider)
+    .bind("hivevar", provider)
     .bind("hiveconf", provider)
 
   /**
@@ -49,5 +47,4 @@ class VariableSubstitution(conf: SQLConf) {
       input
     }
   }
-
 }

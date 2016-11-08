@@ -60,6 +60,13 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    case Some((key @ SetCommand.VariableName(name), Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.conf.set(name, value)
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
+
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
@@ -115,6 +122,10 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 
   override def run(sparkSession: SparkSession): Seq[Row] = runFunc(sparkSession)
 
+}
+
+object SetCommand {
+  val VariableName = """hivevar:([^=]+)""".r
 }
 
 /**
