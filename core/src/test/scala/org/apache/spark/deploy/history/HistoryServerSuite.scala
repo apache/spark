@@ -321,29 +321,32 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       getWebClient.getOptions.setThrowExceptionOnScriptError(false)
     }
 
-    val url = s"http://localhost:$port"
+    try {
+      val url = s"http://localhost:$port"
 
-    go to s"$url$uiRoot"
+      go to s"$url$uiRoot"
 
-    // expect the ajax call to finish in 5 seconds
-    implicitlyWait(org.scalatest.time.Span(5, org.scalatest.time.Seconds))
+      // expect the ajax call to finish in 5 seconds
+      implicitlyWait(org.scalatest.time.Span(5, org.scalatest.time.Seconds))
 
-    // once this findAll call returns, we know the ajax load of the table completed
-    findAll(ClassNameQuery("odd"))
+      // once this findAll call returns, we know the ajax load of the table completed
+      findAll(ClassNameQuery("odd"))
 
-    val links = findAll(TagNameQuery("a"))
-      .map(_.attribute("href"))
-      .filter(_.isDefined)
-      .map(_.get)
-      .filter(_.startsWith(url)).toList
+      val links = findAll(TagNameQuery("a"))
+        .map(_.attribute("href"))
+        .filter(_.isDefined)
+        .map(_.get)
+        .filter(_.startsWith(url)).toList
 
-    contextHandler.stop()
-    quit()
+      // there are atleast some URL links that were generated via javascript,
+      // and they all contain the spark.ui.proxyBase (uiRoot)
+      links.length should be > 4
+      all(links) should startWith(url + uiRoot)
+    } finally {
+      contextHandler.stop()
+      quit()
+    }
 
-    // there are atleast some URL links that were generated via javascript,
-    // and they all contain the spark.ui.proxyBase (uiRoot)
-    links.length should be > 4
-    all(links) should startWith(url + uiRoot)
   }
 
   test("incomplete apps get refreshed") {
