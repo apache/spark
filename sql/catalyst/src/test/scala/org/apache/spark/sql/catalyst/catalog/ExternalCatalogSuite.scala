@@ -652,10 +652,11 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   // --------------------------------------------------------------------------
 
   private def exists(uri: String, children: String*): Boolean = {
-    val base = new File(new URI(uri))
-    children.foldLeft(base) {
-      case (parent, child) => new File(parent, child)
-    }.exists()
+    val base = new Path(uri)
+    val finalPath = children.foldLeft(base) {
+      case (parent, child) => new Path(parent, child)
+    }
+    base.getFileSystem(new Configuration()).exists(finalPath)
   }
 
   test("create/drop database should create/delete the directory") {
