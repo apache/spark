@@ -1612,7 +1612,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset by sampling a fraction of rows, using a random seed.
+   * Returns a new Dataset by sampling a fraction of rows, using a user supplied random seed.
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
@@ -1631,7 +1631,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset by sampling a fraction of rows.
+   * Returns a new Dataset by sampling a fraction of rows, using a random seed.
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
