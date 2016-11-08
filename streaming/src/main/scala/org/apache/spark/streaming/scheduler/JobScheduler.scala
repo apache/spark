@@ -26,7 +26,8 @@ import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark.ExecutorAllocationClient
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{PairRDDFunctions, RDD}
+import org.apache.spark.internal.io.SparkHadoopWriterUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.ui.UIUtils
@@ -250,7 +251,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           // Disable checks for existing output directories in jobs launched by the streaming
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details.
-          PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
+          SparkHadoopWriterUtils.disableOutputSpecValidation.withValue(true) {
             job.run()
           }
           _eventLoop = eventLoop
