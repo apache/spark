@@ -788,11 +788,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
     val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
       speculative)
-    val (acc1, acc2, acc3) =
-      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true))
-    taskInfo.accumulables += acc1
-    taskInfo.accumulables += acc2
-    taskInfo.accumulables += acc3
+    taskInfo.setAccumulables(
+      List(makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true)))
     taskInfo
   }
 
