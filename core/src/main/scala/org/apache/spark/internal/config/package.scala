@@ -207,7 +207,7 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
-  private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.upstreamApp.callerContext")
+  private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .stringConf
     .createOptional
 }

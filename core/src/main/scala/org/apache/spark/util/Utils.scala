@@ -2569,6 +2569,7 @@ private[util] object CallerContext extends Logging {
  * @param from who sets up the caller context (TASK, CLIENT, APPMASTER)
  *
  * The parameters below are optional:
+ * @param upstreamCallerContext caller context the upstream application passes in
  * @param appId id of the app this task belongs to
  * @param appAttemptId attempt id of the app this task belongs to
  * @param jobId id of the job this task belongs to
@@ -2588,20 +2589,16 @@ private[spark] class CallerContext(
    taskId: Option[Long] = None,
    taskAttemptNumber: Option[Int] = None) extends Logging {
 
-   val upstreamCallerContextStr =
-     if (upstreamCallerContext.isDefined) s"_${upstreamCallerContext.get}" else ""
-   val appIdStr = if (appId.isDefined) s"_${appId.get}" else ""
-   val appAttemptIdStr = if (appAttemptId.isDefined) s"_${appAttemptId.get}" else ""
-   val jobIdStr = if (jobId.isDefined) s"_JId_${jobId.get}" else ""
-   val stageIdStr = if (stageId.isDefined) s"_SId_${stageId.get}" else ""
-   val stageAttemptIdStr = if (stageAttemptId.isDefined) s"_${stageAttemptId.get}" else ""
-   val taskIdStr = if (taskId.isDefined) s"_TId_${taskId.get}" else ""
-   val taskAttemptNumberStr =
-     if (taskAttemptNumber.isDefined) s"_${taskAttemptNumber.get}" else ""
-
-   val context = "SPARK_" + from + appIdStr + appAttemptIdStr +
-     jobIdStr + stageIdStr + stageAttemptIdStr + taskIdStr + taskAttemptNumberStr +
-     upstreamCallerContextStr
+   val context = "SPARK_" +
+     from +
+     appId.map("_" + _).getOrElse("") +
+     appAttemptId.map("_" + _).getOrElse("") +
+     jobId.map("_JId_" + _).getOrElse("") +
+     stageId.map("_SId_" + _).getOrElse("") +
+     stageAttemptId.map("_" + _).getOrElse("") +
+     taskId.map("_TId_" + _).getOrElse("") +
+     taskAttemptNumber.map("_" + _).getOrElse("") +
+     upstreamCallerContext.map("_" + _).getOrElse("")
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
@@ -2626,13 +2623,15 @@ private[spark] class CallerContext(
     }
   }
 
-  def prepareContext(context: String): String = {
+  private def prepareContext(context: String): String = {
     // The default max size of Hadoop caller context is 128
     lazy val len = SparkHadoopUtil.get.conf.getInt("hadoop.caller.context.max.size", 128)
     if (context == null || context.length <= len) {
       context
     } else {
-      context.substring(0, len)
+      val finalContext = context.substring(0, len)
+      logWarning(s"Truncated Spark caller context from $context to $finalContext")
+      finalContext
     }
   }
 }

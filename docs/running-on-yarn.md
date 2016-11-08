@@ -495,15 +495,6 @@ To use a custom metrics.properties for the application master and executors, upd
   name matches both the include and the exclude pattern, this file will be excluded eventually.
   </td>
 </tr>
-<tr>
-  <td><code>spark.hadoop.callerContext</code></td>
-  <td>(none)</td>
-  <td>
-  Application information that will be written into Yarn RM log and HDFS audit log. Its length depends on the Hadoop
-  configuration <code>hadoop.caller.context.max.size</code>. It should be concise, and typically can have up to
-  50 characters.
-  </td>
-</tr>
 </table>
 
 # Important notes
