@@ -69,6 +69,7 @@ in_spark = (os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext
             (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1))
 
 def _supports_symlinks():
+    """Check if the system supports symlinks (e.g. *nix) or not."
     return getattr(os, "symlink", None) is not None
 
 if (in_spark):
