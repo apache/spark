@@ -47,7 +47,7 @@ private[ml] class WeightedLeastSquaresModel(
  * formulation:
  *
  * min,,x,z,, 1/2 sum,,i,, w,,i,, (a,,i,,^T^ x + z - b,,i,,)^2^ / sum,,i,, w,,i,,
- *   + lambda / delta (1/2 (1 - alpha) sumj,, (sigma,,j,, x,,j,,)^2^
+ *   + lambda / delta (1/2 (1 - alpha) sum,,j,, (sigma,,j,, x,,j,,)^2^
  *   + alpha sum,,j,, abs(sigma,,j,, x,,j,,)),
  *
  * where lambda is the regularization parameter, alpha is the ElasticNet mixing parameter,
@@ -91,7 +91,7 @@ private[ml] class WeightedLeastSquares(
   require(elasticNetParam >= 0.0 && elasticNetParam <= 1.0,
     s"elasticNetParam must be in [0, 1]: $elasticNetParam")
   require(maxIter >= 0, s"maxIter must be a positive integer: $maxIter")
-  require(tol > 0, s"tol must be greater than zero: $tol")
+  require(tol >= 0.0, s"tol must be >= 0, but was set to $tol")
 
   /**
    * Creates a [[WeightedLeastSquaresModel]] from an RDD of [[Instance]]s.
