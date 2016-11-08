@@ -355,14 +355,16 @@ case class TruncateTableCommand(
             table.identifier.quotedString,
             spark.sessionState.conf.resolver)
         }
-        val parts =
+        val partLocations =
           catalog.listPartitions(table.identifier, normalizedSpec).map(_.storage.locationUri)
 
-        for (spec <- partitionSpec if parts.isEmpty && spec.size == partCols.length) {
+        // Fail if the partition spec is fully specified (not partial) and the partition does not
+        // exist.
+        for (spec <- partitionSpec if partLocations.isEmpty && spec.size == partCols.length) {
           throw new NoSuchPartitionException(table.database, table.identifier.table, spec)
         }
 
-        parts
+        partLocations
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
     locations.foreach { location =>
