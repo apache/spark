@@ -456,7 +456,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     }
   }
 
-  test("commit fails when rename fails") {
+  test("SPARK-18342: commit fails when rename fails") {
     import RenameReturnsFalseFileSystem._
     val dir = scheme + "://" + Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val conf = new Configuration()
@@ -613,8 +613,9 @@ private[state] object StateStoreSuite {
   }
 }
 
-/** Fake FileSystem to test whether the method `fs.exists` is called during
- * `DataSource.resolveRelation`.
+/** 
+ * Fake FileSystem to test that the StateStore throws an exception while committing the
+ * delta file, when `fs.rename` returns `false`.
  */
 class RenameReturnsFalseFileSystem extends RawLocalFileSystem {
   import RenameReturnsFalseFileSystem._
