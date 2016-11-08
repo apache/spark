@@ -702,8 +702,8 @@ private[spark] object JsonProtocol {
     val index = (json \ "Index").extract[Int]
     val attempt = Utils.jsonOption(json \ "Attempt").map(_.extract[Int]).getOrElse(1)
     val launchTime = (json \ "Launch Time").extract[Long]
-    val executorId = (json \ "Executor ID").extract[String]
-    val host = (json \ "Host").extract[String]
+    val executorId = (json \ "Executor ID").extract[String].intern()
+    val host = (json \ "Host").extract[String].intern()
     val taskLocality = TaskLocality.withName((json \ "Locality").extract[String])
     val speculative = Utils.jsonOption(json \ "Speculative").exists(_.extract[Boolean])
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
@@ -721,7 +721,7 @@ private[spark] object JsonProtocol {
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed
     taskInfo.killed = killed
-    accumulables.foreach { taskInfo.accumulables += _ }
+    taskInfo.setAccumulables(accumulables)
     taskInfo
   }
 
@@ -903,8 +903,8 @@ private[spark] object JsonProtocol {
     if (json == JNothing) {
       return null
     }
-    val executorId = (json \ "Executor ID").extract[String]
-    val host = (json \ "Host").extract[String]
+    val executorId = (json \ "Executor ID").extract[String].intern()
+    val host = (json \ "Host").extract[String].intern()
     val port = (json \ "Port").extract[Int]
     BlockManagerId(executorId, host, port)
   }
