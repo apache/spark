@@ -351,7 +351,7 @@ class GaussianMixture @Since("2.0.0") (
     val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(
       numClusters, numFeatures)
 
-    // TODO: Support users supplied initial GMM.
+    // TODO: SPARK-15785 Support users supplied initial GMM.
     val (weights, gaussians) = initRandom(instances, numClusters, numFeatures)
 
     var logLikelihood = Double.MinValue
@@ -429,17 +429,17 @@ class GaussianMixture @Since("2.0.0") (
   }
 
   /**
-   * Initialize weights and corresponding gaussians at random.
+   * Initialize weights and corresponding gaussian distributions at random.
    *
    * We start with uniform weights, a random mean from the data, and diagonal covariance matrices
    * using component variances derived from the samples.
    *
-   * @param instances The instances of training data.
+   * @param instances The training instances.
    * @param numClusters The number of clusters.
-   * @param numFeatures The number of features in training data.
-   * @return The initialized weights and corresponding gaussians. Note the covariance matrix of
-   *         multivariate gaussian distribution is symmetric and we only save the upper triangular
-   *         part as a dense vector.
+   * @param numFeatures The number of features of training instance.
+   * @return The initialized weights and corresponding gaussian distributions. Note the
+   *         covariance matrix of multivariate gaussian distribution is symmetric and
+   *         we only save the upper triangular part as a dense vector.
    */
   private def initRandom(
       instances: RDD[Vector],
