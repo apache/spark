@@ -19,7 +19,7 @@ package org.apache.spark.internal.io
 
 import java.util.Date
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
@@ -45,11 +45,10 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   @transient private var committer: OutputCommitter = _
 
   /**
-   * Tracks files staged by this task for absolute output paths. Unlike files staged by the
-   * OutputCommitter, we must manually move these to their final locations on task commit.
-   * TODO(ekl) it would be nice to provide better atomicity for this type of output.
+   * Tracks files staged by this task for absolute output paths. These outputs are not managed by
+   * the Hadoop OutputCommitter, so we must move these to their final locations on job commit.
    */
-  @transient private var addedAbsPathFiles: ArrayBuffer[String] = _
+  @transient private var addedAbsPathFiles: mutable.Map[String, String] = null
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     context.getOutputFormatClass.newInstance().getOutputCommitter(context)
@@ -76,8 +75,9 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
     val filename = getFilename(taskContext, ext)
     val absOutputPath = new Path(absoluteDir, filename).toString
-    addedAbsPathFiles += absOutputPath
-    absOutputPath
+    val tmpOutputPath = new Path(path, "_temporary-" + jobId + "/" + filename).toString
+    addedAbsPathFiles(tmpOutputPath) = absOutputPath
+    tmpOutputPath
   }
 
   private def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
@@ -107,7 +107,15 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   }
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
+    logDebug(s"Committing staged files")
     committer.commitJob(jobContext)
+    val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]]).reduce(_ ++ _)
+    logDebug(s"Committing staged files with absolute locations $filesToMove")
+    for ((src, dst) <- filesToMove) {
+      val tmp = new Path(src)
+      val fs = tmp.getFileSystem(jobContext.getConfiguration)
+      fs.rename(tmp, new Path(dst))
+    }
   }
 
   override def abortJob(jobContext: JobContext): Unit = {
@@ -117,17 +125,22 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
     committer = setupCommitter(taskContext)
     committer.setupTask(taskContext)
-    addedAbsPathFiles = new ArrayBuffer[String]
+    addedAbsPathFiles = mutable.Map[String, String]()
   }
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
     val attemptId = taskContext.getTaskAttemptID
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
-    EmptyTaskCommitMessage
+    new TaskCommitMessage(addedAbsPathFiles.toMap)
   }
 
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
     committer.abortTask(taskContext)
+    // best effort cleanup of other staged files
+    for ((src, _) <- addedAbsPathFiles) {
+      val tmp = new Path(src)
+      tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
+    }
   }
 }

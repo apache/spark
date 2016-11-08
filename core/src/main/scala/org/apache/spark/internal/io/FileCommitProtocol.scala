@@ -86,11 +86,8 @@ abstract class FileCommitProtocol {
   def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
 
   /**
-   * Similar to newTaskTempFile(), but allows files to committed to an absolute output location
-   * instead of a relative directory under some base path controlled by the committer. Depending
-   * on the protocol implementation, files added this way may have weaker atomicity guarantees.
-   *
-   * Implementing this is optional.
+   * Similar to newTaskTempFile(), but allows files to committed to an absolute output location.
+   * Depending on the implementation, there may be weaker guarantees around adding files this way.
    */
   def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
