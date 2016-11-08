@@ -32,6 +32,9 @@ import org.apache.spark.sql.execution.command.RunnableCommand
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
  * Writing to dynamic partitions is also supported.
+ *
+ * @param staticPartitionKeys
+ * @param customPartitionLocations
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
@@ -109,7 +112,6 @@ case class InsertIntoHadoopFsRelationCommand(
    * Deletes all partition files that match the specified static prefix. Partitions with custom
    * locations are also cleared based on the custom locations map given to this class.
    */
-  // TODO(ekl) also delete partition metadata from the catalog
   private def deleteMatchingPartitions(fs: FileSystem, qualifiedOutputPath: Path): Unit = {
     val staticPartitionPrefix = if (staticPartitionKeys.nonEmpty) {
       "/" + partitionColumns.flatMap { p =>

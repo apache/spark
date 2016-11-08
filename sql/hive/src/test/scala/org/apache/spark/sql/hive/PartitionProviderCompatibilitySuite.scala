@@ -220,22 +220,32 @@ class PartitionProviderCompatibilitySuite
           // dynamic append with full spec, new dir
           spark.sql("insert into test partition (p1=100, p2=100) select id from range(10)")
           assert(spark.sql("select * from test where p1=100").count() == 20)
+          assert(spark.sql("show partitions test").count() == 25)
 
           // dynamic overwrite with partial spec, existing dir
           spark.sql(
             "insert overwrite table test partition (p1=1, p2) select id, id from range(100)")
           assert(spark.sql("select * from test where p1=1").count() == 100)
+          assert(spark.sql("show partitions test").count() == 115)
 
           // dynamic overwrite with full spec, existing dir
           spark.sql(
             "insert overwrite table test partition (p1=1, p2=1) select id from range(100)")
           assert(spark.sql("select * from test where p1=1").count() == 199)
           assert(spark.sql("select * from test where p1=1 and p2=1").count() == 100)
+          assert(spark.sql("show partitions test").count() == 115)
 
           // dynamic overwrite with partial spec, new dir
           spark.sql(
             "insert overwrite table test partition (p1=500, p2) select id, id from range(10)")
           assert(spark.sql("select * from test where p1=500").count() == 10)
+          assert(spark.sql("show partitions test").count() == 125)
+
+          // dynamic overwrite with partial spec again (test partition cleanup)
+          spark.sql(
+            "insert overwrite table test partition (p1=1, p2) select id, id from range(10)")
+          assert(spark.sql("select * from test where p1=1").count() == 10)
+          assert(spark.sql("show partitions test").count() == 35)
 
           // dynamic overwrite with full spec, new dir
           spark.sql(
@@ -243,14 +253,14 @@ class PartitionProviderCompatibilitySuite
           assert(spark.sql("select * from test where p1=500 and p2=500").count() == 10)
 
           // overwrite entire table
-          assert(spark.sql("select * from test").count() == 243)
           spark.sql("insert overwrite table test select id, 1, 1 from range(10)")
           assert(spark.sql("select * from test").count() == 10)
+          assert(spark.sql("show partitions test").count() == 1)
 
           // dynamic append to custom location
           withTempDir { a =>
             spark.sql(
-              s"alter table test partition (p1=1, p2=2) set location '${a.getAbsolutePath}'"
+              s"alter table test add partition (p1=1, p2=2) location '${a.getAbsolutePath}'"
             ).count()
             spark.sql("insert into test partition (p1=1, p2) select id, id from range(100)")
             spark.sql("insert into test partition (p1=1, p2) select id, id from range(100)")
