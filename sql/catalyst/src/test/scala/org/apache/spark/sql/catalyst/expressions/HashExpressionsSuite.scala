@@ -137,11 +137,13 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     val murmur3HashExpr = Murmur3Hash(exprs, 42)
     val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
-    assert(murmur3HashPlan(wideRow).getInt(0) == 58499324)
+    val murmursHashEval = Murmur3Hash(exprs, 42).eval(wideRow)
+    assert(murmur3HashPlan(wideRow).getInt(0) == murmursHashEval)
 
     val hiveHashExpr = HiveHash(exprs)
     val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))
-    assert(hiveHashPlan(wideRow).getInt(0) == 117331003)
+    val hiveHashEval = HiveHash(exprs).eval(wideRow)
+    assert(hiveHashPlan(wideRow).getInt(0) == hiveHashEval)
   }
 
   private def testHash(inputSchema: StructType): Unit = {
