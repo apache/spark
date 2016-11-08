@@ -527,7 +527,7 @@ private[state] class HDFSBackedStateStoreProvider(
 
         val deltaFiles = allFiles.filter { file =>
           file.version > snapshotFile.version && file.version <= version
-        }
+        }.toList
         verify(
           deltaFiles.size == version - snapshotFile.version,
           s"Unexpected list of delta files for version $version for $this: $deltaFiles"
