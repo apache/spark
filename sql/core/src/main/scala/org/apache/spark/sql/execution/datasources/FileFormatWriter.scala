@@ -230,7 +230,6 @@ object FileFormatWriter extends Logging {
       val tmpFilePath = committer.newTaskTempFile(
         taskAttemptContext,
         None,
-        None,
         description.outputWriterFactory.getFileExtension(taskAttemptContext))
 
       val outputWriter = description.outputWriterFactory.newInstance(
@@ -322,9 +321,9 @@ object FileFormatWriter extends Logging {
           None
       }
       val path = if (customPath.isDefined) {
-        committer.newTaskTempFile(taskAttemptContext, None, customPath, ext)
+        committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
       } else {
-        committer.newTaskTempFile(taskAttemptContext, partDir, None, ext)
+        committer.newTaskTempFile(taskAttemptContext, partDir, ext)
       }
       val newWriter = description.outputWriterFactory.newInstance(
         path = path,

@@ -49,23 +49,15 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
    * OutputCommitter, we must manually move these to their final locations on task commit.
    * TODO(ekl) it would be nice to provide better atomicity for this type of output.
    */
-  @transient private var addedExternalFiles: ArrayBuffer[String] = _
+  @transient private var addedAbsPathFiles: ArrayBuffer[String] = _
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     context.getOutputFormatClass.newInstance().getOutputCommitter(context)
   }
 
   override def newTaskTempFile(
-      taskContext: TaskAttemptContext,
-      relativeDir: Option[String], absoluteDir: Option[String], ext: String): String = {
-    if (absoluteDir.isDefined) {
-      require(!relativeDir.isDefined, "Cannot specify both abs and relative output dirs.")
-    }
-    // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
-    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
-    // the file name is fine and won't overflow.
-    val split = taskContext.getTaskAttemptID.getTaskID.getId
-    val filename = f"part-$split%05d-$jobId$ext"
+      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
+    val filename = getFilename(taskContext, ext)
 
     val stagingDir: String = committer match {
       // For FileOutputCommitter it has its own staging path called "work path".
@@ -73,19 +65,27 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
       case _ => path
     }
 
-    absoluteDir match {
-      case Some(d) =>
-        val absOutputPath = new Path(d, filename).toString
-        addedExternalFiles += absOutputPath
-        absOutputPath
-      case _ =>
-        relativeDir match {
-          case Some(d) =>
-            new Path(new Path(stagingDir, d), filename).toString
-          case _ =>
-            new Path(stagingDir, filename).toString
-        }
+    dir.map { d =>
+      new Path(new Path(stagingDir, d), filename).toString
+    }.getOrElse {
+      new Path(stagingDir, filename).toString
     }
+  }
+
+  override def newTaskTempFileAbsPath(
+      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
+    val filename = getFilename(taskContext, ext)
+    val absOutputPath = new Path(absoluteDir, filename).toString
+    addedAbsPathFiles += absOutputPath
+    absOutputPath
+  }
+
+  private def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
+    // The file name looks like part-r-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003.gz.parquet
+    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
+    // the file name is fine and won't overflow.
+    val split = taskContext.getTaskAttemptID.getTaskID.getId
+    f"part-$split%05d-$jobId$ext"
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
@@ -117,7 +117,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
     committer = setupCommitter(taskContext)
     committer.setupTask(taskContext)
-    addedExternalFiles = new ArrayBuffer[String]
+    addedAbsPathFiles = new ArrayBuffer[String]
   }
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
