@@ -870,6 +870,19 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     verify(endpoint, never()).onDisconnected(any())
     verify(endpoint, never()).onNetworkError(any(), any())
   }
+
+  test("isInRPCThread") {
+    val rpcEndpointRef = env.setupEndpoint("isInRPCThread", new RpcEndpoint {
+      override val rpcEnv = env
+
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case m => context.reply(rpcEnv.isInRPCThread)
+      }
+    })
+    assert(rpcEndpointRef.askWithRetry[Boolean]("hello") === true)
+    assert(env.isInRPCThread === false)
+    env.stop(rpcEndpointRef)
+  }
 }
 
 class UnserializableClass
