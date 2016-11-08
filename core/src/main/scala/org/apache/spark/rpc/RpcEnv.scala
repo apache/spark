@@ -135,6 +135,10 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    */
   def openChannel(uri: String): ReadableByteChannel
 
+  /**
+   * Return if the current thread is a RPC thread.
+   */
+  def isInRPCThread: Boolean
 }
 
 /**
