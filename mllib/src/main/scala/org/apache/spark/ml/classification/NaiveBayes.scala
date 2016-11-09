@@ -76,7 +76,7 @@ class NaiveBayes @Since("1.5.0") (
   extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
   with NaiveBayesParams with DefaultParamsWritable {
 
-  import NaiveBayes.{Bernoulli, Multinomial}
+  import NaiveBayes._
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("nb"))
@@ -132,28 +132,9 @@ class NaiveBayes @Since("1.5.0") (
       }
     }
 
-    val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
-      val values = v match {
-        case sv: SparseVector => sv.values
-        case dv: DenseVector => dv.values
-      }
-
-      require(values.forall(_ >= 0.0),
-        s"Naive Bayes requires nonnegative feature values but found $v.")
-    }
-
-    val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
-      val values = v match {
-        case sv: SparseVector => sv.values
-        case dv: DenseVector => dv.values
-      }
-
-      require(values.forall(v => v == 0.0 || v == 1.0),
-        s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
-    }
-
+    val modelTypeValue = $(modelType)
     val requireValues: Vector => Unit = {
-      $(modelType) match {
+      modelTypeValue match {
         case Multinomial =>
           requireNonnegativeValues
         case Bernoulli =>
@@ -232,6 +213,26 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
 
   /* Set of modelTypes that NaiveBayes supports */
   private[spark] val supportedModelTypes = Set(Multinomial, Bernoulli)
+
+  def requireNonnegativeValues(v: Vector): Unit = {
+    val values = v match {
+      case sv: SparseVector => sv.values
+      case dv: DenseVector => dv.values
+    }
+
+    require(values.forall(_ >= 0.0),
+      s"Naive Bayes requires nonnegative feature values but found $v.")
+  }
+
+  def requireZeroOneBernoulliValues(v: Vector): Unit = {
+    val values = v match {
+      case sv: SparseVector => sv.values
+      case dv: DenseVector => dv.values
+    }
+
+    require(values.forall(v => v == 0.0 || v == 1.0),
+      s"Bernoulli naive Bayes requires 0 or 1 feature values but found $v.")
+  }
 
   @Since("1.6.0")
   override def load(path: String): NaiveBayes = super.load(path)
