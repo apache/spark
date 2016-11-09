@@ -604,7 +604,7 @@ private[spark] class Client(
             cachedSecondaryJarLinks += localizedPath
           }
         } else {
-          if (localizedPath != null) {
+          if (localizedPath == null) {
             throw new IllegalArgumentException(s"Attempt to add ($file) multiple times" +
               " to the distributed cache.")
           }

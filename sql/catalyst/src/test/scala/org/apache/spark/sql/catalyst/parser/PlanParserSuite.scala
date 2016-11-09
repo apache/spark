@@ -233,9 +233,8 @@ class PlanParserSuite extends PlanTest {
 
     // Grouping Sets
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
-      GroupingSets(Seq(0, 1, 3), Seq('a, 'b), table("d"), Seq('a, 'b, 'sum.function('c).as("c"))))
-    intercept(s"$sql grouping sets((a, b), (c), ())",
-      "c doesn't show up in the GROUP BY list")
+      GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
+        Seq('a, 'b, 'sum.function('c).as("c"))))
   }
 
   test("limit") {

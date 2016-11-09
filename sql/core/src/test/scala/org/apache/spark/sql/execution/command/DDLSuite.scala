@@ -1673,11 +1673,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("TRUNCATE TABLE partTable PARTITION (width=100)")
       assert(spark.table("partTable").count() == data.count())
 
-      // do nothing if no partition is matched for the given non-partial partition spec
-      // TODO: This behaviour is different from Hive, we should decide whether we need to follow
-      // Hive's behaviour or stick with our existing behaviour later.
-      sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
-      assert(spark.table("partTable").count() == data.count())
+      // throw exception if no partition is matched for the given non-partial partition spec.
+      intercept[NoSuchPartitionException] {
+        sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
+      }
 
       // throw exception if the column in partition spec is not a partition column.
       val e = intercept[AnalysisException] {
