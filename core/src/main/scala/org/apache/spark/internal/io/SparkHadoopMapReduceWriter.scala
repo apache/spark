@@ -140,7 +140,7 @@ object SparkHadoopMapReduceWriter extends Logging {
       SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
 
     // Initiate the writer.
-    val taskFormat = outputFormat.newInstance
+    val taskFormat = outputFormat.newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
     taskFormat match {
       case c: Configurable => c.setConf(hadoopConf)

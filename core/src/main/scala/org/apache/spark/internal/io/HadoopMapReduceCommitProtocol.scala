@@ -43,7 +43,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   @transient private var committer: OutputCommitter = _
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
-    val format = context.getOutputFormatClass.newInstance
+    val format = context.getOutputFormatClass.newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
     format match {
       case c: Configurable => c.setConf(context.getConfiguration)
