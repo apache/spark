@@ -41,7 +41,7 @@ class FileStreamSourceLog(
   protected override def compactInterval: Int = {
     val compactIntervalCfg = sparkSession.sessionState.conf.fileSourceLogCompactInterval
 
-    // SPARK-18187: "compactInterval" can be reset by user in the first time. In case it is changed,
+    // SPARK-18187: "compactInterval" can be set by user in the first time. In case it is changed,
     // we should check and update it:
     //
     // 1. If there is no '.compact' file, we can use user setting directly.
