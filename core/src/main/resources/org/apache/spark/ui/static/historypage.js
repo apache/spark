@@ -39,7 +39,7 @@ function makeIdNumeric(id) {
 
 function formatDate(date) {
   if (date <= 0) return "-";
-  else return date;
+  else return date.split(".")[0].replace("T", " ");
 }
 
 function getParameterByName(name, searchString) {
