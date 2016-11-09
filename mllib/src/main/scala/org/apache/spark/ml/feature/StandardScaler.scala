@@ -162,7 +162,6 @@ class StandardScalerModel private[ml] (
     transformSchema(dataset.schema, logging = true)
     val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
     val transformer: Vector => Vector = v =>
       transform(scaler.mean, v)
 
