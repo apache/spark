@@ -63,7 +63,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   /**
    * A `PathFilter` to filter only batch files
    */
-  protected val batchFilesFilter = new PathFilter {
+  private val batchFilesFilter = new PathFilter {
     override def accept(path: Path): Boolean = isBatchFile(path)
   }
 
