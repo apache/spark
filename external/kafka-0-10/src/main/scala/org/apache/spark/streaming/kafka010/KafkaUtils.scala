@@ -127,7 +127,7 @@ object KafkaUtils extends Logging {
     createDirectStream[K, V](ssc, locationStrategy, consumerStrategy, ppc)
   }
 
-    /**
+  /**
    * :: Experimental ::
    * Scala constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
@@ -174,7 +174,7 @@ object KafkaUtils extends Logging {
         jssc.ssc, locationStrategy, consumerStrategy))
   }
 
-    /**
+  /**
    * :: Experimental ::
    * Java constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
