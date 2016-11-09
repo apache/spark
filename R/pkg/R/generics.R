@@ -1343,6 +1343,10 @@ setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
 setGeneric("spark.gaussianMixture",
            function(data, formula, ...) { standardGeneric("spark.gaussianMixture") })
 
+#' @rdname spark.gbt
+#' @export
+setGeneric("spark.gbt", function(data, formula, ...) { standardGeneric("spark.gbt") })
+
 #' @rdname spark.glm
 #' @export
 setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
