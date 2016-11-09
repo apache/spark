@@ -945,7 +945,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val fileStream = createFileStream("text", src.getCanonicalPath)
         val filtered = fileStream.filter($"value" contains "keep")
         val updateConf = new mutable.HashMap[String, String]()
-        updateConf.put(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key, "4")
+        updateConf.put(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key, "5")
 
         testStream(filtered)(
           AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
