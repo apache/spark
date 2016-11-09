@@ -68,16 +68,16 @@
   <tbody>
   {{#applications}}
     <tr>
-      <td class="rowGroupColumn"><span title="{{id}}"><a href="/history/{{id}}/{{num}}/jobs/">{{id}}</a></span></td>
+      <td class="rowGroupColumn"><span title="{{id}}"><a href="{{uiroot}}/history/{{id}}/{{num}}/jobs/">{{id}}</a></span></td>
       <td class="rowGroupColumn">{{name}}</td>
       {{#attempts}}
-      <td class="attemptIDSpan"><a href="/history/{{id}}/{{attemptId}}/jobs/">{{attemptId}}</a></td>
+      <td class="attemptIDSpan"><a href="{{uiroot}}/history/{{id}}/{{attemptId}}/jobs/">{{attemptId}}</a></td>
       <td>{{startTime}}</td>
       <td>{{endTime}}</td>
       <td><span title="{{duration}}" class="durationClass">{{duration}}</span></td>
       <td>{{sparkUser}}</td>
       <td>{{lastUpdated}}</td>
-      <td><a href="/api/v1/applications/{{id}}/{{num}}/logs" class="btn btn-info btn-mini">Download</a></td>
+      <td><a href="{{uiroot}}/api/v1/applications/{{id}}/{{num}}/logs" class="btn btn-info btn-mini">Download</a></td>
       {{/attempts}}
     </tr>
   {{/applications}}
