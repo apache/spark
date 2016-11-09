@@ -90,10 +90,7 @@ abstract class FileCommitProtocol {
    * Depending on the implementation, there may be weaker guarantees around adding files this way.
    */
   def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
-    throw new UnsupportedOperationException(
-      s"$this does not support adding files with an absolute path")
-  }
+      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
 
   /**
    * Commits a task after the writes succeed. Must be called on the executors when running tasks.

@@ -321,7 +321,8 @@ object FileFormatWriter extends Logging {
           None
       }
       val path = if (customPath.isDefined) {
-        committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+        committer.newTaskTempFileAbsPath(
+          taskAttemptContext, customPath.get, java.util.UUID.randomUUID().toString + ext)
       } else {
         committer.newTaskTempFile(taskAttemptContext, partDir, ext)
       }

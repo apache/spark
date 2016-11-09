@@ -47,9 +47,14 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   /**
    * Tracks files staged by this task for absolute output paths. These outputs are not managed by
    * the Hadoop OutputCommitter, so we must move these to their final locations on job commit.
+   *
+   * The mapping is from the temp output path to the final desired output path of the file.
    */
   @transient private var addedAbsPathFiles: mutable.Map[String, String] = null
 
+  /**
+   * The staging directory for all files committed with absolute output paths.
+   */
   private def absPathStagingDir: Path = new Path(path, "_temporary-" + jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {

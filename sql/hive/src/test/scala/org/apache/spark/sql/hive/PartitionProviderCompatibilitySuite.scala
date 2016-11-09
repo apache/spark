@@ -24,10 +24,12 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 class PartitionProviderCompatibilitySuite
   extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
+/*
   private def setupPartitionedDatasourceTable(tableName: String, dir: File): Unit = {
     spark.range(5).selectExpr("id as fieldOne", "id as partCol").write
       .partitionBy("partCol")
@@ -186,106 +188,158 @@ class PartitionProviderCompatibilitySuite
       }
     }
   }
+*/
 
-  test("insert into and overwrite new datasource tables with partial specs and custom locs") {
-    withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
-      withTable("test") {
-        withTempDir { dir =>
-          spark.range(5).selectExpr("id", "id as p1", "id as p2").write
-            .partitionBy("p1", "p2")
-            .mode("overwrite")
-            .parquet(dir.getAbsolutePath)
-          spark.sql(s"""
-            |create table test (id long, p1 int, p2 int)
-            |using parquet
-            |options (path "${dir.getAbsolutePath}")
-            |partitioned by (p1, p2)""".stripMargin)
-          spark.sql("msck repair table test")
-          assert(spark.sql("select * from test").count() == 5)
+  /**
+   * Runs a test against a multi-level partitioned table.
+   *
+   * The initial partitioning structure is:
+   *   /p1=0/p2=0  -- custom location a
+   *   /p1=0/p2=1  -- custom location b
+   *   /p1=1/p2=0  -- custom location c
+   *   /p1=1/p2=1  -- default location
+   */
+  private def testCustomLocations(testFn: => Unit): Unit = {
+    val base = Utils.createTempDir(namePrefix = "base")
+    val a = Utils.createTempDir(namePrefix = "a")
+    val b = Utils.createTempDir(namePrefix = "b")
+    val c = Utils.createTempDir(namePrefix = "c")
+    try {
+      spark.sql(s"""
+        |create table test (id long, p1 int, p2 int)
+        |using parquet
+        |options (path "${base.getAbsolutePath}")
+        |partitioned by (p1, p2)""".stripMargin)
+      spark.sql(s"alter table test add partition (p1=0, p2=0) location '${a.getAbsolutePath}'")
+      spark.sql(s"alter table test add partition (p1=0, p2=1) location '${b.getAbsolutePath}'")
+      spark.sql(s"alter table test add partition (p1=1, p2=0) location '${c.getAbsolutePath}'")
+      spark.sql(s"alter table test add partition (p1=1, p2=1)")
 
-          // dynamic append with partial spec, existing dir
-          spark.sql("insert into test partition (p1=1, p2) select id, id from range(10)")
-          assert(spark.sql("select * from test where p1=1").count() == 11)
-          assert(spark.sql("select * from test where p1=1 and p2=1").count() == 2)
+      testFn
 
-          // dynamic append with full spec, existing dir
-          spark.sql("insert into test partition (p1=1, p2=1) select id from range(10)")
-          assert(spark.sql("select * from test where p1=1").count() == 21)
-          assert(spark.sql("select * from test where p1=1 and p2=1").count() == 12)
+      // Now validate the partition custom locations were respected
+      val initialCount = spark.sql("select * from test").count()
+      val numA = spark.sql("select * from test where p1=0 and p2=0").count()
+      val numB = spark.sql("select * from test where p1=0 and p2=1").count()
+      val numC = spark.sql("select * from test where p1=1 and p2=0").count()
+      Utils.deleteRecursively(a)
+      spark.sql("refresh table test")
+      assert(spark.sql("select * from test where p1=0 and p2=0").count() == 0)
+      assert(spark.sql("select * from test").count() == initialCount - numA)
+      Utils.deleteRecursively(b)
+      spark.sql("refresh table test")
+      assert(spark.sql("select * from test where p1=0 and p2=1").count() == 0)
+      assert(spark.sql("select * from test").count() == initialCount - numA - numB)
+      Utils.deleteRecursively(c)
+      spark.sql("refresh table test")
+      assert(spark.sql("select * from test where p1=1 and p2=0").count() == 0)
+      assert(spark.sql("select * from test").count() == initialCount - numA - numB - numC)
+    } finally {
+      Utils.deleteRecursively(base)
+      Utils.deleteRecursively(a)
+      Utils.deleteRecursively(b)
+      Utils.deleteRecursively(c)
+      spark.sql("drop table test")
+    }
+  }
 
-          // dynamic append with partial spec, new dir
-          spark.sql("insert into test partition (p1=100, p2) select id, id from range(10)")
-          assert(spark.sql("select * from test where p1=100").count() == 10)
+  test("sanity check table setup") {
+    testCustomLocations {
+      assert(spark.sql("select * from test").count() == 0)
+      assert(spark.sql("show partitions test").count() == 4)
+    }
+  }
 
-          // dynamic append with full spec, new dir
-          spark.sql("insert into test partition (p1=100, p2=100) select id from range(10)")
-          assert(spark.sql("select * from test where p1=100").count() == 20)
-          assert(spark.sql("show partitions test").count() == 25)
+  test("insert into partial dynamic partitions") {
+    testCustomLocations {
+      spark.sql("insert into test partition (p1=0, p2) select id, id from range(10)")
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 12)
+      spark.sql("insert into test partition (p1=0, p2) select id, id from range(10)")
+      assert(spark.sql("select * from test").count() == 20)
+      assert(spark.sql("show partitions test").count() == 12)
+      spark.sql("insert into test partition (p1=1, p2) select id, id from range(10)")
+      assert(spark.sql("select * from test").count() == 30)
+      assert(spark.sql("show partitions test").count() == 20)
+      spark.sql("insert into test partition (p1=2, p2) select id, id from range(10)")
+      assert(spark.sql("select * from test").count() == 40)
+      assert(spark.sql("show partitions test").count() == 30)
+    }
+  }
 
-          // dynamic overwrite with partial spec, existing dir
-          spark.sql(
-            "insert overwrite table test partition (p1=1, p2) select id, id from range(100)")
-          assert(spark.sql("select * from test where p1=1").count() == 100)
-          assert(spark.sql("show partitions test").count() == 115)
+  test("insert into fully dynamic partitions") {
+    testCustomLocations {
+      spark.sql("insert into test partition (p1, p2) select id, id, id from range(10)")
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 12)
+      spark.sql("insert into test partition (p1, p2) select id, id, id from range(10)")
+      assert(spark.sql("select * from test").count() == 20)
+      assert(spark.sql("show partitions test").count() == 12)
+    }
+  }
 
-          // dynamic overwrite with full spec, existing dir
-          spark.sql(
-            "insert overwrite table test partition (p1=1, p2=1) select id from range(100)")
-          assert(spark.sql("select * from test where p1=1").count() == 199)
-          assert(spark.sql("select * from test where p1=1 and p2=1").count() == 100)
-          assert(spark.sql("show partitions test").count() == 115)
+  test("insert into static partition") {
+    testCustomLocations {
+      spark.sql("insert into test partition (p1=0, p2=0) select id from range(10)")
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 4)
+      spark.sql("insert into test partition (p1=0, p2=0) select id from range(10)")
+      assert(spark.sql("select * from test").count() == 20)
+      assert(spark.sql("show partitions test").count() == 4)
+      spark.sql("insert into test partition (p1=1, p2=1) select id from range(10)")
+      assert(spark.sql("select * from test").count() == 30)
+      assert(spark.sql("show partitions test").count() == 4)
+    }
+  }
 
-          // dynamic overwrite with partial spec, new dir
-          spark.sql(
-            "insert overwrite table test partition (p1=500, p2) select id, id from range(10)")
-          assert(spark.sql("select * from test where p1=500").count() == 10)
-          assert(spark.sql("show partitions test").count() == 125)
+  test("overwrite partial dynamic partitions") {
+    testCustomLocations {
+      spark.sql("insert overwrite table test partition (p1=0, p2) select id, id from range(10)")
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 12)
+      spark.sql("insert overwrite table test partition (p1=0, p2) select id, id from range(5)")
+      assert(spark.sql("select * from test").count() == 5)
+      assert(spark.sql("show partitions test").count() == 7)
+      spark.sql("insert overwrite table test partition (p1=0, p2) select id, id from range(1)")
+      assert(spark.sql("select * from test").count() == 1)
+      assert(spark.sql("show partitions test").count() == 3)
+      spark.sql("insert overwrite table test partition (p1=1, p2) select id, id from range(10)")
+      assert(spark.sql("select * from test").count() == 11)
+      assert(spark.sql("show partitions test").count() == 11)
+      spark.sql("insert overwrite table test partition (p1=1, p2) select id, id from range(1)")
+      assert(spark.sql("select * from test").count() == 2)
+      assert(spark.sql("show partitions test").count() == 2)
+      spark.sql("insert overwrite table test partition (p1=3, p2) select id, id from range(100)")
+      assert(spark.sql("select * from test").count() == 102)
+      assert(spark.sql("show partitions test").count() == 102)
+    }
+  }
 
-          // dynamic overwrite with partial spec again (test partition cleanup)
-          spark.sql(
-            "insert overwrite table test partition (p1=1, p2) select id, id from range(10)")
-          assert(spark.sql("select * from test where p1=1").count() == 10)
-          assert(spark.sql("show partitions test").count() == 35)
+  test("overwrite fully dynamic partitions") {
+    testCustomLocations {
+      spark.sql("insert overwrite table test partition (p1, p2) select id, id, id from range(10)")
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 10)
+      spark.sql("insert overwrite table test partition (p1, p2) select id, id, id from range(5)")
+      assert(spark.sql("select * from test").count() == 5)
+      assert(spark.sql("show partitions test").count() == 5)
+    }
+  }
 
-          // dynamic overwrite with full spec, new dir
-          spark.sql(
-            "insert overwrite table test partition (p1=500, p2=500) select id from range(10)")
-          assert(spark.sql("select * from test where p1=500 and p2=500").count() == 10)
-
-          // overwrite entire table
-          spark.sql("insert overwrite table test select id, 1, 1 from range(10)")
-          assert(spark.sql("select * from test").count() == 10)
-          assert(spark.sql("show partitions test").count() == 1)
-
-          // dynamic append to custom location
-          withTempDir { a =>
-            spark.sql(
-              s"alter table test add partition (p1=1, p2=2) location '${a.getAbsolutePath}'"
-            ).count()
-            spark.sql("insert into test partition (p1=1, p2) select id, id from range(100)")
-            spark.sql("insert into test partition (p1=1, p2) select id, id from range(100)")
-            assert(spark.sql("select * from test where p1=1").count() == 210)
-            assert(spark.sql("select * from test where p1=1 and p2=2").count() == 2)
-          }
-          sql("refresh table test")
-          assert(spark.sql("select * from test where p1=1 and p2=2").count() == 0)
-
-          // dynamic overwrite of custom locations
-          withTempDir { a =>
-            spark.sql(
-              s"alter table test partition (p1=1, p2=2) set location '${a.getAbsolutePath}'"
-            ).count()
-            spark.sql(
-              "insert overwrite table test partition (p1=1, p2) select id, id from range(100)")
-            spark.sql(
-              "insert overwrite table test partition (p1=1, p2) select id, id from range(100)")
-            assert(spark.sql("select * from test where p1=1").count() == 100)
-            assert(spark.sql("select * from test where p1=1 and p2=2").count() == 1)
-          }
-          sql("refresh table test")
-          assert(spark.sql("select * from test where p1=1 and p2=2").count() == 0)
-        }
-      }
+  test("overwrite static partition") {
+    testCustomLocations {
+      spark.sql("insert overwrite table test partition (p1=0, p2=0) select id from range(10)")
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 4)
+      spark.sql("insert overwrite table test partition (p1=0, p2=0) select id from range(5)")
+      assert(spark.sql("select * from test").count() == 5)
+      assert(spark.sql("show partitions test").count() == 4)
+      spark.sql("insert overwrite table test partition (p1=1, p2=1) select id from range(5)")
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 4)
+      spark.sql("insert overwrite table test partition (p1=1, p2=2) select id from range(5)")
+      assert(spark.sql("select * from test").count() == 15)
+      assert(spark.sql("show partitions test").count() == 5)
     }
   }
 }
