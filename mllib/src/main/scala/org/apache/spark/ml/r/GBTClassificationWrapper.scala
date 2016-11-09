@@ -23,55 +23,64 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
+import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
+import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.ml.regression.{RandomForestRegressionModel, RandomForestRegressor}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private[r] class RandomForestRegressorWrapper private (
+private[r] class GBTClassifierWrapper private (
   val pipeline: PipelineModel,
   val formula: String,
   val features: Array[String]) extends MLWritable {
 
-  private val rfrModel: RandomForestRegressionModel =
-    pipeline.stages(1).asInstanceOf[RandomForestRegressionModel]
+  import GBTClassifierWrapper._
 
-  lazy val numFeatures: Int = rfrModel.numFeatures
-  lazy val featureImportances: Vector = rfrModel.featureImportances
-  lazy val numTrees: Int = rfrModel.getNumTrees
-  lazy val treeWeights: Array[Double] = rfrModel.treeWeights
+  private val gbtcModel: GBTClassificationModel =
+    pipeline.stages(1).asInstanceOf[GBTClassificationModel]
 
-  def summary: String = rfrModel.toDebugString
+  lazy val numFeatures: Int = gbtcModel.numFeatures
+  lazy val featureImportances: Vector = gbtcModel.featureImportances
+  lazy val numTrees: Int = gbtcModel.getNumTrees
+  lazy val treeWeights: Array[Double] = gbtcModel.treeWeights
+
+  def summary: String = gbtcModel.toDebugString
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(rfrModel.getFeaturesCol)
+    pipeline.transform(dataset)
+      .drop(PREDICTED_LABEL_INDEX_COL)
+      .drop(gbtcModel.getFeaturesCol)
   }
 
   override def write: MLWriter = new
-      RandomForestRegressorWrapper.RandomForestRegressorWrapperWriter(this)
+      GBTClassifierWrapper.GBTClassifierWrapperWriter(this)
 }
 
-private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRegressorWrapper] {
+private[r] object GBTClassifierWrapper extends MLReadable[GBTClassifierWrapper] {
+
+  val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
+  val PREDICTED_LABEL_COL = "prediction"
+
   def fit(  // scalastyle:ignore
       data: DataFrame,
       formula: String,
       maxDepth: Int,
       maxBins: Int,
-      numTrees: Int,
-      impurity: String,
+      maxIter: Int,
+      stepSize: Double,
       minInstancesPerNode: Int,
       minInfoGain: Double,
       checkpointInterval: Int,
-      featureSubsetStrategy: String,
+      lossType: String,
       seed: String,
       subsamplingRate: Double,
       maxMemoryInMB: Int,
-      cacheNodeIds: Boolean): RandomForestRegressorWrapper = {
+      cacheNodeIds: Boolean): GBTClassifierWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
+      .setForceIndexLabel(true)
     RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
@@ -81,34 +90,45 @@ private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRe
       .attributes.get
     val features = featureAttrs.map(_.name.get)
 
+    // get label names from output schema
+    val labelAttr = Attribute.fromStructField(schema(rFormulaModel.getLabelCol))
+      .asInstanceOf[NominalAttribute]
+    val labels = labelAttr.values.get
+
     // assemble and fit the pipeline
-    val rfr = new RandomForestRegressor()
+    val rfc = new GBTClassifier()
       .setMaxDepth(maxDepth)
       .setMaxBins(maxBins)
-      .setNumTrees(numTrees)
-      .setImpurity(impurity)
+      .setMaxIter(maxIter)
+      .setStepSize(stepSize)
       .setMinInstancesPerNode(minInstancesPerNode)
       .setMinInfoGain(minInfoGain)
       .setCheckpointInterval(checkpointInterval)
-      .setFeatureSubsetStrategy(featureSubsetStrategy)
+      .setLossType(lossType)
       .setSubsamplingRate(subsamplingRate)
       .setMaxMemoryInMB(maxMemoryInMB)
       .setCacheNodeIds(cacheNodeIds)
       .setFeaturesCol(rFormula.getFeaturesCol)
-    if (seed != null && seed.length > 0) rfr.setSeed(seed.toLong)
+      .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
+    if (seed != null && seed.length > 0) rfc.setSeed(seed.toLong)
+
+    val idxToStr = new IndexToString()
+      .setInputCol(PREDICTED_LABEL_INDEX_COL)
+      .setOutputCol(PREDICTED_LABEL_COL)
+      .setLabels(labels)
 
     val pipeline = new Pipeline()
-      .setStages(Array(rFormulaModel, rfr))
+      .setStages(Array(rFormulaModel, rfc, idxToStr))
       .fit(data)
 
-    new RandomForestRegressorWrapper(pipeline, formula, features)
+    new GBTClassifierWrapper(pipeline, formula, features)
   }
 
-  override def read: MLReader[RandomForestRegressorWrapper] = new RandomForestRegressorWrapperReader
+  override def read: MLReader[GBTClassifierWrapper] = new GBTClassifierWrapperReader
 
-  override def load(path: String): RandomForestRegressorWrapper = super.load(path)
+  override def load(path: String): GBTClassifierWrapper = super.load(path)
 
-  class RandomForestRegressorWrapperWriter(instance: RandomForestRegressorWrapper)
+  class GBTClassifierWrapperWriter(instance: GBTClassifierWrapper)
     extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
@@ -125,9 +145,9 @@ private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRe
     }
   }
 
-  class RandomForestRegressorWrapperReader extends MLReader[RandomForestRegressorWrapper] {
+  class GBTClassifierWrapperReader extends MLReader[GBTClassifierWrapper] {
 
-    override def load(path: String): RandomForestRegressorWrapper = {
+    override def load(path: String): GBTClassifierWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
@@ -138,7 +158,7 @@ private[r] object RandomForestRegressorWrapper extends MLReadable[RandomForestRe
       val formula = (rMetadata \ "formula").extract[String]
       val features = (rMetadata \ "features").extract[Array[String]]
 
-      new RandomForestRegressorWrapper(pipeline, formula, features)
+      new GBTClassifierWrapper(pipeline, formula, features)
     }
   }
 }
