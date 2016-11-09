@@ -221,7 +221,6 @@ object Client {
     val conf = new SparkConf()
     val driverArgs = new ClientArguments(args)
 
-    conf.set("spark.rpc.askTimeout", "10")
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
     val rpcEnv =
