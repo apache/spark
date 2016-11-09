@@ -24,6 +24,8 @@ import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{Path, PathFilter}
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
 
@@ -37,13 +39,18 @@ import org.apache.spark.sql.SparkSession
  * compact log files every 10 batches by default into a big file. When
  * doing a compaction, it will read all old log files and merge them with the new batch.
  */
-abstract class CompactibleFileStreamLog[T: ClassTag](
+abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     metadataLogVersion: String,
     sparkSession: SparkSession,
     path: String)
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
 
   import CompactibleFileStreamLog._
+
+  private implicit val formats = Serialization.formats(NoTypeHints)
+
+  /** Needed to serialize type T into JSON when using Jackson */
+  private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
   /**
    * If we delete the old files after compaction at once, there is a race condition in S3: other
@@ -57,16 +64,6 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
   protected def isDeletingExpiredLog: Boolean
 
   protected def compactInterval: Int
-
-  /**
-   * Serialize the data into encoded string.
-   */
-  protected def serializeData(t: T): String
-
-  /**
-   * Deserialize the string into data object.
-   */
-  protected def deserializeData(encodedString: String): T
 
   /**
    * Filter out the obsolete logs.
@@ -99,7 +96,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
     out.write(metadataLogVersion.getBytes(UTF_8))
     logData.foreach { data =>
       out.write('\n')
-      out.write(serializeData(data).getBytes(UTF_8))
+      out.write(Serialization.write(data).getBytes(UTF_8))
     }
   }
 
@@ -112,7 +109,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
     if (version != metadataLogVersion) {
       throw new IllegalStateException(s"Unknown log version: ${version}")
     }
-    lines.map(deserializeData).toArray
+    lines.map(Serialization.read[T]).toArray
   }
 
   override def add(batchId: Long, logs: Array[T]): Boolean = {

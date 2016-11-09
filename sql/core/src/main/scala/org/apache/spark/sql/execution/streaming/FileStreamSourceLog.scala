@@ -60,14 +60,6 @@ class FileStreamSourceLog(
     }
   }
 
-  protected override def serializeData(data: FileEntry): String = {
-    Serialization.write(data)
-  }
-
-  protected override def deserializeData(encodedString: String): FileEntry = {
-    Serialization.read[FileEntry](encodedString)
-  }
-
   def compactLogs(logs: Seq[FileEntry]): Seq[FileEntry] = {
     logs
   }

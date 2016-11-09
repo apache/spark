@@ -220,7 +220,7 @@ class StreamingQueryStatus(object):
                 triggerId: 5
             Source statuses [1 source]:
                 Source 1 - MySource1
-                    Available offset: #0
+                    Available offset: 0
                     Input rate: 15.5 rows/sec
                     Processing rate: 23.5 rows/sec
                     Trigger details:
@@ -228,7 +228,7 @@ class StreamingQueryStatus(object):
                         latency.getOffset.source: 10
                         latency.getBatch.source: 20
             Sink status - MySink
-                Committed offsets: [#1, -]
+                Committed offsets: [1, -]
         """
         return self._jsqs.toString()
 
@@ -366,7 +366,7 @@ class SourceStatus(object):
 
         >>> print(sqs.sourceStatuses[0])
         Status of source MySource1
-            Available offset: #0
+            Available offset: 0
             Input rate: 15.5 rows/sec
             Processing rate: 23.5 rows/sec
             Trigger details:
@@ -396,7 +396,7 @@ class SourceStatus(object):
         Description of the current offset if known.
 
         >>> sqs.sourceStatuses[0].offsetDesc
-        u'#0'
+        u'0'
         """
         return self._jss.offsetDesc()
 
@@ -457,7 +457,7 @@ class SinkStatus(object):
 
         >>> print(sqs.sinkStatus)
         Status of sink MySink
-            Committed offsets: [#1, -]
+            Committed offsets: [1, -]
         """
         return self._jss.toString()
 
@@ -481,7 +481,7 @@ class SinkStatus(object):
         Description of the current offsets up to which data has been written by the sink.
 
         >>> sqs.sinkStatus.offsetDesc
-        u'[#1, -]'
+        u'[1, -]'
         """
         return self._jss.offsetDesc()
 

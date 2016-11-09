@@ -15,53 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.streaming.OffsetSuite
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SharedSQLContext
 
-class KafkaSourceOffsetSuite extends OffsetSuite with SharedSQLContext {
+class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
 
-  compare(
-    one = KafkaSourceOffset(("t", 0, 1L)),
-    two = KafkaSourceOffset(("t", 0, 2L)))
+  /** test string offset type */
+  case class StringOffset(override val json: String) extends Offset
 
-  compare(
-    one = KafkaSourceOffset(("t", 0, 1L), ("t", 1, 0L)),
-    two = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L)))
-
-  compare(
-    one = KafkaSourceOffset(("t", 0, 1L), ("T", 0, 0L)),
-    two = KafkaSourceOffset(("t", 0, 2L), ("T", 0, 1L)))
-
-  compare(
-    one = KafkaSourceOffset(("t", 0, 1L)),
-    two = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 1L)))
-
-
-  val kso1 = KafkaSourceOffset(("t", 0, 1L))
-  val kso2 = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 3L))
-  val kso3 = KafkaSourceOffset(("t", 0, 2L), ("t", 1, 3L), ("t", 1, 4L))
-
-  compare(KafkaSourceOffset(SerializedOffset(kso1.json)),
-    KafkaSourceOffset(SerializedOffset(kso2.json)))
-
-  test("basic serialization - deserialization") {
-    assert(KafkaSourceOffset.getPartitionOffsets(kso1) ==
-      KafkaSourceOffset.getPartitionOffsets(SerializedOffset(kso1.json)))
-  }
-
-
-  testWithUninterruptibleThread("OffsetSeqLog serialization - deserialization") {
+  testWithUninterruptibleThread("serialization - deserialization") {
     withTempDir { temp =>
-      // use non-existent directory to test whether log make the dir
-      val dir = new File(temp, "dir")
-      val metadataLog = new OffsetSeqLog(spark, dir.getAbsolutePath)
-      val batch0 = OffsetSeq.fill(kso1)
-      val batch1 = OffsetSeq.fill(kso2, kso3)
+      val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
+    val metadataLog = new OffsetSeqLog(spark, dir.getAbsolutePath)
+      val batch0 = OffsetSeq.fill(LongOffset(0), LongOffset(1), LongOffset(2))
+      val batch1 = OffsetSeq.fill(StringOffset("one"), StringOffset("two"), StringOffset("three"))
 
       val batch0Serialized = OffsetSeq.fill(batch0.offsets.flatMap(_.map(o =>
         SerializedOffset(o.json))): _*)
