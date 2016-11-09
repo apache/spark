@@ -46,7 +46,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   // Used for generating new query answer files by saving
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
-  private val goldenSQLPath = getTestResourcePath("sqlgen")
+  private val goldenSQLPath = {
+    // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
+    // relative path. Otherwise, we use classloader's getResource to find the location.
+    if (regenerateGoldenFiles) {
+      java.nio.file.Paths.get("src", "test", "resources", "sqlgen").toFile.getCanonicalPath
+    } else {
+      getTestResourcePath("sqlgen")
+    }
+  }
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
