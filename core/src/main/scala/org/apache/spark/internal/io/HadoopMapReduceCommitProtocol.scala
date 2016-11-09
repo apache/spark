@@ -17,7 +17,7 @@
 
 package org.apache.spark.internal.io
 
-import java.util.Date
+import java.util.{Date, UUID}
 
 import scala.collection.mutable
 
@@ -82,7 +82,12 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
     val filename = getFilename(taskContext, ext)
     val absOutputPath = new Path(absoluteDir, filename).toString
-    val tmpOutputPath = new Path(absPathStagingDir, filename).toString
+
+    // Include a UUID here to prevent file collisions for one task writing to different dirs.
+    // In principle we could include hash(absoluteDir) instead but this is simpler.
+    val tmpOutputPath = new Path(
+      absPathStagingDir, UUID.randomUUID().toString() + "-" + filename).toString
+
     addedAbsPathFiles(tmpOutputPath) = absOutputPath
     tmpOutputPath
   }

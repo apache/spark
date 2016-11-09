@@ -84,7 +84,8 @@ abstract class FileCommitProtocol {
    * are left to the commit protocol implementation to decide.
    *
    * Important: it is the caller's responsibility to add uniquely identifying content to "ext"
-   * if a task is going to write out multiple files to the same dir.
+   * if a task is going to write out multiple files to the same dir. The file commit protocol only
+   * guarantees that files written by different tasks will not conflict.
    */
   def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
 
@@ -93,7 +94,8 @@ abstract class FileCommitProtocol {
    * Depending on the implementation, there may be weaker guarantees around adding files this way.
    *
    * Important: it is the caller's responsibility to add uniquely identifying content to "ext"
-   * if a task is going to write out multiple files at all (even to different directories).
+   * if a task is going to write out multiple files to the same dir. The file commit protocol only
+   * guarantees that files written by different tasks will not conflict.
    */
   def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
