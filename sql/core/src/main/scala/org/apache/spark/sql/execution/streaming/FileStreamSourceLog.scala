@@ -60,7 +60,7 @@ class FileStreamSourceLog(
       // Find the nearest value around 'compactIntervalCfg' to make the 'latest compact batch id'
       // satisfying 'modular arithmetic'.
       val latestBatchId = compactibleBatchIds(0)
-      for(i <- 0 to compactIntervalCfg) {
+      for(i <- 0 until compactIntervalCfg) {
         if ((latestBatchId + 1) % (compactIntervalCfg + i) == 0) {
           return compactIntervalCfg + i
         }
