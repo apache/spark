@@ -85,8 +85,10 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * (default = 256 MB)
    * @group expertParam
    */
-  final val maxMemoryInMB: IntParam = new IntParam(this, "maxMemoryInMB",
-    "Maximum memory in MB allocated to histogram aggregation.",
+  final val maxMemoryInMB: IntParam = new IntParam(this, "maxMemoryInMB", "Maximum memory in MB" +
+    " allocated to histogram aggregation." +
+    " If too small, then 1 node will be split per iteration," +
+    " and its aggregates may exceed this size.",
     ParamValidators.gtEq(0))
 
   /**

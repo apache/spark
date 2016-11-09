@@ -307,15 +307,18 @@ private[spark] object JettyUtils extends Logging {
       connectors += httpConnector
 
       sslOptions.createJettySslContextFactory().foreach { factory =>
-        // If the new port wraps around, do not try a privileged port.
 
-        require(sslOptions.port == 0 || (1024 <= sslOptions.port && sslOptions.port < 65536))
+        require(sslOptions.port == 0 || (1024 <= sslOptions.port && sslOptions.port < 65536),
+          "securePort should be between 1024 and 65535 (inclusive)," +
+            " or 0 for determined automatically.")
 
         val securePort =
           if (currentPort != 0) {
-            if (1024 < sslOptions.port && sslOptions.port < 65536) {
+            // If the new port wraps around, do not try a privileged port.
+            if (1024 <= sslOptions.port && sslOptions.port < 65536) {
               sslOptions.port
             } else {
+              // If the new port wraps around, do not try a privilege port
               (currentPort + 400 - 1024) % (65536 - 1024) + 1024
             }
           } else {
