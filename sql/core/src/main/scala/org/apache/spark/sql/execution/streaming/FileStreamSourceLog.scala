@@ -38,8 +38,42 @@ class FileStreamSourceLog(
   import CompactibleFileStreamLog._
 
   // Configurations about metadata compaction
-  protected override val compactInterval =
-    sparkSession.sessionState.conf.fileSourceLogCompactInterval
+  protected override def compactInterval: Int = {
+    val compactIntervalCfg = sparkSession.sessionState.conf.fileSourceLogCompactInterval
+
+    // SPARK-18187: "compactInterval" can be reset by user in the first time. In case it is changed,
+    // we should check and update it:
+    //
+    // 1. If there is no '.compact' file, we can use user setting directly.
+    // 2. If there are two or more '.compact' files, we use the interval of patch id suffix with
+    // '.compact' as compactInterval.
+    // 3. If there is just one '.compact', we can find the nearest value around 'compactIntervalCfg'
+    // to make the 'latest compact batch id' satisfying 'modular arithmetic'.
+    val compactibleBatchIds = getCompactBatchIds()
+    if (compactibleBatchIds.length == 0) {
+      compactIntervalCfg
+    } else if (compactibleBatchIds.length >=2) {
+      val latestBatchId = compactibleBatchIds(0)
+      val penultimateBatchId = compactibleBatchIds(1)
+      (latestBatchId - penultimateBatchId).toInt
+    } else {
+      // Find the nearest value around 'compactIntervalCfg' to make the 'latest compact batch id'
+      // satisfying 'modular arithmetic'.
+      val latestBatchId = compactibleBatchIds(0)
+      for(i <- 0 to compactIntervalCfg) {
+        if ((latestBatchId + 1) % (compactIntervalCfg + i) == 0) {
+          return compactIntervalCfg + i
+        }
+
+        if ((latestBatchId + 1) % (compactIntervalCfg - i) == 0) {
+          return compactIntervalCfg - i
+        }
+      }
+
+      // This is unexpected in the code path, make compiler happy.
+      compactIntervalCfg
+    }
+  }
   require(compactInterval > 0,
     s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} (was $compactInterval) to a " +
       s"positive value.")
