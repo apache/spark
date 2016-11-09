@@ -48,7 +48,9 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
   var client = setupKubernetesClient()
   val driverName = s"spark-driver-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
   val svcName = s"spark-svc-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
-  val instances = conf.get(EXECUTOR_INSTANCES).getOrElse(2) //TODO: default 2???
+  val instances = conf.get(EXECUTOR_INSTANCES).getOrElse(1)
+  val serviceAccountName = conf.get("spark.kubernetes.serviceAccountName", "default")
+  val nameSpace = conf.get("spark.kubernetes.namespace", "default")
 
   logWarning("instances: " +  instances)
 
@@ -57,10 +59,10 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
   }
 
   def stop(): Unit = {
-    client.pods().inNamespace(getNamespace()).withName(driverName).delete()
+    client.pods().inNamespace(nameSpace).withName(driverName).delete()
     client
       .services()
-      .inNamespace(getNamespace())
+      .inNamespace(nameSpace)
       .withName(svcName)
       .delete()
   }
@@ -70,121 +72,50 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
     logInfo("Starting spark driver on kubernetes cluster")
     val driverDescription = buildDriverDescription(args)
 
-    // This is the URL of the spark distro.
-    val sparkDistUri = Option(System.getenv("SPARK_DISTRO_URI")).getOrElse {
-      throw new SparkException("Spark distribution not set, please set the SPARK_DISTRO_URI environment variable to " +
-        "a runnable spark archive.")
-    }
-
-    // This is the URL of the driver pod's image.
-    // Any image may be supplied as long as it contains a
-    // ./install.sh file which is executable and sets up the
-    // spark environment in /opt/spark.
-    val sparkDriverImage = Option(System.getenv("SPARK_DRIVER_IMG")).getOrElse {
-      throw new SparkException("Spark driver image not set, please set the SPARK_DRIVER_IMG environment variable to " +
-        "a spark driver image.")
+    // image needs to support shim scripts "/opt/driver.sh" and "/opt/executor.sh"
+    val sparkDriverImage = conf.getOption("spark.kubernetes.sparkImage").getOrElse {
+      // TODO: this needs to default to some standard Apache Spark image
+      throw new SparkException("Spark image not set. Please configure spark.kubernetes.sparkImage")
     }
 
     // This is the URL of the client jar.
     val clientJarUri = args.userJar
     conf.setExecutorEnv("spark.executor.jar", clientJarUri)
-    conf.setExecutorEnv("spark.kubernetes.namespace", getNamespace())
+    conf.setExecutorEnv("spark.kubernetes.namespace", nameSpace)
     conf.setExecutorEnv("spark.kubernetes.driver.image", sparkDriverImage)
-    conf.setExecutorEnv("spark.kubernetes.distribution.uri", sparkDistUri)
 
     // This is the kubernetes master we're launching on.
     val kubernetesHost = "k8s://" + client.getMasterUrl().getHost()
     logInfo("Using as kubernetes-master: " + kubernetesHost.toString())
-
-    var annotationMap = Map("pod.beta.kubernetes.io/init-containers" -> raw"""[
-                {
-                    "name": "client-fetch",
-                    "image": "busybox",
-                    "command": ["wget", "-O", "/work-dir/client.jar", "$clientJarUri"],
-                    "volumeMounts": [
-                        {
-                            "name": "workdir",
-                            "mountPath": "/work-dir"
-                        }
-                    ]
-                },
-                {
-                    "name": "distro-fetch",
-                    "image": "busybox",
-                    "command": ["wget", "-O", "/work-dir/spark.tgz", "$sparkDistUri"],
-                    "volumeMounts": [
-                        {
-                            "name": "workdir",
-                            "mountPath": "/work-dir"
-                        }
-                    ]
-                },
-                {
-                    "name": "setup",
-                    "image": "$sparkDriverImage",
-                    "command": ["./install.sh"],
-                    "volumeMounts": [
-                        {
-                            "name": "workdir",
-                            "mountPath": "/work-dir"
-                        },
-                        {
-                            "name": "opt",
-                            "mountPath": "/opt"
-                        }
-                    ]
-                }
-            ]""")
-
 
     val labelMap = Map("type" -> "spark-driver")
     val pod = new PodBuilder()
       .withNewMetadata()
       .withLabels(labelMap.asJava)
       .withName(driverName)
-      .withAnnotations(annotationMap.asJava)
       .endMetadata()
       .withNewSpec()
       .withRestartPolicy("OnFailure")
+      .withServiceAccount(serviceAccountName)
       .addNewContainer()
       .withName("spark-driver")
       .withImage(sparkDriverImage)
       .withImagePullPolicy("Always")
-      .withCommand("/opt/spark/bin/spark-submit")
-      .withArgs(s"--class=${args.userClass}",
+      .withCommand(s"/opt/driver.sh")
+      .withArgs(s"$clientJarUri",
+                s"--class=${args.userClass}",
                 s"--master=$kubernetesHost",
                 s"--executor-memory=${driverDescription.mem}",
                 s"--conf=spark.executor.jar=$clientJarUri",
                 s"--conf=spark.executor.instances=$instances",
-                s"--conf=spark.kubernetes.namespace=${getNamespace()}",
+                s"--conf=spark.kubernetes.namespace=$nameSpace",
                 s"--conf=spark.kubernetes.driver.image=$sparkDriverImage",
-                s"--conf=spark.kubernetes.distribution.uri=$sparkDistUri",
-                "/work-dir/client.jar",
+                "/opt/spark/kubernetes/client.jar",
                 args.userArgs.mkString(" "))
-      .withVolumeMounts()
-      .addNewVolumeMount()
-      .withName("workdir")
-      .withMountPath("/work-dir")
-      .endVolumeMount()
-      .addNewVolumeMount()
-      .withName("opt")
-      .withMountPath("/opt")
-      .endVolumeMount()
       .endContainer()
-      .withVolumes()
-      .addNewVolume()
-      .withName("workdir")
-      .withNewEmptyDir()
-      .endEmptyDir()
-      .endVolume()
-      .addNewVolume()
-      .withName("opt")
-      .withNewEmptyDir()
-      .endEmptyDir()
-      .endVolume()
       .endSpec()
       .build()
-    client.pods().inNamespace(getNamespace()).withName(driverName).create(pod)
+    client.pods().inNamespace(nameSpace).withName(driverName).create(pod)
 
     var svc = new ServiceBuilder()
       .withNewMetadata()
@@ -205,7 +136,7 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
 
     client
       .services()
-      .inNamespace(getNamespace())
+      .inNamespace(nameSpace)
       .withName(svcName)
       .create(svc)
 
@@ -225,22 +156,19 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
   }
 
   def setupKubernetesClient(): KubernetesClient = {
-      val sparkMaster = new java.net.URI(conf.get("spark.master"))
-      if (sparkMaster.getHost() == "default") {
-        return new DefaultKubernetesClient()
-      } else {
-        var config = new ConfigBuilder().withMasterUrl(sparkMaster.getHost()).build
-        var client = new DefaultKubernetesClient(config)
-        return client
-      }
-  }
+    val sparkHost = new java.net.URI(conf.get("spark.master")).getHost()
 
-  def getNamespace(): String = {
-    var kubernetesNamespace = System.getenv("K8S_NAMESPACE")
-    if (kubernetesNamespace == null) {
-      kubernetesNamespace = "default"
+    var config = new ConfigBuilder().withNamespace(nameSpace)
+    if (sparkHost != "default") {
+      config = config.withMasterUrl(sparkHost)
     }
-    return kubernetesNamespace
+
+    // TODO: support k8s user and password options:
+    // .withTrustCerts(true)
+    // .withUsername("admin")
+    // .withPassword("admin")
+
+    new DefaultKubernetesClient(config.build())
   }
 
   private def buildDriverDescription(args: ClientArguments): KubernetesDriverDescription = {

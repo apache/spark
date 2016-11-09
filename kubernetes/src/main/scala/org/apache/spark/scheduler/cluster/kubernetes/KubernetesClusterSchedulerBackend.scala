@@ -35,13 +35,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
                                                   scheduler: TaskSchedulerImpl,
                                                   sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
-  val config = new ConfigBuilder().withMasterUrl("https://kubernetes").build
-  val client = new DefaultKubernetesClient(config)
+
+  val client = new DefaultKubernetesClient()
+
   val DEFAULT_NUMBER_EXECUTORS = 2
   val sparkExecutorName = s"spark-executor-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
   var executorPods = mutable.ArrayBuffer[String]()
 
-  val sparkDistUri = sc.getConf.get("spark.kubernetes.distribution.uri")
   val sparkDriverImage = sc.getConf.get("spark.kubernetes.driver.image")
   val clientJarUri = sc.getConf.get("spark.executor.jar")
   val ns = sc.getConf.get("spark.kubernetes.namespace")
@@ -97,93 +97,31 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   def createExecutorPod(executorNum: Int): String = {
     // create a single k8s executor pod.
-    var annotationMap = Map(
-      "pod.beta.kubernetes.io/init-containers" -> raw"""[
-                {
-                    "name": "client-fetch",
-                    "image": "busybox",
-                    "command": ["wget", "-O", "/work-dir/client.jar", "$clientJarUri"],
-                    "volumeMounts": [
-                        {
-                            "name": "workdir",
-                            "mountPath": "/work-dir"
-                        }
-                    ]
-                },
-                {
-                    "name": "distro-fetch",
-                    "image": "busybox",
-                    "command": ["wget", "-O", "/work-dir/spark.tgz", "$sparkDistUri"],
-                    "volumeMounts": [
-                        {
-                            "name": "workdir",
-                            "mountPath": "/work-dir"
-                        }
-                    ]
-                },
-                {
-                    "name": "setup",
-                    "image": "$sparkDriverImage",
-                    "command": ["./install.sh"],
-                    "volumeMounts": [
-                        {
-                            "name": "workdir",
-                            "mountPath": "/work-dir"
-                        },
-                        {
-                            "name": "opt",
-                            "mountPath": "/opt"
-                        }
-                    ]
-                }
-            ]""")
-
-
     val labelMap = Map("type" -> "spark-executor")
     val podName = s"$sparkExecutorName-$executorNum"
     var pod = new PodBuilder()
       .withNewMetadata()
       .withLabels(labelMap.asJava)
       .withName(podName)
-      .withAnnotations(annotationMap.asJava)
       .endMetadata()
       .withNewSpec()
       .withRestartPolicy("OnFailure")
+
       .addNewContainer().withName("spark-executor").withImage(sparkDriverImage)
-      .withImagePullPolicy("Always")
-      .withCommand("/opt/spark/bin/spark-class")
+      .withImagePullPolicy("IfNotPresent")
+      .withCommand("/opt/executor.sh")
       .withArgs("org.apache.spark.executor.CoarseGrainedExecutorBackend",
         "--driver-url", s"$driverURL",
         "--executor-id", s"$executorNum",
         "--hostname", "localhost",
         "--cores", "1",
         "--app-id", "1") //TODO: change app-id per application and pass from driver.
-      .withVolumeMounts()
-      .addNewVolumeMount()
-      .withName("workdir")
-      .withMountPath("/work-dir")
-      .endVolumeMount()
-      .addNewVolumeMount()
-      .withName("opt")
-      .withMountPath("/opt")
-      .endVolumeMount()
       .endContainer()
-      .withVolumes()
-      .addNewVolume()
-      .withName("workdir")
-      .withNewEmptyDir()
-      .endEmptyDir()
-      .endVolume()
-      .addNewVolume()
-      .withName("opt")
-      .withNewEmptyDir()
-      .endEmptyDir()
-      .endVolume()
+
       .endSpec().build()
     client.pods().inNamespace(ns).withName(podName).create(pod)
     return podName
   }
-
 
   protected def driverURL: String = {
     if (conf.contains("spark.testing")) {
