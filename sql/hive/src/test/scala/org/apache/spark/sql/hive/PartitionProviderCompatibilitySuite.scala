@@ -29,7 +29,6 @@ import org.apache.spark.util.Utils
 class PartitionProviderCompatibilitySuite
   extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
-/*
   private def setupPartitionedDatasourceTable(tableName: String, dir: File): Unit = {
     spark.range(5).selectExpr("id as fieldOne", "id as partCol").write
       .partitionBy("partCol")
@@ -188,7 +187,6 @@ class PartitionProviderCompatibilitySuite
       }
     }
   }
-*/
 
   /**
    * Runs a test against a multi-level partitioned table, then validates that the custom locations
