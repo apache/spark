@@ -56,6 +56,8 @@ case class InsertIntoHadoopFsRelationCommand(
     catalogTable: Option[CatalogTable])
   extends RunnableCommand {
 
+  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
+
   override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -124,9 +126,7 @@ case class InsertIntoHadoopFsRelationCommand(
       "/" + partitionColumns.flatMap { p =>
         staticPartitionKeys.get(p.name) match {
           case Some(value) =>
-            Some(
-              PartitioningUtils.escapePathName(p.name) + "=" +
-              PartitioningUtils.escapePathName(value))
+            Some(escapePathName(p.name) + "=" + escapePathName(value))
           case None =>
             None
         }
