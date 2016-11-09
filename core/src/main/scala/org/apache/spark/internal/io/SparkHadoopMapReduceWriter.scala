@@ -23,7 +23,7 @@ import java.util.{Date, Locale}
 import scala.reflect.ClassTag
 import scala.util.DynamicVariable
 
-import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.{JobConf, JobID}
 import org.apache.hadoop.mapreduce._
@@ -140,7 +140,12 @@ object SparkHadoopMapReduceWriter extends Logging {
       SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
 
     // Initiate the writer.
-    val taskFormat = outputFormat.newInstance
+    val taskFormat = outputFormat.newInstance()
+    // If OutputFormat is Configurable, we should set conf to it.
+    taskFormat match {
+      case c: Configurable => c.setConf(hadoopConf)
+      case _ => ()
+    }
     val writer = taskFormat.getRecordWriter(taskContext)
       .asInstanceOf[RecordWriter[K, V]]
     require(writer != null, "Unable to obtain RecordWriter")
