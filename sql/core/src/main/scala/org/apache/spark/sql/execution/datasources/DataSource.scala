@@ -424,7 +424,8 @@ case class DataSource(
             _ => Unit, // No existing table needs to be refreshed.
             options,
             data.logicalPlan,
-            mode)
+            mode,
+            catalogTable)
         sparkSession.sessionState.executePlan(plan).toRdd
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
