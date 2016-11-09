@@ -527,13 +527,13 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.createTable(newTable("tbl", "mydb"), ignoreIfExists = false)
     sessionCatalog.createPartitions(
       TableIdentifier("tbl", Some("mydb")), Seq(part1, part2), ignoreIfExists = false)
-    assert(catalogPartitionsEqual(externalCatalog, "mydb", "tbl", Seq(part1, part2)))
+    assert(catalogPartitionsEqual(externalCatalog.listPartitions("mydb", "tbl"), part1, part2))
     // Create partitions without explicitly specifying database
     sessionCatalog.setCurrentDatabase("mydb")
     sessionCatalog.createPartitions(
       TableIdentifier("tbl"), Seq(partWithMixedOrder), ignoreIfExists = false)
     assert(catalogPartitionsEqual(
-      externalCatalog, "mydb", "tbl", Seq(part1, part2, partWithMixedOrder)))
+      externalCatalog.listPartitions("mydb", "tbl"), part1, part2, partWithMixedOrder))
   }
 
   test("create partitions when database/table does not exist") {
@@ -586,13 +586,13 @@ class SessionCatalogSuite extends SparkFunSuite {
   test("drop partitions") {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
-    assert(catalogPartitionsEqual(externalCatalog, "db2", "tbl2", Seq(part1, part2)))
+    assert(catalogPartitionsEqual(externalCatalog.listPartitions("db2", "tbl2"), part1, part2))
     sessionCatalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part1.spec),
       ignoreIfNotExists = false,
       purge = false)
-    assert(catalogPartitionsEqual(externalCatalog, "db2", "tbl2", Seq(part2)))
+    assert(catalogPartitionsEqual(externalCatalog.listPartitions("db2", "tbl2"), part2))
     // Drop partitions without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
     sessionCatalog.dropPartitions(
@@ -604,7 +604,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     // Drop multiple partitions at once
     sessionCatalog.createPartitions(
       TableIdentifier("tbl2", Some("db2")), Seq(part1, part2), ignoreIfExists = false)
-    assert(catalogPartitionsEqual(externalCatalog, "db2", "tbl2", Seq(part1, part2)))
+    assert(catalogPartitionsEqual(externalCatalog.listPartitions("db2", "tbl2"), part1, part2))
     sessionCatalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part1.spec, part2.spec),
@@ -844,10 +844,11 @@ class SessionCatalogSuite extends SparkFunSuite {
 
   test("list partitions") {
     val catalog = new SessionCatalog(newBasicCatalog())
-    assert(catalog.listPartitions(TableIdentifier("tbl2", Some("db2"))).toSet == Set(part1, part2))
+    assert(catalogPartitionsEqual(
+      catalog.listPartitions(TableIdentifier("tbl2", Some("db2"))), part1, part2))
     // List partitions without explicitly specifying database
     catalog.setCurrentDatabase("db2")
-    assert(catalog.listPartitions(TableIdentifier("tbl2")).toSet == Set(part1, part2))
+    assert(catalogPartitionsEqual(catalog.listPartitions(TableIdentifier("tbl2")), part1, part2))
   }
 
   test("list partitions when database/table does not exist") {
@@ -858,6 +859,15 @@ class SessionCatalogSuite extends SparkFunSuite {
     intercept[NoSuchTableException] {
       catalog.listPartitions(TableIdentifier("does_not_exist", Some("db2")))
     }
+  }
+
+  private def catalogPartitionsEqual(
+      actualParts: Seq[CatalogTablePartition],
+      expectedParts: CatalogTablePartition*): Boolean = {
+    // ExternalCatalog may set a default location for partitions, here we ignore the partition
+    // location when comparing them.
+    actualParts.map(p => p.copy(storage = p.storage.copy(locationUri = None))).toSet ==
+      expectedParts.map(p => p.copy(storage = p.storage.copy(locationUri = None))).toSet
   }
 
   // --------------------------------------------------------------------------
