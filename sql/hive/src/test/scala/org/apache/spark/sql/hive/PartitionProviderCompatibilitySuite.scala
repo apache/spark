@@ -191,7 +191,8 @@ class PartitionProviderCompatibilitySuite
 */
 
   /**
-   * Runs a test against a multi-level partitioned table, and validate some post-test invariants.
+   * Runs a test against a multi-level partitioned table, then validates that the custom locations
+   * were respected by the output writer.
    *
    * The initial partitioning structure is:
    *   /p1=0/p2=0  -- custom location a

@@ -321,8 +321,10 @@ object FileFormatWriter extends Logging {
           None
       }
       val path = if (customPath.isDefined) {
+        // We need to include a uuid here since the commit protocol does not guarantee that
+        // temp files requested by the same task for absolute placement do not collide.
         committer.newTaskTempFileAbsPath(
-          taskAttemptContext, customPath.get, java.util.UUID.randomUUID().toString + ext)
+          taskAttemptContext, customPath.get, UUID.randomUUID().toString + ext)
       } else {
         committer.newTaskTempFile(taskAttemptContext, partDir, ext)
       }
