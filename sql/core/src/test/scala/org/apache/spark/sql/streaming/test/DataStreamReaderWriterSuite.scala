@@ -470,28 +470,45 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("MemorySink can recover from a checkpoint in Complete Mode") {
-    val df = spark.readStream
-      .format("org.apache.spark.sql.streaming.test")
-      .load("/test")
+    import testImplicits._
+    val ms = new MemoryStream[Int](0, sqlContext)
+    val df = ms.toDF().toDF("a")
     val checkpointLoc = newMetadataDir
     val checkpointDir = new File(checkpointLoc, "offsets")
     checkpointDir.mkdirs()
     assert(checkpointDir.exists())
+    def startStream: StreamingQuery = {
+      df.groupBy("a")
+        .count()
+        .writeStream
+        .format("memory")
+        .queryName("test")
+        .option("checkpointLocation", checkpointLoc)
+        .outputMode("complete")
+        .start()
+    }
     // no exception here
-    val q = df
-      .groupBy("a")
-      .count()
-      .writeStream
-      .format("memory")
-      .queryName("test")
-      .option("checkpointLocation", checkpointLoc)
-      .outputMode("complete")
-      .start()
-
+    val q = startStream
+    ms.addData(0, 1)
+    q.processAllAvailable()
     q.stop()
 
+    checkAnswer(
+      spark.table("test"),
+      Seq(Row(0, 1), Row(1, 1))
+    )
+
+    val q2 = startStream
+    q2.processAllAvailable()
+    checkAnswer(
+      spark.table("test"),
+      Seq(Row(0, 1), Row(1, 1))
+    )
+
+    q2.stop()
+
     val e = intercept[AnalysisException] {
-      val q2 = df.writeStream
+      df.writeStream
         .format("memory")
         .queryName("test")
         .option("checkpointLocation", checkpointLoc)
