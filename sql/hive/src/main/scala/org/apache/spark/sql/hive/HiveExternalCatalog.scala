@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.IOException
 import java.util
 
 import scala.util.control.NonFatal
@@ -26,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -789,7 +790,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = withClient {
     requireTableExists(db, table)
-    val lowerCasedParts = parts.map(p => p.copy(spec = lowerCasePartitionSpec(p.spec)))
+
+    val tableMeta = getTable(db, table)
+    val partitionColumnNames = tableMeta.partitionColumnNames
+    val tablePath = new Path(tableMeta.location)
+    val partsWithLocation = parts.map { p =>
+      // Ideally we can leave the partition location empty and let Hive metastore to set it.
+      // However, Hive metastore is not case preserving and will generate wrong partition location
+      // with lower cased partition column names. Here we set the default partition location
+      // manually to avoid this problem.
+      val partitionPath = p.storage.locationUri.map(new Path(_)).getOrElse {
+        ExternalCatalogUtils.generatePartitionPath(p.spec, partitionColumnNames, tablePath)
+      }
+      p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toString)))
+    }
+    val lowerCasedParts = partsWithLocation.map(p => p.copy(spec = lowerCasePartitionSpec(p.spec)))
     client.createPartitions(db, table, lowerCasedParts, ignoreIfExists)
   }
 
@@ -810,6 +825,32 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       newSpecs: Seq[TablePartitionSpec]): Unit = withClient {
     client.renamePartitions(
       db, table, specs.map(lowerCasePartitionSpec), newSpecs.map(lowerCasePartitionSpec))
+
+    val tableMeta = getTable(db, table)
+    val partitionColumnNames = tableMeta.partitionColumnNames
+    // Hive metastore is not case preserving and keeps partition columns with lower cased names.
+    // When Hive rename partition for managed tables, it will create the partition location with
+    // a default path generate by the new spec with lower cased partition column names. This is
+    // unexpected and we need to rename them manually and alter the partition location.
+    val hasUpperCasePartitionColumn = partitionColumnNames.exists(col => col.toLowerCase != col)
+    if (tableMeta.tableType == MANAGED && hasUpperCasePartitionColumn) {
+      val tablePath = new Path(tableMeta.location)
+      val fs = tablePath.getFileSystem(hadoopConf)
+      val newParts = newSpecs.map { spec =>
+        val partition = client.getPartition(db, table, lowerCasePartitionSpec(spec))
+        val wrongPath = new Path(partition.storage.locationUri.get)
+        val rightPath = ExternalCatalogUtils.generatePartitionPath(
+          spec, partitionColumnNames, tablePath)
+        try {
+          fs.rename(wrongPath, rightPath)
+        } catch {
+          case e: IOException =>
+            throw new SparkException(s"Unable to rename partition path $wrongPath", e)
+        }
+        partition.copy(storage = partition.storage.copy(locationUri = Some(rightPath.toString)))
+      }
+      alterPartitions(db, table, newParts)
+    }
   }
 
   override def alterPartitions(
@@ -817,6 +858,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withClient {
     val lowerCasedParts = newParts.map(p => p.copy(spec = lowerCasePartitionSpec(p.spec)))
+    // Note: Before altering table partitions in Hive, you *must* set the current database
+    // to the one that contains the table of interest. Otherwise you will end up with the
+    // most helpful error message ever: "Unable to alter partition. alter is not possible."
+    // See HIVE-2742 for more detail.
+    client.setCurrentDatabase(db)
     client.alterPartitions(db, table, lowerCasedParts)
   }
 
