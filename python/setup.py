@@ -51,7 +51,7 @@ elif len(JARS_PATH) > 1:
     print("Assembly jars exist for multiple scalas, please cleanup assembly/target",
           file=sys.stderr)
     sys.exit(-1)
-elif len(JARS_PATH) == 0 and not os.path.exists("deps"):
+elif len(JARS_PATH) == 0 and not os.path.exists(TEMP_PATH):
     print("Assembly jars missing, please build Spark before packaging Python", file=sys.stderr)
     sys.exit(-1)
 
