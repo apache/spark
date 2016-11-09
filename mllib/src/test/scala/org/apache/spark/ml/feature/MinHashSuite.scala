@@ -99,7 +99,7 @@ class MinHashSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (0 until 100).filter(_.toString.contains("1")).map((_, 1.0)))
 
     val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(mh, dataset, key, 20,
-      singleProbing = true)
+      singleProbe = true)
     assert(precision >= 0.7)
     assert(recall >= 0.7)
   }

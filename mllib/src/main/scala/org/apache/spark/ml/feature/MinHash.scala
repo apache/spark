@@ -32,7 +32,9 @@ import org.apache.spark.sql.types.StructType
  * :: Experimental ::
  *
  * Model produced by [[MinHash]], where multiple hash functions are stored. Each hash function is
- * a perfect hash.
+ * a perfect hash function for a specific set `S` with cardinality equal to a half of `numEntries`:
+ *    `h_i(x) = ((x \cdot k_i) \mod prime) \mod numEntries`
+ *
  * @param numEntries The number of entries of the hash functions.
  * @param randCoefficients An array of random coefficients, each used by one hash function.
  */
