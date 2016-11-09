@@ -21,11 +21,11 @@ import java.util.{HashMap => JHashMap, Map => JMap}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.{MapOutputStatistics, ShuffleDependency, SimpleFutureAction}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.execution.{ShuffledRowRDD, SkewPartitionDecs, SkewShuffleRowRDD, SparkPlan}
 
@@ -88,7 +88,8 @@ class ExchangeCoordinator(
     advisoryTargetPostShuffleInputSize: Long,
     minNumPostShufflePartitions: Option[Int] = None,
     skewThreshold: Long = -1,
-    isJoin: Boolean = false)
+    isJoin: Boolean = false,
+    joinType: JoinType = Inner)
   extends Logging {
 
   // The registered Exchange operators.
@@ -252,7 +253,12 @@ class ExchangeCoordinator(
      sti._1.filterNot(
        p => skewPartition(index).exists(p1 => p1._2 == p._2 && p._1 < p1._1))
    })
-
+   if (joinType == LeftOuter && skewPartition(1).length > 0 ||
+   joinType == RightOuter && skewPartition(0).length > 0 ||
+   joinType == FullOuter) {
+     return (0 until numExchanges).map(_ =>
+       (0, Array[(Int, Long, Int, Int)]((-1, 0, 0, 0)))).toArray
+   }
    // skewSize must great than TargetPostShuffleInputSize
    val isSkew = skewPartition.flatten.length > 0 && isJoin &&
      skewThreshold > advisoryTargetPostShuffleInputSize

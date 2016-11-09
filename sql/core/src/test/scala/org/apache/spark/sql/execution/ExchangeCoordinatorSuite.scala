@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -80,7 +80,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("test skewPartitionIdx ") {
-    val coordinator = new ExchangeCoordinator(2, 100L, None, 500L, true)
+    val coordinator = new ExchangeCoordinator(2, 100L, None, 500L, true, Inner)
 
     {
       // All bytes per partition are 0.
@@ -259,7 +259,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("test skewPartitionIdx when need read a range of maps") {
-    val coordinator = new ExchangeCoordinator(2, 100L, None, 500L, true)
+    val coordinator = new ExchangeCoordinator(2, 100L, None, 500L, true, Inner)
 
     {
       val bytesByPartitionId1 = Array[Long](1, 501, 2, 1, 1)
