@@ -19,6 +19,7 @@ package org.apache.spark.internal.io
 
 import java.util.Date
 
+import org.apache.hadoop.conf.Configurable
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
@@ -42,7 +43,13 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   @transient private var committer: OutputCommitter = _
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
-    context.getOutputFormatClass.newInstance().getOutputCommitter(context)
+    val format = context.getOutputFormatClass.newInstance()
+    // If OutputFormat is Configurable, we should set conf to it.
+    format match {
+      case c: Configurable => c.setConf(context.getConfiguration)
+      case _ => ()
+    }
+    format.getOutputCommitter(context)
   }
 
   override def newTaskTempFile(
