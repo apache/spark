@@ -206,15 +206,15 @@ class NaiveBayes @Since("1.5.0") (
 @Since("1.6.0")
 object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   /** String name for multinomial model type. */
-  private[spark] val Multinomial: String = "multinomial"
+  private[classification] val Multinomial: String = "multinomial"
 
   /** String name for Bernoulli model type. */
-  private[spark] val Bernoulli: String = "bernoulli"
+  private[classification] val Bernoulli: String = "bernoulli"
 
   /* Set of modelTypes that NaiveBayes supports */
-  private[spark] val supportedModelTypes = Set(Multinomial, Bernoulli)
+  private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
 
-  def requireNonnegativeValues(v: Vector): Unit = {
+  private[NaiveBayes] val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
     val values = v match {
       case sv: SparseVector => sv.values
       case dv: DenseVector => dv.values
@@ -224,7 +224,7 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
       s"Naive Bayes requires nonnegative feature values but found $v.")
   }
 
-  def requireZeroOneBernoulliValues(v: Vector): Unit = {
+  private[NaiveBayes] val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
     val values = v match {
       case sv: SparseVector => sv.values
       case dv: DenseVector => dv.values
