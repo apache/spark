@@ -462,6 +462,15 @@ class LogisticRegression @Since("1.2.0") (
           new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
         }
 
+        /*
+          The coefficients are laid out in column major order during training. e.g. for
+          `numClasses = 3` and `numFeatures = 2` and `fitIntercept = true` the layout is:
+
+           Array(beta_11, beta_21, beta_31, beta_12, beta_22, beta_32, intercept_1, intercept_2,
+             intercept_3)
+
+           where beta_jk corresponds to the coefficient for class `j` and feature `k`.
+         */
         val initialCoefficientsWithIntercept =
           Vectors.zeros(numCoefficientSets * numFeaturesPlusIntercept)
 
