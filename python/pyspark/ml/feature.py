@@ -1196,16 +1196,18 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
                           "Must be in the range [0, 1].",
                           typeConverter=TypeConverters.toFloat)
 
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle" +
-                          "invalid entries. Options are skip (filter out rows with invalid values)"+
-                          ", error (throw an error), or keep (keep invalid values in a special "+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
+                          "Options are skip (filter out rows with invalid values), " +
+                          "error (throw an error), or keep (keep invalid values in a special " +
                           "additional bucket).",
                           typeConverter=TypeConverters.toString)
 
     @keyword_only
-    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, handleInvalid="error"):
+    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
+                 handleInvalid="error"):
         """
-        __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, handleInvalid="error")
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
+        handleInvalid="error")
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
@@ -1216,7 +1218,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, handleInvalid="error"):
+    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
+                  handleInvalid="error"):
         """
         setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
         Set the params for the QuantileDiscretizer
