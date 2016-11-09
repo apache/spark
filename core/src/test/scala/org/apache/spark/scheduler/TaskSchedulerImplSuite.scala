@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.HashMap
 
-import org.mockito.Matchers.{anyInt, anyString, eq => matchEq}
+import org.mockito.Matchers.{anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mock.MockitoSugar
@@ -466,9 +466,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       verify(stageToMockTaskSetBlacklist(0), never)
         .isExecutorBlacklistedForTaskSet(exec)
       verify(stageToMockTaskSetBlacklist(0), never)
-        .isNodeBlacklistedForTask(matchEq("host1"), anyInt())
+        .isNodeBlacklistedForTask(meq("host1"), anyInt())
       verify(stageToMockTaskSetBlacklist(0), never)
-        .isExecutorBlacklistedForTask(matchEq(exec), anyInt())
+        .isExecutorBlacklistedForTask(meq(exec), anyInt())
     }
     // now make sure checks were OK on stage 1
     (0 to 1).foreach { part =>
@@ -477,9 +477,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       verify(stageToMockTaskSetBlacklist(1), atMost(maxBlacklistChecks))
         .isNodeBlacklistedForTaskSet(anyString())
       verify(stageToMockTaskSetBlacklist(1), never)
-        .isNodeBlacklistedForTask(matchEq("host2"), anyInt())
+        .isNodeBlacklistedForTask(meq("host2"), anyInt())
       verify(stageToMockTaskSetBlacklist(1), never)
-        .isExecutorBlacklistedForTask(matchEq("executor3"), anyInt())
+        .isExecutorBlacklistedForTask(meq("executor3"), anyInt())
     }
     // stage 2 is unblacklisted, so nothing to check
   }
