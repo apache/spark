@@ -158,19 +158,26 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
               "splits specified will be treated as errors.",
               typeConverter=TypeConverters.toListFloat)
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
+                          "Options are skip (filter out rows with invalid values), " +
+                          "error (throw an error), or keep (keep invalid values in a special " +
+                          "additional bucket).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, splits=None, inputCol=None, outputCol=None):
+    def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        __init__(self, splits=None, inputCol=None, outputCol=None)
+        __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
         """
         super(Bucketizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
+        self._setDefault(handleInvalid="error")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, splits=None, inputCol=None, outputCol=None):
+    def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
         """
         setParams(self, splits=None, inputCol=None, outputCol=None)
         Sets params for this Bucketizer.
@@ -192,6 +199,19 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         """
         return self.getOrDefault(self.splits)
 
+    @since("2.1.0")
+    def setHandleInvalid(self):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("2.1.0")
+    def getHandleInvalid(self):
+        """
+        Gets the value of handleInvalid or its default value.
+        """
+        return self.getOrDefault(self.handleInvalid)
 
 @inherit_doc
 class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
