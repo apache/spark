@@ -195,12 +195,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
-      val name = pVal.identifier.getText
-      val operator = Option(pVal.comparisonOperator).map(_.getText)
-      validate(operator.isEmpty || operator.get.equals("="),
-        "Only '=' operator is allowed for this partition specification.", ctx)
-      val value = Option(pVal.constant).map(visitStringConstant)
-      name -> value
+      expression(pVal) match {
+        case UnresolvedAttribute(name :: Nil) =>
+          name -> None
+        case cmp @ EqualTo(UnresolvedAttribute(name :: Nil), constant: Literal) =>
+          name -> Option(constant.toString)
+        case _ =>
+          throw new ParseException("Invalid partition filter specification", ctx)
+      }
     }
     // Before calling `toMap`, we check duplicated keys to avoid silently ignore partition values
     // in partition spec like PARTITION(a='1', b='2', a='3'). The real semantical check for
@@ -214,31 +216,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   def visitPartitionFilterSpec(ctx: PartitionSpecContext): Expression = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
-      val name = pVal.identifier.getText
-      val operator = Option(pVal.comparisonOperator).map(_.getText)
-      if (operator.isDefined) {
-        val left = AttributeReference(name, DataTypes.StringType)()
-        val right = expression(pVal.constant)
-        val operator = pVal.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
-        operator.getSymbol.getType match {
-          case SqlBaseParser.EQ =>
-            EqualTo(left, right)
-          case SqlBaseParser.NSEQ =>
-            throw new ParseException(
-              "'<=>' operator is not allowed in partition specification.", ctx)
-          case SqlBaseParser.NEQ | SqlBaseParser.NEQJ =>
-            Not(EqualTo(left, right))
-          case SqlBaseParser.LT =>
-            LessThan(left, right)
-          case SqlBaseParser.LTE =>
-            LessThanOrEqual(left, right)
-          case SqlBaseParser.GT =>
-            GreaterThan(left, right)
-          case SqlBaseParser.GTE =>
-            GreaterThanOrEqual(left, right)
-        }
-      } else {
-        throw new ParseException("Invalid partition filter specification", ctx)
+      expression(pVal) match {
+        case EqualNullSafe(_, _) =>
+          throw new ParseException("'<=>' operator is not allowed in partition specification.", ctx)
+        case cmp @ BinaryComparison(UnresolvedAttribute(name :: Nil), constant: Literal) =>
+          cmp.withNewChildren(Seq(AttributeReference(name, StringType)(), constant))
+        case _ =>
+          throw new ParseException("Invalid partition filter specification", ctx)
       }
     }
     parts.reduceLeft(And)

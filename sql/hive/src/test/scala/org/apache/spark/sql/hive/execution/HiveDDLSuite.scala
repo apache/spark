@@ -289,7 +289,7 @@ class HiveDDLSuite
       val m4 = intercept[ParseException] {
         sql("ALTER TABLE sales DROP PARTITION (unknown <=> upper('KR'))")
       }.getMessage
-      assert(m4.contains("extraneous input '(' expecting STRING"))
+      assert(m4.contains("'<=>' operator is not allowed in partition specification"))
 
       val m5 = intercept[ParseException] {
         sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter)")
@@ -305,7 +305,7 @@ class HiveDDLSuite
       val m = intercept[ParseException] {
         sql("ALTER TABLE sales ADD PARTITION (country='US', quarter<'1')")
       }.getMessage()
-      assert(m.contains("Only '=' operator is allowed for this partition specification"))
+      assert(m.contains("Invalid partition filter specification"))
     }
   }
 

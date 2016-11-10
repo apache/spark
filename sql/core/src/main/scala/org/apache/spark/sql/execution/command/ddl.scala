@@ -424,7 +424,7 @@ case class AlterTableDropPartitionCommand(
     purge: Boolean)
   extends RunnableCommand with PredicateHelper {
 
-  private def hasNonEqualToComparison(expr: Expression): Boolean = {
+  private def isRangeComparison(expr: Expression): Boolean = {
     expr.find(e => e.isInstanceOf[BinaryComparison] && !e.isInstanceOf[EqualTo]).isDefined
   }
 
@@ -444,7 +444,7 @@ case class AlterTableDropPartitionCommand(
       }
     }
 
-    if (specs.exists(hasNonEqualToComparison)) {
+    if (specs.exists(isRangeComparison)) {
       specs.foreach { spec =>
         val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(spec))
         if (partitions.nonEmpty) {
@@ -456,10 +456,10 @@ case class AlterTableDropPartitionCommand(
       }
     } else {
       val normalizedSpecs = specs.map { expr =>
-        val spec = splitConjunctivePredicates(expr)
-          .map(_.asInstanceOf[BinaryComparison])
-          .map(p => p.left.asInstanceOf[AttributeReference].name -> p.right.toString)
-          .toMap
+        val spec = splitConjunctivePredicates(expr).map {
+          case BinaryComparison(left, right) =>
+            left.asInstanceOf[AttributeReference].name -> right.toString
+        }.toMap
         PartitioningUtils.normalizePartitionSpec(
           spec,
           table.partitionColumnNames,

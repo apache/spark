@@ -243,7 +243,7 @@ partitionSpec
     ;
 
 partitionVal
-    : identifier (comparisonOperator constant)?
+    : expression
     ;
 
 describeFuncName
