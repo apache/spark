@@ -635,4 +635,12 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
     }
   }
+
+  test("SPARK-16472: Force user specified schema to the nullable") {
+    val schema = new StructType().add("s", StringType, nullable = false)
+    val nullableSchema = schema.asNullable
+    val df = spark.read.schema(schema).text()
+    assert(df.schema != schema)
+    assert(df.schema == nullableSchema)
+  }
 }

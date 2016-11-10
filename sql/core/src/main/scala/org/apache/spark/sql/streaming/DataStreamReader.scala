@@ -53,7 +53,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def schema(schema: StructType): DataStreamReader = {
-    this.userSpecifiedSchema = Option(schema)
+    this.userSpecifiedSchema = Option(schema.asNullable)
     this
   }
 
