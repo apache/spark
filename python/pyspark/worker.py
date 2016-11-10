@@ -119,7 +119,9 @@ def main(infile, outfile):
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
             raise Exception(("Python in worker has different version %s than that in " +
-                             "driver %s, PySpark cannot run with different minor versions") %
+                             "driver %s, PySpark cannot run with different minor versions." +
+                             "Please check environment variables PYSPARK_PYTHON and " +
+                             "PYSPARK_DRIVER_PYTHON are correctly set.") %
                             ("%d.%d" % sys.version_info[:2], version))
 
         # initialize global state
