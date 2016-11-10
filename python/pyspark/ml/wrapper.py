@@ -33,6 +33,10 @@ class JavaWrapper(object):
         super(JavaWrapper, self).__init__()
         self._java_obj = java_obj
 
+    def __del__(self):
+        if SparkContext._gateway:
+            SparkContext._gateway.detach(self._java_obj)
+
     @classmethod
     def _create_from_java_class(cls, java_class, *args):
         """
