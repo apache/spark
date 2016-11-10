@@ -128,7 +128,6 @@ abstract class PartitioningAwareFileIndex(
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
           leafDirs,
-          PartitioningUtils.DEFAULT_PARTITION_NAME,
           typeInference = false,
           basePaths = basePaths)
 
@@ -148,7 +147,6 @@ abstract class PartitioningAwareFileIndex(
       case _ =>
         PartitioningUtils.parsePartitions(
           leafDirs,
-          PartitioningUtils.DEFAULT_PARTITION_NAME,
           typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
           basePaths = basePaths)
     }

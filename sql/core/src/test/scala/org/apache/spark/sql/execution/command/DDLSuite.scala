@@ -875,7 +875,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
 
     val part2 = Map("a" -> "2", "b" -> "6")
-    val root = new Path(catalog.getTableMetadata(tableIdent).storage.locationUri.get)
+    val root = new Path(catalog.getTableMetadata(tableIdent).location)
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
@@ -1133,7 +1133,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
     assert(catalog.getTableMetadata(tableIdent).storage.locationUri.isDefined)
     assert(catalog.getTableMetadata(tableIdent).storage.properties.isEmpty)
-    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isEmpty)
+    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isDefined)
     assert(catalog.getPartition(tableIdent, partSpec).storage.properties.isEmpty)
     // Verify that the location is set to the expected string
     def verifyLocation(expected: String, spec: Option[TablePartitionSpec] = None): Unit = {
@@ -1296,9 +1296,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("ALTER TABLE dbx.tab1 ADD IF NOT EXISTS " +
       "PARTITION (a='2', b='6') LOCATION 'paris' PARTITION (a='3', b='7')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
-    assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isEmpty)
+    assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isDefined)
     assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option("paris"))
-    assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isEmpty)
+    assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isDefined)
 
     // add partitions without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
