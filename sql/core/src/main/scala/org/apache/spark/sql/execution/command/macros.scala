@@ -55,7 +55,7 @@ case class CreateMacroCommand(
             s"for CREATE TEMPORARY MACRO $macroName, actual columns: ${columns.mkString(",")}"))
         BoundReference(index, columns(index).dataType, columns(index).nullable)
       case u: UnresolvedFunction =>
-        sparkSession.sessionState.analyzer.resolveFunction(u)
+        sparkSession.sessionState.catalog.lookupFunction(u.name, u.children)
       case s: SubqueryExpression =>
         throw new AnalysisException(s"Cannot support Subquery: ${s} " +
           s"for CREATE TEMPORARY MACRO $macroName")

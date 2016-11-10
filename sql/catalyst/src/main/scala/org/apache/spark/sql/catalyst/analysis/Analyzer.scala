@@ -962,7 +962,7 @@ class Analyzer(
                 // AggregateExpression.
                 case wf: AggregateWindowFunction => wf
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction => AggregateExpression(agg, Complete, func.isDistinct)
+                case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
                 case other => other
               }
