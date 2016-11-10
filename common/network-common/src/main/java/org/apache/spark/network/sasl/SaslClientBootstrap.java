@@ -97,8 +97,8 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
           ByteBuffer buf = configMessage.encodeMessage();
 
           // Encrypted the config message.
-          ByteBuffer encrypted = ByteBuffer.wrap(
-            saslClient.wrap(buf.array(), 0, buf.array().length));
+          byte[] toEncrypt = JavaUtils.bufferToArray(buf);
+          ByteBuffer encrypted = ByteBuffer.wrap(saslClient.wrap(toEncrypt, 0, toEncrypt.length));
 
           client.sendRpcSync(encrypted, conf.saslRTTimeoutMs());
           AesCipher cipher = new AesCipher(configMessage);

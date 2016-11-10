@@ -139,13 +139,7 @@ class SaslRpcHandler extends RpcHandler {
 
       // Create AES cipher when it is authenticated
       try {
-        byte[] encrypted;
-        if (message.hasArray()) {
-          encrypted = message.array();
-        } else {
-          encrypted = new byte[message.remaining()];
-          message.get(encrypted);
-        }
+        byte[] encrypted = JavaUtils.bufferToArray(message);
         ByteBuffer decrypted = ByteBuffer.wrap(saslServer.unwrap(encrypted, 0 , encrypted.length));
 
         AesConfigMessage configMessage = AesConfigMessage.decodeMessage(decrypted);
