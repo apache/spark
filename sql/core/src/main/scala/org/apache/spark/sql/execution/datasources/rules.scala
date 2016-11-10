@@ -21,7 +21,7 @@ import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, SessionCatalog}
@@ -89,6 +89,22 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       }
       c
 
+    case c @ CreateTable(tableDesc, mode, Some(query))
+        if mode == SaveMode.Append && isHiveSerdeTable(tableDesc.identifier) =>
+      val catalog = sparkSession.sessionState.catalog
+      EliminateSubqueryAliases(catalog.lookupRelation(tableDesc.identifier)) match {
+        case metastoreRelation: CatalogRelation =>
+          val schema = metastoreRelation.catalogTable.schema
+          val data = Dataset.ofRows(sparkSession, query).selectExpr(schema.fieldNames: _*)
+          InsertIntoTable(
+            metastoreRelation,
+            Map(),
+            data.logicalPlan,
+            overwrite = OverwriteOptions(enabled = false),
+            ifNotExists = false)
+        case _ => c
+      }
+
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
     //   * column names in table definition can't be duplicated.
@@ -119,6 +135,11 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       val partitionColsChecked = checkPartitionColumns(schema, tableDesc)
       val bucketColsChecked = checkBucketColumns(schema, partitionColsChecked)
       c.copy(tableDesc = bucketColsChecked, query = analyzedQuery)
+  }
+
+  private def isHiveSerdeTable(tableIdent: TableIdentifier): Boolean = {
+    sparkSession.sessionState.catalog.getTableMetadataOption(tableIdent)
+      .exists(_.provider == Option("hive"))
   }
 
   private def checkPartitionColumns(schema: StructType, tableDesc: CatalogTable): CatalogTable = {
