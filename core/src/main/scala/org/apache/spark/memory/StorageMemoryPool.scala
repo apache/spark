@@ -119,13 +119,13 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
   }
 
   /**
-   * Try to shrink the size of this storage memory pool by `spaceToFree` bytes. Return the number
-   * of bytes removed from the pool's capacity.
+   * Free space to shrink the size of this storage memory pool by `spaceToFree` bytes.
+   * Note: this method doesn't actually reduce the pool size but relies on the caller to do so.
+   *
+   * @return number of bytes to be removed from the pool's capacity.
    */
-  def shrinkPoolToFreeSpace(spaceToFree: Long): Long = lock.synchronized {
-    // First, shrink the pool by reclaiming free memory:
+  def freeSpaceToShrinkPool(spaceToFree: Long): Long = lock.synchronized {
     val spaceFreedByReleasingUnusedMemory = math.min(spaceToFree, memoryFree)
-    decrementPoolSize(spaceFreedByReleasingUnusedMemory)
     val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
     if (remainingSpaceToFree > 0) {
       // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
@@ -134,7 +134,6 @@ private[memory] class StorageMemoryPool(lock: Object) extends MemoryPool(lock) w
       val spaceFreedByEviction = evictedBlocks.map(_._2.memSize).sum
       // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
       // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.
-      decrementPoolSize(spaceFreedByEviction)
       spaceFreedByReleasingUnusedMemory + spaceFreedByEviction
     } else {
       spaceFreedByReleasingUnusedMemory

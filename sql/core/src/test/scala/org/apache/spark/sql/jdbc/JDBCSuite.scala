@@ -501,4 +501,10 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(rows(0).getAs[java.sql.Timestamp](2)
       === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
+
+  test("SPARK 12941: The data type mapping for StringType to Oracle") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    assert(oracleDialect.getJDBCType(StringType).
+      map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+  }
 }

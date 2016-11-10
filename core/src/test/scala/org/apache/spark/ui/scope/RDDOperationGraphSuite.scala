@@ -15,25 +15,23 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark;
+package org.apache.spark.ui.scope
 
-import org.apache.spark.TaskContext;
-import org.apache.spark.util.TaskCompletionListener;
+import org.apache.spark.SparkFunSuite
 
+class RDDOperationGraphSuite extends SparkFunSuite {
+  test("Test simple cluster equals") {
+    // create a 2-cluster chain with a child
+    val c1 = new RDDOperationCluster("1", "Bender")
+    val c2 = new RDDOperationCluster("2", "Hal")
+    c1.attachChildCluster(c2)
+    c1.attachChildNode(new RDDOperationNode(3, "Marvin", false, "collect!"))
 
-/**
- * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
- * TaskContext is Java friendly.
- */
-public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
+    // create an equal cluster, but without the child node
+    val c1copy = new RDDOperationCluster("1", "Bender")
+    val c2copy = new RDDOperationCluster("2", "Hal")
+    c1copy.attachChildCluster(c2copy)
 
-  @Override
-  public void onTaskCompletion(TaskContext context) {
-    context.isCompleted();
-    context.isInterrupted();
-    context.stageId();
-    context.partitionId();
-    context.isRunningLocally();
-    context.addTaskCompletionListener(this);
+    assert(c1 == c1copy)
   }
 }

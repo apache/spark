@@ -293,7 +293,7 @@ class DenseVector(Vector):
         s = s[start + 1: end]
 
         try:
-            values = [float(val) for val in s.split(',')]
+            values = [float(val) for val in s.split(',') if val]
         except ValueError:
             raise ValueError("Unable to parse values from %s" % s)
         return DenseVector(values)
@@ -565,7 +565,7 @@ class SparseVector(Vector):
         if start == -1:
             raise ValueError("Tuple should start with '('")
         end = s.find(')')
-        if start == -1:
+        if end == -1:
             raise ValueError("Tuple should end with ')'")
         s = s[start + 1: end].strip()
 
@@ -584,7 +584,7 @@ class SparseVector(Vector):
         new_s = s[ind_start + 1: ind_end]
         ind_list = new_s.split(',')
         try:
-            indices = [int(ind) for ind in ind_list]
+            indices = [int(ind) for ind in ind_list if ind]
         except ValueError:
             raise ValueError("Unable to parse indices from %s." % new_s)
         s = s[ind_end + 1:].strip()
@@ -597,7 +597,7 @@ class SparseVector(Vector):
             raise ValueError("Values array should end with ']'.")
         val_list = s[val_start + 1: val_end].split(',')
         try:
-            values = [float(val) for val in val_list]
+            values = [float(val) for val in val_list if val]
         except ValueError:
             raise ValueError("Unable to parse values from %s." % s)
         return SparseVector(size, indices, values)

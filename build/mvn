@@ -69,10 +69,10 @@ install_app() {
 
 # Install maven under the build/ folder
 install_mvn() {
-  local MVN_VERSION="3.3.3"
+  local MVN_VERSION="3.3.9"
 
   install_app \
-    "http://archive.apache.org/dist/maven/maven-3/${MVN_VERSION}/binaries" \
+    "https://www.apache.org/dyn/closer.lua?action=download&filename=/maven/maven-3/${MVN_VERSION}/binaries" \
     "apache-maven-${MVN_VERSION}-bin.tar.gz" \
     "apache-maven-${MVN_VERSION}/bin/mvn"
 

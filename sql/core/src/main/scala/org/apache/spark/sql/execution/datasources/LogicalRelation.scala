@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, MultiInstanceRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.BaseRelation
@@ -57,9 +57,11 @@ case class LogicalRelation(
     com.google.common.base.Objects.hashCode(relation, output)
   }
 
-  override def sameResult(otherPlan: LogicalPlan): Boolean = otherPlan match {
-    case LogicalRelation(otherRelation, _) => relation == otherRelation
-    case _ => false
+  override def sameResult(otherPlan: LogicalPlan): Boolean = {
+    EliminateSubQueries(otherPlan) match {
+      case LogicalRelation(otherRelation, _) => relation == otherRelation
+      case _ => false
+    }
   }
 
   // When comparing two LogicalRelations from within LogicalPlan.sameResult, we only need

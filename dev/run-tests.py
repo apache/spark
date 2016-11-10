@@ -101,6 +101,8 @@ def determine_modules_to_test(changed_modules):
 
     >>> sorted(x.name for x in determine_modules_to_test([modules.root]))
     ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.build])]
+    ['root']
     >>> sorted(x.name for x in determine_modules_to_test([modules.graphx]))
     ['examples', 'graphx']
     >>> x = sorted(x.name for x in determine_modules_to_test([modules.sql]))
@@ -108,15 +110,14 @@ def determine_modules_to_test(changed_modules):
     ['examples', 'hive-thriftserver', 'mllib', 'pyspark-ml', \
      'pyspark-mllib', 'pyspark-sql', 'sparkr', 'sql']
     """
-    # If we're going to have to run all of the tests, then we can just short-circuit
-    # and return 'root'. No module depends on root, so if it appears then it will be
-    # in changed_modules.
-    if modules.root in changed_modules:
-        return [modules.root]
     modules_to_test = set()
     for module in changed_modules:
         modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
-    return modules_to_test.union(set(changed_modules))
+    modules_to_test = modules_to_test.union(set(changed_modules))
+    # If we need to run all of the tests, then we should short-circuit and return 'root'
+    if modules.root in modules_to_test:
+        return [modules.root]
+    return modules_to_test
 
 
 def determine_tags_to_exclude(changed_modules):
@@ -284,7 +285,7 @@ def exec_sbt(sbt_args=()):
             print(line, end='')
     retcode = sbt_proc.wait()
 
-    if retcode > 0:
+    if retcode != 0:
         exit_from_command_with_retcode(sbt_cmd, retcode)
 
 

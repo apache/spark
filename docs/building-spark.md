@@ -117,9 +117,9 @@ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests 
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 0.13.1 bindings.
+By default Spark will build with Hive 1.2.1 bindings.
 {% highlight bash %}
-# Apache Hadoop 2.4.X with Hive 13 support
+# Apache Hadoop 2.4.X with Hive 1.2.1 support
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
 
@@ -128,8 +128,6 @@ To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` prop
 
     ./dev/change-scala-version.sh 2.11
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
-
-Spark does not yet support its JDBC component for Scala 2.11.
 
 # Spark Tests in Maven
 

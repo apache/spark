@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.sql.hive
 
-import java.util.EventListener
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
-import org.apache.spark.TaskContext
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.QueryTest
 
-/**
- * :: DeveloperApi ::
- *
- * Listener providing a callback function to invoke when a task's execution completes.
- */
-@DeveloperApi
-trait TaskCompletionListener extends EventListener {
-  def onTaskCompletion(context: TaskContext)
+class HiveContextSuite extends QueryTest with TestHiveSingleton {
+  test("newTemporaryConfiguration overwrites listener configurations") {
+    val conf = HiveContext.newTemporaryConfiguration()
+    assert(conf(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname) === "")
+    assert(conf(ConfVars.METASTORE_EVENT_LISTENERS.varname) === "")
+    assert(conf(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname) === "")
+  }
 }

@@ -110,7 +110,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
     val ctx = newCodeGenContext()
     val comparisons = genComparisons(ctx, ordering)
-    val code = s"""
+    val codeBody = s"""
       public SpecificOrdering generate($exprType[] expr) {
         return new SpecificOrdering(expr);
       }
@@ -133,6 +133,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
         }
       }"""
 
+    val code = new CodeAndComment(codeBody, ctx.getPlaceHolderToComments())
     logDebug(s"Generated Ordering: ${CodeFormatter.format(code)}")
 
     compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]

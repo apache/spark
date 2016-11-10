@@ -24,13 +24,13 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.util.Utils
 
 /**
@@ -696,19 +696,34 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("a table with an invalid path can be still dropped") {
+    val schema = StructType(StructField("int", IntegerType, true) :: Nil)
+    val tableIdent = TableIdentifier("test_drop_table_with_invalid_path")
+    catalog.createDataSourceTable(
+      tableIdent = tableIdent,
+      userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
+      provider = "json",
+      options = Map("path" -> "an invalid path"),
+      isExternal = false)
+
+    sql("DROP TABLE test_drop_table_with_invalid_path")
+  }
+
   test("SPARK-6024 wide schema support") {
     withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "4000") {
       withTable("wide_schema") {
         // We will need 80 splits for this schema if the threshold is 4000.
         val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))
-
+        val tableIdent = TableIdentifier("wide_schema")
+        val path = catalog.hiveDefaultTableFilePath(tableIdent)
         // Manually create a metastore data source table.
         catalog.createDataSourceTable(
-          tableIdent = TableIdentifier("wide_schema"),
+          tableIdent = tableIdent,
           userSpecifiedSchema = Some(schema),
           partitionColumns = Array.empty[String],
           provider = "json",
-          options = Map("path" -> "just a dummy path"),
+          options = Map("path" -> path),
           isExternal = false)
 
         invalidateTable("wide_schema")

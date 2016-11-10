@@ -114,6 +114,19 @@ private[spark] class Executor(
   private val heartbeatReceiverRef =
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
+  /**
+   * When an executor is unable to send heartbeats to the driver more than `HEARTBEAT_MAX_FAILURES`
+   * times, it should kill itself. The default value is 60. It means we will retry to send
+   * heartbeats about 10 minutes because the heartbeat interval is 10s.
+   */
+  private val HEARTBEAT_MAX_FAILURES = conf.getInt("spark.executor.heartbeat.maxFailures", 60)
+
+  /**
+   * Count the failure times of heartbeat. It should only be acessed in the heartbeat thread. Each
+   * successful heartbeat will reset it to 0.
+   */
+  private var heartbeatFailures = 0
+
   startDriverHeartbeater()
 
   def launchTask(
@@ -218,10 +231,22 @@ private[spark] class Executor(
           threwException = false
           res
         } finally {
+          val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
           if (freedMemory > 0) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
             if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false) && !threwException) {
+              throw new SparkException(errMsg)
+            } else {
+              logError(errMsg)
+            }
+          }
+
+          if (releasedLocks.nonEmpty) {
+            val errMsg =
+              s"${releasedLocks.size} block locks were not released by TID = $taskId:\n" +
+              releasedLocks.mkString("[", ", ", "]")
+            if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false) && !threwException) {
               throw new SparkException(errMsg)
             } else {
               logError(errMsg)
@@ -287,7 +312,7 @@ private[spark] class Executor(
           logInfo(s"Executor killed $taskName (TID $taskId)")
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
 
-        case cDE: CommitDeniedException =>
+        case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskEndReason
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
@@ -434,7 +459,9 @@ private[spark] class Executor(
             // JobProgressListener will hold an reference of it during
             // onExecutorMetricsUpdate(), then JobProgressListener can not see
             // the changes of metrics any more, so make a deep copy of it
-            val copiedMetrics = Utils.deserialize[TaskMetrics](Utils.serialize(metrics))
+            val copiedMetrics = Utils.deserialize[TaskMetrics](
+              Utils.serialize(metrics),
+              Utils.getContextOrSparkClassLoader)
             tasksMetrics += ((taskRunner.taskId, copiedMetrics))
           } else {
             // It will be copied by serialization
@@ -452,8 +479,16 @@ private[spark] class Executor(
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }
+      heartbeatFailures = 0
     } catch {
-      case NonFatal(e) => logWarning("Issue communicating with driver in heartbeater", e)
+      case NonFatal(e) =>
+        logWarning("Issue communicating with driver in heartbeater", e)
+        heartbeatFailures += 1
+        if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
+          logError(s"Exit as unable to send heartbeats to driver " +
+            s"more than $HEARTBEAT_MAX_FAILURES times")
+          System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
+        }
     }
   }
 

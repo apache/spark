@@ -1402,7 +1402,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
         self.caseSensitive = Param(self, "caseSensitive", "whether to do a case " +
                                    "sensitive comparison over the stop words")
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
-        defaultStopWords = stopWordsObj.English()
+        defaultStopWords = list(stopWordsObj.English())
         self._setDefault(stopWords=defaultStopWords)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)

@@ -95,15 +95,17 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated meaning the code to evaluated has already been added
       // as a function and called in advance. Just use it.
-      val code = s"/* ${this.toCommentSafeString} */"
-      GeneratedExpressionCode(code, subExprState.isNull, subExprState.value)
+      GeneratedExpressionCode(
+        ctx.registerComment(this.toString),
+        subExprState.isNull,
+        subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val primitive = ctx.freshName("primitive")
       val ve = GeneratedExpressionCode("", isNull, primitive)
       ve.code = genCode(ctx, ve)
       // Add `this` in the comment.
-      ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)
+      ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
     }
   }
 
@@ -215,14 +217,6 @@ abstract class Expression extends TreeNode[Expression] {
   override def simpleString: String = toString
 
   override def toString: String = prettyName + flatArguments.mkString("(", ",", ")")
-
-  /**
-   * Returns the string representation of this expression that is safe to be put in
-   * code comments of generated code.
-   */
-  protected def toCommentSafeString: String = this.toString
-    .replace("*/", "\\*\\/")
-    .replace("\\u", "\\\\u")
 }
 
 

@@ -677,7 +677,7 @@ object HiveTypeCoercion {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if left.dataType != right.dataType =>
-        findTightestCommonTypeToString(left.dataType, right.dataType).map { widestType =>
+        findWiderTypeForTwo(left.dataType, right.dataType).map { widestType =>
           val newLeft = if (left.dataType == widestType) left else Cast(left, widestType)
           val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
           If(pred, newLeft, newRight)

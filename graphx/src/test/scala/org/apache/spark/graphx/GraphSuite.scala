@@ -428,4 +428,29 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("unpersist graph RDD") {
+    withSpark { sc =>
+      val vert = sc.parallelize(List((1L, "a"), (2L, "b"), (3L, "c")), 1)
+      val edges = sc.parallelize(List(Edge[Long](1L, 2L), Edge[Long](1L, 3L)), 1)
+      val g0 = Graph(vert, edges)
+      val g = g0.partitionBy(PartitionStrategy.EdgePartition2D, 2)
+      val cc = g.connectedComponents()
+      assert(sc.getPersistentRDDs.nonEmpty)
+      cc.unpersist()
+      g.unpersist()
+      g0.unpersist()
+      vert.unpersist()
+      edges.unpersist()
+      assert(sc.getPersistentRDDs.isEmpty)
+    }
+  }
+
+  test("SPARK-14219: pickRandomVertex") {
+    withSpark { sc =>
+      val vert = sc.parallelize(List((1L, "a")), 1)
+      val edges = sc.parallelize(List(Edge[Long](1L, 1L)), 1)
+      val g0 = Graph(vert, edges)
+      assert(g0.pickRandomVertex() === 1L)
+    }
+  }
 }

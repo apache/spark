@@ -102,11 +102,8 @@ import org.apache.spark.sql.types.IntegerType
  */
 case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case p if !p.resolved => p
-    // We need to wait until this Aggregate operator is resolved.
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp  {
     case a: Aggregate => rewrite(a)
-    case p => p
   }
 
   def rewrite(a: Aggregate): Aggregate = {

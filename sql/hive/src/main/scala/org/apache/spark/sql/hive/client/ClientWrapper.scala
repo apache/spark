@@ -213,7 +213,7 @@ private[hive] class ClientWrapper(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = SessionState.get().getConf
+  def conf: HiveConf = state.getConf
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
@@ -496,12 +496,14 @@ private[hive] class ClientWrapper(
           // Throw an exception if there is an error in query processing.
           if (response.getResponseCode != 0) {
             driver.close()
+            CommandProcessorFactory.clean(conf)
             throw new QueryExecutionException(response.getErrorMessage)
           }
           driver.setMaxRows(maxRows)
 
           val results = shim.getDriverResults(driver)
           driver.close()
+          CommandProcessorFactory.clean(conf)
           results
 
         case _ =>

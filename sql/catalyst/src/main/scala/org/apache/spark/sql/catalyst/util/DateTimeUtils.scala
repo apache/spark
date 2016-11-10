@@ -55,6 +55,7 @@ object DateTimeUtils {
   // this is year -17999, calculation: 50 * daysIn400Year
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
+  final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
 
@@ -89,8 +90,8 @@ object DateTimeUtils {
 
   // reverse of millisToDays
   def daysToMillis(days: SQLDate): Long = {
-    val millisUtc = days.toLong * MILLIS_PER_DAY
-    millisUtc - threadLocalLocalTimeZone.get().getOffset(millisUtc)
+    val millisLocal = days.toLong * MILLIS_PER_DAY
+    millisLocal - getOffsetFromLocalMillis(millisLocal, threadLocalLocalTimeZone.get())
   }
 
   def dateToString(days: SQLDate): String =
@@ -820,13 +821,72 @@ object DateTimeUtils {
   }
 
   /**
+   * Lookup the offset for given millis seconds since 1970-01-01 00:00:00 in given timezone.
+   */
+  private def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
+    var guess = tz.getRawOffset
+    // the actual offset should be calculated based on milliseconds in UTC
+    val offset = tz.getOffset(millisLocal - guess)
+    if (offset != guess) {
+      guess = tz.getOffset(millisLocal - offset)
+      if (guess != offset) {
+        // fallback to do the reverse lookup using java.sql.Timestamp
+        // this should only happen near the start or end of DST
+        val days = Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+        val year = getYear(days)
+        val month = getMonth(days)
+        val day = getDayOfMonth(days)
+
+        var millisOfDay = (millisLocal % MILLIS_PER_DAY).toInt
+        if (millisOfDay < 0) {
+          millisOfDay += MILLIS_PER_DAY.toInt
+        }
+        val seconds = (millisOfDay / 1000L).toInt
+        val hh = seconds / 3600
+        val mm = seconds / 60 % 60
+        val ss = seconds % 60
+        val nano = millisOfDay % 1000 * 1000000
+
+        // create a Timestamp to get the unix timestamp (in UTC)
+        val timestamp = new Timestamp(year - 1900, month - 1, day, hh, mm, ss, nano)
+        guess = (millisLocal - timestamp.getTime).toInt
+      }
+    }
+    guess
+  }
+
+  /**
+   * Convert the timestamp `ts` from one timezone to another.
+   *
+   * TODO: Because of DST, the conversion between UTC and human time is not exactly one-to-one
+   * mapping, the conversion here may return wrong result, we should make the timestamp
+   * timezone-aware.
+   */
+  def convertTz(ts: SQLTimestamp, fromZone: TimeZone, toZone: TimeZone): SQLTimestamp = {
+    // We always use local timezone to parse or format a timestamp
+    val localZone = threadLocalLocalTimeZone.get()
+    val utcTs = if (fromZone.getID == localZone.getID) {
+      ts
+    } else {
+      // get the human time using local time zone, that actually is in fromZone.
+      val localTs = ts + localZone.getOffset(ts / 1000L) * 1000L  // in fromZone
+      localTs - getOffsetFromLocalMillis(localTs / 1000L, fromZone) * 1000L
+    }
+    if (toZone.getID == localZone.getID) {
+      utcTs
+    } else {
+      val localTs2 = utcTs + toZone.getOffset(utcTs / 1000L) * 1000L  // in toZone
+      // treat it as local timezone, convert to UTC (we could get the expected human time back)
+      localTs2 - getOffsetFromLocalMillis(localTs2 / 1000L, localZone) * 1000L
+    }
+  }
+
+  /**
    * Returns a timestamp of given timezone from utc timestamp, with the same string
    * representation in their timezone.
    */
   def fromUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    val tz = TimeZone.getTimeZone(timeZone)
-    val offset = tz.getOffset(time / 1000L)
-    time + offset * 1000L
+    convertTz(time, TimeZoneGMT, TimeZone.getTimeZone(timeZone))
   }
 
   /**
@@ -834,8 +894,15 @@ object DateTimeUtils {
    * string representation in their timezone.
    */
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    val tz = TimeZone.getTimeZone(timeZone)
-    val offset = tz.getOffset(time / 1000L)
-    time - offset * 1000L
+    convertTz(time, TimeZone.getTimeZone(timeZone), TimeZoneGMT)
+  }
+
+  /**
+   * Re-initialize the current thread's thread locals. Exposed for testing.
+   */
+  private[util] def resetThreadLocals(): Unit = {
+    threadLocalLocalTimeZone.remove()
+    threadLocalTimestampFormat.remove()
+    threadLocalDateFormat.remove()
   }
 }

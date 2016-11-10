@@ -23,8 +23,8 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{IntParam, _}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasSeed}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -33,7 +33,8 @@ import org.apache.spark.util.random.XORShiftRandom
 /**
  * Params for [[QuantileDiscretizer]].
  */
-private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol with HasOutputCol {
+private[feature] trait QuantileDiscretizerBase extends Params
+  with HasInputCol with HasOutputCol with HasSeed {
 
   /**
    * Maximum number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -73,6 +74,9 @@ final class QuantileDiscretizer(override val uid: String)
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group setParam */
+  def setSeed(value: Long): this.type = set(seed, value)
+
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     val inputFields = schema.fields
@@ -84,7 +88,8 @@ final class QuantileDiscretizer(override val uid: String)
   }
 
   override def fit(dataset: DataFrame): Bucketizer = {
-    val samples = QuantileDiscretizer.getSampledInput(dataset.select($(inputCol)), $(numBuckets))
+    val samples = QuantileDiscretizer
+      .getSampledInput(dataset.select($(inputCol)), $(numBuckets), $(seed))
       .map { case Row(feature: Double) => feature }
     val candidates = QuantileDiscretizer.findSplitCandidates(samples, $(numBuckets) - 1)
     val splits = QuantileDiscretizer.getSplits(candidates)
@@ -97,16 +102,23 @@ final class QuantileDiscretizer(override val uid: String)
 
 @Since("1.6.0")
 object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] with Logging {
+
+  /**
+   * Minimum number of samples required for finding splits, regardless of number of bins.  If
+   * the dataset has fewer rows than this value, the entire dataset will be used.
+   */
+  private[spark] val minSamplesRequired: Int = 10000
+
   /**
    * Sampling from the given dataset to collect quantile statistics.
    */
-  private[feature] def getSampledInput(dataset: DataFrame, numBins: Int): Array[Row] = {
+  private[feature] def getSampledInput(dataset: DataFrame, numBins: Int, seed: Long): Array[Row] = {
     val totalSamples = dataset.count()
     require(totalSamples > 0,
       "QuantileDiscretizer requires non-empty input dataset but was given an empty input.")
-    val requiredSamples = math.max(numBins * numBins, 10000)
-    val fraction = math.min(requiredSamples / dataset.count(), 1.0)
-    dataset.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
+    val requiredSamples = math.max(numBins * numBins, minSamplesRequired)
+    val fraction = math.min(requiredSamples.toDouble / dataset.count(), 1.0)
+    dataset.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt()).collect()
   }
 
   /**

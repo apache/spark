@@ -75,11 +75,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        Utils.tryOrIOException {
-          if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
-            throw new IOException(s"Unable to clear output " +
-              s"directory $qualifiedOutputPath prior to writing to it")
-          }
+        if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
+          throw new IOException(s"Unable to clear output " +
+            s"directory $qualifiedOutputPath prior to writing to it")
         }
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>

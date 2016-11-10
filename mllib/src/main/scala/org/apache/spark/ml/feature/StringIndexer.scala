@@ -160,15 +160,14 @@ class StringIndexerModel (
     }
 
     val metadata = NominalAttribute.defaultAttr
-      .withName($(inputCol)).withValues(labels).toMetadata()
+      .withName($(outputCol)).withValues(labels).toMetadata()
     // If we are skipping invalid records, filter them out.
-    val filteredDataset = (getHandleInvalid) match {
-      case "skip" => {
+    val filteredDataset = getHandleInvalid match {
+      case "skip" =>
         val filterer = udf { label: String =>
           labelToIndex.contains(label)
         }
         dataset.where(filterer(dataset($(inputCol))))
-      }
       case _ => dataset
     }
     filteredDataset.select(col("*"),

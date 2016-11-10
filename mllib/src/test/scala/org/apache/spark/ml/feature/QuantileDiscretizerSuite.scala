@@ -71,6 +71,26 @@ class QuantileDiscretizerSuite
     }
   }
 
+  test("Test splits on dataset larger than minSamplesRequired") {
+    val sqlCtx = SQLContext.getOrCreate(sc)
+    import sqlCtx.implicits._
+
+    val datasetSize = QuantileDiscretizer.minSamplesRequired + 1
+    val numBuckets = 5
+    val df = sc.parallelize((1.0 to datasetSize by 1.0).map(Tuple1.apply)).toDF("input")
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setOutputCol("result")
+      .setNumBuckets(numBuckets)
+      .setSeed(1)
+
+    val result = discretizer.fit(df).transform(df)
+    val observedNumBuckets = result.select("result").distinct.count
+
+    assert(observedNumBuckets === numBuckets,
+      "Observed number of buckets does not equal expected number of buckets.")
+  }
+
   test("read/write") {
     val t = new QuantileDiscretizer()
       .setInputCol("myInputCol")
@@ -93,7 +113,7 @@ private object QuantileDiscretizerSuite extends SparkFunSuite {
 
     val df = sc.parallelize(data.map(Tuple1.apply)).toDF("input")
     val discretizer = new QuantileDiscretizer().setInputCol("input").setOutputCol("result")
-      .setNumBuckets(numBucket)
+      .setNumBuckets(numBucket).setSeed(1)
     val result = discretizer.fit(df).transform(df)
 
     val transformedFeatures = result.select("result").collect()

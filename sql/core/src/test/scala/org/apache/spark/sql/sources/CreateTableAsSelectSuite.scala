@@ -19,20 +19,23 @@ package org.apache.spark.sql.sources
 
 import java.io.{File, IOException}
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DDLException
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class CreateTableAsSelectSuite
+  extends DataSourceTest
+  with SharedSQLContext
+  with BeforeAndAfterEach {
+
   protected override lazy val sql = caseInsensitiveContext.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     caseInsensitiveContext.read.json(rdd).registerTempTable("jt")
   }
@@ -40,13 +43,21 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   override def afterAll(): Unit = {
     try {
       caseInsensitiveContext.dropTempTable("jt")
+      Utils.deleteRecursively(path)
     } finally {
       super.afterAll()
     }
   }
 
-  after {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    path = Utils.createTempDir()
+    path.delete()
+  }
+
+  override def afterEach(): Unit = {
     Utils.deleteRecursively(path)
+    super.afterEach()
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT") {

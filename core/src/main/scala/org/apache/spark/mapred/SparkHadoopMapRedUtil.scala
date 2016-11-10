@@ -81,11 +81,8 @@ object SparkHadoopMapRedUtil extends Logging {
    * the driver in order to determine whether this attempt can commit (please see SPARK-4879 for
    * details).
    *
-   * Output commit coordinator is only contacted when the following two configurations are both set
-   * to `true`:
-   *
-   *  - `spark.speculation`
-   *  - `spark.hadoop.outputCommitCoordination.enabled`
+   * Output commit coordinator is only used when `spark.hadoop.outputCommitCoordination.enabled`
+   * is set to true (which is the default).
    */
   def commitTask(
       committer: MapReduceOutputCommitter,
@@ -112,11 +109,10 @@ object SparkHadoopMapRedUtil extends Logging {
     if (committer.needsTaskCommit(mrTaskContext)) {
       val shouldCoordinateWithDriver: Boolean = {
         val sparkConf = SparkEnv.get.conf
-        // We only need to coordinate with the driver if there are multiple concurrent task
-        // attempts, which should only occur if speculation is enabled
-        val speculationEnabled = sparkConf.getBoolean("spark.speculation", defaultValue = false)
-        // This (undocumented) setting is an escape-hatch in case the commit code introduces bugs
-        sparkConf.getBoolean("spark.hadoop.outputCommitCoordination.enabled", speculationEnabled)
+        // We only need to coordinate with the driver if there are concurrent task attempts.
+        // Note that this could happen even when speculation is not enabled (e.g. see SPARK-8029).
+        // This (undocumented) setting is an escape-hatch in case the commit code introduces bugs.
+        sparkConf.getBoolean("spark.hadoop.outputCommitCoordination.enabled", defaultValue = true)
       }
 
       if (shouldCoordinateWithDriver) {

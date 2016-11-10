@@ -25,6 +25,6 @@ run2 <- myfunc(-4L)
 
 sparkR.stop()
 
-if(run1 != 6) quit(save = "no", status = 1)
+if (run1 != 6) quit(save = "no", status = 1)
 
-if(run2 != -3) quit(save = "no", status = 1)
+if (run2 != -3) quit(save = "no", status = 1)

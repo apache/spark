@@ -56,7 +56,7 @@ trait DataSourceRegister {
    * overridden by children to provide a nice alias for the data source. For example:
    *
    * {{{
-   *   override def format(): String = "parquet"
+   *   override def shortName(): String = "parquet"
    * }}}
    *
    * @since 1.5.0
@@ -453,13 +453,13 @@ abstract class HadoopFsRelation private[sql](
           val jobConf = new JobConf(hadoopConf, this.getClass())
           val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
           if (pathFilter != null) {
-            Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
+            fs.listStatus(qualified, pathFilter)
           } else {
-            Try(fs.listStatus(qualified)).getOrElse(Array.empty)
+            fs.listStatus(qualified)
           }
         }.filterNot { status =>
           val name = status.getPath.getName
-          name.toLowerCase == "_temporary" || name.startsWith(".")
+          HadoopFsRelation.shouldFilterOut(name)
         }
 
         val (dirs, files) = statuses.partition(_.isDir)
@@ -843,6 +843,16 @@ abstract class HadoopFsRelation private[sql](
 }
 
 private[sql] object HadoopFsRelation extends Logging {
+
+  /** Checks if we should filter out this path name. */
+  def shouldFilterOut(pathName: String): Boolean = {
+    // TODO: We should try to filter out all files/dirs starting with "." or "_".
+    // The only reason that we are not doing it now is that Parquet needs to find those
+    // metadata files from leaf files returned by this methods. We should refactor
+    // this logic to not mix metadata files with data files.
+    pathName == "_SUCCESS" || pathName == "_temporary" || pathName.startsWith(".")
+  }
+
   // We don't filter files/directories whose name start with "_" except "_temporary" here, as
   // specific data sources may take advantages over them (e.g. Parquet _metadata and
   // _common_metadata files). "_temporary" directories are explicitly ignored since failed
@@ -851,19 +861,21 @@ private[sql] object HadoopFsRelation extends Logging {
   def listLeafFiles(fs: FileSystem, status: FileStatus): Array[FileStatus] = {
     logInfo(s"Listing ${status.getPath}")
     val name = status.getPath.getName.toLowerCase
-    if (name == "_temporary" || name.startsWith(".")) {
+    if (shouldFilterOut(name)) {
       Array.empty
     } else {
       // Dummy jobconf to get to the pathFilter defined in configuration
       val jobConf = new JobConf(fs.getConf, this.getClass())
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-      if (pathFilter != null) {
-        val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDir)
-        files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-      } else {
-        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-        files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-      }
+      val statuses =
+        if (pathFilter != null) {
+          val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDir)
+          files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+        } else {
+          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+          files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+        }
+      statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
     }
   }
 
@@ -891,7 +903,7 @@ private[sql] object HadoopFsRelation extends Logging {
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(serializableConfiguration.value)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      Try(listLeafFiles(fs, fs.getFileStatus(qualified))).getOrElse(Array.empty)
+      listLeafFiles(fs, fs.getFileStatus(qualified))
     }.map { status =>
       FakeFileStatus(
         status.getPath.toString,

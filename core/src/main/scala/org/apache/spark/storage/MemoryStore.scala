@@ -393,7 +393,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         }
         val valuesOrBytes = if (deserialized) "values" else "bytes"
         logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
-          blockId, valuesOrBytes, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
+          blockId, valuesOrBytes, Utils.bytesToString(size),
+          Utils.bytesToString(maxMemory - blocksMemoryUsed)))
       } else {
         // Tell the block manager that we couldn't put it in memory so that it can drop it to
         // disk if the block allows disk storage.
@@ -510,10 +511,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         val memoryToRelease = math.min(memory, unrollMemoryMap(taskAttemptId))
         if (memoryToRelease > 0) {
           unrollMemoryMap(taskAttemptId) -= memoryToRelease
-          if (unrollMemoryMap(taskAttemptId) == 0) {
-            unrollMemoryMap.remove(taskAttemptId)
-          }
           memoryManager.releaseUnrollMemory(memoryToRelease)
+        }
+        if (unrollMemoryMap(taskAttemptId) == 0) {
+          unrollMemoryMap.remove(taskAttemptId)
         }
       }
     }
@@ -529,10 +530,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         val memoryToRelease = math.min(memory, pendingUnrollMemoryMap(taskAttemptId))
         if (memoryToRelease > 0) {
           pendingUnrollMemoryMap(taskAttemptId) -= memoryToRelease
-          if (pendingUnrollMemoryMap(taskAttemptId) == 0) {
-            pendingUnrollMemoryMap.remove(taskAttemptId)
-          }
           memoryManager.releaseUnrollMemory(memoryToRelease)
+        }
+        if (pendingUnrollMemoryMap(taskAttemptId) == 0) {
+          pendingUnrollMemoryMap.remove(taskAttemptId)
         }
       }
     }

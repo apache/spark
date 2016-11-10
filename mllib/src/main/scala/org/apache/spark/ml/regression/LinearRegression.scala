@@ -735,16 +735,16 @@ class LinearRegressionSummary private[regression] (
  * {{{
  * \frac{\partial L}{\partial\w_i} =
  *     1/N \sum_j diff_j (x_{ij} - \bar{x_i}) / \hat{x_i}
- *   = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) - diffSum \bar{x_i}) / \hat{x_i})
+ *   = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) - diffSum \bar{x_i} / \hat{x_i})
  *   = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) + correction_i)
  * }}},
- * where correction_i = - diffSum \bar{x_i}) / \hat{x_i}
+ * where correction_i = - diffSum \bar{x_i} / \hat{x_i}
  *
  * A simple math can show that diffSum is actually zero, so we don't even
  * need to add the correction terms in the end. From the definition of diff,
  * {{{
  * diffSum = \sum_j (\sum_i w_i(x_{ij} - \bar{x_i}) / \hat{x_i} - (y_j - \bar{y}) / \hat{y})
- *         = N * (\sum_i w_i(\bar{x_i} - \bar{x_i}) / \hat{x_i} - (\bar{y_j} - \bar{y}) / \hat{y})
+ *         = N * (\sum_i w_i(\bar{x_i} - \bar{x_i}) / \hat{x_i} - (\bar{y} - \bar{y}) / \hat{y})
  *         = 0
  * }}}
  *

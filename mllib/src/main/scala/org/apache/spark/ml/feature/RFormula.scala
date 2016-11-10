@@ -101,6 +101,7 @@ class RFormula(override val uid: String) extends Estimator[RFormulaModel] with R
           encoderStages += new StringIndexer()
             .setInputCol(term)
             .setOutputCol(indexCol)
+          prefixesToRewrite(indexCol + "_") = term + "_"
           (term, indexCol)
         case _ =>
           (term, term)
@@ -198,7 +199,7 @@ class RFormulaModel private[feature](
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
     new RFormulaModel(uid, resolvedFormula, pipelineModel))
 
-  override def toString: String = s"RFormulaModel(${resolvedFormula}) (uid=$uid)"
+  override def toString: String = s"RFormulaModel($resolvedFormula) (uid=$uid)"
 
   private def transformLabel(dataset: DataFrame): DataFrame = {
     val labelName = resolvedFormula.label
@@ -268,14 +269,10 @@ private class VectorAttributeRewriter(
       val group = AttributeGroup.fromStructField(dataset.schema(vectorCol))
       val attrs = group.attributes.get.map { attr =>
         if (attr.name.isDefined) {
-          val name = attr.name.get
-          val replacement = prefixesToRewrite.filter { case (k, _) => name.startsWith(k) }
-          if (replacement.nonEmpty) {
-            val (k, v) = replacement.headOption.get
-            attr.withName(v + name.stripPrefix(k))
-          } else {
-            attr
+          val name = prefixesToRewrite.foldLeft(attr.name.get) { case (curName, (from, to)) =>
+            curName.replace(from, to)
           }
+          attr.withName(name)
         } else {
           attr
         }
@@ -284,7 +281,7 @@ private class VectorAttributeRewriter(
     }
     val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
     val rewrittenCol = dataset.col(vectorCol).as(vectorCol, metadata)
-    dataset.select((otherCols :+ rewrittenCol): _*)
+    dataset.select(otherCols :+ rewrittenCol : _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {

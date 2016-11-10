@@ -1013,7 +1013,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       withTempPath { path =>
-        Seq(2012 -> "a").toDF("year", "val").write.partitionBy("year").parquet(path.getAbsolutePath)
+        Seq(2012 -> "a", 1999 -> "b").toDF("year", "val").write.partitionBy("year")
+          .parquet(path.getAbsolutePath)
         val df = sqlContext.read.parquet(path.getAbsolutePath)
         checkAnswer(df.filter($"yEAr" > 2000).select($"val"), Row("a"))
       }
@@ -1185,5 +1186,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
+  }
+
+  test("SPARK-16664: persist with more than 200 columns") {
+    val size = 201L
+    val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(0L to size)))
+    val schema = (0L to size).map(i => StructField("name" + i, LongType, true))
+    val df = sqlContext.createDataFrame(rdd, StructType(schema))
+    assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
 }

@@ -44,10 +44,12 @@ class PlannerSuite extends SharedSQLContext {
         fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
     val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
-    // For the new aggregation code path, there will be four aggregate operator for
-    // distinct aggregations.
+    // For the new aggregation code path, there will be three aggregate operator for
+    // distinct aggregations. There used to be four aggregate operators because single
+    // distinct aggregate used to trigger DistinctAggregationRewriter rewrite. Now the
+    // the rewrite only happens when there are multiple distinct aggregations.
     assert(
-      aggregations.size == 2 || aggregations.size == 4,
+      aggregations.size == 2 || aggregations.size == 3,
       s"The plan of query $query does not have partial aggregations.")
   }
 

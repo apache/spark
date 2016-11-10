@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.util.TaskCompletionListener
+import org.apache.spark.util.{TaskCompletionListener, TaskFailureListener}
 
 
 object TaskContext {
@@ -108,6 +108,8 @@ abstract class TaskContext extends Serializable {
    * Adds a (Java friendly) listener to be executed on task completion.
    * This will be called in all situation - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   *
+   * Exceptions thrown by the listener will result in failure of the task.
    */
   def addTaskCompletionListener(listener: TaskCompletionListener): TaskContext
 
@@ -115,8 +117,30 @@ abstract class TaskContext extends Serializable {
    * Adds a listener in the form of a Scala closure to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   *
+   * Exceptions thrown by the listener will result in failure of the task.
    */
-  def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
+  def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext = {
+    addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = f(context)
+    })
+  }
+
+  /**
+   * Adds a listener to be executed on task failure.
+   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+   */
+  def addTaskFailureListener(listener: TaskFailureListener): TaskContext
+
+  /**
+   * Adds a listener to be executed on task failure.
+   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+   */
+  def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
+    addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = f(context, error)
+    })
+  }
 
   /**
    * Adds a callback function to be executed on task completion. An example use

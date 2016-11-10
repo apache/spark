@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.BinaryType;
 import org.apache.spark.sql.types.BooleanType;
@@ -610,8 +611,12 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);
+    } else if (other == null || !(other instanceof InternalRow)) {
+      return false;
+    } else {
+      throw new IllegalArgumentException(
+        "Cannot compare UnsafeRow to " + other.getClass().getName());
     }
-    return false;
   }
 
   /**

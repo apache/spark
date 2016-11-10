@@ -468,7 +468,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
-    >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed")
+    >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = gbt.fit(td)
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
@@ -491,12 +491,12 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
-                 maxIter=20, stepSize=0.1):
+                 maxIter=20, stepSize=0.1, seed=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 lossType="logistic", maxIter=20, stepSize=0.1)
+                 lossType="logistic", maxIter=20, stepSize=0.1, seed=None)
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -507,7 +507,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                               "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         lossType="logistic", maxIter=20, stepSize=0.1)
+                         lossType="logistic", maxIter=20, stepSize=0.1, seed=None)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -516,12 +516,12 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  lossType="logistic", maxIter=20, stepSize=0.1):
+                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  lossType="logistic", maxIter=20, stepSize=0.1)
+                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None)
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self.setParams._input_kwargs

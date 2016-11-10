@@ -472,10 +472,23 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
         === expected)
     }
-    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
-    test("2011-12-25 09:00:00.123456", "JST", "2011-12-25 18:00:00.123456")
-    test("2011-12-25 09:00:00.123456", "PST", "2011-12-25 01:00:00.123456")
-    test("2011-12-25 09:00:00.123456", "Asia/Shanghai", "2011-12-25 17:00:00.123456")
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
+        test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "JST", "2011-12-25 18:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "PST", "2011-12-25 01:00:00.123456")
+        test("2011-12-25 09:00:00.123456", "Asia/Shanghai", "2011-12-25 17:00:00.123456")
+      }
+    }
+
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
+      // Daylight Saving Time
+      test("2016-03-13 09:59:59.0", "PST", "2016-03-13 01:59:59.0")
+      test("2016-03-13 10:00:00.0", "PST", "2016-03-13 03:00:00.0")
+      test("2016-11-06 08:59:59.0", "PST", "2016-11-06 01:59:59.0")
+      test("2016-11-06 09:00:00.0", "PST", "2016-11-06 01:00:00.0")
+      test("2016-11-06 10:00:00.0", "PST", "2016-11-06 02:00:00.0")
+    }
   }
 
   test("to UTC timestamp") {
@@ -483,9 +496,49 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
         === expected)
     }
-    test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
-    test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
-    test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
-    test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
+
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
+        test("2011-12-25 09:00:00.123456", "UTC", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 18:00:00.123456", "JST", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 01:00:00.123456", "PST", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
+      }
+    }
+
+    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("PST")) {
+      // Daylight Saving Time
+      test("2016-03-13 01:59:59", "PST", "2016-03-13 09:59:59.0")
+      // 2016-03-13 02:00:00 PST does not exists
+      test("2016-03-13 02:00:00", "PST", "2016-03-13 10:00:00.0")
+      test("2016-03-13 03:00:00", "PST", "2016-03-13 10:00:00.0")
+      test("2016-11-06 00:59:59", "PST", "2016-11-06 07:59:59.0")
+      // 2016-11-06 01:00:00 PST could be 2016-11-06 08:00:00 UTC or 2016-11-06 09:00:00 UTC
+      test("2016-11-06 01:00:00", "PST", "2016-11-06 09:00:00.0")
+      test("2016-11-06 01:59:59", "PST", "2016-11-06 09:59:59.0")
+      test("2016-11-06 02:00:00", "PST", "2016-11-06 10:00:00.0")
+    }
+  }
+
+  test("daysToMillis and millisToDays") {
+    // There are some days are skipped entirely in some timezone, skip them here.
+    val skipped_days = Map[String, Int](
+      "Kwajalein" -> 8632,
+      "Pacific/Apia" -> 15338,
+      "Pacific/Enderbury" -> 9131,
+      "Pacific/Fakaofo" -> 15338,
+      "Pacific/Kiritimati" -> 9131,
+      "Pacific/Kwajalein" -> 8632,
+      "MIT" -> 15338)
+    for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
+        val skipped = skipped_days.getOrElse(tz.getID, Int.MinValue)
+        (-20000 to 20000).foreach { d =>
+          if (d != skipped) {
+            assert(millisToDays(daysToMillis(d)) === d)
+          }
+        }
+      }
+    }
   }
 }

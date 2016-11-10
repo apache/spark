@@ -284,7 +284,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
   <td>(none)</td>
   <td>
-    Set the max size of the file by which the executor logs will be rolled over.
+    Set the max size of the file in bytes by which the executor logs will be rolled over.
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
@@ -296,7 +296,7 @@ Apart from these, the following properties are also available, and may be useful
     Set the strategy of rolling of executor logs. By default it is disabled. It can
     be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
     use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
-    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
+    For "size", use <code>spark.executor.logs.rolling.maxSize</code> to set
     the maximum file size for rolling.
   </td>
 </tr>
@@ -749,7 +749,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.offHeap.size</code></td>
   <td>0</td>
   <td>
-    The absolute amount of memory which can be used for off-heap allocation.
+    The absolute amount of memory in bytes which can be used for off-heap allocation.
     This setting has no impact on heap memory usage, so if your executors' total memory consumption must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
     This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
   </td>

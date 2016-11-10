@@ -71,6 +71,7 @@ private[deploy] class Master(
   private val RETAINED_DRIVERS = conf.getInt("spark.deploy.retainedDrivers", 200)
   private val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   private val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
+  private val MAX_EXECUTOR_RETRIES = conf.getInt("spark.deploy.maxExecutorRetries", 10)
 
   val workers = new HashSet[WorkerInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
@@ -284,19 +285,20 @@ private[deploy] class Master(
 
             val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
-            if (!normalExit) {
-              if (appInfo.incrementRetryCount() < ApplicationState.MAX_NUM_RETRY) {
-                schedule()
-              } else {
-                val execs = appInfo.executors.values
-                if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                  logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
-                    s"${appInfo.retryCount} times; removing it")
-                  removeApplication(appInfo, ApplicationState.FAILED)
-                }
+            // Important note: this code path is not exercised by tests, so be very careful when
+            // changing this `if` condition.
+            if (!normalExit
+                && appInfo.incrementRetryCount() >= MAX_EXECUTOR_RETRIES
+                && MAX_EXECUTOR_RETRIES >= 0) { // < 0 disables this application-killing path
+              val execs = appInfo.executors.values
+              if (!execs.exists(_.state == ExecutorState.RUNNING)) {
+                logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
+                  s"${appInfo.retryCount} times; removing it")
+                removeApplication(appInfo, ApplicationState.FAILED)
               }
             }
           }
+          schedule()
         }
         case None =>
           logWarning(s"Got status update for unknown executor $appId/$execId")
@@ -703,15 +705,28 @@ private[deploy] class Master(
    * every time a new app joins or resource availability changes.
    */
   private def schedule(): Unit = {
-    if (state != RecoveryState.ALIVE) { return }
+    if (state != RecoveryState.ALIVE) {
+      return
+    }
     // Drivers take strict precedence over executors
-    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
-    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
-      for (driver <- waitingDrivers) {
+    val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
+    val numWorkersAlive = shuffledAliveWorkers.size
+    var curPos = 0
+    for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
+      // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
+      // start from the last worker that was assigned a driver, and continue onwards until we have
+      // explored all alive workers.
+      var launched = false
+      var numWorkersVisited = 0
+      while (numWorkersVisited < numWorkersAlive && !launched) {
+        val worker = shuffledAliveWorkers(curPos)
+        numWorkersVisited += 1
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
+          launched = true
         }
+        curPos = (curPos + 1) % numWorkersAlive
       }
     }
     startExecutorsOnWorkers()

@@ -14,8 +14,8 @@ include:
 
 # These allow the documentation to be updated with newer releases
 # of Spark, Scala, and Mesos.
-SPARK_VERSION: 1.6.1
-SPARK_VERSION_SHORT: 1.6.1
+SPARK_VERSION: 1.6.3
+SPARK_VERSION_SHORT: 1.6.3
 SCALA_BINARY_VERSION: "2.10"
 SCALA_VERSION: "2.10.5"
 MESOS_VERSION: 0.21.0

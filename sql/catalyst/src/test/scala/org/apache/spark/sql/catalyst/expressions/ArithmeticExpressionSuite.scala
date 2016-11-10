@@ -172,6 +172,17 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     // }
   }
 
+  test("SPARK-17617: % (Remainder) double % double on super big double") {
+    val leftDouble = Literal(-5083676433652386516D)
+    val rightDouble = Literal(10D)
+    checkEvaluation(Remainder(leftDouble, rightDouble), -6.0D)
+
+    // Float has smaller precision
+    val leftFloat = Literal(-5083676433652386516F)
+    val rightFloat = Literal(10F)
+    checkEvaluation(Remainder(leftFloat, rightFloat), -2.0F)
+  }
+
   test("Abs") {
     testNumericDataTypes { convert =>
       val input = Literal(convert(1))

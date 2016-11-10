@@ -18,7 +18,8 @@
 package org.apache.spark.util
 
 import java.util.concurrent._
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+
 import scala.util.DynamicVariable
 
 import org.apache.spark.SparkContext
@@ -50,6 +51,12 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
   private val started = new AtomicBoolean(false)
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
+
+  /** A counter for dropped events. It will be reset every time we log it. */
+  private val droppedEventsCounter = new AtomicLong(0L)
+
+  /** When `droppedEventsCounter` was logged last time in milliseconds. */
+  @volatile private var lastReportTimestamp = 0L
 
   // Indicate if we are processing some event
   // Guarded by `self`
@@ -117,6 +124,24 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
       eventLock.release()
     } else {
       onDropEvent(event)
+      droppedEventsCounter.incrementAndGet()
+    }
+
+    val droppedEvents = droppedEventsCounter.get
+    if (droppedEvents > 0) {
+      // Don't log too frequently
+      if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
+        // There may be multiple threads trying to decrease droppedEventsCounter.
+        // Use "compareAndSet" to make sure only one thread can win.
+        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
+        // then that thread will update it.
+        if (droppedEventsCounter.compareAndSet(droppedEvents, 0)) {
+          val prevLastReportTimestamp = lastReportTimestamp
+          lastReportTimestamp = System.currentTimeMillis()
+          logWarning(s"Dropped $droppedEvents SparkListenerEvents since " +
+            new java.util.Date(prevLastReportTimestamp))
+        }
+      }
     }
   }
 

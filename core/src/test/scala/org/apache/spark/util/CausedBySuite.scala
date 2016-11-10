@@ -17,18 +17,40 @@
 
 package org.apache.spark.util
 
-/**
- * Exception thrown when there is an exception in
- * executing the callback in TaskCompletionListener.
- */
-private[spark]
-class TaskCompletionListenerException(errorMessages: Seq[String]) extends Exception {
+import org.apache.spark.SparkFunSuite
 
-  override def getMessage: String = {
-    if (errorMessages.size == 1) {
-      errorMessages.head
-    } else {
-      errorMessages.zipWithIndex.map { case (msg, i) => s"Exception $i: $msg" }.mkString("\n")
+class CausedBySuite extends SparkFunSuite {
+
+  test("For an error without a cause, should return the error") {
+    val error = new Exception
+
+    val causedBy = error match {
+      case CausedBy(e) => e
     }
+
+    assert(causedBy === error)
+  }
+
+  test("For an error with a cause, should return the cause of the error") {
+    val cause = new Exception
+    val error = new Exception(cause)
+
+    val causedBy = error match {
+      case CausedBy(e) => e
+    }
+
+    assert(causedBy === cause)
+  }
+
+  test("For an error with a cause that itself has a cause, return the root cause") {
+    val causeOfCause = new Exception
+    val cause = new Exception(causeOfCause)
+    val error = new Exception(cause)
+
+    val causedBy = error match {
+      case CausedBy(e) => e
+    }
+
+    assert(causedBy === causeOfCause)
   }
 }

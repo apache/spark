@@ -28,6 +28,9 @@ import org.apache.spark.annotation.DeveloperApi
  * space overhead.
  *
  * Under the hood, it uses our OpenHashSet implementation.
+ *
+ * NOTE: when using numeric type as the value type, the user of this class should be careful to
+ * distinguish between the 0/0.0/0L and non-exist value
  */
 @DeveloperApi
 private[spark]

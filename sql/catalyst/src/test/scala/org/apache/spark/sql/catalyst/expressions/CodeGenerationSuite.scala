@@ -59,6 +59,28 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-13242: case-when expression with large number of branches (or cases)") {
+    val cases = 50
+    val clauses = 20
+
+    // Generate an individual case
+    def generateCase(n: Int): Seq[Expression] = {
+      val condition = (1 to clauses)
+        .map(c => EqualTo(BoundReference(0, StringType, false), Literal(s"$c:$n")))
+        .reduceLeft[Expression]((l, r) => Or(l, r))
+      Seq(condition, Literal(n))
+    }
+
+    val expression = CaseWhen((1 to cases).flatMap(generateCase(_)))
+
+    val plan = GenerateMutableProjection.generate(Seq(expression))()
+    val input = new GenericMutableRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
+    val actual = plan(input).toSeq(Seq(expression.dataType))
+
+    assert(actual(0) == cases)
+  }
+
+
   test("test generated safe and unsafe projection") {
     val schema = new StructType(Array(
       StructField("a", StringType, true),
@@ -115,5 +137,48 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       EqualTo(BoundReference(0, StringType, false), Literal.create("\\u", StringType)),
       true,
       InternalRow(UTF8String.fromString("\\u")))
+  }
+
+  test("check compilation error doesn't occur caused by specific literal") {
+    // The end of comment (*/) should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("*/Compilation error occurs/*", StringType) :: Nil)
+
+    // `\u002A` is `*` and `\u002F` is `/`
+    // so if the end of comment consists of those characters in queries, we need to escape them.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002A/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002A/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002a/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002a/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\u002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\\\u002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\002fCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\\\002fCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\002A\\002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\002A\\002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\002A\\\\002FCompilation error occurs/*", StringType) :: Nil)
+
+    // \ u002X is an invalid unicode literal so it should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002X/Compilation error occurs", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002X/Compilation error occurs", StringType) :: Nil)
+
+    // \ u001 is an invalid unicode literal so it should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u001/Compilation error occurs", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u001/Compilation error occurs", StringType) :: Nil)
   }
 }

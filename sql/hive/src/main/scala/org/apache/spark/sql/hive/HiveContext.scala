@@ -753,6 +753,13 @@ private[hive] object HiveContext {
     // hive.metastore.uris is not set.
     propMap.put(ConfVars.METASTOREURIS.varname, "")
 
+    // The execution client will generate garbage events, therefore the listeners that are generated
+    // for the execution clients are useless. In order to not output garbage, we don't generate
+    // these listeners.
+    propMap.put(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
+
     propMap.toMap
   }
 

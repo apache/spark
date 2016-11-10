@@ -152,7 +152,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         s"""if (!nullBits[$i]) arr[$i] = c$i;"""
     }.mkString("\n")
 
-    val code = s"""
+    val codeBody = s"""
     public SpecificProjection generate($exprType[] expr) {
       return new SpecificProjection(expr);
     }
@@ -230,6 +230,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     }
     """
 
+    val code = new CodeAndComment(codeBody, ctx.getPlaceHolderToComments())
     logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n" +
       CodeFormatter.format(code))
 

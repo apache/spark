@@ -555,9 +555,9 @@ private[spark] class TaskSetManager(
         // Jump to the next locality level, and reset lastLaunchTime so that the next locality
         // wait timer doesn't immediately expire
         lastLaunchTime += localityWaits(currentLocalityIndex)
-        currentLocalityIndex += 1
-        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex)} after waiting for " +
+        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
           s"${localityWaits(currentLocalityIndex)}ms")
+        currentLocalityIndex += 1
       } else {
         return myLocalityLevels(currentLocalityIndex)
       }
@@ -720,7 +720,16 @@ private[spark] class TaskSetManager(
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
       put(info.executorId, clock.getTimeMillis())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
-    addPendingTask(index)
+
+    if (successful(index)) {
+      logInfo(
+        s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, " +
+          "but another instance of the task has already succeeded, " +
+          "so not re-queuing the task to be re-executed.")
+    } else {
+      addPendingTask(index)
+    }
+
     if (!isZombie && state != TaskState.KILLED
         && reason.isInstanceOf[TaskFailedReason]
         && reason.asInstanceOf[TaskFailedReason].countTowardsTaskFailures) {

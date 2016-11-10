@@ -87,12 +87,24 @@ private[spark] abstract class Task[T](
     }
     try {
       (runTask(context), context.collectAccumulators())
+    } catch {
+      case e: Throwable =>
+        // Catch all errors; run task failure callbacks, and rethrow the exception.
+        try {
+          context.markTaskFailed(e)
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
+        throw e
     } finally {
+      // Call the task completion callbacks.
       context.markTaskCompleted()
       try {
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
           SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+          SparkEnv.get.blockManager.memoryStore.releasePendingUnrollMemoryForThisTask()
           // Notify any tasks waiting for execution memory to be freed to wake up and try to
           // acquire memory again. This makes impossible the scenario where a task sleeps forever
           // because there are no other tasks left to notify it. Since this is safe to do but may

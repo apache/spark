@@ -32,7 +32,7 @@ test_that("no package specified doesn't add packages flag", {
 })
 
 test_that("multiple packages don't produce a warning", {
-  expect_that(generateSparkSubmitArgs("", "", "", "", c("A", "B")), not(gives_warning()))
+  expect_warning(generateSparkSubmitArgs("", "", "", "", c("A", "B")), NA)
 })
 
 test_that("sparkJars sparkPackages as character vectors", {

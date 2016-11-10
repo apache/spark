@@ -99,7 +99,10 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] with M
   val stages: Param[Array[PipelineStage]] = new Param(this, "stages", "stages of the pipeline")
 
   /** @group setParam */
-  def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
+  def setStages(value: Array[_ <: PipelineStage]): this.type = {
+    set(stages, value.asInstanceOf[Array[PipelineStage]])
+    this
+  }
 
   // Below, we clone stages so that modifications to the list of stages will not change
   // the Param value in the Pipeline.
