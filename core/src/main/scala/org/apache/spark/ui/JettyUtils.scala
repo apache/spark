@@ -314,12 +314,12 @@ private[spark] object JettyUtils extends Logging {
 
         val securePort =
           if (currentPort != 0) {
-            // If the new port wraps around, do not try a privileged port.
-            if (1024 <= sslOptions.port && sslOptions.port < 65536) {
-              sslOptions.port
-            } else {
-              // If the new port wraps around, do not try a privilege port
+            if (sslOptions.port == 0) {
+              // If the new port wraps around, do not try a privileged port
               (currentPort + 400 - 1024) % (65536 - 1024) + 1024
+            } else {
+              // use sslOptions.port value as securePort
+              sslOptions.port
             }
           } else {
             0

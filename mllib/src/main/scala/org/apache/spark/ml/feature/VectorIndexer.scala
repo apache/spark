@@ -66,7 +66,7 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *     - This helps process a dataset of unknown vectors into a dataset with some continuous
  *       features and some categorical features. The choice between continuous and categorical
  *       is based upon a maxCategories parameter.
- *     - Set maxCategories to the maximum number of categories which categorical feature should have.
+ *     - Set maxCategories to the maximum number of categories that any categorical feature should have.
  *     - E.g.: Feature 0 has unique values {-1.0, 0.0}, and feature 1 values {1.0, 3.0, 5.0}.
  *       If maxCategories = 2, then feature 0 will be declared categorical and use indices {0, 1},
  *       and feature 1 will be declared continuous.
