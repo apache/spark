@@ -101,7 +101,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
           ByteBuffer encrypted = ByteBuffer.wrap(saslClient.wrap(toEncrypt, 0, toEncrypt.length));
 
           client.sendRpcSync(encrypted, conf.saslRTTimeoutMs());
-          AesCipher cipher = new AesCipher(configMessage);
+          AesCipher cipher = new AesCipher(configMessage, conf);
           logger.info("Enabling AES cipher for client channel {}", client);
           cipher.addToChannel(channel);
           saslClient.dispose();

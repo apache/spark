@@ -20,49 +20,38 @@ package org.apache.spark.network.util;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
-import java.util.LinkedList;
 
 import io.netty.buffer.ByteBuf;
 
 public class ByteArrayReadableChannel implements ReadableByteChannel {
-  private final LinkedList<ByteBuf> buffers = new LinkedList<>();
-  private int remain = 0;
+  private ByteBuf data;
 
   public int readableBytes() {
-    return remain;
+    return data.readableBytes();
   }
 
   public void feedData(ByteBuf buf) {
-    remain += buf.readableBytes();
-    buffers.add(buf);
+    data = buf;
   }
 
   @Override
   public int read(ByteBuffer dst) throws IOException {
     int totalRead = 0;
-    while (!buffers.isEmpty() && dst.remaining() > 0) {
-      ByteBuf first = buffers.getFirst();
-      int bytesToRead = Math.min(first.readableBytes(), dst.remaining());
-      ByteBuffer src = first.readSlice(bytesToRead).nioBuffer();
-      dst.put(src);
-
-      if (first.readableBytes() == 0) {
-        buffers.removeFirst().release();
-      }
-
+    while (data.readableBytes() > 0 && dst.remaining() > 0) {
+      int bytesToRead = Math.min(data.readableBytes(), dst.remaining());
+      dst.put(data.readSlice(bytesToRead).nioBuffer());
       totalRead += bytesToRead;
     }
 
-    remain -= totalRead;
+    if (data.readableBytes() == 0) {
+      data.release();
+    }
 
     return totalRead;
   }
 
   @Override
   public void close() throws IOException {
-    while (!buffers.isEmpty()) {
-      buffers.removeFirst().release();
-    }
   }
 
   @Override

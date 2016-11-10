@@ -32,14 +32,16 @@ public class AesConfigMessage implements Encodable {
   /** Serialization tag used to catch incorrect payloads. */
   private static final byte TAG_BYTE = (byte) 0xEB;
 
-  public int keySize;
   public byte[] inKey;
   public byte[] outKey;
   public byte[] inIv;
   public byte[] outIv;
 
-  public AesConfigMessage(int keySize, byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
-    this.keySize = keySize;
+  public AesConfigMessage(byte[] inKey, byte[] inIv, byte[] outKey, byte[] outIv) {
+    if (inKey == null || inIv == null || outKey == null || outIv == null) {
+      throw new IllegalArgumentException("Cipher Key or IV must not be null!");
+    }
+
     this.inKey = inKey;
     this.inIv = inIv;
     this.outKey = outKey;
@@ -48,21 +50,18 @@ public class AesConfigMessage implements Encodable {
 
   @Override
   public int encodedLength() {
-    return 1 + 4 + ((inKey != null && inIv != null && outKey != null && outIv != null) ?
-      Encoders.ByteArrays.encodedLength(inKey) + Encoders.ByteArrays.encodedLength(inKey) +
-      Encoders.ByteArrays.encodedLength(inIv) + Encoders.ByteArrays.encodedLength(outIv) : 0);
+    return 1 +
+      Encoders.ByteArrays.encodedLength(inKey) + Encoders.ByteArrays.encodedLength(outKey) +
+      Encoders.ByteArrays.encodedLength(inIv) + Encoders.ByteArrays.encodedLength(outIv);
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeByte(TAG_BYTE);
-    buf.writeInt(keySize);
-    if (inKey != null && inIv != null && outKey != null && outIv != null) {
-      Encoders.ByteArrays.encode(buf, inKey);
-      Encoders.ByteArrays.encode(buf, inIv);
-      Encoders.ByteArrays.encode(buf, outKey);
-      Encoders.ByteArrays.encode(buf, outIv);
-    }
+    Encoders.ByteArrays.encode(buf, inKey);
+    Encoders.ByteArrays.encode(buf, inIv);
+    Encoders.ByteArrays.encode(buf, outKey);
+    Encoders.ByteArrays.encode(buf, outIv);
   }
 
   /**
@@ -92,13 +91,11 @@ public class AesConfigMessage implements Encodable {
         + " (maybe your client does not have AES enabled?)");
     }
 
-    int keySize = buf.readInt();
-
     byte[] outKey = Encoders.ByteArrays.decode(buf);
     byte[] outIv = Encoders.ByteArrays.decode(buf);
     byte[] inKey = Encoders.ByteArrays.decode(buf);
     byte[] inIv = Encoders.ByteArrays.decode(buf);
-    return new AesConfigMessage(keySize, inKey, inIv, outKey, outIv);
+    return new AesConfigMessage(inKey, inIv, outKey, outIv);
   }
 
 }

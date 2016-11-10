@@ -59,22 +59,12 @@ public class AesCipher {
   private final IvParameterSpec outIvSpec;
   private final Properties properties;
 
-  public AesCipher(
-      Properties properties,
-      byte[] inKey,
-      byte[] outKey,
-      byte[] inIv,
-      byte[] outIv) throws IOException {
-    this.properties = properties;
-    inKeySpec = new SecretKeySpec(inKey, "AES");
-    inIvSpec = new IvParameterSpec(inIv);
-    outKeySpec = new SecretKeySpec(outKey, "AES");
-    outIvSpec = new IvParameterSpec(outIv);
-  }
-
-  public AesCipher(AesConfigMessage configMessage) throws IOException  {
-    this(new Properties(), configMessage.inKey, configMessage.outKey,
-      configMessage.inIv, configMessage.outIv);
+  public AesCipher(AesConfigMessage configMessage, TransportConf conf) throws IOException  {
+    this.properties = CryptoStreamUtils.toCryptoConf(conf);
+    this.inKeySpec = new SecretKeySpec(configMessage.inKey, "AES");
+    this.inIvSpec = new IvParameterSpec(configMessage.inIv);
+    this.outKeySpec = new SecretKeySpec(configMessage.outKey, "AES");
+    this.outIvSpec = new IvParameterSpec(configMessage.outIv);
   }
 
   /**
@@ -131,7 +121,7 @@ public class AesCipher {
       random.nextBytes(inIv);
       random.nextBytes(outIv);
 
-      return new AesConfigMessage(keySize, inKey, inIv, outKey, outIv);
+      return new AesConfigMessage(inKey, inIv, outKey, outIv);
     } catch (Exception e) {
       logger.error("AES config error", e);
       throw Throwables.propagate(e);
@@ -187,8 +177,7 @@ public class AesCipher {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
-      ByteBuf in = (ByteBuf) data;
-      byteChannel.feedData(in);
+      byteChannel.feedData((ByteBuf) data);
 
       byte[] decryptedData = new byte[byteChannel.readableBytes()];
       int offset = 0;

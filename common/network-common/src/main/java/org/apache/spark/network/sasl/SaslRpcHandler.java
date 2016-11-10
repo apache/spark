@@ -117,7 +117,6 @@ class SaslRpcHandler extends RpcHandler {
     // messages are being written to the channel while negotiation is still going on.
     if (saslServer.isComplete()) {
       if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
-        logger.debug("SASL authentication successful for channel {}", client);
         complete(true);
         return;
       }
@@ -143,7 +142,7 @@ class SaslRpcHandler extends RpcHandler {
         ByteBuffer decrypted = ByteBuffer.wrap(saslServer.unwrap(encrypted, 0 , encrypted.length));
 
         AesConfigMessage configMessage = AesConfigMessage.decodeMessage(decrypted);
-        AesCipher cipher = new AesCipher(configMessage);
+        AesCipher cipher = new AesCipher(configMessage, conf);
 
         // Send response back to client to confirm that server accept config.
         callback.onSuccess(JavaUtils.stringToBytes(AesCipher.TRANSFORM));
