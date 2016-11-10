@@ -511,15 +511,15 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
   }
 
   /**
-    * Return a new "state" DStream where the state for each key is updated by applying
-    * the given function on the previous state of the key and the new values of the key.
-    * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
-    * @param updateFunc State update function. If `this` function returns None, then
-    *                   corresponding state key-value pair will be eliminated.
-    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
-    *                    DStream.
-    * @tparam S State type
-    */
+   * Return a new "state" DStream where the state for each key is updated by applying
+   * the given function on the previous state of the key and the new values of the key.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
+   * @param updateFunc State update function. If `this` function returns None, then
+   *                   corresponding state key-value pair will be eliminated.
+   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
+   *                    DStream.
+   * @tparam S State type
+   */
   def updateStateByKey[S: ClassTag](updateFunc: (Time, K, Seq[V], Option[S]) => Option[S],
       partitioner: Partitioner,
       rememberPartitioner: Boolean,
