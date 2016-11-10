@@ -18,12 +18,16 @@
 package org.apache.spark.scheduler
 
 import java.io.File
+import java.util.Date
 import java.util.concurrent.TimeoutException
+
+import org.apache.hadoop.mapreduce.TaskType
+import org.apache.spark.internal.io.{SparkHadoopWriterUtils, HadoopMapRedCommitProtocol, FileCommitProtocol}
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.apache.hadoop.mapred.{JobConf, OutputCommitter, TaskAttemptContext, TaskAttemptID}
+import org.apache.hadoop.mapred._
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -222,6 +226,8 @@ private case class OutputCommitFunctions(tempDirPath: String) {
       if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
   }
 
+  private val jobId = new SerializableWritable(SparkHadoopWriterUtils.createJobID(new Date, 0))
+
   private def runCommitWithProvidedCommitter(
       ctx: TaskContext,
       iter: Iterator[Int],
@@ -229,14 +235,15 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     def jobConf = new JobConf {
       override def getOutputCommitter(): OutputCommitter = outputCommitter
     }
-    val sparkHadoopWriter = new SparkHadoopWriter(jobConf) {
-      override def newTaskAttemptContext(
-        conf: JobConf,
-        attemptId: TaskAttemptID): TaskAttemptContext = {
-        mock(classOf[TaskAttemptContext])
-      }
-    }
-    sparkHadoopWriter.setup(ctx.stageId, ctx.partitionId, ctx.attemptNumber)
-    sparkHadoopWriter.commit()
+    val committer = FileCommitProtocol.instantiate(
+      className = classOf[HadoopMapRedCommitProtocol].getName,
+      jobId = jobId.value.getId.toString,
+      outputPath = jobConf.get("mapred.output.dir"),
+      isAppend = false)
+    val taskAttemptId = (ctx.taskAttemptId % Int.MaxValue).toInt
+    val attemptId = new TaskAttemptID(new TaskID(jobId.value, TaskType.MAP, ctx.partitionId), taskAttemptId)
+    val taskContext = new TaskAttemptContextImpl(jobConf, attemptId)
+    committer.setupTask(taskContext)
+    committer.commitTask(taskContext)
   }
 }

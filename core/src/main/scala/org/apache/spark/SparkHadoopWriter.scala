@@ -17,144 +17,178 @@
 
 package org.apache.spark
 
-import java.io.IOException
 import java.text.NumberFormat
-import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
+import org.apache.spark.executor.OutputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.SparkHadoopWriterUtils
-import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.rdd.HadoopRDD
-import org.apache.spark.util.SerializableJobConf
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.internal.io.{HadoopMapRedCommitProtocol, HadoopMapReduceCommitProtocol, FileCommitProtocol, SparkHadoopWriterUtils}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.{Utils, SerializableJobConf}
+
+import scala.reflect.ClassTag
+
 
 /**
- * Internal helper class that saves an RDD using a Hadoop OutputFormat.
- *
- * Saves the RDD using a JobConf, which should contain an output key class, an output value class,
- * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
+ * A helper object that saves an RDD using a Hadoop OutputFormat
+ * (from the old mapred API).
  */
 private[spark]
-class SparkHadoopWriter(jobConf: JobConf) extends Logging with Serializable {
+object SparkHadoopMapRedWriter extends Logging {
 
-  private val now = new Date()
-  private val conf = new SerializableJobConf(jobConf)
+  /**
+   * Basic work flow of this command is:
+   * 1. Driver side setup, prepare the data source and hadoop configuration for the write job to
+   *    be issued.
+   * 2. Issues a write job consists of one or more executor side tasks, each of which writes all
+   *    rows within an RDD partition.
+   * 3. If no exception is thrown in a task, commits that task, otherwise aborts that task;  If any
+   *    exception is thrown during task commitment, also aborts that task.
+   * 4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
+   *    thrown during job commitment, also aborts the job.
+   */
+  def write[K, V: ClassTag](
+      rdd: RDD[(K, V)],
+      hadoopConf: JobConf): Unit = {
+    // Extract context and configuration from RDD.
+    val sparkContext = rdd.context
+    val stageId = rdd.id
+    val sparkConf = rdd.conf
+    val conf = new SerializableJobConf(hadoopConf)
 
-  private var jobID = 0
-  private var splitID = 0
-  private var attemptID = 0
-  private var jID: SerializableWritable[JobID] = null
-  private var taID: SerializableWritable[TaskAttemptID] = null
+    // Set up a job.
+    val jobTrackerId = SparkHadoopWriterUtils.createJobTrackerID(new Date())
+    val jobAttemptId = new SerializableWritable[JobID](SparkHadoopWriterUtils.createJobID(new Date(), stageId))
+    val jobContext = new JobContextImpl(conf.value, jobAttemptId.value)
+    val format = conf.value.getOutputFormat.getClass
 
-  @transient private var writer: RecordWriter[AnyRef, AnyRef] = null
-  @transient private var format: OutputFormat[AnyRef, AnyRef] = null
-  @transient private var committer: OutputCommitter = null
-  @transient private var jobContext: JobContext = null
-  @transient private var taskContext: TaskAttemptContext = null
+    if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(sparkConf)) {
+      // FileOutputFormat ignores the filesystem parameter
+      val ignoredFs = FileSystem.get(hadoopConf)
+      format.newInstance().checkOutputSpecs(ignoredFs, hadoopConf)
+    }
 
-  def preSetup() {
-    setIDs(0, 0, 0)
-    HadoopRDD.addLocalConfiguration("", 0, 0, 0, conf.value)
+    val committer = FileCommitProtocol.instantiate(
+      className = classOf[HadoopMapRedCommitProtocol].getName,
+      jobId = stageId.toString,
+      outputPath = conf.value.get("mapred.output.dir"),
+      isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
+    committer.setupJob(jobContext)
 
-    val jCtxt = getJobContext()
-    getOutputCommitter().setupJob(jCtxt)
+    // When speculation is on and output committer class name contains "Direct", we should warn
+    // users that they may loss data if they are using a direct output committer.
+    if (SparkHadoopWriterUtils.isSpeculationEnabled(sparkConf) && committer.isDirectOutput) {
+      val warningMessage =
+        s"$committer may be an output committer that writes data directly to " +
+          "the final location. Because speculation is enabled, this output committer may " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
+          "committer that does not have this behavior (e.g. FileOutputCommitter)."
+      logWarning(warningMessage)
+    }
+
+    // Try to write all RDD partitions as a Hadoop OutputFormat.
+    try {
+      val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
+        executeTask(
+          context = context,
+          jobTrackerId = jobTrackerId,
+          sparkStageId = context.stageId,
+          sparkPartitionId = context.partitionId,
+          sparkAttemptNumber = context.attemptNumber,
+          committer = committer,
+          hadoopConf = conf.value,
+          outputFormat = format.asInstanceOf[Class[OutputFormat[K, V]]],
+          iterator = iter)
+      })
+
+      committer.commitJob(jobContext, ret)
+      logInfo(s"Job ${jobContext.getJobID} committed.")
+    } catch {
+      case cause: Throwable =>
+        logError(s"Aborting job ${jobContext.getJobID}.", cause)
+        committer.abortJob(jobContext)
+        throw new SparkException("Job aborted.", cause)
+    }
   }
 
+  /** Write a RDD partition out in a single Spark task. */
+  private def executeTask[K, V: ClassTag](
+      context: TaskContext,
+      jobTrackerId: String,
+      sparkStageId: Int,
+      sparkPartitionId: Int,
+      sparkAttemptNumber: Int,
+      committer: FileCommitProtocol,
+      hadoopConf: JobConf,
+      outputFormat: Class[_ <: OutputFormat[K, V]],
+      iterator: Iterator[(K, V)]): TaskCommitMessage = {
+    // Set up a task.
 
-  def setup(jobid: Int, splitid: Int, attemptid: Int) {
-    setIDs(jobid, splitid, attemptid)
-    HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(now),
-      jobid, splitID, attemptID, conf.value)
-  }
+    // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
+    // around by taking a mod. We expect that no task will be attempted 2 billion times.
+    val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
+    //String jtIdentifier, int jobId, TaskType type, int taskId, int id
+    val attemptId = new TaskAttemptID(jobTrackerId, sparkStageId, TaskType.MAP, sparkPartitionId, taskAttemptId)
+    val taskContext = new TaskAttemptContextImpl(hadoopConf, attemptId)
+    committer.setupTask(taskContext)
 
-  def open() {
+    val outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)] =
+      SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
+
+    // Initiate the writer.
     val numfmt = NumberFormat.getInstance(Locale.US)
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
 
-    val outputName = "part-"  + numfmt.format(splitID)
-    val path = FileOutputFormat.getOutputPath(conf.value)
+    val outputName = "part-"  + numfmt.format(sparkPartitionId)
+    val path = FileOutputFormat.getOutputPath(hadoopConf)
     val fs: FileSystem = {
       if (path != null) {
-        path.getFileSystem(conf.value)
+        path.getFileSystem(hadoopConf)
       } else {
-        FileSystem.get(conf.value)
+        FileSystem.get(hadoopConf)
       }
     }
 
-    getOutputCommitter().setupTask(getTaskContext())
-    writer = getOutputFormat().getRecordWriter(fs, conf.value, outputName, Reporter.NULL)
-  }
+    val writer = hadoopConf.getOutputFormat.getRecordWriter(fs, hadoopConf, outputName, Reporter.NULL)
+      .asInstanceOf[RecordWriter[K, V]]
+    require(writer != null, "Unable to obtain RecordWriter")
+    var recordsWritten = 0L
 
-  def write(key: AnyRef, value: AnyRef) {
-    if (writer != null) {
-      writer.write(key, value)
-    } else {
-      throw new IOException("Writer is null, open() has not been called")
+    // Write all rows in RDD partition.
+    try {
+      val ret = Utils.tryWithSafeFinallyAndFailureCallbacks {
+        while (iterator.hasNext) {
+          val pair = iterator.next()
+          writer.write(pair._1, pair._2)
+
+          // Update bytes written metric every few records
+          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(
+            outputMetricsAndBytesWrittenCallback, recordsWritten)
+          recordsWritten += 1
+        }
+
+        committer.commitTask(taskContext)
+      }(catchBlock = {
+        committer.abortTask(taskContext)
+        logError(s"Task ${taskContext.getTaskAttemptID} aborted.")
+      }, finallyBlock = writer.close(Reporter.NULL))
+
+      outputMetricsAndBytesWrittenCallback.foreach {
+        case (om, callback) =>
+          om.setBytesWritten(callback())
+          om.setRecordsWritten(recordsWritten)
+      }
+
+      ret
+    } catch {
+      case t: Throwable =>
+        throw new SparkException("Task failed while writing rows", t)
     }
-  }
-
-  def close() {
-    writer.close(Reporter.NULL)
-  }
-
-  def commit() {
-    SparkHadoopMapRedUtil.commitTask(getOutputCommitter(), getTaskContext(), jobID, splitID)
-  }
-
-  def commitJob() {
-    val cmtr = getOutputCommitter()
-    cmtr.commitJob(getJobContext())
-  }
-
-  // ********* Private Functions *********
-
-  private def getOutputFormat(): OutputFormat[AnyRef, AnyRef] = {
-    if (format == null) {
-      format = conf.value.getOutputFormat()
-        .asInstanceOf[OutputFormat[AnyRef, AnyRef]]
-    }
-    format
-  }
-
-  private def getOutputCommitter(): OutputCommitter = {
-    if (committer == null) {
-      committer = conf.value.getOutputCommitter
-    }
-    committer
-  }
-
-  private def getJobContext(): JobContext = {
-    if (jobContext == null) {
-      jobContext = new JobContextImpl(conf.value, jID.value)
-    }
-    jobContext
-  }
-
-  private def getTaskContext(): TaskAttemptContext = {
-    if (taskContext == null) {
-      taskContext = newTaskAttemptContext(conf.value, taID.value)
-    }
-    taskContext
-  }
-
-  protected def newTaskAttemptContext(
-      conf: JobConf,
-      attemptId: TaskAttemptID): TaskAttemptContext = {
-    new TaskAttemptContextImpl(conf, attemptId)
-  }
-
-  private def setIDs(jobid: Int, splitid: Int, attemptid: Int) {
-    jobID = jobid
-    splitID = splitid
-    attemptID = attemptid
-
-    jID = new SerializableWritable[JobID](SparkHadoopWriterUtils.createJobID(now, jobid))
-    taID = new SerializableWritable[TaskAttemptID](
-        new TaskAttemptID(new TaskID(jID.value, TaskType.MAP, splitID), attemptID))
   }
 }

@@ -1108,47 +1108,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
 
-    if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(self.conf)) {
-      // FileOutputFormat ignores the filesystem parameter
-      val ignoredFs = FileSystem.get(hadoopConf)
-      hadoopConf.getOutputFormat.checkOutputSpecs(ignoredFs, hadoopConf)
-    }
-
-    val writer = new SparkHadoopWriter(hadoopConf)
-    writer.preSetup()
-
-    val writeToFile = (context: TaskContext, iter: Iterator[(K, V)]) => {
-      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-      // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
-
-      val outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)] =
-        SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
-
-      writer.setup(context.stageId, context.partitionId, taskAttemptId)
-      writer.open()
-      var recordsWritten = 0L
-
-      Utils.tryWithSafeFinallyAndFailureCallbacks {
-        while (iter.hasNext) {
-          val record = iter.next()
-          writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
-
-          // Update bytes written metric every few records
-          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(
-            outputMetricsAndBytesWrittenCallback, recordsWritten)
-          recordsWritten += 1
-        }
-      }(finallyBlock = writer.close())
-      writer.commit()
-      outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
-        om.setBytesWritten(callback())
-        om.setRecordsWritten(recordsWritten)
-      }
-    }
-
-    self.context.runJob(self, writeToFile)
-    writer.commitJob()
+    SparkHadoopMapRedWriter.write(
+      rdd = self,
+      hadoopConf = conf
+    )
   }
 
   /**
