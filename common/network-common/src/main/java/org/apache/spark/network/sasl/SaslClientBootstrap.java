@@ -106,10 +106,9 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
           cipher.addToChannel(channel);
         } else {
           SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
+          saslClient = null;
         }
 
-        saslClient.dispose();
-        saslClient = null;
         logger.debug("Channel {} configured for encryption.", client);
       }
     } catch (IOException ioe) {
