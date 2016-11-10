@@ -17,14 +17,70 @@
 
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
 
-__all__ = ['BisectingKMeans', 'BisectingKMeansModel',
+__all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
            'KMeans', 'KMeansModel',
-           'GaussianMixture', 'GaussianMixtureModel',
+           'GaussianMixture', 'GaussianMixtureModel', 'GaussianMixtureSummary',
            'LDA', 'LDAModel', 'LocalLDAModel', 'DistributedLDAModel']
+
+
+class ClusteringSummary(JavaWrapper):
+    """
+    Summary of clustering algorithms.
+
+    .. versionadded:: 2.1.0
+    """
+
+    @property
+    @since("2.1.0")
+    def predictions(self):
+        """
+        Dataframe produced by the model's `transform` method.
+        """
+        return self._call_java("predictions")
+
+    @property
+    @since("2.1.0")
+    def predictionCol(self):
+        """
+        Column of predicted clusters in `predictions`.
+        """
+        return self._call_java("predictionCol")
+
+    @property
+    @since("2.1.0")
+    def featuresCol(self):
+        """
+        Column of features clusters in `predictions`.
+        """
+        return self._call_java("featuresCol")
+
+    @property
+    @since("2.1.0")
+    def k(self):
+        """
+        Number of clusters.
+        """
+        return self._call_java("k")
+
+    @property
+    @since("2.1.0")
+    def cluster(self):
+        """
+        Cluster centers of the transformed data.
+        """
+        return self._call_java("cluster")
+
+    @property
+    @since("2.1.0")
+    def clusterSizes(self):
+        """
+        Size of (number of data points in) each cluster.
+        """
+        return self._call_java("clusterSizes")
 
 
 class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
@@ -55,6 +111,40 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         The DataFrame has two columns: mean (Vector) and cov (Matrix).
         """
         return self._call_java("gaussiansDF")
+
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary of model on training set.
+        """
+        java_gmm_summary = self._call_java("summary")
+        return GaussianMixtureSummary(java_gmm_summary)
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a summary exists for this model instance.
+        """
+        return self._call_java("hasSummary")
+
+
+@inherit_doc
+class GaussianMixtureSummary(ClusteringSummary):
+    """
+    Summary of GaussianMixture algorithms.
+
+    .. versionadded:: 2.1.0
+    """
+
+    @property
+    @since("2.1.0")
+    def probability(self):
+        """
+        Probability of each cluster.
+        """
+        return self._call_java("probability")
 
 
 @inherit_doc
@@ -92,6 +182,24 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> gm = GaussianMixture(k=3, tol=0.0001,
     ...                      maxIter=10, seed=10)
     >>> model = gm.fit(df)
+    >>> model.hasSummary
+    True
+    >>> summary = model.summary
+    >>> transformed = model.transform(df)
+    >>> summary.predictions.collect() == transformed.collect()
+    True
+    >>> summary.probability.collect() == transformed.select("probability").collect()
+    True
+    >>> summary.cluster.collect() == transformed.select("prediction").collect()
+    True
+    >>> summary.predictionCol == "prediction"
+    True
+    >>> summary.featuresCol == "features"
+    True
+    >>> summary.k
+    3
+    >>> len(summary.clusterSizes)
+    3
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -104,7 +212,6 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     |[-0.4472625243352...|0.167304119758233...|
     +--------------------+--------------------+
     ...
-    >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[4].prediction == rows[5].prediction
     True
@@ -346,6 +453,32 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("computeCost", dataset)
 
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary of model on training set.
+        """
+        java_bkm_summary = self._call_java("summary")
+        return BisectingKMeansSummary(java_bkm_summary)
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a summary exists for this model instance.
+        """
+        return self._call_java("hasSummary")
+
+
+@inherit_doc
+class BisectingKMeansSummary(ClusteringSummary):
+    """
+    Summary of BisectingKMeans algorithms.
+
+    .. versionadded:: 2.1.0
+    """
+
 
 @inherit_doc
 class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed,
@@ -368,6 +501,37 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> df = spark.createDataFrame(data, ["features"])
     >>> bkm = BisectingKMeans(k=2, minDivisibleClusterSize=1.0)
     >>> model = bkm.fit(df)
+    >>> model.hasSummary
+    True
+    >>> summary = model.summary
+    >>> summary.predictions.show()
+    +---------+----------+
+    | features|prediction|
+    +---------+----------+
+    |[0.0,0.0]|         0|
+    |[1.0,1.0]|         0|
+    |[9.0,8.0]|         1|
+    |[8.0,9.0]|         1|
+    +---------+----------+
+    ...
+    >>> summary.predictionCol == "prediction"
+    True
+    >>> summary.featuresCol == "features"
+    True
+    >>> summary.k
+    2
+    >>> summary.cluster.show()
+    +----------+
+    |prediction|
+    +----------+
+    |         0|
+    |         0|
+    |         1|
+    |         1|
+    +----------+
+    ...
+    >>> summary.clusterSizes
+    [2, 2]
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2

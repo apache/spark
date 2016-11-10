@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import array
 import sys
 if sys.version > '3':
@@ -24,7 +25,6 @@ if sys.version > '3':
 from abc import ABCMeta
 import copy
 import numpy as np
-import warnings
 
 from py4j.java_gateway import JavaObject
 
