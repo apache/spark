@@ -138,8 +138,8 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
   }
 
   private def isHiveSerdeTable(tableIdent: TableIdentifier): Boolean = {
-    sparkSession.sessionState.catalog.getTableMetadataOption(tableIdent)
-      .exists(_.provider == Option("hive"))
+    val tableMeta = sparkSession.sessionState.catalog.getTableMetadataOption(tableIdent)
+    tableMeta.isDefined && DDLUtils.isHiveSerdeTable(tableMeta.get)
   }
 
   private def checkPartitionColumns(schema: StructType, tableDesc: CatalogTable): CatalogTable = {

@@ -693,6 +693,10 @@ object DDLUtils {
     table.provider.isDefined && table.provider.get != HIVE_PROVIDER
   }
 
+  def isHiveSerdeTable(table: CatalogTable): Boolean = {
+    table.provider.isDefined && table.provider.get == HIVE_PROVIDER
+  }
+
   /**
    * Throws a standard error for actions that require partitionProvider = hive.
    */
