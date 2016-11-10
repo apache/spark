@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -58,6 +59,7 @@ private[sql] object Column {
  *
  * @since 1.6.0
  */
+@InterfaceStability.Stable
 class TypedColumn[-T, U](
     expr: Expression,
     private[sql] val encoder: ExpressionEncoder[U])
@@ -68,12 +70,15 @@ class TypedColumn[-T, U](
    * on a decoded object.
    */
   private[sql] def withInputType(
-      inputDeserializer: Expression,
+      inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
-    val unresolvedDeserializer = UnresolvedDeserializer(inputDeserializer, inputAttributes)
+    val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
     val newExpr = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
-        ta.copy(inputDeserializer = Some(unresolvedDeserializer))
+        ta.copy(
+          inputDeserializer = Some(unresolvedDeserializer),
+          inputClass = Some(inputEncoder.clsTag.runtimeClass),
+          inputSchema = Some(inputEncoder.schema))
     }
     new TypedColumn[T, U](newExpr, encoder)
   }
@@ -113,6 +118,9 @@ class TypedColumn[-T, U](
  *   $"a" === $"b"
  * }}}
  *
+ * Note that the internal Catalyst expression can be accessed via "expr", but this method is for
+ * debugging purposes only and can change in any future Spark releases.
+ *
  * @groupname java_expr_ops Java-specific expression operators
  * @groupname expr_ops Expression operators
  * @groupname df_ops DataFrame functions
@@ -120,7 +128,8 @@ class TypedColumn[-T, U](
  *
  * @since 1.3.0
  */
-class Column(protected[sql] val expr: Expression) extends Logging {
+@InterfaceStability.Stable
+class Column(val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
@@ -158,6 +167,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
     case explode: Explode => MultiAlias(explode, Nil)
+    case explode: PosExplode => MultiAlias(explode, Nil)
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
@@ -175,6 +185,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
+
+    // Wait until the struct is resolved. This will generate a nicer looking alias.
+    case struct: CreateNamedStructLike => UnresolvedAlias(struct)
 
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
@@ -1002,7 +1015,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   /**
    * Returns an ordering used in sorting.
    * {{{
-   *   // Scala: sort a DataFrame by age column in descending order.
+   *   // Scala
    *   df.sort(df("age").desc)
    *
    *   // Java
@@ -1015,7 +1028,37 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def desc: Column = withExpr { SortOrder(expr, Descending) }
 
   /**
-   * Returns an ordering used in sorting.
+   * Returns a descending ordering used in sorting, where null values appear before non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in descending order and null values appearing first.
+   *   df.sort(df("age").desc_nulls_first)
+   *
+   *   // Java
+   *   df.sort(df.col("age").desc_nulls_first());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst) }
+
+  /**
+   * Returns a descending ordering used in sorting, where null values appear after non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in descending order and null values appearing last.
+   *   df.sort(df("age").desc_nulls_last)
+   *
+   *   // Java
+   *   df.sort(df.col("age").desc_nulls_last());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast) }
+
+  /**
+   * Returns an ascending ordering used in sorting.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order.
    *   df.sort(df("age").asc)
@@ -1028,6 +1071,36 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def asc: Column = withExpr { SortOrder(expr, Ascending) }
+
+  /**
+   * Returns an ascending ordering used in sorting, where null values appear before non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
+   *   df.sort(df("age").asc_nulls_last)
+   *
+   *   // Java
+   *   df.sort(df.col("age").asc_nulls_last());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst) }
+
+  /**
+   * Returns an ordering used in sorting, where null values appear after non-null values.
+   * {{{
+   *   // Scala: sort a DataFrame by age column in ascending order and null values appearing last.
+   *   df.sort(df("age").asc_nulls_last)
+   *
+   *   // Java
+   *   df.sort(df.col("age").asc_nulls_last());
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.1.0
+   */
+  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast) }
 
   /**
    * Prints the expression to the console for debugging purpose.
@@ -1094,16 +1167,31 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    */
   def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
 
+  /**
+   * Define a empty analytic clause. In this case the analytic function is applied
+   * and presented for all rows in the result set.
+   *
+   * {{{
+   *   df.select(
+   *     sum("price").over(),
+   *     avg("price").over()
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  def over(): Column = over(Window.spec)
+
 }
 
 
 /**
- * :: Experimental ::
  * A convenient class used for constructing schema.
  *
  * @since 1.3.0
  */
-@Experimental
+@InterfaceStability.Stable
 class ColumnName(name: String) extends Column(name) {
 
   /**

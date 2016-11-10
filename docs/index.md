@@ -8,7 +8,7 @@ description: Apache Spark SPARK_VERSION_SHORT documentation homepage
 Apache Spark is a fast and general-purpose cluster computing system.
 It provides high-level APIs in Java, Scala, Python and R,
 and an optimized engine that supports general execution graphs.
-It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
+It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
 # Downloading
 
@@ -27,6 +27,10 @@ or the `JAVA_HOME` environment variable pointing to a Java installation.
 Spark runs on Java 7+, Python 2.6+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).
+
+Note that support for Java 7 and Python 2.6 are deprecated as of Spark 2.0.0, and support for 
+Scala 2.10 and versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0, and may be 
+removed in Spark 2.2.0.
 
 # Running the Examples and Shell
 
@@ -87,7 +91,7 @@ options for deployment:
 * Modules built on Spark:
   * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
   * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): support for structured data and relational queries
-  * [MLlib](mllib-guide.html): built-in machine learning library
+  * [MLlib](ml-guide.html): built-in machine learning library
   * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
 
 **API Docs:**
@@ -120,7 +124,7 @@ options for deployment:
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system
 * [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
-* [Supplemental Projects](https://cwiki.apache.org/confluence/display/SPARK/Supplemental+Spark+Projects): related third party Spark projects
+* [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects): related third party Spark projects
 
 **External Resources:**
 

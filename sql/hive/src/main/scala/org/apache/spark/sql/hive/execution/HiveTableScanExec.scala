@@ -54,7 +54,7 @@ case class HiveTableScanExec(
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def producedAttributes: AttributeSet = outputSet ++
@@ -154,8 +154,9 @@ case class HiveTableScanExec(
     val numOutputRows = longMetric("numOutputRows")
     // Avoid to serialize MetastoreRelation because schema is lazy. (see SPARK-15649)
     val outputSchema = schema
-    rdd.mapPartitionsInternal { iter =>
+    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(outputSchema)
+      proj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         proj(r)
@@ -164,4 +165,19 @@ case class HiveTableScanExec(
   }
 
   override def output: Seq[Attribute] = attributes
+
+  override def sameResult(plan: SparkPlan): Boolean = plan match {
+    case other: HiveTableScanExec =>
+      val thisPredicates = partitionPruningPred.map(cleanExpression)
+      val otherPredicates = other.partitionPruningPred.map(cleanExpression)
+
+      val result = relation.sameResult(other.relation) &&
+        output.length == other.output.length &&
+          output.zip(other.output)
+            .forall(p => p._1.name == p._2.name && p._1.dataType == p._2.dataType) &&
+              thisPredicates.length == otherPredicates.length &&
+                thisPredicates.zip(otherPredicates).forall(p => p._1.semanticEquals(p._2))
+      result
+    case _ => false
+  }
 }

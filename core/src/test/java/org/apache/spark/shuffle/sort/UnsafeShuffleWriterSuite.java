@@ -86,7 +86,7 @@ public class UnsafeShuffleWriterSuite {
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
   @Mock(answer = RETURNS_SMART_NULLS) ShuffleDependency<Object, Object, Object> shuffleDep;
 
-  private final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
+  private final class WrapStream extends AbstractFunction1<OutputStream, OutputStream> {
     @Override
     public OutputStream apply(OutputStream stream) {
       if (conf.getBoolean("spark.shuffle.compress", true)) {
@@ -136,7 +136,7 @@ public class UnsafeShuffleWriterSuite {
           (File) args[1],
           (SerializerInstance) args[2],
           (Integer) args[3],
-          new CompressStream(),
+          new WrapStream(),
           false,
           (ShuffleWriteMetrics) args[4],
           (BlockId) args[0]
@@ -413,10 +413,10 @@ public class UnsafeShuffleWriterSuite {
   }
 
   private void writeEnoughRecordsToTriggerSortBufferExpansionAndSpill() throws Exception {
-    memoryManager.limit(UnsafeShuffleWriter.INITIAL_SORT_BUFFER_SIZE * 16);
+    memoryManager.limit(UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE * 16);
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
-    for (int i = 0; i < UnsafeShuffleWriter.INITIAL_SORT_BUFFER_SIZE + 1; i++) {
+    for (int i = 0; i < UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE + 1; i++) {
       dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
     writer.write(dataToWrite.iterator());

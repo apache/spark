@@ -106,7 +106,7 @@ trait ExtractValue extends Expression
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
   extends UnaryExpression with ExtractValue {
 
-  private[sql] lazy val childSchema = child.dataType.asInstanceOf[StructType]
+  lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
   override def dataType: DataType = childSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
@@ -260,7 +260,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
  * We need to do type checking here as `key` expression maybe unresolved.
  */
 case class GetMapValue(child: Expression, key: Expression)
-  extends BinaryExpression with ExpectsInputTypes with ExtractValue {
+  extends BinaryExpression with ImplicitCastInputTypes with ExtractValue {
 
   private def keyType = child.dataType.asInstanceOf[MapType].keyType
 

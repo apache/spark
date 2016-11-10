@@ -66,8 +66,6 @@ case class RepeatedData(
     mapFieldNull: scala.collection.Map[Int, java.lang.Long],
     structField: PrimitiveData)
 
-case class SpecificCollection(l: List[Int])
-
 /** For testing Kryo serialization based encoder. */
 class KryoSerializable(val value: Int) {
   override def hashCode(): Int = value
@@ -105,6 +103,12 @@ class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
   override def deserialize(datum: Any): UDTCaseClass = datum match {
     case uri: UTF8String => UDTCaseClass(new java.net.URI(uri.toString))
   }
+}
+
+case class PrimitiveValueClass(wrapped: Int) extends AnyVal
+case class ReferenceValueClass(wrapped: ReferenceValueClass.Container) extends AnyVal
+object ReferenceValueClass {
+  case class Container(data: Int)
 }
 
 class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
@@ -290,6 +294,12 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
 
+  encodeDecodeTest(
+    PrimitiveValueClass(42), "primitive value class")
+
+  encodeDecodeTest(
+    ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("nullable of encoder schema") {
@@ -326,6 +336,12 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       assert(schema(1).dataType.asInstanceOf[StructType](0).nullable === true)
       assert(schema(1).dataType.asInstanceOf[StructType](1).nullable === false)
     }
+  }
+
+  test("null check for map key") {
+    val encoder = ExpressionEncoder[Map[String, Int]]()
+    val e = intercept[RuntimeException](encoder.toRow(Map(("a", 1), (null, 2))))
+    assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
   private def encodeDecodeTest[T : ExpressionEncoder](

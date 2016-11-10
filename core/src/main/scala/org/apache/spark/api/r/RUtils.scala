@@ -38,6 +38,15 @@ private[spark] object RUtils {
   }
 
   /**
+   * Check if SparkR is installed before running tests that use SparkR.
+   */
+  def isSparkRInstalled: Boolean = {
+    localSparkRPackagePath.filter { pkgDir =>
+      new File(Seq(pkgDir, "SparkR").mkString(File.separator)).exists
+    }.isDefined
+  }
+
+  /**
    * Get the list of paths for R packages in various deployment modes, of which the first
    * path is for the SparkR package itself. The second path is for R packages built as
    * part of Spark Packages, if any exist. Spark Packages can be provided through the
@@ -75,7 +84,6 @@ private[spark] object RUtils {
       }
     } else {
       // Otherwise, assume the package is local
-      // TODO: support this for Mesos
       val sparkRPkgPath = localSparkRPackagePath.getOrElse {
           throw new SparkException("SPARK_HOME not set. Can't locate SparkR package.")
       }

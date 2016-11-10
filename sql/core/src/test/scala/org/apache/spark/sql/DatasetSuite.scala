@@ -20,12 +20,13 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
-import scala.language.postfixOps
-
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
@@ -33,6 +34,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
+
+  test("checkAnswer should compare map correctly") {
+    val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
+    checkAnswer(
+      data.toDF(),
+      Seq(Row(1, "2", Map(2 -> 1, 1 -> 2))))
+  }
 
   test("toDS") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
@@ -175,6 +183,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.select(expr("_2 + 1").as[Int]),
       2, 3, 4)
+  }
+
+  test("SPARK-16853: select, case class and tuple") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    checkDataset(
+      ds.select(expr("struct(_2, _2)").as[(Int, Int)]): Dataset[(Int, Int)],
+      (1, 1), (2, 2), (3, 3))
+
+    checkDataset(
+      ds.select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]): Dataset[ClassData],
+      ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
   }
 
   test("select 2") {
@@ -320,6 +339,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       "a", "30", "b", "3", "c", "1")
   }
 
+  test("groupBy function, mapValues, flatMap") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val keyValue = ds.groupByKey(_._1).mapValues(_._2)
+    val agged = keyValue.mapGroups { case (g, iter) => (g, iter.sum) }
+    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+
+    val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
+    val agged1 = keyValue1.mapGroups { case (g, iter) => (g._1, iter.map(_._1).sum) }
+    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+  }
+
   test("groupBy function, reduce") {
     val ds = Seq("abc", "xyz", "hello").toDS()
     val agged = ds.groupByKey(_.length).reduceGroups(_ + _)
@@ -415,6 +445,31 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       3, 17, 27, 58, 62)
   }
 
+  test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
+    val simpleUdf = udf((n: Int) => {
+      require(n != 1, "simpleUdf shouldn't see id=1!")
+      1
+    })
+
+    val df = Seq(
+      (0, "string0"),
+      (1, "string1"),
+      (2, "string2"),
+      (3, "string3"),
+      (4, "string4"),
+      (5, "string5"),
+      (6, "string6"),
+      (7, "string7"),
+      (8, "string8"),
+      (9, "string9")
+    ).toDF("id", "stringData")
+    val sampleDF = df.sample(false, 0.7, 50)
+    // After sampling, sampleDF doesn't contain id=1.
+    assert(!sampleDF.select("id").collect.contains(1))
+    // simpleUdf should not encounter id=1.
+    checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(1)))
+  }
+
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
@@ -425,7 +480,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("self join") {
     val ds = Seq("1", "2").toDS().as("a")
-    val joined = ds.joinWith(ds, lit(true))
+    val joined = ds.joinWith(ds, lit(true), "cross")
     checkDataset(joined, ("1", "1"), ("1", "2"), ("2", "1"), ("2", "2"))
   }
 
@@ -445,7 +500,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Kryo encoder self join") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
-    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
+    assert(ds.joinWith(ds, lit(true), "cross").collect().toSet ==
       Set(
         (KryoData(1), KryoData(1)),
         (KryoData(1), KryoData(2)),
@@ -473,7 +528,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Java encoder self join") {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
-    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
+    assert(ds.joinWith(ds, lit(true), "cross").collect().toSet ==
       Set(
         (JavaData(1), JavaData(1)),
         (JavaData(1), JavaData(2)),
@@ -491,7 +546,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
 
     checkDataset(
-      ds1.joinWith(ds2, lit(true)),
+      ds1.joinWith(ds2, lit(true), "cross"),
       ((nullInt, "1"), (nullInt, "1")),
       ((nullInt, "1"), (new java.lang.Integer(22), "2")),
       ((new java.lang.Integer(22), "2"), (nullInt, "1")),
@@ -723,7 +778,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
     val numRows = expected.split("\n").length - 4
-    val actual = ds.showString(numRows, truncate = true)
+    val actual = ds.showString(numRows, truncate = 20)
 
     if (expected != actual) {
       fail(
@@ -830,6 +885,172 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds.dropDuplicates("_1", "_2"),
       ("a", 1), ("a", 2), ("b", 1))
   }
+
+  test("dropDuplicates: columns with same column name") {
+    val ds1 = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    val ds2 = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    // The dataset joined has two columns of the same name "_2".
+    val joined = ds1.join(ds2, "_1").select(ds1("_2").as[Int], ds2("_2").as[Int])
+    checkDataset(
+      joined.dropDuplicates(),
+      (1, 2), (1, 1), (2, 1), (2, 2))
+  }
+
+  test("dropDuplicates should not change child plan output") {
+    val ds = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    checkDataset(
+      ds.dropDuplicates("_1").select(ds("_1").as[String], ds("_2").as[Int]),
+      ("a", 1), ("b", 1))
+  }
+
+  test("SPARK-16097: Encoders.tuple should handle null object correctly") {
+    val enc = Encoders.tuple(Encoders.tuple(Encoders.STRING, Encoders.STRING), Encoders.STRING)
+    val data = Seq((("a", "b"), "c"), (null, "d"))
+    val ds = spark.createDataset(data)(enc)
+    checkDataset(ds, (("a", "b"), "c"), (null, "d"))
+  }
+
+  test("SPARK-16995: flat mapping on Dataset containing a column created with lit/expr") {
+    val df = Seq("1").toDF("a")
+
+    import df.sparkSession.implicits._
+
+    checkDataset(
+      df.withColumn("b", lit(0)).as[ClassData]
+        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+    checkDataset(
+      df.withColumn("b", expr("0")).as[ClassData]
+        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+  }
+
+  test("SPARK-18125: Spark generated code causes CompileException") {
+    val data = Array(
+      Route("a", "b", 1),
+      Route("a", "b", 2),
+      Route("a", "c", 2),
+      Route("a", "d", 10),
+      Route("b", "a", 1),
+      Route("b", "a", 5),
+      Route("b", "c", 6))
+    val ds = sparkContext.parallelize(data).toDF.as[Route]
+
+    val grped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
+      .groupByKey(r => (r.src, r.dest))
+      .reduceGroups { (g1: GroupedRoutes, g2: GroupedRoutes) =>
+        GroupedRoutes(g1.src, g1.dest, g1.routes ++ g2.routes)
+      }.map(_._2)
+
+    val expected = Seq(
+      GroupedRoutes("a", "d", Seq(Route("a", "d", 10))),
+      GroupedRoutes("b", "c", Seq(Route("b", "c", 6))),
+      GroupedRoutes("a", "b", Seq(Route("a", "b", 1), Route("a", "b", 2))),
+      GroupedRoutes("b", "a", Seq(Route("b", "a", 1), Route("b", "a", 5))),
+      GroupedRoutes("a", "c", Seq(Route("a", "c", 2)))
+    )
+
+    implicit def ordering[GroupedRoutes]: Ordering[GroupedRoutes] = new Ordering[GroupedRoutes] {
+      override def compare(x: GroupedRoutes, y: GroupedRoutes): Int = {
+        x.toString.compareTo(y.toString)
+      }
+    }
+
+    checkDatasetUnorderly(grped, expected: _*)
+  }
+
+  test("SPARK-18189: Fix serialization issue in KeyValueGroupedDataset") {
+    val resultValue = 12345
+    val keyValueGrouped = Seq((1, 2), (3, 4)).toDS().groupByKey(_._1)
+    val mapGroups = keyValueGrouped.mapGroups((k, v) => (k, 1))
+    val broadcasted = spark.sparkContext.broadcast(resultValue)
+
+    // Using broadcast triggers serialization issue in KeyValueGroupedDataset
+    val dataset = mapGroups.map(_ => broadcasted.value)
+
+    assert(dataset.collect() sameElements Array(resultValue, resultValue))
+  }
+
+  Seq(true, false).foreach { eager =>
+    def testCheckpointing(testName: String)(f: => Unit): Unit = {
+      test(s"Dataset.checkpoint() - $testName (eager = $eager)") {
+        withTempDir { dir =>
+          val originalCheckpointDir = spark.sparkContext.checkpointDir
+
+          try {
+            spark.sparkContext.setCheckpointDir(dir.getCanonicalPath)
+            f
+          } finally {
+            // Since the original checkpointDir can be None, we need
+            // to set the variable directly.
+            spark.sparkContext.checkpointDir = originalCheckpointDir
+          }
+        }
+      }
+    }
+
+    testCheckpointing("basic") {
+      val ds = spark.range(10).repartition('id % 2).filter('id > 5).orderBy('id.desc)
+      val cp = ds.checkpoint(eager)
+
+      val logicalRDD = cp.logicalPlan match {
+        case plan: LogicalRDD => plan
+        case _ =>
+          val treeString = cp.logicalPlan.treeString(verbose = true)
+          fail(s"Expecting a LogicalRDD, but got\n$treeString")
+      }
+
+      val dsPhysicalPlan = ds.queryExecution.executedPlan
+      val cpPhysicalPlan = cp.queryExecution.executedPlan
+
+      assertResult(dsPhysicalPlan.outputPartitioning) { logicalRDD.outputPartitioning }
+      assertResult(dsPhysicalPlan.outputOrdering) { logicalRDD.outputOrdering }
+
+      assertResult(dsPhysicalPlan.outputPartitioning) { cpPhysicalPlan.outputPartitioning }
+      assertResult(dsPhysicalPlan.outputOrdering) { cpPhysicalPlan.outputOrdering }
+
+      // For a lazy checkpoint() call, the first check also materializes the checkpoint.
+      checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
+
+      // Reads back from checkpointed data and check again.
+      checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
+    }
+
+    testCheckpointing("should preserve partitioning information") {
+      val ds = spark.range(10).repartition('id % 2)
+      val cp = ds.checkpoint(eager)
+
+      val agg = cp.groupBy('id % 2).agg(count('id))
+
+      agg.queryExecution.executedPlan.collectFirst {
+        case ShuffleExchange(_, _: RDDScanExec, _) =>
+        case BroadcastExchangeExec(_, _: RDDScanExec) =>
+      }.foreach { _ =>
+        fail(
+          "No Exchange should be inserted above RDDScanExec since the checkpointed Dataset " +
+            "preserves partitioning information:\n\n" + agg.queryExecution
+        )
+      }
+
+      checkAnswer(agg, ds.groupBy('id % 2).agg(count('id)))
+    }
+  }
+
+  test("identity map for primitive arrays") {
+    val arrayByte = Array(1.toByte, 2.toByte, 3.toByte)
+    val arrayInt = Array(1, 2, 3)
+    val arrayLong = Array(1.toLong, 2.toLong, 3.toLong)
+    val arrayDouble = Array(1.1, 2.2, 3.3)
+    val arrayString = Array("a", "b", "c")
+    val dsByte = sparkContext.parallelize(Seq(arrayByte), 1).toDS.map(e => e)
+    val dsInt = sparkContext.parallelize(Seq(arrayInt), 1).toDS.map(e => e)
+    val dsLong = sparkContext.parallelize(Seq(arrayLong), 1).toDS.map(e => e)
+    val dsDouble = sparkContext.parallelize(Seq(arrayDouble), 1).toDS.map(e => e)
+    val dsString = sparkContext.parallelize(Seq(arrayString), 1).toDS.map(e => e)
+    checkDataset(dsByte, arrayByte)
+    checkDataset(dsInt, arrayInt)
+    checkDataset(dsLong, arrayLong)
+    checkDataset(dsDouble, arrayDouble)
+    checkDataset(dsString, arrayString)
+  }
 }
 
 case class Generic[T](id: T, value: Double)
@@ -902,3 +1123,6 @@ object DatasetTransform {
     ds.map(_ + 1)
   }
 }
+
+case class Route(src: String, dest: String, cost: Int)
+case class GroupedRoutes(src: String, dest: String, routes: Seq[Route])

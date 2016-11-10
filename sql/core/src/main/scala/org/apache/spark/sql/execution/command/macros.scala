@@ -63,18 +63,20 @@ case class CreateMacroCommand(
         throw new AnalysisException(s"Cannot support Generator: ${u} " +
           s"for CREATE TEMPORARY MACRO $macroName")
     }
-    if (!macroFunction.resolved) {
-      if (macroFunction.checkInputDataTypes().isFailure) {
-        macroFunction.checkInputDataTypes() match {
-          case TypeCheckResult.TypeCheckFailure(message) =>
-            throw new AnalysisException(s"Cannot resolve '${macroFunction.sql}' " +
-              s"for CREATE TEMPORARY MACRO $macroName, due to data type mismatch: $message")
+    macroFunction.transformUp {
+      case e: Expression if !e.resolved =>
+        if (e.checkInputDataTypes().isFailure) {
+          e.checkInputDataTypes() match {
+            case TypeCheckResult.TypeCheckFailure(message) =>
+              throw new AnalysisException(s"Cannot resolve '${e.sql}' " +
+                s"for CREATE TEMPORARY MACRO $macroName, due to data type mismatch: $message")
+          }
+        } else {
+          throw new AnalysisException(s"Cannot resolve '${e.sql}' " +
+            s"for CREATE TEMPORARY MACRO $macroName ")
         }
-      } else {
-        throw new AnalysisException(s"Cannot resolve '${macroFunction.sql}' " +
-          s"for CREATE TEMPORARY MACRO $macroName")
-      }
     }
+
     val macroInfo = columns.mkString(",") + " -> " + funcWrapper.macroFunction.toString
     val info = new ExpressionInfo(macroInfo, macroName)
     val builder = (children: Seq[Expression]) => {

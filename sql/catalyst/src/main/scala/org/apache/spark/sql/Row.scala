@@ -20,9 +20,14 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
 
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object Row {
   /**
    * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
@@ -117,8 +122,9 @@ object Row {
  * }
  * }}}
  *
- * @group row
+ * @since 1.3.0
  */
+@InterfaceStability.Stable
 trait Row extends Serializable {
   /** Number of elements in the Row. */
   def size: Int = length
@@ -351,7 +357,7 @@ trait Row extends Serializable {
     }.toMap
   }
 
-  override def toString(): String = s"[${this.mkString(",")}]"
+  override def toString: String = s"[${this.mkString(",")}]"
 
   /**
    * Make a copy of the current [[Row]] object.
@@ -456,13 +462,13 @@ trait Row extends Serializable {
   def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
 
   /**
-   * Returns the value of a given fieldName.
+   * Returns the value at position i.
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
-    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i in null")
+    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
     else getAs[T](i)
 }

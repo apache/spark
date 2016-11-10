@@ -18,12 +18,11 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, LinkedHashMap}
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.executor.{ShuffleReadMetrics, ShuffleWriteMetrics, TaskMetrics}
+import org.apache.spark.executor._
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
-import org.apache.spark.storage.{BlockId, BlockStatus}
 import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -81,6 +80,7 @@ private[spark] object UIData {
     var numKilledTasks: Int = _
 
     var executorRunTime: Long = _
+    var executorCpuTime: Long = _
 
     var inputBytes: Long = _
     var inputRecords: Long = _
@@ -97,7 +97,7 @@ private[spark] object UIData {
     var description: Option[String] = None
 
     var accumulables = new HashMap[Long, AccumulableInfo]
-    var taskData = new HashMap[Long, TaskUIData]
+    var taskData = new LinkedHashMap[Long, TaskUIData]
     var executorSummary = new HashMap[String, ExecutorSummary]
 
     def hasInput: Boolean = inputBytes > 0
@@ -138,17 +138,17 @@ private[spark] object UIData {
       metrics.map { m =>
         TaskMetricsUIData(
           executorDeserializeTime = m.executorDeserializeTime,
+          executorDeserializeCpuTime = m.executorDeserializeCpuTime,
           executorRunTime = m.executorRunTime,
+          executorCpuTime = m.executorCpuTime,
           resultSize = m.resultSize,
           jvmGCTime = m.jvmGCTime,
           resultSerializationTime = m.resultSerializationTime,
           memoryBytesSpilled = m.memoryBytesSpilled,
           diskBytesSpilled = m.diskBytesSpilled,
           peakExecutionMemory = m.peakExecutionMemory,
-          updatedBlockStatuses = m.updatedBlockStatuses.toList,
-          inputMetrics = InputMetricsUIData(m.inputMetrics.bytesRead, m.inputMetrics.recordsRead),
-          outputMetrics =
-            OutputMetricsUIData(m.outputMetrics.bytesWritten, m.outputMetrics.recordsWritten),
+          inputMetrics = InputMetricsUIData(m.inputMetrics),
+          outputMetrics = OutputMetricsUIData(m.outputMetrics),
           shuffleReadMetrics = ShuffleReadMetricsUIData(m.shuffleReadMetrics),
           shuffleWriteMetrics = ShuffleWriteMetricsUIData(m.shuffleWriteMetrics))
       }
@@ -170,38 +170,58 @@ private[spark] object UIData {
         speculative = taskInfo.speculative
       )
       newTaskInfo.gettingResultTime = taskInfo.gettingResultTime
-      newTaskInfo.accumulables ++= taskInfo.accumulables.filter {
+      newTaskInfo.setAccumulables(taskInfo.accumulables.filter {
         accum => !accum.internal && accum.metadata != Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
-      }
+      })
       newTaskInfo.finishTime = taskInfo.finishTime
       newTaskInfo.failed = taskInfo.failed
       newTaskInfo
     }
   }
 
-  class ExecutorUIData(
-      val startTime: Long,
-      var finishTime: Option[Long] = None,
-      var finishReason: Option[String] = None)
-
   case class TaskMetricsUIData(
       executorDeserializeTime: Long,
+      executorDeserializeCpuTime: Long,
       executorRunTime: Long,
+      executorCpuTime: Long,
       resultSize: Long,
       jvmGCTime: Long,
       resultSerializationTime: Long,
       memoryBytesSpilled: Long,
       diskBytesSpilled: Long,
       peakExecutionMemory: Long,
-      updatedBlockStatuses: Seq[(BlockId, BlockStatus)],
       inputMetrics: InputMetricsUIData,
       outputMetrics: OutputMetricsUIData,
       shuffleReadMetrics: ShuffleReadMetricsUIData,
       shuffleWriteMetrics: ShuffleWriteMetricsUIData)
 
   case class InputMetricsUIData(bytesRead: Long, recordsRead: Long)
+  object InputMetricsUIData {
+    def apply(metrics: InputMetrics): InputMetricsUIData = {
+      if (metrics.bytesRead == 0 && metrics.recordsRead == 0) {
+        EMPTY
+      } else {
+        new InputMetricsUIData(
+          bytesRead = metrics.bytesRead,
+          recordsRead = metrics.recordsRead)
+      }
+    }
+    private val EMPTY = InputMetricsUIData(0, 0)
+  }
 
   case class OutputMetricsUIData(bytesWritten: Long, recordsWritten: Long)
+  object OutputMetricsUIData {
+    def apply(metrics: OutputMetrics): OutputMetricsUIData = {
+      if (metrics.bytesWritten == 0 && metrics.recordsWritten == 0) {
+        EMPTY
+      } else {
+        new OutputMetricsUIData(
+          bytesWritten = metrics.bytesWritten,
+          recordsWritten = metrics.recordsWritten)
+      }
+    }
+    private val EMPTY = OutputMetricsUIData(0, 0)
+  }
 
   case class ShuffleReadMetricsUIData(
       remoteBlocksFetched: Long,
@@ -215,17 +235,30 @@ private[spark] object UIData {
 
   object ShuffleReadMetricsUIData {
     def apply(metrics: ShuffleReadMetrics): ShuffleReadMetricsUIData = {
-      new ShuffleReadMetricsUIData(
-        remoteBlocksFetched = metrics.remoteBlocksFetched,
-        localBlocksFetched = metrics.localBlocksFetched,
-        remoteBytesRead = metrics.remoteBytesRead,
-        localBytesRead = metrics.localBytesRead,
-        fetchWaitTime = metrics.fetchWaitTime,
-        recordsRead = metrics.recordsRead,
-        totalBytesRead = metrics.totalBytesRead,
-        totalBlocksFetched = metrics.totalBlocksFetched
-      )
+      if (
+          metrics.remoteBlocksFetched == 0 &&
+          metrics.localBlocksFetched == 0 &&
+          metrics.remoteBytesRead == 0 &&
+          metrics.localBytesRead == 0 &&
+          metrics.fetchWaitTime == 0 &&
+          metrics.recordsRead == 0 &&
+          metrics.totalBytesRead == 0 &&
+          metrics.totalBlocksFetched == 0) {
+        EMPTY
+      } else {
+        new ShuffleReadMetricsUIData(
+          remoteBlocksFetched = metrics.remoteBlocksFetched,
+          localBlocksFetched = metrics.localBlocksFetched,
+          remoteBytesRead = metrics.remoteBytesRead,
+          localBytesRead = metrics.localBytesRead,
+          fetchWaitTime = metrics.fetchWaitTime,
+          recordsRead = metrics.recordsRead,
+          totalBytesRead = metrics.totalBytesRead,
+          totalBlocksFetched = metrics.totalBlocksFetched
+        )
+      }
     }
+    private val EMPTY = ShuffleReadMetricsUIData(0, 0, 0, 0, 0, 0, 0, 0)
   }
 
   case class ShuffleWriteMetricsUIData(
@@ -235,12 +268,17 @@ private[spark] object UIData {
 
   object ShuffleWriteMetricsUIData {
     def apply(metrics: ShuffleWriteMetrics): ShuffleWriteMetricsUIData = {
-      new ShuffleWriteMetricsUIData(
-        bytesWritten = metrics.bytesWritten,
-        recordsWritten = metrics.recordsWritten,
-        writeTime = metrics.writeTime
-      )
+      if (metrics.bytesWritten == 0 && metrics.recordsWritten == 0 && metrics.writeTime == 0) {
+        EMPTY
+      } else {
+        new ShuffleWriteMetricsUIData(
+          bytesWritten = metrics.bytesWritten,
+          recordsWritten = metrics.recordsWritten,
+          writeTime = metrics.writeTime
+        )
+      }
     }
+    private val EMPTY = ShuffleWriteMetricsUIData(0, 0, 0)
   }
 
 }

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Extracting, transforming and selecting features - spark.ml
-displayTitle: Extracting, transforming and selecting features - spark.ml
+title: Extracting, transforming and selecting features
+displayTitle: Extracting, transforming and selecting features
 ---
 
 This section covers algorithms for working with features, roughly divided into these groups:
@@ -46,14 +46,18 @@ In MLlib, we separate TF and IDF to make them flexible.
 `HashingTF` is a `Transformer` which takes sets of terms and converts those sets into 
 fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
 `HashingTF` utilizes the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
-A raw feature is mapped into an index (term) by applying a hash function. Then term frequencies 
+A raw feature is mapped into an index (term) by applying a hash function. The hash function
+used here is [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash). Then term frequencies
 are calculated based on the mapped indices. This approach avoids the need to compute a global 
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
 chance of collision, we can increase the target feature dimension, i.e. the number of buckets 
 of the hash table. Since a simple modulo is used to transform the hash function to a column index, 
 it is advisable to use a power of two as the feature dimension, otherwise the features will 
-not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`. 
+not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`.
+An optional binary toggle parameter controls term frequency counts. When set to true all nonzero
+frequency counts are set to 1. This is especially useful for discrete probabilistic models that
+model binary, rather than integer, counts.
 
 `CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
 ](ml-features.html#countvectorizer) for more details.
@@ -108,6 +112,8 @@ can then be used as features for prediction, document similarity calculations, e
 Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#word2vec) for more
 details.
 
+**Examples**
+
 In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
 
 <div class="codetabs">
@@ -145,9 +151,11 @@ for more details on the API.
  passed to other algorithms like LDA.
 
  During the fitting process, `CountVectorizer` will select the top `vocabSize` words ordered by
- term frequency across the corpus. An optional parameter "minDF" also affects the fitting process
+ term frequency across the corpus. An optional parameter `minDF` also affects the fitting process
  by specifying the minimum number (or fraction if < 1.0) of documents a term must appear in to be
- included in the vocabulary.
+ included in the vocabulary. Another optional binary toggle parameter controls the output vector.
+ If set to true all nonzero counts are set to 1. This is especially useful for discrete probabilistic
+ models that model binary, rather than integer, counts.
 
 **Examples**
 
@@ -210,9 +218,11 @@ for more details on the API.
 
 [RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer) allows more
  advanced tokenization based on regular expression (regex) matching.
- By default, the parameter "pattern" (regex, default: \\s+) is used as delimiters to split the input text.
+ By default, the parameter "pattern" (regex, default: `"\\s+"`) is used as delimiters to split the input text.
  Alternatively, users can set parameter "gaps" to false indicating the regex "pattern" denotes
  "tokens" rather than splitting gaps, and find all matching occurrences as the tokenization result.
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -251,11 +261,12 @@ frequently and don't carry as much meaning.
 `StopWordsRemover` takes as input a sequence of strings (e.g. the output
 of a [Tokenizer](ml-features.html#tokenizer)) and drops all the stop
 words from the input sequences. The list of stopwords is specified by
-the `stopWords` parameter.  We provide [a list of stop
-words](http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words) by
-default, accessible by calling `getStopWords` on a newly instantiated
-`StopWordsRemover` instance. A boolean parameter `caseSensitive` indicates
-if the matches should be case sensitive (false by default).
+the `stopWords` parameter. Default stop words for some languages are accessible 
+by calling `StopWordsRemover.loadDefaultStopWords(language)`, for which available 
+options are "danish", "dutch", "english", "finnish", "french", "german", "hungarian", 
+"italian", "norwegian", "portuguese", "russian", "spanish", "swedish" and "turkish". 
+A boolean parameter `caseSensitive` indicates if the matches should be case sensitive 
+(false by default).
 
 **Examples**
 
@@ -314,6 +325,8 @@ An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (t
 
 `NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](ml-features.html#tokenizer)).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains fewer than `n` strings, no output is produced.
 
+**Examples**
+
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
@@ -346,7 +359,12 @@ for more details on the API.
 
 Binarization is the process of thresholding numerical features to binary (0/1) features.
 
-`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold` for binarization. Feature values greater than the threshold are binarized to 1.0; values equal to or less than the threshold are binarized to 0.0.
+`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold`
+for binarization. Feature values greater than the threshold are binarized to 1.0; values equal
+to or less than the threshold are binarized to 0.0. Both Vector and Double types are supported
+for `inputCol`.
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -378,6 +396,8 @@ for more details on the API.
 
 [PCA](http://en.wikipedia.org/wiki/Principal_component_analysis) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components. A [PCA](api/scala/index.html#org.apache.spark.ml.feature.PCA) class trains a model to project vectors to a low-dimensional space using PCA. The example below shows how to project 5-dimensional feature vectors into 3-dimensional principal components.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -407,6 +427,8 @@ for more details on the API.
 ## PolynomialExpansion
 
 [Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -447,6 +469,8 @@ and scaling the result by $1/\sqrt{2}$ such that the representing matrix
 for the transform is unitary. No shift is applied to the transformed
 sequence (e.g. the $0$th element of the transformed sequence is the
 $0$th DCT coefficient and _not_ the $N/2$th).
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -653,6 +677,8 @@ for more details on the API.
 
 [One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -691,6 +717,8 @@ It can both automatically decide which features are categorical and convert orig
 
 Indexing categorical features allows algorithms such as Decision Trees and Tree Ensembles to treat categorical features appropriately, improving performance.
 
+**Examples**
+
 In the example below, we read in a dataset of labeled points and then use `VectorIndexer` to decide which features should be treated as categorical.  We transform the categorical feature values to their indices.  This transformed data could then be passed to algorithms such as `DecisionTreeRegressor` that handle categorical features.
 
 <div class="codetabs">
@@ -719,12 +747,66 @@ for more details on the API.
 </div>
 </div>
 
+## Interaction
+
+`Interaction` is a `Transformer` which takes vector or double-valued columns, and generates a single vector column that contains the product of all combinations of one value from each input column.
+
+For example, if you have 2 vector type columns each of which has 3 dimensions as input columns, then then you'll get a 9-dimensional vector as the output column.
+
+**Examples**
+
+Assume that we have the following DataFrame with the columns "id1", "vec1", and "vec2":
+
+~~~~
+  id1|vec1          |vec2          
+  ---|--------------|--------------
+  1  |[1.0,2.0,3.0] |[8.0,4.0,5.0] 
+  2  |[4.0,3.0,8.0] |[7.0,9.0,8.0] 
+  3  |[6.0,1.0,9.0] |[2.0,3.0,6.0] 
+  4  |[10.0,8.0,6.0]|[9.0,4.0,5.0] 
+  5  |[9.0,2.0,7.0] |[10.0,7.0,3.0]
+  6  |[1.0,1.0,4.0] |[2.0,8.0,4.0]     
+~~~~
+
+Applying `Interaction` with those input columns,
+then `interactedCol` as the output column contains:
+
+~~~~
+  id1|vec1          |vec2          |interactedCol                                         
+  ---|--------------|--------------|------------------------------------------------------
+  1  |[1.0,2.0,3.0] |[8.0,4.0,5.0] |[8.0,4.0,5.0,16.0,8.0,10.0,24.0,12.0,15.0]            
+  2  |[4.0,3.0,8.0] |[7.0,9.0,8.0] |[56.0,72.0,64.0,42.0,54.0,48.0,112.0,144.0,128.0]     
+  3  |[6.0,1.0,9.0] |[2.0,3.0,6.0] |[36.0,54.0,108.0,6.0,9.0,18.0,54.0,81.0,162.0]        
+  4  |[10.0,8.0,6.0]|[9.0,4.0,5.0] |[360.0,160.0,200.0,288.0,128.0,160.0,216.0,96.0,120.0]
+  5  |[9.0,2.0,7.0] |[10.0,7.0,3.0]|[450.0,315.0,135.0,100.0,70.0,30.0,350.0,245.0,105.0] 
+  6  |[1.0,1.0,4.0] |[2.0,8.0,4.0] |[12.0,48.0,24.0,12.0,48.0,24.0,48.0,192.0,96.0]       
+~~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Interaction Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Interaction)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/InteractionExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Interaction Java docs](api/java/org/apache/spark/ml/feature/Interaction.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaInteractionExample.java %}
+</div>
+</div>
 
 ## Normalizer
 
 `Normalizer` is a `Transformer` which transforms a dataset of `Vector` rows, normalizing each `Vector` to have unit norm.  It takes parameter `p`, which specifies the [p-norm](http://en.wikipedia.org/wiki/Norm_%28mathematics%29#p-norm) used for normalization.  ($p = 2$ by default.)  This normalization can help standardize your input data and improve the behavior of learning algorithms.
 
-The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^2$ norm and unit $L^\infty$ norm.
+**Examples**
+
+The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^1$ norm and unit $L^\infty$ norm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -758,11 +840,13 @@ for more details on the API.
 `StandardScaler` transforms a dataset of `Vector` rows, normalizing each feature to have unit standard deviation and/or zero mean.  It takes parameters:
 
 * `withStd`: True by default. Scales the data to unit standard deviation.
-* `withMean`: False by default. Centers the data with mean before scaling. It will build a dense output, so this does not work on sparse input and will raise an exception.
+* `withMean`: False by default. Centers the data with mean before scaling. It will build a dense output, so take care when applying to sparse input.
 
 `StandardScaler` is an `Estimator` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
 
 Note that if the standard deviation of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
+
+**Examples**
 
 The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
 
@@ -805,9 +889,11 @@ The rescaled value for a feature E is calculated as,
 `\begin{equation}
   Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
 \end{equation}`
-For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
+For the case `$E_{max} == E_{min}$`, `$Rescaled(e_i) = 0.5 * (max + min)$`
 
 Note that since zero values will probably be transformed to non-zero values, output of the transformer will be `DenseVector` even for sparse input.
+
+**Examples**
 
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
 
@@ -849,6 +935,8 @@ data, and thus does not destroy any sparsity.
 
 `MaxAbsScaler` computes summary statistics on a data set and produces a `MaxAbsScalerModel`. The 
 model can then transform each feature individually to range [-1, 1].
+
+**Examples**
 
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [-1, 1].
 
@@ -892,6 +980,8 @@ Note that if you have no idea of the upper and lower bounds of the targeted colu
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
 More details can be found in the API docs for [Bucketizer](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer).
+
+**Examples**
 
 The following example demonstrates how to bucketize a column of `Double`s into another index-wised column.
 
@@ -940,6 +1030,8 @@ v_N
   v_N w_N
   \end{pmatrix}
 \]`
+
+**Examples**
 
 This example below demonstrates how to transform vectors using a transforming vector value.
 
@@ -1092,14 +1184,22 @@ for more details on the API.
 ## QuantileDiscretizer
 
 `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-categorical features.
-The bin ranges are chosen by taking a sample of the data and dividing it into roughly equal parts.
-The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
-This attempts to find `numBuckets` partitions based on a sample of the given input data, but it may
-find fewer depending on the data sample values.
+categorical features. The number of bins is set by the `numBuckets` parameter. It is possible
+that the number of buckets used will be smaller than this value, for example, if there are too few
+distinct values of the input to create enough distinct quantiles.
 
-Note that the result may be different every time you run it, since the sample strategy behind it is
-non-deterministic.
+NaN values: Note also that QuantileDiscretizer
+will raise an error when it finds NaN values in the dataset, but the user can also choose to either
+keep or remove NaN values within the dataset by setting `handleInvalid`. If the user chooses to keep
+NaN values, they will be handled specially and placed into their own bucket, for example, if 4 buckets
+are used, then non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
+
+Algorithm: The bin ranges are chosen using an approximate algorithm (see the documentation for
+[approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions) for a
+detailed description). The precision of the approximation can be controlled with the
+`relativeError` parameter. When set to zero, exact quantiles are calculated
+(**Note:** Computing exact quantiles is an expensive operation). The lower and upper bin bounds
+will be `-Infinity` and `+Infinity` covering all real values.
 
 **Examples**
 
@@ -1318,10 +1418,16 @@ for more details on the API.
 ## ChiSqSelector
 
 `ChiSqSelector` stands for Chi-Squared feature selection. It operates on labeled data with
-categorical features. ChiSqSelector orders features based on a
-[Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test)
-from the class, and then filters (selects) the top features which the class label depends on the
-most. This is akin to yielding the features with the most predictive power.
+categorical features. ChiSqSelector uses the
+[Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
+features to choose. It supports three selection methods: `numTopFeatures`, `percentile`, `fpr`:
+
+* `numTopFeatures` chooses a fixed number of top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
+* `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
+* `fpr` chooses all features whose p-value is below a threshold, thus controlling the false positive rate of selection.
+
+By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
+The user can choose a selection method using `setSelectorType`.
 
 **Examples**
 

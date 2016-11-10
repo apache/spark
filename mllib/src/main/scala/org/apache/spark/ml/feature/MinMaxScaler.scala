@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
@@ -28,6 +28,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -73,35 +74,43 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
 }
 
 /**
- * :: Experimental ::
  * Rescale each feature individually to a common range [min, max] linearly using column summary
  * statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
- * feature E is calculated as,
+ * feature E is calculated as:
  *
- * Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+ * <p><blockquote>
+ *    $$
+ *    Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+ *    $$
+ * </blockquote></p>
  *
- * For the case E_{max} == E_{min}, Rescaled(e_i) = 0.5 * (max + min)
+ * For the case $E_{max} == E_{min}$, $Rescaled(e_i) = 0.5 * (max + min)$.
  * Note that since zero values will probably be transformed to non-zero values, output of the
  * transformer will be DenseVector even for sparse input.
  */
-@Experimental
-class MinMaxScaler(override val uid: String)
+@Since("1.5.0")
+class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[MinMaxScalerModel] with MinMaxScalerParams with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("minMaxScal"))
 
   setDefault(min -> 0.0, max -> 1.0)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMin(value: Double): this.type = set(min, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMax(value: Double): this.type = set(max, value)
 
   @Since("2.0.0")
@@ -114,10 +123,12 @@ class MinMaxScaler(override val uid: String)
     copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): MinMaxScaler = defaultCopy(extra)
 }
 
@@ -129,7 +140,6 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[MinMaxScaler]].
  *
  * @param originalMin min value for each original column during fitting
@@ -137,29 +147,34 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
  *
  * TODO: The transformer does not yet set the metadata in the output column (SPARK-8529).
  */
-@Experimental
+@Since("1.5.0")
 class MinMaxScalerModel private[ml] (
-    override val uid: String,
-    val originalMin: Vector,
-    val originalMax: Vector)
+    @Since("1.5.0") override val uid: String,
+    @Since("2.0.0") val originalMin: Vector,
+    @Since("2.0.0") val originalMax: Vector)
   extends Model[MinMaxScalerModel] with MinMaxScalerParams with MLWritable {
 
   import MinMaxScalerModel._
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMin(value: Double): this.type = set(min, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMax(value: Double): this.type = set(max, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
     val minArray = originalMin.toArray
 
@@ -171,8 +186,10 @@ class MinMaxScalerModel private[ml] (
       val size = values.length
       var i = 0
       while (i < size) {
-        val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
-        values(i) = raw * scale + $(min)
+        if (!values(i).isNaN) {
+          val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
+          values(i) = raw * scale + $(min)
+        }
         i += 1
       }
       Vectors.dense(values)
@@ -181,10 +198,12 @@ class MinMaxScalerModel private[ml] (
     dataset.withColumn($(outputCol), reScale(col($(inputCol))))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): MinMaxScalerModel = {
     val copied = new MinMaxScalerModel(uid, originalMin, originalMax)
     copyValues(copied, extra).setParent(parent)
@@ -206,7 +225,7 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = new Data(instance.originalMin, instance.originalMax)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -217,9 +236,11 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
     override def load(path: String): MinMaxScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(originalMin: Vector, originalMax: Vector) = sqlContext.read.parquet(dataPath)
-        .select("originalMin", "originalMax")
-        .head()
+      val data = sparkSession.read.parquet(dataPath)
+      val Row(originalMin: Vector, originalMax: Vector) =
+        MLUtils.convertVectorColumnsToML(data, "originalMin", "originalMax")
+          .select("originalMin", "originalMax")
+          .head()
       val model = new MinMaxScalerModel(metadata.uid, originalMin, originalMax)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

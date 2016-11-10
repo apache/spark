@@ -19,16 +19,17 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.util.UUID
 
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Project, Union}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.functions._
@@ -324,6 +325,24 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData2.select(sumDistinct('a)),
       Row(6))
+  }
+
+  test("sorting with null ordering") {
+    val data = Seq[java.lang.Integer](2, 1, null).toDF("key")
+
+    checkAnswer(data.orderBy('key.asc), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy(asc("key")), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy('key.asc_nulls_first), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy(asc_nulls_first("key")), Row(null) :: Row(1) :: Row(2) :: Nil)
+    checkAnswer(data.orderBy('key.asc_nulls_last), Row(1) :: Row(2) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy(asc_nulls_last("key")), Row(1) :: Row(2) :: Row(null) :: Nil)
+
+    checkAnswer(data.orderBy('key.desc), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy(desc("key")), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy('key.desc_nulls_first), Row(null) :: Row(2) :: Row(1) :: Nil)
+    checkAnswer(data.orderBy(desc_nulls_first("key")), Row(null) :: Row(2) :: Row(1) :: Nil)
+    checkAnswer(data.orderBy('key.desc_nulls_last), Row(2) :: Row(1) :: Row(null) :: Nil)
+    checkAnswer(data.orderBy(desc_nulls_last("key")), Row(2) :: Row(1) :: Row(null) :: Nil)
   }
 
   test("global sorting") {
@@ -627,9 +646,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("drop(name: String) search and drop all top level columns that matchs the name") {
     val df1 = Seq((1, 2)).toDF("a", "b")
     val df2 = Seq((3, 4)).toDF("a", "b")
-    checkAnswer(df1.join(df2), Row(1, 2, 3, 4))
+    checkAnswer(df1.crossJoin(df2), Row(1, 2, 3, 4))
     // Finds and drops all columns that match the name (case insensitive).
-    checkAnswer(df1.join(df2).drop("A"), Row(2, 4))
+    checkAnswer(df1.crossJoin(df2).drop("A"), Row(2, 4))
   }
 
   test("withColumnRenamed") {
@@ -651,44 +670,44 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       ("Amy", 24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count", "4", "4"),
-      Row("mean", "33.0", "178.0"),
-      Row("stddev", "19.148542155126762", "11.547005383792516"),
-      Row("min", "16", "164"),
-      Row("max", "60", "192"))
+      Row("count", "4", "4", "4"),
+      Row("mean", null, "33.0", "178.0"),
+      Row("stddev", null, "19.148542155126762", "11.547005383792516"),
+      Row("min", "Alice", "16", "164"),
+      Row("max", "David", "60", "192"))
 
     val emptyDescribeResult = Seq(
-      Row("count", "0", "0"),
-      Row("mean", null, null),
-      Row("stddev", null, null),
-      Row("min", null, null),
-      Row("max", null, null))
+      Row("count", "0", "0", "0"),
+      Row("mean", null, null, null),
+      Row("stddev", null, null, null),
+      Row("min", null, null, null),
+      Row("max", null, null, null))
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeTwoCols = describeTestData.describe("age", "height")
-    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
+    val describeTwoCols = describeTestData.describe("name", "age", "height")
+    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
     // All aggregate value should have been cast to string
     describeTwoCols.collect().foreach { row =>
-      assert(row.get(1).isInstanceOf[String], "expected string but found " + row.get(1).getClass)
       assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
+      assert(row.get(3).isInstanceOf[String], "expected string but found " + row.get(3).getClass)
     }
 
     val describeAllCols = describeTestData.describe()
-    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeAllCols, describeResult)
 
     val describeOneCol = describeTestData.describe("age")
     assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
-    checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+    checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
 
     val describeNoCol = describeTestData.select("name").describe()
-    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
-    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary", "name"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, n, _, _) => Row(s, n)} )
 
     val emptyDescription = describeTestData.limit(0).describe()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
@@ -723,7 +742,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     testData.select($"*").show(1000)
   }
 
-  test("showString: truncate = [true, false]") {
+  test("showString: truncate = [0, 20]") {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = """+---------------------+
@@ -733,7 +752,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                                    ||111111111111111111111|
                                    |+---------------------+
                                    |""".stripMargin
-    assert(df.showString(10, false) === expectedAnswerForFalse)
+    assert(df.showString(10, truncate = 0) === expectedAnswerForFalse)
     val expectedAnswerForTrue = """+--------------------+
                                   ||               value|
                                   |+--------------------+
@@ -741,7 +760,28 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                                   ||11111111111111111...|
                                   |+--------------------+
                                   |""".stripMargin
-    assert(df.showString(10, true) === expectedAnswerForTrue)
+    assert(df.showString(10, truncate = 20) === expectedAnswerForTrue)
+  }
+
+  test("showString: truncate = [3, 17]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = """+-----+
+                                   ||value|
+                                   |+-----+
+                                   ||    1|
+                                   ||  111|
+                                   |+-----+
+                                   |""".stripMargin
+    assert(df.showString(10, truncate = 3) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = """+-----------------+
+                                  ||            value|
+                                  |+-----------------+
+                                  ||                1|
+                                  ||11111111111111...|
+                                  |+-----------------+
+                                  |""".stripMargin
+    assert(df.showString(10, truncate = 17) === expectedAnswerForTrue)
   }
 
   test("showString(negative)") {
@@ -1535,5 +1575,157 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     } finally {
       Utils.deleteRecursively(baseDir)
     }
+  }
+
+  test("SPARK-15230: distinct() does not handle column name with dot properly") {
+    val df = Seq(1, 1, 2).toDF("column.with.dot")
+    checkAnswer(df.distinct(), Row(1) :: Row(2) :: Nil)
+  }
+
+  test("SPARK-16181: outer join with isNull filter") {
+    val left = Seq("x").toDF("col")
+    val right = Seq("y").toDF("col").withColumn("new", lit(true))
+    val joined = left.join(right, left("col") === right("col"), "left_outer")
+
+    checkAnswer(joined, Row("x", null, null))
+    checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
+  }
+
+  test("SPARK-16664: persist with more than 200 columns") {
+    val size = 201L
+    val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
+    val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
+    val df = spark.createDataFrame(rdd, StructType(schemas), false)
+    assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
+  }
+
+  test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
+    withTable("bar") {
+      withTempView("foo") {
+        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
+          sql("select 0 as id").createOrReplaceTempView("foo")
+          val df = sql("select * from foo group by id")
+          // If we optimize the query in CTAS more than once, the following saveAsTable will fail
+          // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
+          df.write.mode("overwrite").saveAsTable("bar")
+          checkAnswer(spark.table("bar"), Row(0) :: Nil)
+          val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
+          assert(tableMetadata.provider == Some("json"),
+            "the expected table is a data source table using json")
+        }
+      }
+    }
+  }
+
+  test("copy results for sampling with replacement") {
+    val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
+    val sampleDf = df.sample(true, 2.00)
+    val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
+    assert(d.size == d.distinct.size)
+  }
+
+  test("SPARK-17625: data source table in InMemoryCatalog should guarantee output consistency") {
+    val tableName = "tbl"
+    withTable(tableName) {
+      spark.range(10).select('id as 'i, 'id as 'j).write.saveAsTable(tableName)
+      val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName))
+      val expr = relation.resolve("i")
+      val qe = spark.sessionState.executePlan(Project(Seq(expr), relation))
+      qe.assertAnalyzed()
+    }
+  }
+
+  private def verifyNullabilityInFilterExec(
+      df: DataFrame,
+      expr: String,
+      expectedNonNullableColumns: Seq[String]): Unit = {
+    val dfWithFilter = df.where(s"isnotnull($expr)").selectExpr(expr)
+    // In the logical plan, all the output columns of input dataframe are nullable
+    dfWithFilter.queryExecution.optimizedPlan.collect {
+      case e: Filter => assert(e.output.forall(_.nullable))
+    }
+
+    dfWithFilter.queryExecution.executedPlan.collect {
+      // When the child expression in isnotnull is null-intolerant (i.e. any null input will
+      // result in null output), the involved columns are converted to not nullable;
+      // otherwise, no change should be made.
+      case e: FilterExec =>
+        assert(e.output.forall { o =>
+          if (expectedNonNullableColumns.contains(o.name)) !o.nullable else o.nullable
+        })
+    }
+  }
+
+  test("SPARK-17957: no change on nullability in FilterExec output") {
+    val df = sparkContext.parallelize(Seq(
+      null.asInstanceOf[java.lang.Integer] -> new java.lang.Integer(3),
+      new java.lang.Integer(1) -> null.asInstanceOf[java.lang.Integer],
+      new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF()
+
+    verifyNullabilityInFilterExec(df,
+      expr = "Rand()", expectedNonNullableColumns = Seq.empty[String])
+    verifyNullabilityInFilterExec(df,
+      expr = "coalesce(_1, _2)", expectedNonNullableColumns = Seq.empty[String])
+    verifyNullabilityInFilterExec(df,
+      expr = "coalesce(_1, 0) + Rand()", expectedNonNullableColumns = Seq.empty[String])
+    verifyNullabilityInFilterExec(df,
+      expr = "cast(coalesce(cast(coalesce(_1, _2) as double), 0.0) as int)",
+      expectedNonNullableColumns = Seq.empty[String])
+  }
+
+  test("SPARK-17957: set nullability to false in FilterExec output") {
+    val df = sparkContext.parallelize(Seq(
+      null.asInstanceOf[java.lang.Integer] -> new java.lang.Integer(3),
+      new java.lang.Integer(1) -> null.asInstanceOf[java.lang.Integer],
+      new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF()
+
+    verifyNullabilityInFilterExec(df,
+      expr = "_1 + _2 * 3", expectedNonNullableColumns = Seq("_1", "_2"))
+    verifyNullabilityInFilterExec(df,
+      expr = "_1 + _2", expectedNonNullableColumns = Seq("_1", "_2"))
+    verifyNullabilityInFilterExec(df,
+      expr = "_1", expectedNonNullableColumns = Seq("_1"))
+    // `constructIsNotNullConstraints` infers the IsNotNull(_2) from IsNotNull(_2 + Rand())
+    // Thus, we are able to set nullability of _2 to false.
+    // If IsNotNull(_2) is not given from `constructIsNotNullConstraints`, the impl of
+    // isNullIntolerant in `FilterExec` needs an update for more advanced inference.
+    verifyNullabilityInFilterExec(df,
+      expr = "_2 + Rand()", expectedNonNullableColumns = Seq("_2"))
+    verifyNullabilityInFilterExec(df,
+      expr = "_2 * 3 + coalesce(_1, 0)", expectedNonNullableColumns = Seq("_2"))
+    verifyNullabilityInFilterExec(df,
+      expr = "cast((_1 + _2) as boolean)", expectedNonNullableColumns = Seq("_1", "_2"))
+  }
+
+  test("SPARK-17957: outer join + na.fill") {
+    val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
+    val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
+    val df3 = Seq((3, 1)).toDF("a", "d")
+    checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
+  }
+
+  test("SPARK-17123: Performing set operations that combine non-scala native types") {
+    val dates = Seq(
+      (new Date(0), BigDecimal.valueOf(1), new Timestamp(2)),
+      (new Date(3), BigDecimal.valueOf(4), new Timestamp(5))
+    ).toDF("date", "timestamp", "decimal")
+
+    val widenTypedRows = Seq(
+      (new Timestamp(2), 10.5D, "string")
+    ).toDF("date", "timestamp", "decimal")
+
+    dates.union(widenTypedRows).collect()
+    dates.except(widenTypedRows).collect()
+    dates.intersect(widenTypedRows).collect()
+  }
+
+  test("SPARK-18070 binary operator should not consider nullability when comparing input types") {
+    val rows = Seq(Row(Seq(1), Seq(1)))
+    val schema = new StructType()
+      .add("array1", ArrayType(IntegerType))
+      .add("array2", ArrayType(IntegerType, containsNull = false))
+    val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
+    assert(df.filter($"array1" === $"array2").count() == 1)
   }
 }
