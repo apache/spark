@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.execution.aggregate.SortAggregateExec
+import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -55,7 +55,7 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     val df = sql("SELECT hive_max(key) FROM t GROUP BY key % 2")
 
     val aggs = df.queryExecution.executedPlan.collect {
-      case agg: SortAggregateExec => agg
+      case agg: ObjectHashAggregateExec => agg
     }
 
     // There should be two aggregate operators, one for partial aggregation, and the other for
@@ -72,7 +72,7 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     val df = sql("SELECT mock(value) FROM t GROUP BY key % 2")
 
     val aggs = df.queryExecution.executedPlan.collect {
-      case agg: SortAggregateExec => agg
+      case agg: ObjectHashAggregateExec => agg
     }
 
     // There should be two aggregate operators, one for partial aggregation, and the other for
