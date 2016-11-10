@@ -40,7 +40,7 @@ echo "USING R_HOME = $R_HOME"
 NO_VIGNETTES=1 $FWDIR/create-docs.sh
 
 # Build source package with vignettes
-SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+SPARK_HOME="$(cd "${FWDIR}"/..; pwd)"
 . "${SPARK_HOME}"/bin/load-spark-env.sh
 if [ -f "${SPARK_HOME}/RELEASE" ]; then
   SPARK_JARS_DIR="${SPARK_HOME}/jars"
