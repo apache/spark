@@ -104,11 +104,11 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
           AesCipher cipher = new AesCipher(configMessage);
           logger.info("Enabling AES cipher for client channel {}", client);
           cipher.addToChannel(channel);
+          saslClient.dispose();
         } else {
           SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
-          saslClient = null;
         }
-
+        saslClient = null;
         logger.debug("Channel {} configured for encryption.", client);
       }
     } catch (IOException ioe) {
