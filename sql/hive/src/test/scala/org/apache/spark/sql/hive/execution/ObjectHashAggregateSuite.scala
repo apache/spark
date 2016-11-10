@@ -326,7 +326,8 @@ class ObjectHashAggregateSuite
             // Currently Spark SQL doesn't support evaluating distinct aggregate function together
             // with aggregate functions without partial aggregation support.
             if (!(aggs.contains(withoutPartial) && aggs.contains(withDistinct))) {
-              test(
+              // TODO Re-enables them after fixing SPARK-18403
+              ignore(
                 s"randomized aggregation test - " +
                   s"${names.mkString("[", ", ", "]")} - " +
                   s"${if (withGroupingKeys) "with" else "without"} grouping keys - " +
