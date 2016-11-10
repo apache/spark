@@ -67,7 +67,8 @@ case class SubExprEliminationState(isNull: String, value: String)
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
  *
- * @param codes Strings representing the codes that evaluate common subexpressions.
+ * @param codes Strings representing the codes that reset the initialization status of
+ *              common subexpression evaluation.
  * @param states Foreach expression that is participating in subexpression elimination,
  *               the state to use.
  */
@@ -681,6 +682,47 @@ class CodegenContext {
   }
 
   /**
+   * A private helper function used to construct the parameter list for subexpression elimination
+   * evaluation functions
+   *
+   * @param expression The subexpression to evaluate.
+   * @param caller Indicating to construct parameter list for function caller.
+   */
+  private def genFunctionParamsListForSubExprEliminate(
+      expression: Expression,
+      caller: Boolean): String = {
+    val boundRefs = expression.collect {
+      case b: BoundReference => b
+    }.distinct
+    if (currentVars == null) {
+      if (caller) INPUT_ROW else s"InternalRow $INPUT_ROW"
+    } else {
+      val boundRefsInCurrentVars = boundRefs.filter(b => currentVars(b.ordinal) != null)
+      val currentVarsParams = boundRefsInCurrentVars.map { bound =>
+        val paramType = javaType(bound.dataType)
+        val variable = currentVars(bound.ordinal).value
+        val isNull = currentVars(bound.ordinal).isNull
+        if (caller) {
+          if (isNull == "false") variable else s"$variable, $isNull"
+        } else {
+          if (isNull == "false") {
+            s"$paramType $variable"
+          } else {
+            s"$paramType $variable, boolean $isNull"
+          }
+        }
+      }
+
+      if (boundRefsInCurrentVars.size == boundRefs.size) {
+        currentVarsParams.mkString(", ")
+      } else {
+        val rowParam = if (caller) INPUT_ROW else s"InternalRow $INPUT_ROW"
+        (Seq(rowParam) ++ currentVarsParams).mkString(", ")
+      }
+    }
+  }
+
+  /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
    * common subexpressions, generates the code snippets that evaluate those expressions and
    * populates the mapping of common subexpressions to the generated code snippets. The generated
@@ -700,11 +742,63 @@ class CodegenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     val codes = commonExprs.map { e =>
       val expr = e.head
+      val fnName = freshName("evalSubExpr")
+      val isNull = s"${fnName}IsNull"
+      val value = s"${fnName}Value"
+      val isInitialized = s"${fnName}IsInitialized"
+
+      val functionParams = genFunctionParamsListForSubExprEliminate(expr, false)
+      val callerParams = genFunctionParamsListForSubExprEliminate(expr, true)
+
       // Generate the code for this expression tree.
       val code = expr.genCode(this)
-      val state = SubExprEliminationState(code.isNull, code.value)
+      val returnType = javaType(expr.dataType)
+      val fn =
+        s"""
+           |private void $fnName($functionParams) {
+           |  ${code.code.trim}
+           |  $isNull = ${code.isNull};
+           |  $value = ${code.value};
+           |  $isInitialized = true;
+           |}
+           """.stripMargin
+
+      val valueFnName = s"${fnName}ForValue"
+      val valueFn =
+        s"""
+           |private $returnType $valueFnName($functionParams) {
+           |  if (!$isInitialized) {
+           |    $fnName($callerParams);
+           |  }
+           |  return $value;
+           |}
+           """.stripMargin
+
+      val isNullFnName = s"${fnName}ForIsNull"
+      val isNullFn =
+        s"""
+           |private boolean $isNullFnName($functionParams) {
+           |  if (!$isInitialized) {
+           |    $fnName($callerParams);
+           |  }
+           |  return $isNull;
+           |}
+           """.stripMargin
+
+      addNewFunction(fnName, fn)
+      addNewFunction(valueFnName, valueFn)
+      addNewFunction(isNullFnName, isNullFn)
+
+      addMutableState("boolean", isNull, s"$isNull = false;")
+      addMutableState("boolean", isInitialized, s"$isInitialized = false;")
+      addMutableState(returnType, value, s"$value = ${defaultValue(expr.dataType)};")
+
+      val state = SubExprEliminationState(
+        isNull = s"$isNullFnName($callerParams)",
+        value = s"$valueFnName($callerParams)")
+
       e.foreach(subExprEliminationExprs.put(_, state))
-      code.code.trim
+      s"$isInitialized = false;"
     }
     SubExprCodes(codes, subExprEliminationExprs.toMap)
   }
