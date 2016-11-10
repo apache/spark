@@ -340,7 +340,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val partitionLocation = catalog.getPartition(
       "db1",
       "tbl",
-      Map("partCol1" -> "1", "partCol2" -> "2")).storage.locationUri.get
+      Map("partCol1" -> "1", "partCol2" -> "2")).location
     val tableLocation = catalog.getTable("db1", "tbl").location
     val defaultPartitionLocation = new Path(new Path(tableLocation, "partCol1=1"), "partCol2=2")
     assert(new Path(partitionLocation) == defaultPartitionLocation)
@@ -449,19 +449,19 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
     catalog.createPartitions("db1", "tbl", Seq(mixedCasePart1), ignoreIfExists = false)
     assert(
-      new Path(catalog.getPartition("db1", "tbl", mixedCasePart1.spec).storage.locationUri.get) ==
+      new Path(catalog.getPartition("db1", "tbl", mixedCasePart1.spec).location) ==
         new Path(new Path(tableLocation, "partCol1=1"), "partCol2=2"))
 
     catalog.renamePartitions("db1", "tbl", Seq(mixedCasePart1.spec), Seq(mixedCasePart2.spec))
     assert(
-      new Path(catalog.getPartition("db1", "tbl", mixedCasePart2.spec).storage.locationUri.get) ==
+      new Path(catalog.getPartition("db1", "tbl", mixedCasePart2.spec).location) ==
         new Path(new Path(tableLocation, "partCol1=3"), "partCol2=4"))
 
     // For external tables, RENAME PARTITION should not update the partition location.
-    val existingPartLoc = catalog.getPartition("db2", "tbl2", part1.spec).storage.locationUri.get
+    val existingPartLoc = catalog.getPartition("db2", "tbl2", part1.spec).location
     catalog.renamePartitions("db2", "tbl2", Seq(part1.spec), Seq(part3.spec))
     assert(
-      new Path(catalog.getPartition("db2", "tbl2", part3.spec).storage.locationUri.get) ==
+      new Path(catalog.getPartition("db2", "tbl2", part3.spec).location) ==
         new Path(existingPartLoc))
   }
 
@@ -741,7 +741,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     catalog.createPartitions("db2", "tbl1", Seq(part1), ignoreIfExists = false)
 
-    val partPath = new Path(catalog.getPartition("db2", "tbl1", part1.spec).storage.locationUri.get)
+    val partPath = new Path(catalog.getPartition("db2", "tbl1", part1.spec).location)
     val fs = partPath.getFileSystem(new Configuration)
     assert(fs.exists(partPath))
 

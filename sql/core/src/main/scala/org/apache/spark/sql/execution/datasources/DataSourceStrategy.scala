@@ -190,7 +190,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       val effectiveOutputPath = if (overwritingSinglePartition) {
         val partition = t.sparkSession.sessionState.catalog.getPartition(
           l.catalogTable.get.identifier, overwrite.specificPartition.get)
-        new Path(partition.storage.locationUri.get)
+        new Path(partition.location)
       } else {
         outputPath
       }
