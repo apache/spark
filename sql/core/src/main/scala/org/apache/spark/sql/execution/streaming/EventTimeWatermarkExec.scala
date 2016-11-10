@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import scala.math.max
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
@@ -39,13 +41,11 @@ class MaxLong(protected var currentValue: Long = 0)
   }
 
   override def add(v: Long): Unit = {
-    if (value < v) { currentValue = v }
+    currentValue = max(v, value)
   }
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = {
-    if (currentValue < other.value) {
-      currentValue = other.value
-    }
+    currentValue = max(value, other.value)
   }
 }
 
