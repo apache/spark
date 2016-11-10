@@ -970,15 +970,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-18284: Serializer should have correct nullable value") {
-    val df1 = sparkContext.parallelize(Seq(1, 2, 3, 4), 1).toDF
+    val df1 = Seq(1, 2, 3, 4).toDF
     assert(df1.schema(0).nullable == false)
-    val df2 = sparkContext.parallelize(Seq(Integer.valueOf(1), Integer.valueOf(2)), 1).toDF
+    val df2 = Seq(Integer.valueOf(1), Integer.valueOf(2)).toDF
     assert(df2.schema(0).nullable == true)
 
-    val df3 = sparkContext.parallelize(Seq(Seq(1, 2), Seq(3, 4)), 1).toDF()
+    val df3 = Seq(Seq(1, 2), Seq(3, 4)).toDF
     assert(df3.schema(0).nullable == true)
     assert(df3.schema(0).dataType.asInstanceOf[ArrayType].containsNull == false)
-    val df4 = sparkContext.parallelize(Seq(Seq("a", "b"), Seq("c", "d")), 1).toDF()
+    val df4 = Seq(Seq("a", "b"), Seq("c", "d")).toDF
     assert(df4.schema(0).nullable == true)
     assert(df4.schema(0).dataType.asInstanceOf[ArrayType].containsNull == true)
   }
