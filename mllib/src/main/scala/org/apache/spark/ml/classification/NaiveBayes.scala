@@ -111,7 +111,7 @@ class NaiveBayes @Since("1.5.0") (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
-    trainWithLabelCheck(dataset)
+    trainWithLabelCheck(dataset, positiveLabel = true)
   }
 
   /**
@@ -122,7 +122,7 @@ class NaiveBayes @Since("1.5.0") (
    */
   private[spark] def trainWithLabelCheck(
       dataset: Dataset[_],
-      positiveLabel: Boolean = true): NaiveBayesModel = {
+      positiveLabel: Boolean): NaiveBayesModel = {
     if (positiveLabel) {
       val numClasses = getNumClasses(dataset)
       if (isDefined(thresholds)) {
@@ -214,7 +214,7 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
   /* Set of modelTypes that NaiveBayes supports */
   private[classification] val supportedModelTypes = Set(Multinomial, Bernoulli)
 
-  private[NaiveBayes] val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
+  private[NaiveBayes] def requireNonnegativeValues(v: Vector): Unit = {
     val values = v match {
       case sv: SparseVector => sv.values
       case dv: DenseVector => dv.values
@@ -224,7 +224,7 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
       s"Naive Bayes requires nonnegative feature values but found $v.")
   }
 
-  private[NaiveBayes] val requireZeroOneBernoulliValues: Vector => Unit = (v: Vector) => {
+  private[NaiveBayes] def requireZeroOneBernoulliValues(v: Vector): Unit = {
     val values = v match {
       case sv: SparseVector => sv.values
       case dv: DenseVector => dv.values
