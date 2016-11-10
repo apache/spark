@@ -33,10 +33,6 @@ class JavaWrapper(object):
         super(JavaWrapper, self).__init__()
         self._java_obj = java_obj
 
-    def __del__(self):
-        if SparkContext._gateway:
-            SparkContext._gateway.detach(self._java_obj)
-
     @classmethod
     def _create_from_java_class(cls, java_class, *args):
         """
@@ -260,6 +256,10 @@ class JavaModel(JavaTransformer, Model):
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
             self._resetUid(java_model.uid())
+
+    def __del__(self):
+        if SparkContext._gateway:
+            SparkContext._gateway.detach(self._java_obj)
 
     def copy(self, extra=None):
         """
