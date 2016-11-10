@@ -95,13 +95,20 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
           // Generate a request config message to send to server.
           AesConfigMessage configMessage = AesCipher.createConfigMessage(conf);
           ByteBuffer buf = configMessage.encodeMessage();
-          client.sendRpcSync(buf, conf.saslRTTimeoutMs());
+
+          // Encrypted the config message.
+          ByteBuffer encrypted = ByteBuffer.wrap(
+            saslClient.wrap(buf.array(), 0, buf.array().length));
+
+          client.sendRpcSync(encrypted, conf.saslRTTimeoutMs());
           AesCipher cipher = new AesCipher(configMessage);
           logger.info("Enabling AES cipher for client channel {}", client);
           cipher.addToChannel(channel);
         } else {
           SaslEncryption.addToChannel(channel, saslClient, conf.maxSaslEncryptedBlockSize());
         }
+
+        saslClient.dispose();
         saslClient = null;
         logger.debug("Channel {} configured for encryption.", client);
       }
