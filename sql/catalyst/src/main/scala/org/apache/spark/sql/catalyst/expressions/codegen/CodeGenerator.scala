@@ -820,19 +820,46 @@ class CodegenContext {
       val fnName = freshName("evalExpr")
       val isNull = s"${fnName}IsNull"
       val value = s"${fnName}Value"
+      val isInitialized = s"${fnName}IsInitialized"
 
       // Generate the code for this expression tree and wrap it in a function.
       val code = expr.genCode(this)
+      val returnType = javaType(expr.dataType)
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
            |  ${code.code.trim}
            |  $isNull = ${code.isNull};
            |  $value = ${code.value};
+           |  $isInitialized = true;
+           |}
+           """.stripMargin
+
+      val valueFnName = s"${fnName}ForValue"
+      val valueFn =
+        s"""
+           |private $returnType $valueFnName(InternalRow $INPUT_ROW) {
+           |  if (!$isInitialized) {
+           |    $fnName($INPUT_ROW);
+           |  }
+           |  return $value;
+           |}
+           """.stripMargin
+
+      val isNullFnName = s"${fnName}ForIsNull"
+      val isNullFn =
+        s"""
+           |private boolean $isNullFnName(InternalRow $INPUT_ROW) {
+           |  if (!$isInitialized) {
+           |    $fnName($INPUT_ROW);
+           |  }
+           |  return $isNull;
            |}
            """.stripMargin
 
       addNewFunction(fnName, fn)
+      addNewFunction(valueFnName, valueFn)
+      addNewFunction(isNullFnName, isNullFn)
 
       // Add a state and a mapping of the common subexpressions that are associate with this
       // state. Adding this expression to subExprEliminationExprMap means it will call `fn`
@@ -851,11 +878,14 @@ class CodegenContext {
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
       addMutableState("boolean", isNull, s"$isNull = false;")
-      addMutableState(javaType(expr.dataType), value,
+      addMutableState("boolean", isInitialized, s"$isInitialized = false;")
+      addMutableState(returnType, value,
         s"$value = ${defaultValue(expr.dataType)};")
 
-      subexprFunctions += s"$fnName($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
+      subexprFunctions += s"$isInitialized = false;"
+      val state = SubExprEliminationState(
+        isNull = s"$isNullFnName($INPUT_ROW)",
+        value = s"$valueFnName($INPUT_ROW)")
       e.foreach(subExprEliminationExprs.put(_, state))
     }
   }
