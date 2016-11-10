@@ -5,7 +5,7 @@ To release SparkR as a package to CRAN, we would use the `devtools` package. Ple
 
 ### Release
 
-First, check that the `Version:` field in the `pkg/DESCRIPTION` file is updated. Also, check for stale file not under source control.
+First, check that the `Version:` field in the `pkg/DESCRIPTION` file is updated. Also, check for stale files not under source control.
 
 Note that while `check-cran.sh` is running `R CMD check`, it is doing so with `--no-manual --no-vignettes`, which skips a few vignettes or PDF checks - therefore it will be preferred to run `R CMD check` on the source package built manually before uploading a release.
 
@@ -56,6 +56,23 @@ man/
 
 vignettes/
 sparkr-vignettes.Rmd
+```
+
+#### Test source package
+
+To install, run this:
+
+```sh
+R CMD INSTALL SparkR_2.1.0.tar.gz
+```
+
+With "2.1.0" replaced with the version of SparkR.
+
+This command installs SparkR to the default libPaths. Once that is done, you should be able to start R and run:
+
+```R
+library(SparkR)
+vignette("sparkr-vignettes", package="SparkR")
 ```
 
 #### Build binary package
