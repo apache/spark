@@ -63,8 +63,12 @@ private[kinesis] class KinesisCheckpointer(
    */
   def removeCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
     synchronized {
-      checkpointers.remove(shardId)
-      checkpoint(shardId, checkpointer)
+      if (shardId != null) {
+        checkpointers.remove(shardId)
+        checkpoint(shardId, checkpointer)
+      } else {
+        logWarning(s"Told to remove checkpointer for null shardId")
+      }
     }
   }
 
