@@ -422,14 +422,15 @@ case class MapObjects private(
     lambdaFunction: Expression,
     inputData: Expression) extends Expression with NonSQLExpression {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = inputData.nullable
 
   override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override def dataType: DataType = ArrayType(lambdaFunction.dataType)
+  override def dataType: DataType =
+    ArrayType(lambdaFunction.dataType, containsNull = lambdaFunction.nullable)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = ctx.javaType(loopVarDataType)
@@ -512,6 +513,18 @@ case class MapObjects private(
       case _ => s"$loopIsNull = $loopValue == null;"
     }
 
+    val setValue = if (lambdaFunction.nullable) {
+      s"""
+        if (${genFunction.isNull}) {
+          $convertedArray[$loopIndex] = null;
+        } else {
+          $convertedArray[$loopIndex] = $genFunctionValue;
+        }
+      """
+    } else {
+      s"$convertedArray[$loopIndex] = $genFunctionValue;"
+    }
+
     val code = s"""
       ${genInputData.code}
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -528,11 +541,7 @@ case class MapObjects private(
           $loopNullCheck
 
           ${genFunction.code}
-          if (${genFunction.isNull}) {
-            $convertedArray[$loopIndex] = null;
-          } else {
-            $convertedArray[$loopIndex] = $genFunctionValue;
-          }
+          $setValue
 
           $loopIndex += 1;
         }
