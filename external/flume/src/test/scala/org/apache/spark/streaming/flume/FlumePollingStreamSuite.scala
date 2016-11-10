@@ -43,7 +43,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfterAll with 
   @transient private var _sc: SparkContext = _
 
   val conf = new SparkConf()
-    .setMaster("local[2]")
+    .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
     .set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
 
