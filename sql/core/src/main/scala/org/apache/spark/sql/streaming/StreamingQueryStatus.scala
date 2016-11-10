@@ -27,7 +27,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset}
+import org.apache.spark.sql.execution.streaming.{LongOffset, OffsetSeq}
 import org.apache.spark.util.JsonProtocol
 
 /**
@@ -140,7 +140,7 @@ private[sql] object StreamingQueryStatus {
       sourceStatuses = Array(
         SourceStatus(
           desc = "MySource1",
-          offsetDesc = LongOffset(0).toString,
+          offsetDesc = LongOffset(0).json,
           inputRate = 15.5,
           processingRate = 23.5,
           triggerDetails = Map(
@@ -149,7 +149,7 @@ private[sql] object StreamingQueryStatus {
             SOURCE_GET_BATCH_LATENCY -> "20"))),
       sinkStatus = SinkStatus(
         desc = "MySink",
-        offsetDesc = CompositeOffset(Some(LongOffset(1)) :: None :: Nil).toString),
+        offsetDesc = OffsetSeq(Some(LongOffset(1)) :: None :: Nil).toString),
       triggerDetails = Map(
         TRIGGER_ID -> "5",
         IS_TRIGGER_ACTIVE -> "true",

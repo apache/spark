@@ -127,6 +127,21 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.dropDatabase("db_that_does_not_exist", ignoreIfNotExists = true, cascade = false)
   }
 
+  test("drop current database and drop default database") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    catalog.setCurrentDatabase("db1")
+    assert(catalog.getCurrentDatabase == "db1")
+    catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = true)
+    intercept[NoSuchDatabaseException] {
+      catalog.createTable(newTable("tbl1", "db1"), ignoreIfExists = false)
+    }
+    catalog.setCurrentDatabase("default")
+    assert(catalog.getCurrentDatabase == "default")
+    intercept[AnalysisException] {
+      catalog.dropDatabase("default", ignoreIfNotExists = false, cascade = true)
+    }
+  }
+
   test("alter database") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val db1 = catalog.getDatabaseMetadata("db1")
@@ -902,6 +917,34 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.createTempFunction("temp1", info3, tempFunc3, ignoreIfExists = true)
     assert(
       catalog.lookupFunction(FunctionIdentifier("temp1"), arguments) === Literal(arguments.length))
+  }
+
+  test("isTemporaryFunction") {
+    val externalCatalog = newBasicCatalog()
+    val sessionCatalog = new SessionCatalog(externalCatalog)
+
+    // Returns false when the function does not exist
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("temp1")))
+
+    val tempFunc1 = (e: Seq[Expression]) => e.head
+    val info1 = new ExpressionInfo("tempFunc1", "temp1")
+    sessionCatalog.createTempFunction("temp1", info1, tempFunc1, ignoreIfExists = false)
+
+    // Returns true when the function is temporary
+    assert(sessionCatalog.isTemporaryFunction(FunctionIdentifier("temp1")))
+
+    // Returns false when the function is permanent
+    assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func1"))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("func1", Some("db2"))))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("db2.func1")))
+    sessionCatalog.setCurrentDatabase("db2")
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("func1")))
+
+    // Returns false when the function is built-in or hive
+    assert(FunctionRegistry.builtin.functionExists("sum"))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("sum")))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("histogram_numeric")))
+    assert(!sessionCatalog.isTemporaryFunction(FunctionIdentifier("percentile")))
   }
 
   test("drop function") {

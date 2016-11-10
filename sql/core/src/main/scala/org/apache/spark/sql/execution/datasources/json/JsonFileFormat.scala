@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
@@ -83,11 +83,14 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(stagingDir, parsedOptions, fileNamePrefix, dataSchema, context)
+        new JsonOutputWriter(path, parsedOptions, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".json" + TextOutputWriter.getCompressionExtension(context)
       }
     }
   }
@@ -154,17 +157,11 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 }
 
 private[json] class JsonOutputWriter(
-    stagingDir: String,
+    path: String,
     options: JSONOptions,
-    fileNamePrefix: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
-
-  override val path: String = {
-    val compressionExtension = TextOutputWriter.getCompressionExtension(context)
-    new Path(stagingDir, fileNamePrefix + ".json" + compressionExtension).toString
-  }
 
   private[this] val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records

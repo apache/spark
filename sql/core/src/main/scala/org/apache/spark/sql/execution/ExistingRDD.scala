@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
@@ -130,17 +130,40 @@ case class ExternalRDDScanExec[T](
 /** Logical plan node for scanning data from an RDD of InternalRow. */
 case class LogicalRDD(
     output: Seq[Attribute],
-    rdd: RDD[InternalRow])(session: SparkSession)
+    rdd: RDD[InternalRow],
+    outputPartitioning: Partitioning = UnknownPartitioning(0),
+    outputOrdering: Seq[SortOrder] = Nil)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
-  override def newInstance(): LogicalRDD.this.type =
-    LogicalRDD(output.map(_.newInstance()), rdd)(session).asInstanceOf[this.type]
+  override def newInstance(): LogicalRDD.this.type = {
+    val rewrite = output.zip(output.map(_.newInstance())).toMap
+
+    val rewrittenPartitioning = outputPartitioning match {
+      case p: Expression =>
+        p.transform {
+          case e: Attribute => rewrite.getOrElse(e, e)
+        }.asInstanceOf[Partitioning]
+
+      case p => p
+    }
+
+    val rewrittenOrdering = outputOrdering.map(_.transform {
+      case e: Attribute => rewrite.getOrElse(e, e)
+    }.asInstanceOf[SortOrder])
+
+    LogicalRDD(
+      output.map(rewrite),
+      rdd,
+      rewrittenPartitioning,
+      rewrittenOrdering
+    )(session).asInstanceOf[this.type]
+  }
 
   override def sameResult(plan: LogicalPlan): Boolean = {
     plan.canonicalized match {
-      case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
+      case LogicalRDD(_, otherRDD, _, _) => rdd.id == otherRDD.id
       case _ => false
     }
   }
@@ -158,15 +181,18 @@ case class LogicalRDD(
 case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    override val nodeName: String) extends LeafExecNode {
+    override val nodeName: String,
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0),
+    override val outputOrdering: Seq[SortOrder] = Nil) extends LeafExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    rdd.mapPartitionsInternal { iter =>
+    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(schema)
+      proj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         proj(r)

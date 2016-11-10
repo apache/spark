@@ -160,11 +160,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set the solver algorithm used for optimization.
    * In case of linear regression, this can be "l-bfgs", "normal" and "auto".
-   * "l-bfgs" denotes Limited-memory BFGS which is a limited-memory quasi-Newton
-   * optimization method. "normal" denotes using Normal Equation as an analytical
-   * solution to the linear regression problem.
-   * The default value is "auto" which means that the solver algorithm is
-   * selected automatically.
+   *  - "l-bfgs" denotes Limited-memory BFGS which is a limited-memory quasi-Newton
+   *    optimization method.
+   *  - "normal" denotes using Normal Equation as an analytical solution to the linear regression
+   *    problem.  This solver is limited to [[LinearRegression.MAX_FEATURES_FOR_NORMAL_SOLVER]].
+   *  - "auto" (default) means that the solver algorithm is selected automatically.
+   *    The Normal Equations solver will be used when possible, but this will automatically fall
+   *    back to iterative optimization methods when needed.
    *
    * @group setParam
    */
@@ -177,6 +179,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
+   *
    * @group expertSetParam
    */
   @Since("2.1.0")
@@ -189,26 +192,23 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     val instances: RDD[Instance] = dataset.select(
-      col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+      col($(labelCol)), w, col($(featuresCol))).rdd.map {
       case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
     }
 
-    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 &&
+    if (($(solver) == "auto" &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
-      require($(elasticNetParam) == 0.0, "Only L2 regularization can be used when normal " +
-        "solver is used.'")
-      // For low dimensional data, WeightedLeastSquares is more efficiently since the
+      // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
-        $(standardization), true)
+        elasticNetParam = $(elasticNetParam), $(standardization), true,
+        solverType = WeightedLeastSquares.Auto, maxIter = $(maxIter), tol = $(tol))
       val model = optimizer.fit(instances)
       // When it is trained by WeightedLeastSquares, training summary does not
-      // attached returned model.
+      // attach returned model.
       val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
-      // WeightedLeastSquares does not run through iterations. So it does not generate
-      // an objective history.
       val (summaryModel, predictionColName) = lrModel.findSummaryModelAndPredictionCol()
       val trainingSummary = new LinearRegressionTrainingSummary(
         summaryModel.transform(dataset),
@@ -217,7 +217,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         $(featuresCol),
         summaryModel,
         model.diagInvAtWA.toArray,
-        Array(0D))
+        model.objectiveHistory)
 
       return lrModel.setSummary(trainingSummary)
     }
@@ -243,7 +243,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val yMean = ySummarizer.mean(0)
     val rawYStd = math.sqrt(ySummarizer.variance(0))
     if (rawYStd == 0.0) {
-      if ($(fitIntercept) || yMean==0.0) {
+      if ($(fitIntercept) || yMean == 0.0) {
         // If the rawYStd is zero and fitIntercept=true, then the intercept is yMean with
         // zero coefficient; as a result, training is not needed.
         // Also, if yMean==0 and rawYStd==0, all the coefficients are zero regardless of
@@ -406,6 +406,14 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
 
   @Since("1.6.0")
   override def load(path: String): LinearRegression = super.load(path)
+
+  /**
+   * When using [[LinearRegression.solver]] == "normal", the solver must limit the number of
+   * features to at most this number.  The entire covariance matrix X^T^X will be collected
+   * to the driver. This limit helps prevent memory overflow errors.
+   */
+  @Since("2.1.0")
+  val MAX_FEATURES_FOR_NORMAL_SOLVER: Int = WeightedLeastSquares.MAX_NUM_FEATURES
 }
 
 /**

@@ -221,18 +221,27 @@ private[csv] object CSVTypeCast {
    * Currently we do not support complex types (ArrayType, MapType, StructType).
    *
    * For string types, this is simply the datum. For other types.
-   * For other nullable types, this is null if the string datum is empty.
+   * For other nullable types, returns null if it is null or equals to the value specified
+   * in `nullValue` option.
    *
    * @param datum string value
-   * @param castType SparkSQL type
+   * @param name field name in schema.
+   * @param castType data type to cast `datum` into.
+   * @param nullable nullability for the field.
+   * @param options CSV options.
    */
   def castTo(
       datum: String,
+      name: String,
       castType: DataType,
       nullable: Boolean = true,
       options: CSVOptions = CSVOptions()): Any = {
 
-    if (nullable && datum == options.nullValue) {
+    // datum can be null if the number of fields found is less than the length of the schema
+    if (datum == options.nullValue || datum == null) {
+      if (!nullable) {
+        throw new RuntimeException(s"null value found but field $name is not nullable.")
+      }
       null
     } else {
       castType match {
@@ -247,7 +256,7 @@ private[csv] object CSVTypeCast {
             case options.positiveInf => Float.PositiveInfinity
             case _ =>
               Try(datum.toFloat)
-                .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+                .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).floatValue())
           }
         case _: DoubleType =>
           datum match {
@@ -256,7 +265,7 @@ private[csv] object CSVTypeCast {
             case options.positiveInf => Double.PositiveInfinity
             case _ =>
               Try(datum.toDouble)
-                .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+                .getOrElse(NumberFormat.getInstance(Locale.US).parse(datum).doubleValue())
           }
         case _: BooleanType => datum.toBoolean
         case dt: DecimalType =>
@@ -281,7 +290,7 @@ private[csv] object CSVTypeCast {
               DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
             }
         case _: StringType => UTF8String.fromString(datum)
-        case udt: UserDefinedType[_] => castTo(datum, udt.sqlType, nullable, options)
+        case udt: UserDefinedType[_] => castTo(datum, name, udt.sqlType, nullable, options)
         case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
       }
     }

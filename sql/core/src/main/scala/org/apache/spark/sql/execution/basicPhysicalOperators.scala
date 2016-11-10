@@ -70,9 +70,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsInternal { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val project = UnsafeProjection.create(projectList, child.output,
         subexpressionEliminationEnabled)
+      project.initialize(index)
       iter.map(project)
     }
   }
@@ -89,7 +90,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
-    case IsNotNull(a: NullIntolerant) if a.references.subsetOf(child.outputSet) => true
+    case IsNotNull(a) => isNullIntolerant(a) && a.references.subsetOf(child.outputSet)
+    case _ => false
+  }
+
+  // If one expression and its children are null intolerant, it is null intolerant.
+  private def isNullIntolerant(expr: Expression): Boolean = expr match {
+    case e: NullIntolerant => e.children.forall(isNullIntolerant)
     case _ => false
   }
 
@@ -205,10 +212,11 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitionsInternal { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val predicate = newPredicate(condition, child.output)
+      predicate.initialize(0)
       iter.filter { row =>
-        val r = predicate(row)
+        val r = predicate.eval(row)
         if (r) numOutputRows += 1
         r
       }
@@ -570,7 +578,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
   }
 
   override def executeCollect(): Array[InternalRow] = {
-    ThreadUtils.awaitResult(relationFuture, Duration.Inf)
+    ThreadUtils.awaitResultInForkJoinSafely(relationFuture, Duration.Inf)
   }
 }
 

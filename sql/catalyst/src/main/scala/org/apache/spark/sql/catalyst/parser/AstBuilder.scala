@@ -177,12 +177,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       throw new ParseException(s"Dynamic partitions do not support IF NOT EXISTS. Specified " +
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
+    val overwrite = ctx.OVERWRITE != null
+    val overwritePartition =
+      if (overwrite && partitionKeys.nonEmpty && dynamicPartitionKeys.isEmpty) {
+        Some(partitionKeys.map(t => (t._1, t._2.get)))
+      } else {
+        None
+      }
 
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
       partitionKeys,
       query,
-      ctx.OVERWRITE != null,
+      OverwriteOptions(overwrite, overwritePartition),
       ctx.EXISTS != null)
   }
 
@@ -192,11 +199,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
-      val name = pVal.identifier.getText.toLowerCase
+      val name = pVal.identifier.getText
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
     }
-    // Check for duplicate partition columns in one spec.
+    // Before calling `toMap`, we check duplicated keys to avoid silently ignore partition values
+    // in partition spec like PARTITION(a='1', b='2', a='3'). The real semantical check for
+    // partition columns will be done in analyzer.
     checkDuplicateKeys(parts, ctx)
     parts.toMap
   }
@@ -483,33 +492,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       ctx: AggregationContext,
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    import ctx._
-    val groupByExpressions = expressionList(groupingExpressions)
+    val groupByExpressions = expressionList(ctx.groupingExpressions)
 
-    if (GROUPING != null) {
+    if (ctx.GROUPING != null) {
       // GROUP BY .... GROUPING SETS (...)
-      val expressionMap = groupByExpressions.zipWithIndex.toMap
-      val numExpressions = expressionMap.size
-      val mask = (1 << numExpressions) - 1
-      val masks = ctx.groupingSet.asScala.map {
-        _.expression.asScala.foldLeft(mask) {
-          case (bitmap, eCtx) =>
-            // Find the index of the expression.
-            val e = typedVisit[Expression](eCtx)
-            val index = expressionMap.find(_._1.semanticEquals(e)).map(_._2).getOrElse(
-              throw new ParseException(
-                s"$e doesn't show up in the GROUP BY list", ctx))
-            // 0 means that the column at the given index is a grouping column, 1 means it is not,
-            // so we unset the bit in bitmap.
-            bitmap & ~(1 << (numExpressions - 1 - index))
-        }
-      }
-      GroupingSets(masks, groupByExpressions, query, selectExpressions)
+      val selectedGroupByExprs =
+        ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)))
+      GroupingSets(selectedGroupByExprs, groupByExpressions, query, selectExpressions)
     } else {
       // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
-      val mappedGroupByExpressions = if (CUBE != null) {
+      val mappedGroupByExpressions = if (ctx.CUBE != null) {
         Seq(Cube(groupByExpressions))
-      } else if (ROLLUP != null) {
+      } else if (ctx.ROLLUP != null) {
         Seq(Rollup(groupByExpressions))
       } else {
         groupByExpressions
@@ -679,8 +673,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // inline table comes in two styles:
         // style 1: values (1), (2), (3)  -- multiple columns are supported
         // style 2: values 1, 2, 3  -- only a single column is supported here
-        case CreateStruct(children) => children  // style 1
-        case child => Seq(child)  // style 2
+        case struct: CreateNamedStruct => struct.valExprs // style 1
+        case child => Seq(child)                          // style 2
       }
     }
 

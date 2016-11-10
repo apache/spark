@@ -377,6 +377,10 @@ private[hive] class HiveClientImpl(
         unsupportedFeatures += "bucketing"
       }
 
+      if (h.getTableType == HiveTableType.VIRTUAL_VIEW && partCols.nonEmpty) {
+        unsupportedFeatures += "partitioned view"
+      }
+
       val properties = Option(h.getParameters).map(_.asScala.toMap).orNull
 
       CatalogTable(
@@ -777,7 +781,7 @@ private[hive] class HiveClientImpl(
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)
     }
-    if (table.schema.isEmpty) {
+    if (schema.isEmpty) {
       // This is a hack to preserve existing behavior. Before Spark 2.0, we do not
       // set a default serde here (this was done in Hive), and so if the user provides
       // an empty schema Hive would automatically populate the schema with a single

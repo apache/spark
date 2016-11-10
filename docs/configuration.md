@@ -632,7 +632,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.killEnabled</code></td>
   <td>true</td>
   <td>
-    Allows stages and corresponding jobs to be killed from the web ui.
+    Allows jobs and stages to be killed from the web UI.
   </td>
 </tr>
 <tr>
@@ -767,7 +767,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.kryo.referenceTracking</code></td>
-  <td>true (false when using Spark SQL Thrift Server)</td>
+  <td>true</td>
   <td>
     Whether to track references to the same object when serializing data with Kryo, which is
     necessary if your object graphs have loops and useful for efficiency if they contain multiple
@@ -838,8 +838,7 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.serializer</code></td>
   <td>
-    org.apache.spark.serializer.<br />JavaSerializer (org.apache.spark.serializer.<br />
-    KryoSerializer when using Spark SQL Thrift Server)
+    org.apache.spark.serializer.<br />JavaSerializer
   </td>
   <td>
     Class to use for serializing objects that will be sent over the network or need to be cached
@@ -1033,6 +1032,22 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to overwrite files added through SparkContext.addFile() when the target file exists and
     its contents do not match those of the source.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.files.maxPartitionBytes</code></td>
+  <td>134217728 (128 MB)</td>
+  <td>
+    The maximum number of bytes to pack into a single partition when reading files.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.files.openCostInBytes</code></td>
+  <td>4194304 (4 MB)</td>
+  <td>
+    The estimated cost to open a file, measured by the number of bytes could be scanned in the same
+    time. This is used when putting multiple files into a partition. It is better to over estimate,
+    then the partitions with small files will be faster than partitions with bigger files.
   </td>
 </tr>
 <tr>
@@ -1890,6 +1905,21 @@ showDF(properties, numRows = 200, truncate = FALSE)
     <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.backendConnectionTimeout</code></td>
+  <td>6000</td>
+  <td>
+    Connection timeout set by R process on its connection to RBackend in seconds.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.r.heartBeatInterval</code></td>
+  <td>100</td>
+  <td>
+    Interval for heartbeats sents from SparkR backend to R process to prevent connection timeout.
+  </td>
+</tr>
+
 </table>
 
 #### Deploy

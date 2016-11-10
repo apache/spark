@@ -594,7 +594,7 @@ class RandomForestParams(TreeEnsembleParams):
     featureSubsetStrategy = \
         Param(Params._dummy(), "featureSubsetStrategy",
               "The number of features to consider for splits at each tree node. Supported " +
-              "options: " + ", ".join(supportedFeatureSubsetStrategies) + " (0.0-1.0], [1-n].",
+              "options: " + ", ".join(supportedFeatureSubsetStrategies) + ", (0.0-1.0], [1-n].",
               typeConverter=TypeConverters.toString)
 
     def __init__(self):

@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.{DescribeFunctionCommand, DescribeTableCommand,
-  ShowFunctionsCommand}
+import org.apache.spark.sql.execution.command.{AnalyzeTableCommand, DescribeFunctionCommand,
+  DescribeTableCommand, ShowFunctionsCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
@@ -219,5 +219,19 @@ class SparkSqlParserSuite extends PlanTest {
         TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = true))
 
     intercept("explain describe tables x", "Unsupported SQL statement")
+  }
+
+  test("SPARK-18106 analyze table") {
+    assertEqual("analyze table t compute statistics",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+    assertEqual("analyze table t compute statistics noscan",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+    assertEqual("analyze table t partition (a) compute statistics noscan",
+      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+
+    intercept("analyze table t compute statistics xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
+    intercept("analyze table t partition (a) compute statistics xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
   }
 }

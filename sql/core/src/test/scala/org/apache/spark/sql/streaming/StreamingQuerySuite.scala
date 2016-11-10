@@ -104,7 +104,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       TestAwaitTermination(ExpectException[SparkException], timeoutMs = 10),
       AssertOnQuery(
         q =>
-          q.exception.get.startOffset.get === q.committedOffsets.toCompositeOffset(Seq(inputData)),
+          q.exception.get.startOffset.get === q.committedOffsets.toOffsetSeq(Seq(inputData)),
         "incorrect start offset on exception")
     )
   }
@@ -124,13 +124,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.status.sinkStatus.description.contains("Memory")),
-      AssertOnQuery(_.status.sinkStatus.offsetDesc === CompositeOffset(None :: Nil).toString),
+      AssertOnQuery(_.status.sinkStatus.offsetDesc === OffsetSeq(None :: Nil).toString),
       AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
       AssertOnQuery(_.sourceStatuses(0).offsetDesc === "-"),
       AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.sinkStatus.description.contains("Memory")),
-      AssertOnQuery(_.sinkStatus.offsetDesc === new CompositeOffset(None :: Nil).toString),
+      AssertOnQuery(_.sinkStatus.offsetDesc === new OffsetSeq(None :: Nil).toString),
 
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
@@ -139,38 +139,38 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.processingRate >= 0.0),
       AssertOnQuery(_.status.sourceStatuses.length === 1),
       AssertOnQuery(_.status.sourceStatuses(0).description.contains("Memory")),
-      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(0).toString),
+      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(0).json),
       AssertOnQuery(_.status.sourceStatuses(0).inputRate >= 0.0),
       AssertOnQuery(_.status.sourceStatuses(0).processingRate >= 0.0),
       AssertOnQuery(_.status.sinkStatus.description.contains("Memory")),
       AssertOnQuery(_.status.sinkStatus.offsetDesc ===
-        CompositeOffset.fill(LongOffset(0)).toString),
-      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(0).toString),
+        OffsetSeq.fill(LongOffset(0)).toString),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(0).json),
       AssertOnQuery(_.sourceStatuses(0).inputRate >= 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate >= 0.0),
-      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString),
+      AssertOnQuery(_.sinkStatus.offsetDesc === OffsetSeq.fill(LongOffset(0)).toString),
 
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3, 6, 3),
-      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(1).toString),
+      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(1).json),
       AssertOnQuery(_.status.sinkStatus.offsetDesc ===
-        CompositeOffset.fill(LongOffset(1)).toString),
-      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(1).toString),
-      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
+        OffsetSeq.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(1).json),
+      AssertOnQuery(_.sinkStatus.offsetDesc === OffsetSeq.fill(LongOffset(1)).toString),
 
       StopStream,
       AssertOnQuery(_.status.inputRate === 0.0),
       AssertOnQuery(_.status.processingRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses.length === 1),
-      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(1).toString),
+      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(1).json),
       AssertOnQuery(_.status.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.status.sinkStatus.offsetDesc ===
-        CompositeOffset.fill(LongOffset(1)).toString),
-      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(1).toString),
+        OffsetSeq.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(1).json),
       AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
-      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sinkStatus.offsetDesc === OffsetSeq.fill(LongOffset(1)).toString),
       AssertOnQuery(_.status.triggerDetails.isEmpty),
 
       StartStream(),
@@ -179,15 +179,15 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AssertOnQuery(_.status.inputRate === 0.0),
       AssertOnQuery(_.status.processingRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses.length === 1),
-      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(2).toString),
+      AssertOnQuery(_.status.sourceStatuses(0).offsetDesc === LongOffset(2).json),
       AssertOnQuery(_.status.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.status.sourceStatuses(0).processingRate === 0.0),
       AssertOnQuery(_.status.sinkStatus.offsetDesc ===
-        CompositeOffset.fill(LongOffset(1)).toString),
-      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(2).toString),
+        OffsetSeq.fill(LongOffset(1)).toString),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === LongOffset(2).json),
       AssertOnQuery(_.sourceStatuses(0).inputRate === 0.0),
       AssertOnQuery(_.sourceStatuses(0).processingRate === 0.0),
-      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString)
+      AssertOnQuery(_.sinkStatus.offsetDesc === OffsetSeq.fill(LongOffset(1)).toString)
     )
   }
 
@@ -252,8 +252,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(6 / _)
 
-    // Run 3 batches, and then assert that only 1 metadata file is left at the end
-    // since the first 2 should have been purged.
+    // Run 3 batches, and then assert that only 2 metadata files is are at the end
+    // since the first should have been purged.
     testStream(mapped)(
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
@@ -262,11 +262,11 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       AddData(inputData, 4, 6),
       CheckAnswer(6, 3, 6, 3, 1, 1),
 
-      AssertOnQuery("metadata log should contain only one file") { q =>
+      AssertOnQuery("metadata log should contain only two files") { q =>
         val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
         val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
-        val toTest = logFileNames.filter(! _.endsWith(".crc"))  // Workaround for SPARK-17475
-        assert(toTest.size == 1 && toTest.head == "2")
+        val toTest = logFileNames.filter(! _.endsWith(".crc")).sorted  // Workaround for SPARK-17475
+        assert(toTest.size == 2 && toTest.head == "1")
         true
       }
     )
@@ -290,7 +290,10 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     // A StreamingQueryListener that gets the query status after the first completed trigger
     val listener = new StreamingQueryListener {
       @volatile var firstStatus: StreamingQueryStatus = null
-      override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = { }
+      @volatile var queryStartedEvent = 0
+      override def onQueryStarted(queryStarted: QueryStartedEvent): Unit = {
+        queryStartedEvent += 1
+      }
       override def onQueryProgress(queryProgress: QueryProgressEvent): Unit = {
        if (firstStatus == null) firstStatus = queryProgress.queryStatus
       }
@@ -303,6 +306,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       q.processAllAvailable()
       eventually(timeout(streamingTimeout)) {
         assert(listener.firstStatus != null)
+        // test if QueryStartedEvent callback is called for only once
+        assert(listener.queryStartedEvent === 1)
       }
       listener.firstStatus
     } finally {
