@@ -126,7 +126,8 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     committer.commitJob(jobContext)
-    val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]]).reduce(_ ++ _)
+    val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]])
+      .foldLeft(Map[String, String]())(_ ++ _)
     logDebug(s"Committing files staged for absolute locations $filesToMove")
     val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
     for ((src, dst) <- filesToMove) {
