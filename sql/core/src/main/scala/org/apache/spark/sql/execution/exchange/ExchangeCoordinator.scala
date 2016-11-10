@@ -237,7 +237,7 @@ class ExchangeCoordinator(
     partitionStartIndices: Option[Array[Int]] = None):
  Array[(Int, Array[(Int, Long, Int, Int)])] = {
 
-   if (mapOutputStatistics.length != 2 || !isJoin) {
+   if (mapOutputStatistics.length != 2 || !isJoin || joinType == FullOuter) {
      return (0 until numExchanges).map(_ =>
        (0, Array[(Int, Long, Int, Int)]((-1, 0, 0, 0)))).toArray
    }
@@ -253,9 +253,9 @@ class ExchangeCoordinator(
      sti._1.filterNot(
        p => skewPartition(index).exists(p1 => p1._2 == p._2 && p._1 < p1._1))
    })
+
    if (joinType == LeftOuter && skewPartition(1).length > 0 ||
-   joinType == RightOuter && skewPartition(0).length > 0 ||
-   joinType == FullOuter) {
+   joinType == RightOuter && skewPartition(0).length > 0 ) {
      return (0 until numExchanges).map(_ =>
        (0, Array[(Int, Long, Int, Int)]((-1, 0, 0, 0)))).toArray
    }
