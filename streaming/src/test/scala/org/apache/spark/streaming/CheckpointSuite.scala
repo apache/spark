@@ -815,6 +815,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     val ois = new ObjectInputStreamWithLoader(
       new ByteArrayInputStream(bos.toByteArray), loader)
     assert(ois.readObject().asInstanceOf[Class[_]].getName == "[LtestClz;")
+    ois.close()
   }
 
   test("SPARK-11267: the race condition of two checkpoints in a batch") {

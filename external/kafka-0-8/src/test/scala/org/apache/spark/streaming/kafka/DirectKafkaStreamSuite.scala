@@ -184,6 +184,7 @@ class DirectKafkaStreamSuite
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
+    ssc.stop()
   }
 
 
@@ -230,6 +231,7 @@ class DirectKafkaStreamSuite
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
+    ssc.stop()
   }
 
   // Test to verify the offset ranges can be recovered from the checkpoints

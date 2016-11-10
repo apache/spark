@@ -609,7 +609,12 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   test("SPARK-11043 check operation log root directory") {
     val expectedLine =
       "Operation log root directory is created: " + operationLogPath.getAbsoluteFile
-    assert(Source.fromFile(logPath).getLines().exists(_.contains(expectedLine)))
+    val bufferSrc = Source.fromFile(logPath)
+    Utils.tryWithSafeFinally {
+      assert(bufferSrc.getLines().exists(_.contains(expectedLine)))
+    } {
+      bufferSrc.close()
+    }
   }
 }
 
