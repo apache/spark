@@ -83,10 +83,11 @@ class GeneralizedLinearRegressionSuite
       testData.toDF()
     }
 
+    // force some labels to be exactly zero
     datasetPoissonLog = generateGeneralizedLinearRegressionInput(
-      intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
+      intercept = -1.5, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
       xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
-      family = "poisson", link = "log").toDF()
+      family = "poisson", link = "log").map{x => LabeledPoint(if (x.label < 0.7) 0.0 else x.label, x.features)}.toDF()
 
     datasetPoissonIdentity = generateGeneralizedLinearRegressionInput(
       intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
@@ -393,8 +394,8 @@ class GeneralizedLinearRegressionSuite
          print(as.vector(coef(model)))
        }
 
-       [1] 0.22999393 0.08047088
-       [1] 0.25022353 0.21998599 0.05998621
+       [1]  0.5306608 -0.1993461
+       [1] -4.6023688  0.7566674  0.1632284
 
        data <- read.csv("path", header=FALSE)
        for (formula in c(f1, f2)) {
@@ -415,8 +416,8 @@ class GeneralizedLinearRegressionSuite
        [1] 2.5000480 2.1999972 0.5999968
      */
     val expected = Seq(
-      Vectors.dense(0.0, 0.22999393, 0.08047088),
-      Vectors.dense(0.25022353, 0.21998599, 0.05998621),
+      Vectors.dense(0.0, 0.5306608, -0.1993461),
+      Vectors.dense(-4.6023688,  0.7566674,  0.1632284),
       Vectors.dense(0.0, 2.2929501, 0.8119415),
       Vectors.dense(2.5012730, 2.1999407, 0.5999107),
       Vectors.dense(0.0, 2.2958947, 0.8090515),
@@ -452,6 +453,8 @@ class GeneralizedLinearRegressionSuite
       }
     }
   }
+
+
 
   test("generalized linear regression: gamma family against glm") {
     /*
