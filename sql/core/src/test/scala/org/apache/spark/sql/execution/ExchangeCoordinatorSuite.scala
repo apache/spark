@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, RightOuter}
