@@ -1,0 +1,10 @@
+metadata:
+  name: spark-job.kubernetes.io
+  labels:
+    resource: spark-job
+    object: spark
+apiVersion: extensions/v1beta1
+kind: ThirdPartyResource
+description: "A resource that manages a spark job"
+versions:
+  - name: v1
