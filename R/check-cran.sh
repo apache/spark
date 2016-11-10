@@ -37,7 +37,7 @@ fi
 echo "USING R_HOME = $R_HOME"
 
 # Build the latest docs, but not vignettes, which is built with the package next
-NO_VIGNETTES=1 $FWDIR/create-docs.sh
+$FWDIR/create-docs.sh
 
 # Build source package with vignettes
 SPARK_HOME="$(cd "${FWDIR}"/..; pwd)"
