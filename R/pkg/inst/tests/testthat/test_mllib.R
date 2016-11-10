@@ -64,6 +64,16 @@ test_that("spark.glm and predict", {
   rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 
+  # binomial family
+  binomialTraining <- training[training$Species %in% c("versicolor", "virginica"), ]
+  model <- spark.glm(binomialTraining, Species ~ Sepal_Length + Sepal_Width,
+    family = binomial(link = "logit"))
+  prediction <- predict(model, binomialTraining)
+  expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "character")
+  expected <- c("virginica", "virginica", "virginica", "versicolor", "virginica",
+    "versicolor", "virginica", "versicolor", "virginica", "versicolor")
+  expect_equal(as.list(take(select(prediction, "prediction"), 10))[[1]], expected)
+
   # poisson family
   model <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
   family = poisson(link = identity))
@@ -128,10 +138,10 @@ test_that("spark.glm summary", {
   expect_equal(stats$aic, rStats$aic)
 
   # Test spark.glm works with weighted dataset
-  a1 <- c(0, 1, 2, 3)
-  a2 <- c(5, 2, 1, 3)
-  w <- c(1, 2, 3, 4)
-  b <- c(1, 0, 1, 0)
+  a1 <- c(0, 1, 2, 3, 4)
+  a2 <- c(5, 2, 1, 3, 2)
+  w <- c(1, 2, 3, 4, 5)
+  b <- c(1, 0, 1, 0, 0)
   data <- as.data.frame(cbind(a1, a2, w, b))
   df <- createDataFrame(data)
 
@@ -158,7 +168,7 @@ test_that("spark.glm summary", {
   data <- as.data.frame(cbind(a1, a2, b))
   df <- suppressWarnings(createDataFrame(data))
   regStats <- summary(spark.glm(df, b ~ a1 + a2, regParam = 1.0))
-  expect_equal(regStats$aic, 13.32836, tolerance = 1e-4) # 13.32836 is from summary() result
+  expect_equal(regStats$aic, 14.00976, tolerance = 1e-4) # 14.00976 is from summary() result
 })
 
 test_that("spark.glm save/load", {
@@ -937,6 +947,74 @@ test_that("spark.randomForest Classification", {
   expect_equal(stats$numClasses, stats2$numClasses)
 
   unlink(modelPath)
+})
+
+test_that("spark.gbt", {
+  # regression
+  data <- suppressWarnings(createDataFrame(longley))
+  model <- spark.gbt(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16, seed = 123)
+  predictions <- collect(predict(model, data))
+  expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
+                                         63.221, 63.639, 64.989, 63.761,
+                                         66.019, 67.857, 68.169, 66.513,
+                                         68.655, 69.564, 69.331, 70.551),
+               tolerance = 1e-4)
+  stats <- summary(model)
+  expect_equal(stats$numTrees, 20)
+  expect_equal(stats$formula, "Employed ~ .")
+  expect_equal(stats$numFeatures, 6)
+  expect_equal(length(stats$treeWeights), 20)
+
+  modelPath <- tempfile(pattern = "spark-gbtRegression", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$formula, stats2$formula)
+  expect_equal(stats$numFeatures, stats2$numFeatures)
+  expect_equal(stats$features, stats2$features)
+  expect_equal(stats$featureImportances, stats2$featureImportances)
+  expect_equal(stats$numTrees, stats2$numTrees)
+  expect_equal(stats$treeWeights, stats2$treeWeights)
+
+  unlink(modelPath)
+
+  # classification
+  # label must be binary - GBTClassifier currently only supports binary classification.
+  iris2 <- iris[iris$Species != "virginica", ]
+  data <- suppressWarnings(createDataFrame(iris2))
+  model <- spark.gbt(data, Species ~ Petal_Length + Petal_Width, "classification")
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$numTrees, 20)
+  expect_error(capture.output(stats), NA)
+  expect_true(length(capture.output(stats)) > 6)
+  predictions <- collect(predict(model, data))$prediction
+  # test string prediction values
+  expect_equal(length(grep("setosa", predictions)), 50)
+  expect_equal(length(grep("versicolor", predictions)), 50)
+
+  modelPath <- tempfile(pattern = "spark-gbtClassification", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+  expect_equal(stats$depth, stats2$depth)
+  expect_equal(stats$numNodes, stats2$numNodes)
+  expect_equal(stats$numClasses, stats2$numClasses)
+
+  unlink(modelPath)
+
+  iris2$NumericSpecies <- ifelse(iris2$Species == "setosa", 0, 1)
+  df <- suppressWarnings(createDataFrame(iris2))
+  m <- spark.gbt(df, NumericSpecies ~ ., type = "classification")
+  s <- summary(m)
+  # test numeric prediction values
+  expect_equal(iris2$NumericSpecies, as.double(collect(predict(m, df))$prediction))
+  expect_equal(s$numFeatures, 5)
+  expect_equal(s$numTrees, 20)
 })
 
 sparkR.session.stop()

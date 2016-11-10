@@ -187,6 +187,22 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     query.stop()
   }
 
+  test("MemoryPlan statistics") {
+    implicit val schema = new StructType().add(new StructField("value", IntegerType))
+    val sink = new MemorySink(schema, InternalOutputModes.Append)
+    val plan = new MemoryPlan(sink)
+
+    // Before adding data, check output
+    checkAnswer(sink.allData, Seq.empty)
+    assert(plan.statistics.sizeInBytes === 0)
+
+    sink.addBatch(0, 1 to 3)
+    assert(plan.statistics.sizeInBytes === 12)
+
+    sink.addBatch(1, 4 to 6)
+    assert(plan.statistics.sizeInBytes === 24)
+  }
+
   ignore("stress test") {
     // Ignore the stress test as it takes several minutes to run
     (0 until 1000).foreach { _ =>

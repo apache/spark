@@ -19,12 +19,12 @@ package org.apache.spark.internal.io
 
 import java.util.Date
 
+import org.apache.hadoop.conf.Configurable
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.SparkHadoopWriter
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
@@ -43,7 +43,13 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   @transient private var committer: OutputCommitter = _
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
-    context.getOutputFormatClass.newInstance().getOutputCommitter(context)
+    val format = context.getOutputFormatClass.newInstance()
+    // If OutputFormat is Configurable, we should set conf to it.
+    format match {
+      case c: Configurable => c.setConf(context.getConfiguration)
+      case _ => ()
+    }
+    format.getOutputCommitter(context)
   }
 
   override def newTaskTempFile(
@@ -69,7 +75,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
 
   override def setupJob(jobContext: JobContext): Unit = {
     // Setup IDs
-    val jobId = SparkHadoopWriter.createJobID(new Date, 0)
+    val jobId = SparkHadoopWriterUtils.createJobID(new Date, 0)
     val taskId = new TaskID(jobId, TaskType.MAP, 0)
     val taskAttemptId = new TaskAttemptID(taskId, 0)
 
@@ -108,4 +114,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
     committer.abortTask(taskContext)
   }
+
+  /** Whether we are using a direct output committer */
+  def isDirectOutput(): Boolean = committer.getClass.getSimpleName.contains("Direct")
 }
