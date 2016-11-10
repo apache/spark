@@ -258,7 +258,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     partitions.flatMap { p =>
       val defaultLocation = qualifiedBasePath.suffix(
         "/" + PartitioningUtils.getPathFragment(p.spec, table.partitionSchema)).toString
-      val catalogLocation = new Path(p.storage.locationUri.get).makeQualified(
+      val catalogLocation = new Path(p.location).makeQualified(
         fs.getUri, fs.getWorkingDirectory).toString
       if (catalogLocation != defaultLocation) {
         Some(p.spec -> catalogLocation)

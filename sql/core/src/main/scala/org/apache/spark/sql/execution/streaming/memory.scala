@@ -106,8 +106,8 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
     val startOrdinal =
-      start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
-    val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
+      start.flatMap(LongOffset.convert).getOrElse(LongOffset(-1)).offset.toInt + 1
+    val endOrdinal = LongOffset.convert(end).getOrElse(LongOffset(-1)).offset.toInt + 1
 
     // Internal buffer only holds the batches after lastCommittedOffset.
     val newBlocks = synchronized {
@@ -127,19 +127,21 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def commit(end: Offset): Unit = synchronized {
-    end match {
-      case newOffset: LongOffset =>
-        val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
+    def check(newOffset: LongOffset): Unit = {
+      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
-        if (offsetDiff < 0) {
-          sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
-        }
+      if (offsetDiff < 0) {
+        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
+      }
 
-        batches.trimStart(offsetDiff)
-        lastOffsetCommitted = newOffset
-      case _ =>
-        sys.error(s"MemoryStream.commit() received an offset ($end) that did not originate with " +
-          "an instance of this class")
+      batches.trimStart(offsetDiff)
+      lastOffsetCommitted = newOffset
+    }
+
+    LongOffset.convert(end) match {
+      case Some(lo) => check(lo)
+      case None => sys.error(s"MemoryStream.commit() received an offset ($end) " +
+        "that did not originate with an instance of this class")
     }
   }
 

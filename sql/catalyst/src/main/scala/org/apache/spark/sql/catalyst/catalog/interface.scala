@@ -99,6 +99,12 @@ case class CatalogTablePartition(
     output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
   }
 
+  /** Return the partition location, assuming it is specified. */
+  def location: String = storage.locationUri.getOrElse {
+    val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
+    throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
+  }
+
   /**
    * Given the partition schema, returns a row with that schema holding the partition values.
    */

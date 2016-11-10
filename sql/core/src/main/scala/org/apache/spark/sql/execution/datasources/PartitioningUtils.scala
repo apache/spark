@@ -253,6 +253,9 @@ object PartitioningUtils {
     }.toMap
   }
 
+  /**
+   * This is the inverse of parsePathFragment().
+   */
   def getPathFragment(spec: TablePartitionSpec, partitionSchema: StructType): String = {
     partitionSchema.map { field =>
       escapePathName(field.name) + "=" + escapePathName(spec(field.name))

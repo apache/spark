@@ -400,7 +400,7 @@ class InMemoryCatalog(
     // partial partition spec.
     partSpecs.foreach { p =>
       if (existingParts.contains(p) && shouldRemovePartitionLocation) {
-        val partitionPath = new Path(existingParts(p).storage.locationUri.get)
+        val partitionPath = new Path(existingParts(p).location)
         try {
           val fs = partitionPath.getFileSystem(hadoopConfig)
           fs.delete(partitionPath, true)
@@ -431,7 +431,7 @@ class InMemoryCatalog(
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       val oldPartition = getPartition(db, table, oldSpec)
       val newPartition = if (shouldUpdatePartitionLocation) {
-        val oldPartPath = new Path(oldPartition.storage.locationUri.get)
+        val oldPartPath = new Path(oldPartition.location)
         val newPartPath = ExternalCatalogUtils.generatePartitionPath(
           newSpec, partitionColumnNames, tablePath)
         try {

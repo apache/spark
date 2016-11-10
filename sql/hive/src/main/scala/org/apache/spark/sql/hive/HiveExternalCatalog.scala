@@ -256,7 +256,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           // compatible format, which means the data source is file-based and must have a `path`.
           require(tableDefinition.storage.locationUri.isDefined,
             "External file-based data source table must have a `path` entry in storage properties.")
-          Some(new Path(tableDefinition.storage.locationUri.get).toUri.toString)
+          Some(new Path(tableDefinition.location).toUri.toString)
         } else {
           None
         }
@@ -835,17 +835,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val hasUpperCasePartitionColumn = partitionColumnNames.exists(col => col.toLowerCase != col)
     if (tableMeta.tableType == MANAGED && hasUpperCasePartitionColumn) {
       val tablePath = new Path(tableMeta.location)
-      val fs = tablePath.getFileSystem(hadoopConf)
       val newParts = newSpecs.map { spec =>
         val partition = client.getPartition(db, table, lowerCasePartitionSpec(spec))
-        val wrongPath = new Path(partition.storage.locationUri.get)
+        val wrongPath = new Path(partition.location)
         val rightPath = ExternalCatalogUtils.generatePartitionPath(
           spec, partitionColumnNames, tablePath)
         try {
-          fs.rename(wrongPath, rightPath)
+          tablePath.getFileSystem(hadoopConf).rename(wrongPath, rightPath)
         } catch {
-          case e: IOException =>
-            throw new SparkException(s"Unable to rename partition path $wrongPath", e)
+          case e: IOException => throw new SparkException(
+            s"Unable to rename partition path from $wrongPath to $rightPath", e)
         }
         partition.copy(storage = partition.storage.copy(locationUri = Some(rightPath.toString)))
       }
