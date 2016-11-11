@@ -75,7 +75,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     // '.compact' as compactInterval.
     // 3. If there is only one '.compact' file, then use the max of (1) default setting directly
     // or (2) the difference between the latest batchId + 1 - (batchId of the only '.compact' file)
-    // i.e., using the default setting in case (2) would mean that we missed a '.compact' file.
+    // i.e., using the default in case 3.2 would mean that we missed a '.compact' file entry.
     // e.g., if defaultCompactInterval is 2, and the log is: 0, 1, 2.compact, 3, 4 then case 3.2
     // will ensure we use the correct compactInterval = 4 + 1 - 2 = 3
     val compactibleBatchIds = fileManager.list(metadataPath, batchFilesFilter)
