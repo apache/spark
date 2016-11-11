@@ -349,13 +349,15 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
  * Options for writing new data into a table.
  *
  * @param enabled whether to overwrite existing data in the table.
- * @param specificPartition only data in the specified partition will be overwritten.
+ * @param staticPartitionKeys if non-empty, specifies that we only want to overwrite partitions
+ *                            that match this partial partition spec. If empty, all partitions
+ *                            will be overwritten.
  */
 case class OverwriteOptions(
     enabled: Boolean,
-    specificPartition: Option[CatalogTypes.TablePartitionSpec] = None) {
-  if (specificPartition.isDefined) {
-    assert(enabled, "Overwrite must be enabled when specifying a partition to overwrite.")
+    staticPartitionKeys: CatalogTypes.TablePartitionSpec = Map.empty) {
+  if (staticPartitionKeys.nonEmpty) {
+    assert(enabled, "Overwrite must be enabled when specifying specific partitions.")
   }
 }
 

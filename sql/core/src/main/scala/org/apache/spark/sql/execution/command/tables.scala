@@ -710,7 +710,8 @@ case class ShowPartitionsCommand(
 
   private def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
     partColNames.map { name =>
-      PartitioningUtils.escapePathName(name) + "=" + PartitioningUtils.escapePathName(spec(name))
+      ExternalCatalogUtils.escapePathName(name) + "=" +
+        ExternalCatalogUtils.escapePathName(spec(name))
     }.mkString(File.separator)
   }
 
