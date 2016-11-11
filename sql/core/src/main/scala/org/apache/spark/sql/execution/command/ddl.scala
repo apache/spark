@@ -451,7 +451,7 @@ case class AlterTableDropPartitionCommand(
           catalog.dropPartitions(
             table.identifier, partitions.map(_.spec), ignoreIfNotExists = ifExists, purge = purge)
         } else if (!ifExists) {
-          throw new AnalysisException(s"There is no partition for $spec.")
+          throw new AnalysisException(s"There is no partition for ${spec.sql}")
         }
       }
     } else {
