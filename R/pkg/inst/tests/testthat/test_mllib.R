@@ -971,6 +971,12 @@ test_that("spark.randomForest Classification", {
   predictions <- collect(predict(model, data))$prediction
   expect_equal(length(grep("1.0", predictions)), 50)
   expect_equal(length(grep("2.0", predictions)), 50)
+
+  # spark.randomForest classification can work on libsvm data
+  data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
+                source = "libsvm")
+  model <- spark.randomForest(data, label ~ features, "classification")
+  expect_equal(summary(model)$numFeatures, 4)
 })
 
 test_that("spark.gbt", {
@@ -1039,6 +1045,12 @@ test_that("spark.gbt", {
   expect_equal(iris2$NumericSpecies, as.double(collect(predict(m, df))$prediction))
   expect_equal(s$numFeatures, 5)
   expect_equal(s$numTrees, 20)
+
+  # spark.gbt classification can work on libsvm data
+  data <- read.df(absoluteSparkPath("data/mllib/sample_binary_classification_data.txt"),
+                source = "libsvm")
+  model <- spark.gbt(data, label ~ features, "classification")
+  expect_equal(summary(model)$numFeatures, 692)
 })
 
 sparkR.session.stop()
