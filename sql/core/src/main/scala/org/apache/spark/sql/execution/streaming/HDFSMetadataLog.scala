@@ -241,6 +241,14 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     None
   }
 
+  def getCompactBatchIds(): Array[Long] = {
+    fileManager.list(metadataPath, batchFilesFilter)
+      .filter(f => f.getPath.toString.endsWith(CompactibleFileStreamLog.COMPACT_FILE_SUFFIX))
+      .map(f => pathToBatchId(f.getPath))
+      .sorted
+      .reverse
+  }
+
   /**
    * Removes all the log entry earlier than thresholdBatchId (exclusive).
    */
