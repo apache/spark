@@ -232,7 +232,7 @@ class HiveDDLSuite
 
       for (country <- Seq("US", "CA", "KR")) {
         for (quarter <- 1 to 4) {
-          sql(s"ALTER TABLE sales ADD PARTITION (country='$country', quarter='$quarter')")
+          sql(s"ALTER TABLE sales ADD PARTITION (country = '$country', quarter = '$quarter')")
         }
       }
 
@@ -271,12 +271,12 @@ class HiveDDLSuite
         Row("country=KR/quarter=3") :: Nil)
 
       val m = intercept[AnalysisException] {
-        sql("ALTER TABLE sales DROP PARTITION (quarter <= 4), PARTITION (quarter <= '2')")
+        sql("ALTER TABLE sales DROP PARTITION (quarter <= 4), PARTITION (quarter <= '3')")
       }.getMessage
       // `PARTITION (quarter <= '2')` should raises exceptions because `PARTITION (quarter <= 4)`
       // already removes all partitions.
       checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
-      assert(m.contains("There is no partition for (`quarter` <= '2')"))
+      assert(m.contains("There is no partition for (`quarter` <= '3')"))
     }
   }
 
@@ -308,6 +308,15 @@ class HiveDDLSuite
         sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter)")
       }.getMessage
       assert(m5.contains("Invalid partition filter specification"))
+
+      sql(s"ALTER TABLE sales ADD PARTITION (country = 'KR', quarter = '3')")
+      val m6 = intercept[AnalysisException] {
+        sql("ALTER TABLE sales DROP PARTITION (quarter <= '4'), PARTITION (quarter <= '2')")
+      }.getMessage
+      // The query is not executed because `PARTITION (quarter <= '2')` is invalid.
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=3") :: Nil)
+      assert(m6.contains("There is no partition for (`quarter` <= '2')"))
     }
   }
 

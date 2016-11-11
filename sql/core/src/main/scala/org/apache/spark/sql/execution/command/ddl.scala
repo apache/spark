@@ -445,6 +445,16 @@ case class AlterTableDropPartitionCommand(
     }
 
     if (specs.exists(isRangeComparison)) {
+      if (!ifExists) {
+        // Prevent query execution if one of partition specs is invalid.
+        specs.foreach { spec =>
+          val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(spec))
+          val x = partitions.toArray
+          if (partitions.isEmpty) {
+            throw new AnalysisException(s"There is no partition for ${spec.sql}")
+          }
+        }
+      }
       specs.foreach { spec =>
         val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(spec))
         if (partitions.nonEmpty) {
