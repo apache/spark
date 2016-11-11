@@ -935,6 +935,10 @@ test_that("spark.randomForest Classification", {
   expect_equal(stats$numTrees, 20)
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
+  # Test string prediction values
+  predictions <- collect(predict(model, data))$prediction
+  expect_equal(length(grep("setosa", predictions)), 50)
+  expect_equal(length(grep("versicolor", predictions)), 50)
 
   modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
   write.ml(model, modelPath)
@@ -947,6 +951,26 @@ test_that("spark.randomForest Classification", {
   expect_equal(stats$numClasses, stats2$numClasses)
 
   unlink(modelPath)
+
+  # Test numeric response variable
+  labelToIndex <- function(species) {
+    switch(as.character(species),
+      setosa = 0.0,
+      versicolor = 1.0,
+      virginica = 2.0
+    )
+  }
+  iris$NumericSpecies <- lapply(iris$Species, labelToIndex)
+  data <- suppressWarnings(createDataFrame(iris[-5]))
+  model <- spark.randomForest(data, NumericSpecies ~ Petal_Length + Petal_Width, "classification",
+                              maxDepth = 5, maxBins = 16)
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$numTrees, 20)
+  # Test numeric prediction values
+  predictions <- collect(predict(model, data))$prediction
+  expect_equal(length(grep("1.0", predictions)), 50)
+  expect_equal(length(grep("2.0", predictions)), 50)
 })
 
 test_that("spark.gbt", {
