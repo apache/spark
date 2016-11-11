@@ -979,8 +979,7 @@ test_that("spark.randomForest Classification", {
   expect_equal(summary(model)$numFeatures, 4)
 })
 
-test_that("spark.gbt", {
-  # regression
+test_that("spark.gbt regression", {
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.gbt(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16, seed = 123)
   predictions <- collect(predict(model, data))
@@ -1009,8 +1008,9 @@ test_that("spark.gbt", {
   expect_equal(stats$treeWeights, stats2$treeWeights)
 
   unlink(modelPath)
+})
 
-  # classification
+test_that("spark.gbt classification", {
   # label must be binary - GBTClassifier currently only supports binary classification.
   iris2 <- iris[iris$Species != "virginica", ]
   data <- suppressWarnings(createDataFrame(iris2))

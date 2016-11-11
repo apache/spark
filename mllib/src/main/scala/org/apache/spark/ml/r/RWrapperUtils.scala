@@ -52,7 +52,7 @@ object RWrapperUtils extends Logging {
 
   /**
    * Get the feature names and original labels from the schema
-   * of transformed DataFrame by RFormulaModel.
+   * of DataFrame transformed by RFormulaModel.
    */
   def getFeaturesAndLabels(
       rFormulaModel: RFormulaModel,
