@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
@@ -47,6 +47,10 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 /** A helper object for writing FileFormat data out to a location. */
 object FileFormatWriter extends Logging {
 
+  /** Describes how output files should be placed in the filesystem. */
+  case class OutputSpec(
+    outputPath: String, customPartitionLocations: Map[TablePartitionSpec, String])
+
   /** A shared job description for all the write tasks. */
   private class WriteJobDescription(
       val uuid: String,  // prevent collision between different (appending) write jobs
@@ -56,7 +60,8 @@ object FileFormatWriter extends Logging {
       val partitionColumns: Seq[Attribute],
       val nonPartitionColumns: Seq[Attribute],
       val bucketSpec: Option[BucketSpec],
-      val path: String)
+      val path: String,
+      val customPartitionLocations: Map[TablePartitionSpec, String])
     extends Serializable {
 
     assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ nonPartitionColumns),
@@ -83,7 +88,7 @@ object FileFormatWriter extends Logging {
       plan: LogicalPlan,
       fileFormat: FileFormat,
       committer: FileCommitProtocol,
-      outputPath: String,
+      outputSpec: OutputSpec,
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
@@ -93,7 +98,7 @@ object FileFormatWriter extends Logging {
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
     job.setOutputValueClass(classOf[InternalRow])
-    FileOutputFormat.setOutputPath(job, new Path(outputPath))
+    FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = plan.output.filterNot(partitionSet.contains)
@@ -111,7 +116,8 @@ object FileFormatWriter extends Logging {
       partitionColumns = partitionColumns,
       nonPartitionColumns = dataColumns,
       bucketSpec = bucketSpec,
-      path = outputPath)
+      path = outputSpec.outputPath,
+      customPartitionLocations = outputSpec.customPartitionLocations)
 
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       // This call shouldn't be put into the `try` block below because it only initializes and
@@ -281,11 +287,11 @@ object FileFormatWriter extends Logging {
     private def partitionStringExpression: Seq[Expression] = {
       description.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
         val escaped = ScalaUDF(
-          PartitioningUtils.escapePathName _,
+          ExternalCatalogUtils.escapePathName _,
           StringType,
           Seq(Cast(c, StringType)),
           Seq(StringType))
-        val str = If(IsNull(c), Literal(PartitioningUtils.DEFAULT_PARTITION_NAME), escaped)
+        val str = If(IsNull(c), Literal(ExternalCatalogUtils.DEFAULT_PARTITION_NAME), escaped)
         val partitionName = Literal(c.name + "=") :: str :: Nil
         if (i == 0) partitionName else Literal(Path.SEPARATOR) :: partitionName
       }
@@ -308,7 +314,17 @@ object FileFormatWriter extends Logging {
       }
       val ext = bucketId + description.outputWriterFactory.getFileExtension(taskAttemptContext)
 
-      val path = committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+      val customPath = partDir match {
+        case Some(dir) =>
+          description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
+        case _ =>
+          None
+      }
+      val path = if (customPath.isDefined) {
+        committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+      } else {
+        committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+      }
       val newWriter = description.outputWriterFactory.newInstance(
         path = path,
         dataSchema = description.nonPartitionColumns.toStructType,

@@ -710,7 +710,8 @@ case class ShowPartitionsCommand(
 
   private def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
     partColNames.map { name =>
-      PartitioningUtils.escapePathName(name) + "=" + PartitioningUtils.escapePathName(spec(name))
+      ExternalCatalogUtils.escapePathName(name) + "=" +
+        ExternalCatalogUtils.escapePathName(spec(name))
     }.mkString(File.separator)
   }
 
@@ -780,7 +781,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showCreateHiveTable(metadata: CatalogTable): String = {
     def reportUnsupportedError(features: Seq[String]): Unit = {
       throw new AnalysisException(
-        s"Failed to execute SHOW CREATE TABLE against table ${metadata.identifier.quotedString}, " +
+        s"Failed to execute SHOW CREATE TABLE against table/view ${metadata.identifier}, " +
           "which is created by Hive and uses the following unsupported feature(s)\n" +
           features.map(" - " + _).mkString("\n")
       )
