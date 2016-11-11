@@ -1,12 +1,13 @@
 ---
 title: "SparkR - Practical Guide"
 output:
-  html_document:
-    theme: united
+  rmarkdown::html_vignette:
     toc: true
     toc_depth: 4
-    toc_float: true
-    highlight: textmate
+vignette: >
+  %\VignetteIndexEntry{SparkR - Practical Guide}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
 ---
 
 ## Overview
