@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
@@ -32,18 +32,31 @@ import org.apache.spark.sql.execution.command.RunnableCommand
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
  * Writing to dynamic partitions is also supported.
+ *
+ * @param staticPartitionKeys partial partitioning spec for write. This defines the scope of
+ *                            partition overwrites: when the spec is empty, all partitions are
+ *                            overwritten. When it covers a prefix of the partition keys, only
+ *                            partitions matching the prefix are overwritten.
+ * @param customPartitionLocations mapping of partition specs to their custom locations. The
+ *                                 caller should guarantee that exactly those table partitions
+ *                                 falling under the specified static partition keys are contained
+ *                                 in this map, and that no other partitions are.
  */
 case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
+    staticPartitionKeys: TablePartitionSpec,
+    customPartitionLocations: Map[TablePartitionSpec, String],
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    refreshFunction: (Seq[TablePartitionSpec]) => Unit,
+    refreshFunction: Seq[TablePartitionSpec] => Unit,
     options: Map[String, String],
     @transient query: LogicalPlan,
     mode: SaveMode,
     catalogTable: Option[CatalogTable])
   extends RunnableCommand {
+
+  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -66,10 +79,7 @@ case class InsertIntoHadoopFsRelationCommand(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
-          throw new IOException(s"Unable to clear output " +
-            s"directory $qualifiedOutputPath prior to writing to it")
-        }
+        deleteMatchingPartitions(fs, qualifiedOutputPath)
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
         true
@@ -93,7 +103,8 @@ case class InsertIntoHadoopFsRelationCommand(
         plan = query,
         fileFormat = fileFormat,
         committer = committer,
-        outputPath = qualifiedOutputPath.toString,
+        outputSpec = FileFormatWriter.OutputSpec(
+          qualifiedOutputPath.toString, customPartitionLocations),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
@@ -104,5 +115,41 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     Seq.empty[Row]
+  }
+
+  /**
+   * Deletes all partition files that match the specified static prefix. Partitions with custom
+   * locations are also cleared based on the custom locations map given to this class.
+   */
+  private def deleteMatchingPartitions(fs: FileSystem, qualifiedOutputPath: Path): Unit = {
+    val staticPartitionPrefix = if (staticPartitionKeys.nonEmpty) {
+      "/" + partitionColumns.flatMap { p =>
+        staticPartitionKeys.get(p.name) match {
+          case Some(value) =>
+            Some(escapePathName(p.name) + "=" + escapePathName(value))
+          case None =>
+            None
+        }
+      }.mkString("/")
+    } else {
+      ""
+    }
+    // first clear the path determined by the static partition keys (e.g. /table/foo=1)
+    val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
+    if (fs.exists(staticPrefixPath) && !fs.delete(staticPrefixPath, true /* recursively */)) {
+      throw new IOException(s"Unable to clear output " +
+        s"directory $staticPrefixPath prior to writing to it")
+    }
+    // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
+    for ((spec, customLoc) <- customPartitionLocations) {
+      assert(
+        (staticPartitionKeys.toSet -- spec).isEmpty,
+        "Custom partition location did not match static partitioning keys")
+      val path = new Path(customLoc)
+      if (fs.exists(path) && !fs.delete(path, true)) {
+        throw new IOException(s"Unable to clear partition " +
+          s"directory $path prior to writing to it")
+      }
+    }
   }
 }
