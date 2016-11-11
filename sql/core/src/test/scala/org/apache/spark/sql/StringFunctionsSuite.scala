@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
+
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 
 class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  test("string concat") {
+  test("string concat - basic") {
     val df = Seq[(String, String, String)](("a", "b", null)).toDF("a", "b", "c")
 
     checkAnswer(
@@ -34,6 +38,27 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("concat(a, b)", "concat(a, b, c)"),
       Row("ab", null))
+  }
+
+  test("string concat - all compatible types") {
+    val allTypeData = AllTypeData(spark)
+    val df = allTypeData.dataFrame
+    checkAnswer(
+      df.select(concat(allTypeData.getStringCompatibleColumns: _*)),
+      Row("11111.011.011.010001970-01-011970-01-01 00:00:00aatrue") ::
+      Row("22222.022.022.020001970-02-021970-01-01 00:00:05bbbbfalse") :: Nil)
+  }
+
+  test("string concat - unsupported types") {
+    val allTypeData = AllTypeData(spark)
+    val df = allTypeData.dataFrame
+
+    Seq(allTypeData.mapCol, allTypeData.arrayCol, allTypeData.structCol).foreach { col =>
+      val e = intercept[AnalysisException] {
+        df.select(concat(allTypeData.stringCol, col))
+      }.getMessage
+      assert(e.contains("argument 2 requires string type"))
+    }
   }
 
   test("string concat_ws") {
@@ -450,5 +475,70 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
+  }
+}
+
+case class AllTypeData (spark: SparkSession) {
+  private val intSeq = Seq(1, 2)
+  private val doubleSeq = Seq(1.01d, 2.02d)
+  private val stringSeq = Seq("a", "bb")
+  private val booleanSeq = Seq(true, false)
+  private val dateSeq = Seq("1970-01-01", "1970-02-02").map(Date.valueOf)
+  private val timestampSeq = Seq("1970-01-01 00:00:00", "1970-01-01 00:00:05")
+    .map(Timestamp.valueOf)
+  private val arraySeq = Seq(Seq(1), Seq(2))
+  private val mapSeq = Seq(Map("a" -> "1", "b" -> "2"), Map("d" -> "3", "e" -> "4"))
+  private val structSeq = Seq(Row("d"), Row("c"))
+
+  private val allTypeSchema = StructType(Seq(
+    StructField("byteCol", ByteType),
+    StructField("shortCol", ShortType),
+    StructField("intCol", IntegerType),
+    StructField("longCol", LongType),
+    StructField("floatCol", FloatType),
+    StructField("doubleCol", DoubleType),
+    StructField("decimalCol", DecimalType(10, 5)),
+    StructField("dateCol", DateType),
+    StructField("timestampCol", TimestampType),
+    StructField("stringCol", StringType),
+    StructField("binaryCol", BinaryType),
+    StructField("booleanCol", BooleanType),
+    StructField("arrayCol", ArrayType(IntegerType, containsNull = true)),
+    StructField("mapCol", MapType(StringType, StringType)),
+    StructField("structCol", new StructType().add("a", StringType))
+  ))
+
+  private val rowRDD: RDD[Row] = spark.sparkContext.parallelize(intSeq.indices.map { i =>
+    Row(intSeq(i).toByte, intSeq(i).toShort, intSeq(i), intSeq(i).toLong,
+      doubleSeq(i).toFloat, doubleSeq(i), Decimal(doubleSeq(i)),
+      dateSeq(i), timestampSeq(i),
+      stringSeq(i), stringSeq(i).getBytes,
+      booleanSeq(i),
+      arraySeq(i),
+      mapSeq(i),
+      structSeq(i))
+  })
+
+  val dataFrame: DataFrame = spark.createDataFrame(rowRDD, allTypeSchema)
+
+  val byteCol = Column("byteCol")
+  val shortCol = Column("shortCol")
+  val intCol = Column("intCol")
+  val longCol = Column("longCol")
+  val floatCol = Column("floatCol")
+  val doubleCol = Column("doubleCol")
+  val decimalCol = Column("decimalCol")
+  val dateCol = Column("dateCol")
+  val timestampCol = Column("timestampCol")
+  val stringCol = Column("stringCol")
+  val binaryCol = Column("binaryCol")
+  val booleanCol = Column("booleanCol")
+  val arrayCol = Column("arrayCol")
+  val mapCol = Column("mapCol")
+  val structCol = Column("structCol")
+
+  def getStringCompatibleColumns: Seq[Column] = {
+    Seq(byteCol, shortCol, intCol, longCol, floatCol, doubleCol, decimalCol,
+      dateCol, timestampCol, stringCol, binaryCol, booleanCol)
   }
 }

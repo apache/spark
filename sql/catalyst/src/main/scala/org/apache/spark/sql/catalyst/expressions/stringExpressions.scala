@@ -44,6 +44,10 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 @ExpressionDescription(
   usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of `str1`, `str2`, ..., `strN`.",
   extended = """
+    Arguments:
+      str - An expression that returns a value of a character string. If any argument is null, the
+            result is the null value.
+
     Examples:
       > SELECT _FUNC_('Spark','SQL');
        SparkSQL
