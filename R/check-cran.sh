@@ -36,11 +36,27 @@ if [ ! -z "$R_HOME" ]
 fi
 echo "USING R_HOME = $R_HOME"
 
-# Build the latest docs
+# Build the latest docs, but not vignettes, which is built with the package next
 $FWDIR/create-docs.sh
 
-# Build a zip file containing the source package
-"$R_SCRIPT_PATH/"R CMD build $FWDIR/pkg
+# Build source package with vignettes
+SPARK_HOME="$(cd "${FWDIR}"/..; pwd)"
+. "${SPARK_HOME}"/bin/load-spark-env.sh
+if [ -f "${SPARK_HOME}/RELEASE" ]; then
+  SPARK_JARS_DIR="${SPARK_HOME}/jars"
+else
+  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"
+fi
+
+if [ -d "$SPARK_JARS_DIR" ]; then
+  # Build a zip file containing the source package with vignettes
+  SPARK_HOME="${SPARK_HOME}" "$R_SCRIPT_PATH/"R CMD build $FWDIR/pkg
+
+  find pkg/vignettes/. -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
+else
+  echo "Error Spark JARs not found in $SPARK_HOME"
+  exit 1
+fi
 
 # Run check as-cran.
 VERSION=`grep Version $FWDIR/pkg/DESCRIPTION | awk '{print $NF}'`
@@ -54,11 +70,16 @@ fi
 
 if [ -n "$NO_MANUAL" ]
 then
-  CRAN_CHECK_OPTIONS=$CRAN_CHECK_OPTIONS" --no-manual"
+  CRAN_CHECK_OPTIONS=$CRAN_CHECK_OPTIONS" --no-manual --no-vignettes"
 fi
 
 echo "Running CRAN check with $CRAN_CHECK_OPTIONS options"
 
-"$R_SCRIPT_PATH/"R CMD check $CRAN_CHECK_OPTIONS SparkR_"$VERSION".tar.gz
-
+if [ -n "$NO_TESTS" ] && [ -n "$NO_MANUAL" ]
+then
+  "$R_SCRIPT_PATH/"R CMD check $CRAN_CHECK_OPTIONS SparkR_"$VERSION".tar.gz
+else
+  # This will run tests and/or build vignettes, and require SPARK_HOME
+  SPARK_HOME="${SPARK_HOME}" "$R_SCRIPT_PATH/"R CMD check $CRAN_CHECK_OPTIONS SparkR_"$VERSION".tar.gz
+fi
 popd > /dev/null
