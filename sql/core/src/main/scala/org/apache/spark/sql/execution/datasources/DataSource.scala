@@ -417,15 +417,17 @@ case class DataSource(
         // will be adjusted within InsertIntoHadoopFsRelation.
         val plan =
           InsertIntoHadoopFsRelationCommand(
-            outputPath,
-            columns,
-            bucketSpec,
-            format,
-            _ => Unit, // No existing table needs to be refreshed.
-            options,
-            data.logicalPlan,
-            mode,
-            catalogTable)
+            outputPath = outputPath,
+            staticPartitionKeys = Map.empty,
+            customPartitionLocations = Map.empty,
+            partitionColumns = columns,
+            bucketSpec = bucketSpec,
+            fileFormat = format,
+            refreshFunction = _ => Unit, // No existing table needs to be refreshed.
+            options = options,
+            query = data.logicalPlan,
+            mode = mode,
+            catalogTable = catalogTable)
         sparkSession.sessionState.executePlan(plan).toRdd
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
