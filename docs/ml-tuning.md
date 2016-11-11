@@ -62,7 +62,7 @@ To help construct the parameter grid, users can use the [`ParamGridBuilder`](api
 
 After identifying the best `ParamMap`, `CrossValidator` finally re-fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
-## Example: model selection via cross-validation
+**Examples: model selection via cross-validation**
 
 The following example demonstrates using `CrossValidator` to select from a grid of parameters.
 
@@ -102,7 +102,7 @@ It splits the dataset into these two parts using the `trainRatio` parameter. For
 
 Like `CrossValidator`, `TrainValidationSplit` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
-## Example: model selection via train validation split
+**Examples: model selection via train validation split**
 
 <div class="codetabs">
 
