@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * @param name The short name of the function
  */
 abstract class LeafMathExpression(c: Double, name: String)
-  extends LeafExpression with CodegenFallback {
+  extends LeafExpression with CodegenFallback with Serializable {
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = true
