@@ -179,7 +179,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     @since("1.4.0")
     def setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, splits=None, inputCol=None, outputCol=None)
+        setParams(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error")
         Sets params for this Bucketizer.
         """
         kwargs = self.setParams._input_kwargs
@@ -209,7 +209,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     @since("2.1.0")
     def getHandleInvalid(self):
         """
-        Gets the value of handleInvalid or its default value.
+        Gets the value of :py:attr:`handleInvalid` or its default value.
         """
         return self.getOrDefault(self.handleInvalid)
 
@@ -1227,8 +1227,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
     def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
                  handleInvalid="error"):
         """
-        __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
-        handleInvalid="error")
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
+                 handleInvalid="error")
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
@@ -1242,7 +1242,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
     def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
                   handleInvalid="error"):
         """
-        setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
+        setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
+                  handleInvalid="error")
         Set the params for the QuantileDiscretizer
         """
         kwargs = self.setParams._input_kwargs
@@ -1286,7 +1287,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
     @since("2.1.0")
     def getHandleInvalid(self):
         """
-        Gets the value of handleInvalid or its default value.
+        Gets the value of :py:attr:`handleInvalid` or its default value.
         """
         return self.getOrDefault(self.handleInvalid)
 
