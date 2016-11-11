@@ -1236,18 +1236,20 @@ case class FormatNumber(x: Expression, d: Expression)
 
   // Associated with the pattern, for the last d value, and we will update the
   // pattern (DecimalFormat) once the new coming d value differ with the last one.
+  // This is an Option to distinguish between 0 (numberFormat is valid) and uninitialized after
+  // serialization (numberFormat has not been updated for dValue = 0).
   @transient
-  private var lastDValue: Int = -100
+  private var lastDValue: Option[Int] = None
 
   // A cached DecimalFormat, for performance concern, we will change it
   // only if the d value changed.
   @transient
-  private val pattern: StringBuffer = new StringBuffer()
+  private lazy val pattern: StringBuffer = new StringBuffer()
 
   // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
   // as a decimal separator.
   @transient
-  private val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
+  private lazy val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     val dValue = dObject.asInstanceOf[Int]
@@ -1255,24 +1257,28 @@ case class FormatNumber(x: Expression, d: Expression)
       return null
     }
 
-    if (dValue != lastDValue) {
-      // construct a new DecimalFormat only if a new dValue
-      pattern.delete(0, pattern.length)
-      pattern.append("#,###,###,###,###,###,##0")
+    lastDValue match {
+      case Some(last) if last == dValue =>
+        // use the current pattern
+      case _ =>
+        // construct a new DecimalFormat only if a new dValue
+        pattern.delete(0, pattern.length)
+        pattern.append("#,###,###,###,###,###,##0")
 
-      // decimal place
-      if (dValue > 0) {
-        pattern.append(".")
+        // decimal place
+        if (dValue > 0) {
+          pattern.append(".")
 
-        var i = 0
-        while (i < dValue) {
-          i += 1
-          pattern.append("0")
+          var i = 0
+          while (i < dValue) {
+            i += 1
+            pattern.append("0")
+          }
         }
-      }
-      lastDValue = dValue
 
-      numberFormat.applyLocalizedPattern(pattern.toString)
+        lastDValue = Some(dValue)
+
+        numberFormat.applyLocalizedPattern(pattern.toString)
     }
 
     x.dataType match {
