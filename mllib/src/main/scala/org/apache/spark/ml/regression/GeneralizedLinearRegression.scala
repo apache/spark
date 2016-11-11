@@ -502,7 +502,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def initialize(y: Double, weight: Double): Double = {
       require(y >= 0.0, "The response variable of Poisson family " +
-        s"should be positive, but got $y")
+        s"should be non-negative, but got $y")
       y
     }
 
