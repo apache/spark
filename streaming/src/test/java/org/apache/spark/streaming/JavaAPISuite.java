@@ -368,7 +368,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     ssc.stop();
     // Create a new JavaStreamingContext without checkpointing
     SparkConf conf = new SparkConf()
-        .setMaster("local[2]")
+        .setMaster("local[4]")
         .setAppName("test")
         .set("spark.streaming.clock", "org.apache.spark.util.ManualClock");
     ssc = new JavaStreamingContext(conf, new Duration(1000));
@@ -1815,7 +1815,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     ssc.stop();
 
     final SparkConf conf = new SparkConf()
-        .setMaster("local[2]")
+        .setMaster("local[4]")
         .setAppName("test")
         .set("newContext", "true");
 

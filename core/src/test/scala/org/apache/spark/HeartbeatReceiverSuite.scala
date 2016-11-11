@@ -67,7 +67,7 @@ class HeartbeatReceiverSuite
   override def beforeEach(): Unit = {
     super.beforeEach()
     val conf = new SparkConf()
-      .setMaster("local[2]")
+      .setMaster("local[4]")
       .setAppName("test")
       .set("spark.dynamicAllocation.testing", "true")
     sc = spy(new SparkContext(conf))

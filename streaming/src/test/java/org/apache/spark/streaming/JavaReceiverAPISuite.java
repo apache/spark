@@ -61,7 +61,7 @@ public class JavaReceiverAPISuite implements Serializable {
     final AtomicLong dataCounter = new AtomicLong(0);
 
     try {
-      JavaStreamingContext ssc = new JavaStreamingContext("local[2]", "test", new Duration(200));
+      JavaStreamingContext ssc = new JavaStreamingContext("local[4]", "test", new Duration(200));
       JavaReceiverInputDStream<String> input =
         ssc.receiverStream(new JavaSocketReceiver("localhost", server.port()));
       JavaDStream<String> mapped = input.map(new Function<String, String>() {
