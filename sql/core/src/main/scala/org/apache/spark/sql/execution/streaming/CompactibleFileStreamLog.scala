@@ -82,6 +82,9 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
       val latestCompactBatchId = compactibleBatchIds(0)
       val previousCompactBatchId = compactibleBatchIds(1)
       (latestCompactBatchId - previousCompactBatchId).toInt
+    } else if (compactibleBatchIds.length == 1) {
+      Math.max(defaultCompactInterval,
+        (getLatest().map(_._1).getOrElse(-1L) - compactibleBatchIds(0) + 1)).toInt
     } else {
       defaultCompactInterval
     }
