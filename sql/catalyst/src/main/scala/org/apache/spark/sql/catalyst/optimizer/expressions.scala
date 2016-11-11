@@ -428,6 +428,9 @@ object FoldablePropagation extends Rule[LogicalPlan] {
       }
       case _ => Nil
     })
+    val replaceFoldable: PartialFunction[Expression, Expression] = {
+      case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
+    }
 
     if (foldableMap.isEmpty) {
       plan
@@ -449,7 +452,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
           stop = true
           j
 
-        // These 3 operators take attributes as constructor parameters, and these attributes
+        // These 4 operators take attributes as constructor parameters, and these attributes
         // can't be replaced by alias.
         case m: MapGroups =>
           stop = true
@@ -460,11 +463,15 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         case c: CoGroup =>
           stop = true
           c
+        case expand: Expand if !stop =>
+          val newExpand = expand.copy(projections = expand.projections.map { projection =>
+            projection.map(_.transform(replaceFoldable))
+          })
+          stop = true
+          newExpand
 
-        case p: LogicalPlan if !stop => p.transformExpressions {
-          case a: AttributeReference if foldableMap.contains(a) =>
-            foldableMap(a)
-        }
+        case p: LogicalPlan if !stop =>
+          p.transformExpressions(replaceFoldable)
       })
     }
   }

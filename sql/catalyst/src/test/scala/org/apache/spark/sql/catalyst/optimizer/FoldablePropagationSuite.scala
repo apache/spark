@@ -128,4 +128,22 @@ class FoldablePropagationSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("Propagate in expand") {
+    val c1 = Literal(1).as('a)
+    val c2 = Literal(2).as('b)
+    val a1 = c1.toAttribute.withNullability(true)
+    val a2 = c2.toAttribute.withNullability(true)
+    val expand = Expand(
+      Seq(Seq(Literal(null), 'b), Seq('a, Literal(null))),
+      Seq(a1, a2),
+      OneRowRelation.select(c1, c2))
+    val query = expand.where(a1.isNotNull).select(a1, a2).analyze
+    val optimized = Optimize.execute(query)
+    val correctExpand = expand.copy(projections = Seq(
+      Seq(Literal(null), c2),
+      Seq(c1, Literal(null))))
+    val correctAnswer = correctExpand.where(a1.isNotNull).select(a1, a2).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
