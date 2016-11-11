@@ -477,7 +477,6 @@ class GeneralizedLinearRegressionSuite
        }
        [1]  0.4272661 -0.1565423
        [1] -3.6911354  0.6214301  0.1295814
-
      */
     val expected = Seq(
       Vectors.dense(0.0, 0.4272661, -0.1565423),
@@ -495,21 +494,6 @@ class GeneralizedLinearRegressionSuite
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
         s"$link link and fitIntercept = $fitIntercept (with zero values).")
-
-      val familyLink = new FamilyAndLink(Poisson, Link.fromName(link))
-      model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
-        .foreach {
-          case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
-            val eta = BLAS.dot(features, model.coefficients) + model.intercept
-            val prediction2 = familyLink.fitted(eta)
-            val linkPrediction2 = eta
-            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
-              s"poisson family, $link link and fitIntercept = $fitIntercept. (with zero values)")
-            assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
-              s"GLM with poisson family, $link link and fitIntercept = $fitIntercept " +
-              "(with zero values).")
-        }
-
       idx += 1
     }
   }
