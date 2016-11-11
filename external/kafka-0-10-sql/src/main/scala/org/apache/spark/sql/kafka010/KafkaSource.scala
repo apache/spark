@@ -140,10 +140,8 @@ private[kafka010] case class KafkaSource(
     val offsets = maxOffsetsPerTrigger match {
       case None =>
         latest
-      case Some(limit) if currentPartitionOffsets.isEmpty =>
-        rateLimit(limit, initialPartitionOffsets, latest)
       case Some(limit) =>
-        rateLimit(limit, currentPartitionOffsets.get, latest)
+        rateLimit(limit, currentPartitionOffsets.getOrElse(initialPartitionOffsets), latest)
     }
 
     currentPartitionOffsets = Some(offsets)
