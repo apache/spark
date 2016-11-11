@@ -33,7 +33,6 @@ object RWrapperUtils extends Logging {
    *
    * @param rFormula RFormula instance
    * @param data Input dataset
-   * @return Unit
    */
   def checkDataColumns(rFormula: RFormula, data: Dataset[_]): Unit = {
     if (data.schema.fieldNames.contains(rFormula.getFeaturesCol)) {
@@ -51,6 +50,10 @@ object RWrapperUtils extends Logging {
     }
   }
 
+  /**
+   * Get the feature names and original labels from the schema
+   * of transformed DataFrame by RFormulaModel.
+   */
   def getFeaturesAndLabels(
       rFormulaModel: RFormulaModel,
       data: Dataset[_]): (Array[String], Array[String]) = {

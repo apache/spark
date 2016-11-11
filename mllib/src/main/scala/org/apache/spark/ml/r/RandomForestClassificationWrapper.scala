@@ -104,6 +104,7 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       .setCacheNodeIds(cacheNodeIds)
       .setProbabilityCol(probabilityCol)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
     if (seed != null && seed.length > 0) rfc.setSeed(seed.toLong)
 

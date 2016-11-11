@@ -111,6 +111,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setWeightCol(weightCol)
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setLabelCol(rFormula.getLabelCol)
     val pipeline = if (family == "binomial") {
       // Convert prediction from probability to label index.
       val probToPred = new ProbabilityToPrediction()
