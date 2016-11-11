@@ -477,35 +477,49 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     val checkpointDir = new File(checkpointLoc, "offsets")
     checkpointDir.mkdirs()
     assert(checkpointDir.exists())
-    def startStream: StreamingQuery = {
+    val tableName = "test"
+    def startQuery: StreamingQuery = {
       df.groupBy("a")
         .count()
         .writeStream
         .format("memory")
-        .queryName("test")
+        .queryName(tableName)
         .option("checkpointLocation", checkpointLoc)
         .outputMode("complete")
         .start()
     }
     // no exception here
-    val q = startStream
+    val q = startQuery
     ms.addData(0, 1)
     q.processAllAvailable()
     q.stop()
 
     checkAnswer(
-      spark.table("test"),
+      spark.table(tableName),
       Seq(Row(0, 1), Row(1, 1))
     )
-
-    val q2 = startStream
+    spark.sql(s"drop table $tableName")
+    // verify table is dropped
+    intercept[AnalysisException](spark.table(tableName).collect())
+    val q2 = startQuery
+    ms.addData(0)
     q2.processAllAvailable()
     checkAnswer(
-      spark.table("test"),
-      Seq(Row(0, 1), Row(1, 1))
+      spark.table(tableName),
+      Seq(Row(0, 2), Row(1, 1))
     )
 
     q2.stop()
+  }
+
+  test("append mode memory sink's do not support checkpoint recovery") {
+    import testImplicits._
+    val ms = new MemoryStream[Int](0, sqlContext)
+    val df = ms.toDF().toDF("a")
+    val checkpointLoc = newMetadataDir
+    val checkpointDir = new File(checkpointLoc, "offsets")
+    checkpointDir.mkdirs()
+    assert(checkpointDir.exists())
 
     val e = intercept[AnalysisException] {
       df.writeStream
