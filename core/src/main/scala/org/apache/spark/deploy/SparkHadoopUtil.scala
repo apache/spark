@@ -24,6 +24,7 @@ import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.Future
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
@@ -143,7 +144,10 @@ class SparkHadoopUtil extends Logging {
    *
    * Note this will only be worked under YARN cluster manager.
    */
-  def updateCredentials(sc: SparkContext): Unit = { }
+  def updateCredentials(sc: SparkContext): Future[Boolean] = {
+    throw new UnsupportedOperationException("updateCredentials can only be used under YARN " +
+      "cluster manager")
+  }
 
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If

@@ -23,6 +23,7 @@ import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.concurrent.Future
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -90,7 +91,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     if (credentials != null) credentials.getSecretKey(new Text(key)) else null
   }
 
-  override def updateCredentials(sc: SparkContext): Unit = {
+  override def updateCredentials(sc: SparkContext): Future[Boolean] = {
     val sparkConf = sc.conf
     require(sparkConf.get(PRINCIPAL).isDefined && sparkConf.get(KEYTAB).isDefined,
       s"${PRINCIPAL.key} and ${KEYTAB.key} should be set to update credentials")

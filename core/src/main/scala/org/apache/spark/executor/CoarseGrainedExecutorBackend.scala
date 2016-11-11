@@ -123,9 +123,12 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
+  }
 
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case UpdateCredentials =>
       SparkHadoopUtil.get.triggerCredentialUpdater()
+      context.reply(true)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
