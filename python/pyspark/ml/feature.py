@@ -1176,7 +1176,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
     >>> qds.getRelativeError()
     0.01
     >>> bucketizer = qds.fit(df)
-    >>> len(qds.setHandleInvalid("keep").fit(df).transform(df).collect())
+    >>> qds.setHandleInvalid("keep").fit(df).transform(df).count()
     6
     >>> qds.setHandleInvalid("skip").fit(df).transform(df).count()
     4
