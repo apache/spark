@@ -189,8 +189,8 @@ class JavaParams(JavaWrapper, Params):
         Creates a copy of this instance with the same uid and some
         extra params. This implementation first calls Params.copy and
         then make a copy of the companion Java pipeline component with
-        extra params. So both the Python wrapper and the Java model get
-        copied.
+        extra params. So both the Python wrapper and the Java pipeline
+        component get copied.
 
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
