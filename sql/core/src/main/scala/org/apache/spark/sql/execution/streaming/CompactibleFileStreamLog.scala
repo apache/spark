@@ -72,6 +72,9 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     // 1. If there is no '.compact' file, we can use the default setting directly.
     // 2. If there are two or more '.compact' files, we use the interval of patch id suffix with
     // '.compact' as compactInterval.
+    // 3. If there is only one '.compact' file, then use the max of (1) default setting directly
+    // or (2) the difference between the latest batchId + 1 - (batchId of the only '.compact' file)
+    // i.e., using the default setting in case (2) would mean that we missed a '.compact' file.
     val compactibleBatchIds = fileManager.list(metadataPath, batchFilesFilter)
       .filter(f => f.getPath.toString.endsWith(CompactibleFileStreamLog.COMPACT_FILE_SUFFIX))
       .map(f => pathToBatchId(f.getPath))
