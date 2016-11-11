@@ -63,7 +63,29 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   protected def isDeletingExpiredLog: Boolean
 
-  protected def compactInterval: Int
+  protected def defaultCompactInterval: Int
+
+  protected val compactInterval: Int = {
+    // SPARK-18187: "compactInterval" can be set by user in the first time. In case it is changed,
+    // we should check and update it:
+    //
+    // 1. If there is no '.compact' file, we can use the default setting directly.
+    // 2. If there are two or more '.compact' files, we use the interval of patch id suffix with
+    // '.compact' as compactInterval.
+    val compactibleBatchIds = fileManager.list(metadataPath, batchFilesFilter)
+      .filter(f => f.getPath.toString.endsWith(CompactibleFileStreamLog.COMPACT_FILE_SUFFIX))
+      .map(f => pathToBatchId(f.getPath))
+      .sorted
+      .reverse
+
+    if (compactibleBatchIds.length >= 2) {
+      val latestCompactBatchId = compactibleBatchIds(0)
+      val previousCompactBatchId = compactibleBatchIds(1)
+      (latestCompactBatchId - previousCompactBatchId).toInt
+    } else {
+      defaultCompactInterval
+    }
+  }
 
   /**
    * Filter out the obsolete logs.

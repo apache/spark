@@ -88,7 +88,8 @@ class FileStreamSinkLog(
 
   protected override val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSinkLogDeletion
 
-  protected override val compactInterval = sparkSession.sessionState.conf.fileSinkLogCompactInterval
+  protected override val defaultCompactInterval =
+    sparkSession.sessionState.conf.fileSinkLogCompactInterval
   require(compactInterval > 0,
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $compactInterval) " +
       "to a positive value.")

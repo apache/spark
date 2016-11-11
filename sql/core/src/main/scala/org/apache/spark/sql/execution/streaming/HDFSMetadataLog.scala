@@ -70,7 +70,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   /**
    * A `PathFilter` to filter only batch files
    */
-  private val batchFilesFilter = new PathFilter {
+  protected val batchFilesFilter = new PathFilter {
     override def accept(path: Path): Boolean = isBatchFile(path)
   }
 
@@ -239,14 +239,6 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       }
     }
     None
-  }
-
-  def getCompactBatchIds(): Array[Long] = {
-    fileManager.list(metadataPath, batchFilesFilter)
-      .filter(f => f.getPath.toString.endsWith(CompactibleFileStreamLog.COMPACT_FILE_SUFFIX))
-      .map(f => pathToBatchId(f.getPath))
-      .sorted
-      .reverse
   }
 
   /**
