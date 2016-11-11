@@ -127,7 +127,8 @@ private[kafka010] case class CachedKafkaConsumer private(
       getRecordFromFetchedData(offset, untilOffset)
     } catch {
       case e: OffsetOutOfRangeException =>
-        logWarning(s"Cannot fetch offset $offset, try to recover from the beginning offset", e)
+        logWarning(s"Cannot fetch offset $offset. Some data may be lost. Recovering from " +
+          "the beginning offset", e)
         advanceToBeginningOffsetAndFetch(offset, untilOffset, pollTimeoutMs)
     }
   }
@@ -153,6 +154,15 @@ private[kafka010] case class CachedKafkaConsumer private(
         null
       } else {
         // beginningOffset <= offset <= min(latestOffset - 1, untilOffset - 1)
+        //
+        // This will happen when a topic is deleted and recreated, and new data are pushed very fast
+        // , then we will see `offset` disappears first then appears again. Although the parameters
+        // are same, the state in Kafka cluster is changed, so it's not an endless loop.
+        //
+        // In addition, the stack here won't be deep unless the user keeps deleting and creating the
+        // topic very fast.
+        //
+        // Therefore, this recursive call is safe.
         getAndIgnoreLostData(offset, untilOffset, pollTimeoutMs)
       }
     } else {
