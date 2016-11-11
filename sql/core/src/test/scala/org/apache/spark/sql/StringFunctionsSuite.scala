@@ -41,7 +41,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("string concat - all compatible types") {
-    val allTypeData = AllTypeData(spark)
+    val allTypeData = AllTypeTestData(spark)
     val df = allTypeData.dataFrame
     checkAnswer(
       df.select(concat(allTypeData.getStringCompatibleColumns: _*)),
@@ -50,7 +50,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("string concat - unsupported types") {
-    val allTypeData = AllTypeData(spark)
+    val allTypeData = AllTypeTestData(spark)
     val df = allTypeData.dataFrame
 
     Seq(allTypeData.mapCol, allTypeData.arrayCol, allTypeData.structCol).foreach { col =>
@@ -478,7 +478,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 }
 
-case class AllTypeData (spark: SparkSession) {
+case class AllTypeTestData (spark: SparkSession) {
   private val intSeq = Seq(1, 2)
   private val doubleSeq = Seq(1.01d, 2.02d)
   private val stringSeq = Seq("a", "bb")
