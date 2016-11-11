@@ -265,6 +265,34 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     }
   }
 
+  test("hive partitioned view is not supported") {
+    withTable("t1") {
+      withView("v1") {
+        sql(
+          s"""
+             |CREATE TABLE t1 (c1 INT, c2 STRING)
+             |PARTITIONED BY (
+             |  p1 BIGINT COMMENT 'bla',
+             |  p2 STRING )
+           """.stripMargin)
+
+        createRawHiveTable(
+          s"""
+             |CREATE VIEW v1
+             |PARTITIONED ON (p1, p2)
+             |AS SELECT * from t1
+           """.stripMargin
+        )
+
+        val cause = intercept[AnalysisException] {
+          sql("SHOW CREATE TABLE v1")
+        }
+
+        assert(cause.getMessage.contains(" - partitioned view"))
+      }
+    }
+  }
+
   private def createRawHiveTable(ddl: String): Unit = {
     hiveContext.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client.runSqlHive(ddl)
   }

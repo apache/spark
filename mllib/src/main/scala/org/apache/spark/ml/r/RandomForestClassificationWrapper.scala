@@ -23,9 +23,9 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
-import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -35,18 +35,22 @@ private[r] class RandomForestClassifierWrapper private (
   val formula: String,
   val features: Array[String]) extends MLWritable {
 
-  private val DTModel: RandomForestClassificationModel =
+  import RandomForestClassifierWrapper._
+
+  private val rfcModel: RandomForestClassificationModel =
     pipeline.stages(1).asInstanceOf[RandomForestClassificationModel]
 
-  lazy val numFeatures: Int = DTModel.numFeatures
-  lazy val featureImportances: Vector = DTModel.featureImportances
-  lazy val numTrees: Int = DTModel.getNumTrees
-  lazy val treeWeights: Array[Double] = DTModel.treeWeights
+  lazy val numFeatures: Int = rfcModel.numFeatures
+  lazy val featureImportances: Vector = rfcModel.featureImportances
+  lazy val numTrees: Int = rfcModel.getNumTrees
+  lazy val treeWeights: Array[Double] = rfcModel.treeWeights
 
-  def summary: String = DTModel.toDebugString
+  def summary: String = rfcModel.toDebugString
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(DTModel.getFeaturesCol)
+    pipeline.transform(dataset)
+      .drop(PREDICTED_LABEL_INDEX_COL)
+      .drop(rfcModel.getFeaturesCol)
   }
 
   override def write: MLWriter = new
@@ -54,6 +58,10 @@ private[r] class RandomForestClassifierWrapper private (
 }
 
 private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestClassifierWrapper] {
+
+  val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
+  val PREDICTED_LABEL_COL = "prediction"
+
   def fit(  // scalastyle:ignore
       data: DataFrame,
       formula: String,
@@ -73,6 +81,7 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
 
     val rFormula = new RFormula()
       .setFormula(formula)
+      .setForceIndexLabel(true)
     RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
@@ -81,6 +90,11 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
     val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
       .attributes.get
     val features = featureAttrs.map(_.name.get)
+
+    // get label names from output schema
+    val labelAttr = Attribute.fromStructField(schema(rFormulaModel.getLabelCol))
+      .asInstanceOf[NominalAttribute]
+    val labels = labelAttr.values.get
 
     // assemble and fit the pipeline
     val rfc = new RandomForestClassifier()
@@ -97,10 +111,16 @@ private[r] object RandomForestClassifierWrapper extends MLReadable[RandomForestC
       .setCacheNodeIds(cacheNodeIds)
       .setProbabilityCol(probabilityCol)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
     if (seed != null && seed.length > 0) rfc.setSeed(seed.toLong)
 
+    val idxToStr = new IndexToString()
+      .setInputCol(PREDICTED_LABEL_INDEX_COL)
+      .setOutputCol(PREDICTED_LABEL_COL)
+      .setLabels(labels)
+
     val pipeline = new Pipeline()
-      .setStages(Array(rFormulaModel, rfc))
+      .setStages(Array(rFormulaModel, rfc, idxToStr))
       .fit(data)
 
     new RandomForestClassifierWrapper(pipeline, formula, features)
