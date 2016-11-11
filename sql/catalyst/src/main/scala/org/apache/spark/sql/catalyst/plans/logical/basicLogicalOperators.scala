@@ -406,10 +406,10 @@ case class InsertIntoTable(
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  // override def simpleString: String = {
-  //   val cteAliases = Utils.truncatedString(cteRelations.flatMap(_._1), "[", ", ", "]")
-  //   s"CTE $cteAliases"
-  // }
+  override def simpleString: String = {
+    val cteAliases = Utils.truncatedString(cteRelations.flatMap(_._1), "[", ", ", "]")
+    s"CTE $cteAliases"
+  }
 }
 
 case class WithWindowDefinition(
