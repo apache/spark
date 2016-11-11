@@ -76,6 +76,10 @@
       <artifactId>guava</artifactId>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-crypto</artifactId>
+    </dependency>
 
     <!-- Test dependencies -->
     <dependency>

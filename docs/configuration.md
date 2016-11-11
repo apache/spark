@@ -1530,6 +1530,32 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.authenticate.encryption.aes.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable AES for over-the-wire encryption
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.encryption.aes.cipher.keySize</code></td>
+  <td>16</td>
+  <td>
+    The bytes of AES cipher key which is effective when AES cipher is enabled. AES
+    works with 16, 24 and 32 bytes keys.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.encryption.aes.cipher.class</code></td>
+  <td>null</td>
+  <td>
+    Specify the underlying implementation class of crypto cipher. Set null here to use default.
+    In order to use OpenSslCipher users should install openssl. Currently, there are two cipher
+    classes available in Commons Crypto library:
+        org.apache.commons.crypto.cipher.OpenSslCipher
+        org.apache.commons.crypto.cipher.JceCipher
+  </td>
+</tr>
+<tr>
   <td><code>spark.core.connection.ack.wait.timeout</code></td>
   <td>60s</td>
   <td>
