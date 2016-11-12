@@ -22,15 +22,14 @@ import scala.util.Try
 
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.SparkException
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
  * A [[StructType]] object can be constructed by
  * {{{
  * StructType(fields: Seq[StructField])
@@ -90,8 +89,10 @@ import org.apache.spark.util.Utils
  * val row = Row(Row(1, 2, true))
  * // row: Row = [[1,2,true]]
  * }}}
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
   /** No-arg constructor for kryo. */
@@ -138,7 +139,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *   .add("c", StringType)
    */
   def add(name: String, dataType: DataType): StructType = {
-    StructType(fields :+ new StructField(name, dataType, nullable = true, Metadata.empty))
+    StructType(fields :+ StructField(name, dataType, nullable = true, Metadata.empty))
   }
 
   /**
@@ -150,7 +151,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    *   .add("c", StringType, true)
    */
   def add(name: String, dataType: DataType, nullable: Boolean): StructType = {
-    StructType(fields :+ new StructField(name, dataType, nullable, Metadata.empty))
+    StructType(fields :+ StructField(name, dataType, nullable, Metadata.empty))
   }
 
   /**
@@ -167,7 +168,24 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: DataType,
       nullable: Boolean,
       metadata: Metadata): StructType = {
-    StructType(fields :+ new StructField(name, dataType, nullable, metadata))
+    StructType(fields :+ StructField(name, dataType, nullable, metadata))
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", IntegerType, true, "comment1")
+   *   .add("b", LongType, false, "comment2")
+   *   .add("c", StringType, true, "comment3")
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: DataType,
+      nullable: Boolean,
+      comment: String): StructType = {
+    StructType(fields :+ StructField(name, dataType, nullable).withComment(comment))
   }
 
   /**
@@ -216,6 +234,24 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       nullable: Boolean,
       metadata: Metadata): StructType = {
     add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
+   * dataType is specified as a String.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true, "comment1")
+   *   .add("b", "long", false, "comment2")
+   *   .add("c", "string", true, "comment3")
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: String,
+      nullable: Boolean,
+      comment: String): StructType = {
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, comment)
   }
 
   /**
@@ -298,6 +334,12 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     Utils.truncatedString(fieldTypes, "struct<", ",", ">")
   }
 
+  override def catalogString: String = {
+    // in catalogString, we should not truncate
+    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.catalogString}")
+    s"struct<${fieldTypes.mkString(",")}>"
+  }
+
   override def sql: String = {
     val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
     s"STRUCT<${fieldTypes.mkString(", ")}>"
@@ -306,7 +348,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] override def simpleString(maxNumberFields: Int): String = {
     val builder = new StringBuilder
     val fieldTypes = fields.take(maxNumberFields).map {
-      case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
+      f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
     }
     builder.append("struct<")
     builder.append(fieldTypes.mkString(", "))
@@ -352,8 +394,17 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     InterpretedOrdering.forSchema(this.fields.map(_.dataType))
 }
 
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object StructType extends AbstractDataType {
 
+  /**
+   * A key used in field metadata to indicate that the field comes from the result of merging
+   * two different StructTypes that do not always contain the field. That is to say, the field
+   * might be missing (optional) from one of the StructTypes.
+   */
   private[sql] val metadataKeyForOptionalField = "_OPTIONAL_"
 
   override private[sql] def defaultConcreteType: DataType = new StructType
@@ -378,10 +429,10 @@ object StructType extends AbstractDataType {
     StructType(fields.asScala)
   }
 
-  protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
+  private[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
-  def removeMetadata(key: String, dt: DataType): DataType =
+  private[sql] def removeMetadata(key: String, dt: DataType): DataType =
     dt match {
       case StructType(fields) =>
         val newFields = fields.map { f =>
@@ -423,7 +474,7 @@ object StructType extends AbstractDataType {
                   nullable = leftNullable || rightNullable)
               }
               .orElse {
-                optionalMeta.putBoolean(metadataKeyForOptionalField, true)
+                optionalMeta.putBoolean(metadataKeyForOptionalField, value = true)
                 Some(leftField.copy(metadata = optionalMeta.build()))
               }
               .foreach(newFields += _)
@@ -433,7 +484,7 @@ object StructType extends AbstractDataType {
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
           .foreach { f =>
-            optionalMeta.putBoolean(metadataKeyForOptionalField, true)
+            optionalMeta.putBoolean(metadataKeyForOptionalField, value = true)
             newFields += f.copy(metadata = optionalMeta.build())
           }
 

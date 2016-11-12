@@ -140,8 +140,8 @@ class MLUtils(object):
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from glob import glob
         >>> from pyspark.mllib.util import MLUtils
-        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])), \
-                        LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
+        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])),
+        ...             LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
         >>> MLUtils.saveAsLibSVMFile(sc.parallelize(examples), tempFile.name)
@@ -166,8 +166,8 @@ class MLUtils(object):
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
         >>> from pyspark.mllib.regression import LabeledPoint
-        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, -1.23), (2, 4.56e-7)])), \
-                        LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
+        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, -1.23), (2, 4.56e-7)])),
+        ...             LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
         >>> sc.parallelize(examples, 1).saveAsTextFile(tempFile.name)
@@ -280,6 +280,86 @@ class MLUtils(object):
         if not isinstance(dataset, DataFrame):
             raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
         return callMLlibFunc("convertVectorColumnsFromML", dataset, list(cols))
+
+    @staticmethod
+    @since("2.0.0")
+    def convertMatrixColumnsToML(dataset, *cols):
+        """
+        Converts matrix columns in an input DataFrame from the
+        :py:class:`pyspark.mllib.linalg.Matrix` type to the new
+        :py:class:`pyspark.ml.linalg.Matrix` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of matrix columns to be converted.
+          New matrix columns will be ignored. If unspecified, all old
+          matrix columns will be converted excepted nested ones.
+        :return:
+          the input dataset with old matrix columns converted to the
+          new matrix type
+
+        >>> import pyspark
+        >>> from pyspark.mllib.linalg import Matrices
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4]),
+        ...     Matrices.dense(2, 2, range(4)))], ["id", "x", "y"])
+        >>> r1 = MLUtils.convertMatrixColumnsToML(df).first()
+        >>> isinstance(r1.x, pyspark.ml.linalg.SparseMatrix)
+        True
+        >>> isinstance(r1.y, pyspark.ml.linalg.DenseMatrix)
+        True
+        >>> r2 = MLUtils.convertMatrixColumnsToML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.ml.linalg.SparseMatrix)
+        True
+        >>> isinstance(r2.y, pyspark.mllib.linalg.DenseMatrix)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertMatrixColumnsToML", dataset, list(cols))
+
+    @staticmethod
+    @since("2.0.0")
+    def convertMatrixColumnsFromML(dataset, *cols):
+        """
+        Converts matrix columns in an input DataFrame to the
+        :py:class:`pyspark.mllib.linalg.Matrix` type from the new
+        :py:class:`pyspark.ml.linalg.Matrix` type under the `spark.ml`
+        package.
+
+        :param dataset:
+          input dataset
+        :param cols:
+          a list of matrix columns to be converted.
+          Old matrix columns will be ignored. If unspecified, all new
+          matrix columns will be converted except nested ones.
+        :return:
+          the input dataset with new matrix columns converted to the
+          old matrix type
+
+        >>> import pyspark
+        >>> from pyspark.ml.linalg import Matrices
+        >>> from pyspark.mllib.util import MLUtils
+        >>> df = spark.createDataFrame(
+        ...     [(0, Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4]),
+        ...     Matrices.dense(2, 2, range(4)))], ["id", "x", "y"])
+        >>> r1 = MLUtils.convertMatrixColumnsFromML(df).first()
+        >>> isinstance(r1.x, pyspark.mllib.linalg.SparseMatrix)
+        True
+        >>> isinstance(r1.y, pyspark.mllib.linalg.DenseMatrix)
+        True
+        >>> r2 = MLUtils.convertMatrixColumnsFromML(df, "x").first()
+        >>> isinstance(r2.x, pyspark.mllib.linalg.SparseMatrix)
+        True
+        >>> isinstance(r2.y, pyspark.ml.linalg.DenseMatrix)
+        True
+        """
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Input dataset must be a DataFrame but got {}.".format(type(dataset)))
+        return callMLlibFunc("convertMatrixColumnsFromML", dataset, list(cols))
 
 
 class Saveable(object):

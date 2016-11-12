@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.language.existentials
+
+import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -45,13 +49,11 @@ object CatalystSerde {
  */
 trait ObjectProducer extends LogicalPlan {
   // The attribute that reference to the single object field this operator outputs.
-  protected def outputObjAttr: Attribute
+  def outputObjAttr: Attribute
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
 
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
-
-  def outputObjectType: DataType = outputObjAttr.dataType
 }
 
 /**
@@ -64,7 +66,7 @@ trait ObjectConsumer extends UnaryNode {
   // This operator always need all columns of its child, even it doesn't reference to.
   override def references: AttributeSet = child.outputSet
 
-  def inputObjectType: DataType = child.output.head.dataType
+  def inputObjAttr: Attribute = child.output.head
 }
 
 /**
@@ -153,6 +155,8 @@ object MapElements {
     val deserialized = CatalystSerde.deserialize[T](child)
     val mapped = MapElements(
       func,
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
       CatalystSerde.generateObjAttr[U],
       deserialized)
     CatalystSerde.serialize[U](mapped)
@@ -164,8 +168,54 @@ object MapElements {
  */
 case class MapElements(
     func: AnyRef,
+    argumentClass: Class[_],
+    argumentSchema: StructType,
     outputObjAttr: Attribute,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer
+
+object TypedFilter {
+  def apply[T : Encoder](func: AnyRef, child: LogicalPlan): TypedFilter = {
+    TypedFilter(
+      func,
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
+      UnresolvedDeserializer(encoderFor[T].deserializer),
+      child)
+  }
+}
+
+/**
+ * A relation produced by applying `func` to each element of the `child` and filter them by the
+ * resulting boolean value.
+ *
+ * This is logically equal to a normal [[Filter]] operator whose condition expression is decoding
+ * the input row to object and apply the given function with decoded object. However we need the
+ * encapsulation of [[TypedFilter]] to make the concept more clear and make it easier to write
+ * optimizer rules.
+ */
+case class TypedFilter(
+    func: AnyRef,
+    argumentClass: Class[_],
+    argumentSchema: StructType,
+    deserializer: Expression,
+    child: LogicalPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output
+
+  def withObjectProducerChild(obj: LogicalPlan): Filter = {
+    assert(obj.output.length == 1)
+    Filter(typedCondition(obj.output.head), obj)
+  }
+
+  def typedCondition(input: Expression): Expression = {
+    val (funcClass, methodName) = func match {
+      case m: FilterFunction[_] => classOf[FilterFunction[_]] -> "call"
+      case _ => classOf[Any => Boolean] -> "apply"
+    }
+    val funcObj = Literal.create(func, ObjectType(funcClass))
+    Invoke(funcObj, methodName, BooleanType, input :: Nil)
+  }
+}
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
@@ -174,7 +224,22 @@ object AppendColumns {
       child: LogicalPlan): AppendColumns = {
     new AppendColumns(
       func.asInstanceOf[Any => Any],
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
       UnresolvedDeserializer(encoderFor[T].deserializer),
+      encoderFor[U].namedExpressions,
+      child)
+  }
+
+  def apply[T : Encoder, U : Encoder](
+      func: T => U,
+      inputAttributes: Seq[Attribute],
+      child: LogicalPlan): AppendColumns = {
+    new AppendColumns(
+      func.asInstanceOf[Any => Any],
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
+      UnresolvedDeserializer(encoderFor[T].deserializer, inputAttributes),
       encoderFor[U].namedExpressions,
       child)
   }
@@ -189,6 +254,8 @@ object AppendColumns {
  */
 case class AppendColumns(
     func: Any => Any,
+    argumentClass: Class[_],
+    argumentSchema: StructType,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
     child: LogicalPlan) extends UnaryNode {

@@ -923,7 +923,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("udaf without specifying inputSchema") {
-    withTempTable("noInputSchemaUDAF") {
+    withTempView("noInputSchemaUDAF") {
       spark.udf.register("noInputSchema", new ScalaAggregateFunctionWithoutInputSchema)
 
       val data =
@@ -998,9 +998,9 @@ class HashAggregationQuerySuite extends AggregationQuerySuite
 class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    Seq(0, 10).foreach { maxColumnarHashMapColumns =>
-      withSQLConf("spark.sql.codegen.aggregate.map.columns.max" ->
-        maxColumnarHashMapColumns.toString) {
+    Seq("true", "false").foreach { enableTwoLevelMaps =>
+      withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enable" ->
+        enableTwoLevelMaps) {
         (1 to 3).foreach { fallbackStartsAt =>
           withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
             s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {

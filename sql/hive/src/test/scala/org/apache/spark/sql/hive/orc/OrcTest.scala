@@ -62,7 +62,7 @@ private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
       (f: => Unit): Unit = {
     withOrcDataFrame(data) { df =>
       df.createOrReplaceTempView(tableName)
-      withTempTable(tableName)(f)
+      withTempView(tableName)(f)
     }
   }
 

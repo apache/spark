@@ -22,8 +22,9 @@ import java.io.File
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -82,6 +83,29 @@ class DefaultSource
   }
 }
 
+/** Dummy provider with only RelationProvider and CreatableRelationProvider. */
+class DefaultSourceWithoutUserSpecifiedSchema
+  extends RelationProvider
+  with CreatableRelationProvider {
+
+  case class FakeRelation(sqlContext: SQLContext) extends BaseRelation {
+    override def schema: StructType = StructType(Seq(StructField("a", StringType)))
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation = {
+    FakeRelation(sqlContext)
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    FakeRelation(sqlContext)
+  }
+}
 
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
@@ -117,6 +141,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       .load()
       .write
       .format("org.apache.spark.sql.test")
+      .save()
+  }
+
+  test("resolve default source without extending SchemaRelationProvider") {
+    spark.read
+      .format("org.apache.spark.sql.test.DefaultSourceWithoutUserSpecifiedSchema")
+      .load()
+      .write
+      .format("org.apache.spark.sql.test.DefaultSourceWithoutUserSpecifiedSchema")
       .save()
   }
 
@@ -168,6 +201,34 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       .mode(SaveMode.ErrorIfExists)
       .save()
     assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
+  }
+
+  test("test path option in load") {
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("intOpt", 56)
+      .load("/test")
+
+    assert(LastOptions.parameters("intOpt") == "56")
+    assert(LastOptions.parameters("path") == "/test")
+
+    LastOptions.clear()
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("intOpt", 55)
+      .load()
+
+    assert(LastOptions.parameters("intOpt") == "55")
+    assert(!LastOptions.parameters.contains("path"))
+
+    LastOptions.clear()
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("intOpt", 54)
+      .load("/test", "/test1", "/test2")
+
+    assert(LastOptions.parameters("intOpt") == "54")
+    assert(!LastOptions.parameters.contains("path"))
   }
 
   test("test different data types for options") {
@@ -231,10 +292,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   test("prevent all column partitioning") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
-      val e = intercept[AnalysisException] {
+      var e = intercept[AnalysisException] {
         spark.range(10).write.format("parquet").mode("overwrite").partitionBy("id").save(path)
       }.getMessage
       assert(e.contains("Cannot use all columns for partition columns"))
+      e = intercept[AnalysisException] {
+        spark.range(10).write.format("csv").mode("overwrite").partitionBy("id").save(path)
+      }.getMessage
+      assert(e.contains("Cannot use all columns for partition columns"))
+      spark.emptyDataFrame.write.format("parquet").mode("overwrite").save(path)
     }
   }
 
@@ -244,6 +310,39 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     spark.read.format("org.apache.spark.sql.test").load(dir, dir, dir)
     spark.read.format("org.apache.spark.sql.test").load(Seq(dir, dir): _*)
     Option(dir).map(spark.read.format("org.apache.spark.sql.test").load)
+  }
+
+  test("read a data source that does not extend SchemaRelationProvider") {
+    val dfReader = spark.read
+      .option("from", "1")
+      .option("TO", "10")
+      .format("org.apache.spark.sql.sources.SimpleScanSource")
+
+    // when users do not specify the schema
+    checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
+
+    // when users specify the schema
+    val inputSchema = new StructType().add("s", IntegerType, nullable = false)
+    val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
+    assert(e.getMessage.contains(
+      "org.apache.spark.sql.sources.SimpleScanSource does not allow user-specified schemas"))
+  }
+
+  test("read a data source that does not extend RelationProvider") {
+    val dfReader = spark.read
+      .option("from", "1")
+      .option("TO", "10")
+      .option("option_with_underscores", "someval")
+      .option("option.with.dots", "someval")
+      .format("org.apache.spark.sql.sources.AllDataTypesScanSource")
+
+    // when users do not specify the schema
+    val e = intercept[AnalysisException] { dfReader.load() }
+    assert(e.getMessage.contains("A schema needs to be specified when using"))
+
+    // when users specify the schema
+    val inputSchema = new StructType().add("s", StringType, nullable = false)
+    assert(dfReader.schema(inputSchema).load().count() == 10)
   }
 
   test("text - API and behavior regarding schema") {
@@ -363,11 +462,136 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       spark.read.schema(userSchema).parquet(Seq(dir, dir): _*), expData ++ expData, userSchema)
   }
 
+  /**
+   * This only tests whether API compiles, but does not run it as orc()
+   * cannot be run without Hive classes.
+   */
+  ignore("orc - API") {
+    // Reader, with user specified schema
+    // Refer to csv-specific test suites for behavior without user specified schema
+    spark.read.schema(userSchema).orc()
+    spark.read.schema(userSchema).orc(dir)
+    spark.read.schema(userSchema).orc(dir, dir, dir)
+    spark.read.schema(userSchema).orc(Seq(dir, dir): _*)
+    Option(dir).map(spark.read.schema(userSchema).orc)
+
+    // Writer
+    spark.range(10).write.orc(dir)
+  }
+
+  test("column nullability and comment - write and then read") {
+    import testImplicits._
+
+    Seq("json", "parquet", "csv").foreach { format =>
+      val schema = StructType(
+        StructField("cl1", IntegerType, nullable = false).withComment("test") ::
+          StructField("cl2", IntegerType, nullable = true) ::
+          StructField("cl3", IntegerType, nullable = true) :: Nil)
+      val row = Row(3, null, 4)
+      val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+      val tableName = "tab"
+      withTable(tableName) {
+        df.write.format(format).mode("overwrite").saveAsTable(tableName)
+        // Verify the DDL command result: DESCRIBE TABLE
+        checkAnswer(
+          sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
+          Row("cl1", "test") :: Nil)
+        // Verify the schema
+        val expectedFields = schema.fields.map(f => f.copy(nullable = true))
+        assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
+      }
+    }
+  }
+
+  test("SPARK-17230: write out results of decimal calculation") {
+    val df = spark.range(99, 101)
+      .selectExpr("id", "cast(id as long) * cast('1.0' as decimal(38, 18)) as num")
+    df.write.mode(SaveMode.Overwrite).parquet(dir)
+    val df2 = spark.read.parquet(dir)
+    checkAnswer(df2, df)
+  }
+
   private def testRead(
       df: => DataFrame,
       expectedResult: Seq[String],
       expectedSchema: StructType): Unit = {
     checkAnswer(df, spark.createDataset(expectedResult).toDF())
     assert(df.schema === expectedSchema)
+  }
+
+  test("saveAsTable with mode Append should not fail if the table not exists " +
+    "but a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.mode(SaveMode.Append).saveAsTable("same_name")
+        assert(
+          spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
+      }
+    }
+  }
+
+  test("saveAsTable with mode Append should not fail if the table already exists " +
+    "and a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        sql("CREATE TABLE same_name(id LONG) USING parquet")
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.mode(SaveMode.Append).saveAsTable("same_name")
+        checkAnswer(spark.table("same_name"), spark.range(10).toDF())
+        checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
+      }
+    }
+  }
+
+  test("saveAsTable with mode ErrorIfExists should not fail if the table not exists " +
+    "but a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.mode(SaveMode.ErrorIfExists).saveAsTable("same_name")
+        assert(
+          spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
+      }
+    }
+  }
+
+  test("saveAsTable with mode Overwrite should not drop the temp view if the table not exists " +
+    "but a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.mode(SaveMode.Overwrite).saveAsTable("same_name")
+        assert(spark.sessionState.catalog.getTempView("same_name").isDefined)
+        assert(
+          spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
+      }
+    }
+  }
+
+  test("saveAsTable with mode Overwrite should not fail if the table already exists " +
+    "and a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        sql("CREATE TABLE same_name(id LONG) USING parquet")
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.mode(SaveMode.Overwrite).saveAsTable("same_name")
+        checkAnswer(spark.table("same_name"), spark.range(10).toDF())
+        checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
+      }
+    }
+  }
+
+  test("saveAsTable with mode Ignore should create the table if the table not exists " +
+    "but a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.mode(SaveMode.Ignore).saveAsTable("same_name")
+        assert(
+          spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
+      }
+    }
   }
 }

@@ -370,17 +370,6 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     assert(cause.getMessage.contains("insertInto() can't be used together with partitionBy()."))
   }
 
-  test("InsertIntoTable#resolved should include dynamic partitions") {
-    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
-      val data = (1 to 10).map(i => (i.toLong, s"data-$i")).toDF("id", "data")
-
-      val logical = InsertIntoTable(spark.table("partitioned").logicalPlan,
-        Map("part" -> None), data.logicalPlan, overwrite = false, ifNotExists = false)
-      assert(!logical.resolved, "Should not resolve: missing partition data")
-    }
-  }
-
   testPartitionedTable(
     "SPARK-16036: better error message when insert into a table with mismatch schema") {
     tableName =>
@@ -409,8 +398,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
         sql(s"INSERT INTO TABLE $tableName PARTITION (c=11, b=10) SELECT 9, 12")
 
-        // c is defined twice. Parser will complain.
-        intercept[ParseException] {
+        // c is defined twice. Analyzer will complain.
+        intercept[AnalysisException] {
           sql(s"INSERT INTO TABLE $tableName PARTITION (b=14, c=15, c=16) SELECT 13")
         }
 
@@ -467,6 +456,54 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
             Row(21, 22, 23, 24) ::
             Row(25, 26, 27, 28) :: Nil
         )
+      }
+  }
+
+  testPartitionedTable("insertInto() should match columns by position and ignore column names") {
+    tableName =>
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        // Columns `df.c` and `df.d` are resolved by position, and thus mapped to partition columns
+        // `b` and `c` of the target table.
+        val df = Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d")
+        df.write.insertInto(tableName)
+
+        checkAnswer(
+          sql(s"SELECT a, b, c, d FROM $tableName"),
+          Row(1, 3, 4, 2)
+        )
+      }
+  }
+
+  testPartitionedTable("insertInto() should match unnamed columns by position") {
+    tableName =>
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        // Columns `c + 1` and `d + 1` are resolved by position, and thus mapped to partition
+        // columns `b` and `c` of the target table.
+        val df = Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d")
+        df.select('a + 1, 'b + 1, 'c + 1, 'd + 1).write.insertInto(tableName)
+
+        checkAnswer(
+          sql(s"SELECT a, b, c, d FROM $tableName"),
+          Row(2, 4, 5, 3)
+        )
+      }
+  }
+
+  testPartitionedTable("insertInto() should reject missing columns") {
+    tableName =>
+      sql("CREATE TABLE t (a INT, b INT)")
+
+      intercept[AnalysisException] {
+        spark.table("t").write.insertInto(tableName)
+      }
+  }
+
+  testPartitionedTable("insertInto() should reject extra columns") {
+    tableName =>
+      sql("CREATE TABLE t (a INT, b INT, c INT, d INT, e INT)")
+
+      intercept[AnalysisException] {
+        spark.table("t").write.insertInto(tableName)
       }
   }
 }

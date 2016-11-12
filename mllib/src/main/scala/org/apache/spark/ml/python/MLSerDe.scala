@@ -19,17 +19,12 @@ package org.apache.spark.ml.python
 
 import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
-import java.util.{ArrayList => JArrayList}
-
-import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.ml.linalg._
 import org.apache.spark.mllib.api.python.SerDeBase
-import org.apache.spark.rdd.RDD
 
 /**
  * SerDe utility functions for pyspark.ml.
@@ -56,9 +51,8 @@ private[spark] object MLSerDe extends SerDeBase with Serializable {
     }
 
     def construct(args: Array[Object]): Object = {
-      require(args.length == 1)
       if (args.length != 1) {
-        throw new PickleException("should be 1")
+        throw new PickleException("length of args should be 1")
       }
       val bytes = getBytes(args(0))
       val bb = ByteBuffer.wrap(bytes, 0, bytes.length)
@@ -95,7 +89,7 @@ private[spark] object MLSerDe extends SerDeBase with Serializable {
 
     def construct(args: Array[Object]): Object = {
       if (args.length != 4) {
-        throw new PickleException("should be 4")
+        throw new PickleException("length of args should be 4")
       }
       val bytes = getBytes(args(2))
       val n = bytes.length / 8
@@ -143,7 +137,7 @@ private[spark] object MLSerDe extends SerDeBase with Serializable {
 
     def construct(args: Array[Object]): Object = {
       if (args.length != 6) {
-        throw new PickleException("should be 6")
+        throw new PickleException("length of args should be 6")
       }
       val order = ByteOrder.nativeOrder()
       val colPtrsBytes = getBytes(args(2))
@@ -187,7 +181,7 @@ private[spark] object MLSerDe extends SerDeBase with Serializable {
 
     def construct(args: Array[Object]): Object = {
       if (args.length != 3) {
-        throw new PickleException("should be 3")
+        throw new PickleException("length of args should be 3")
       }
       val size = args(0).asInstanceOf[Int]
       val indiceBytes = getBytes(args(1))

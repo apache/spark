@@ -18,7 +18,9 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.UUID
+
+import org.scalatest.PrivateMethodTester
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
@@ -28,7 +30,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class FileStreamSourceTest extends StreamTest with SharedSQLContext {
+class FileStreamSourceTest extends StreamTest with SharedSQLContext with PrivateMethodTester {
 
   import testImplicits._
 
@@ -104,12 +106,13 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
   def createFileStream(
       format: String,
       path: String,
-      schema: Option[StructType] = None): DataFrame = {
+      schema: Option[StructType] = None,
+      options: Map[String, String] = Map.empty): DataFrame = {
     val reader =
       if (schema.isDefined) {
-        spark.readStream.format(format).schema(schema.get)
+        spark.readStream.format(format).schema(schema.get).options(options)
       } else {
-        spark.readStream.format(format)
+        spark.readStream.format(format).options(options)
       }
     reader.load(path)
   }
@@ -140,6 +143,8 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
 class FileStreamSourceSuite extends FileStreamSourceTest {
 
   import testImplicits._
+
+  override val streamingTimeout = 20.seconds
 
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   private def createFileStreamSource(
@@ -179,18 +184,24 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") { testError() }
   }
 
-  test("FileStreamSource schema: path doesn't exist, no schema") {
-    val e = intercept[IllegalArgumentException] {
-      createFileStreamSourceAndGetSchema(format = None, path = Some("/a/b/c"), schema = None)
+  test("FileStreamSource schema: path doesn't exist (without schema) should throw exception") {
+    withTempDir { dir =>
+      intercept[AnalysisException] {
+        val userSchema = new StructType().add(new StructField("value", IntegerType))
+        val schema = createFileStreamSourceAndGetSchema(
+          format = None, path = Some(new File(dir, "1").getAbsolutePath), schema = None)
+      }
     }
-    assert(e.getMessage.toLowerCase.contains("schema")) // reason is schema absence, not the path
   }
 
-  test("FileStreamSource schema: path doesn't exist, with schema") {
-    val userSchema = new StructType().add(new StructField("value", IntegerType))
-    val schema = createFileStreamSourceAndGetSchema(
-      format = None, path = Some("/a/b/c"), schema = Some(userSchema))
-    assert(schema === userSchema)
+  test("FileStreamSource schema: path doesn't exist (with schema) should throw exception") {
+    withTempDir { dir =>
+      intercept[AnalysisException] {
+        val userSchema = new StructType().add(new StructField("value", IntegerType))
+        val schema = createFileStreamSourceAndGetSchema(
+          format = None, path = Some(new File(dir, "1").getAbsolutePath), schema = Some(userSchema))
+      }
+    }
   }
 
 
@@ -224,20 +235,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   // =============== Parquet file stream schema tests ================
-
-  test("FileStreamSource schema: parquet, no existing files, no schema") {
-    withTempDir { src =>
-      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
-        val e = intercept[AnalysisException] {
-          createFileStreamSourceAndGetSchema(
-            format = Some("parquet"),
-            path = Some(new File(src, "1").getCanonicalPath),
-            schema = None)
-        }
-        assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
-      }
-    }
-  }
 
   test("FileStreamSource schema: parquet, existing files, no schema") {
     withTempDir { src =>
@@ -335,6 +332,60 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+      )
+    }
+  }
+
+  test("read from textfile") {
+    withTempDirs { case (src, tmp) =>
+      val textStream = spark.readStream.textFile(src.getCanonicalPath)
+      val filtered = textStream.filter(_.contains("keep"))
+
+      testStream(filtered)(
+        AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
+        CheckAnswer("keep2", "keep3"),
+        StopStream,
+        AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
+        StartStream(),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+        AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+      )
+    }
+  }
+
+  test("SPARK-17165 should not track the list of seen files indefinitely") {
+    // This test works by:
+    // 1. Create a file
+    // 2. Get it processed
+    // 3. Sleeps for a very short amount of time (larger than maxFileAge
+    // 4. Add another file (at this point the original file should have been purged
+    // 5. Test the size of the seenFiles internal data structure
+
+    // Note that if we change maxFileAge to a very large number, the last step should fail.
+    withTempDirs { case (src, tmp) =>
+      val textStream: DataFrame =
+        createFileStream("text", src.getCanonicalPath, options = Map("maxFileAge" -> "5ms"))
+
+      testStream(textStream)(
+        AddTextFileData("a\nb", src, tmp),
+        CheckAnswer("a", "b"),
+
+        // SLeeps longer than 5ms (maxFileAge)
+        // Unfortunately since a lot of file system does not have modification time granularity
+        // finer grained than 1 sec, we need to use 1 sec here.
+        AssertOnQuery { _ => Thread.sleep(1000); true },
+
+        AddTextFileData("c\nd", src, tmp),
+        CheckAnswer("a", "b", "c", "d"),
+
+        AssertOnQuery("seen files should contain only one entry") { streamExecution =>
+          val source = streamExecution.logicalPlan.collect { case e: StreamingExecutionRelation =>
+            e.source.asInstanceOf[FileStreamSource]
+          }.head
+          assert(source.seenFiles.size == 1)
+          true
+        }
       )
     }
   }
@@ -575,6 +626,79 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   // =============== other tests ================
 
+  test("read new files in partitioned table without globbing, should read partition data") {
+    withTempDirs { case (dir, tmp) =>
+      val partitionFooSubDir = new File(dir, "partition=foo")
+      val partitionBarSubDir = new File(dir, "partition=bar")
+
+      val schema = new StructType().add("value", StringType).add("partition", StringType)
+      val fileStream = createFileStream("json", s"${dir.getCanonicalPath}", Some(schema))
+      val filtered = fileStream.filter($"value" contains "keep")
+      testStream(filtered)(
+        // Create new partition=foo sub dir and write to it
+        AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
+        CheckAnswer(("keep2", "foo")),
+
+        // Append to same partition=foo sub dir
+        AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
+        CheckAnswer(("keep2", "foo"), ("keep3", "foo")),
+
+        // Create new partition sub dir and write to it
+        AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
+        CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar")),
+
+        // Append to same partition=bar sub dir
+        AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
+        CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"))
+      )
+    }
+  }
+
+  test("when schema inference is turned on, should read partition data") {
+    def createFile(content: String, src: File, tmp: File): Unit = {
+      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+      val finalFile = new File(src, tempFile.getName)
+      require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
+      require(src.mkdirs(), s"Cannot create $src")
+      require(src.isDirectory(), s"$src is not a directory")
+      require(stringToFile(tempFile, content).renameTo(finalFile))
+    }
+
+    withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+      withTempDirs { case (dir, tmp) =>
+        val partitionFooSubDir = new File(dir, "partition=foo")
+        val partitionBarSubDir = new File(dir, "partition=bar")
+
+        // Create file in partition, so we can infer the schema.
+        createFile("{'value': 'drop0'}", partitionFooSubDir, tmp)
+
+        val fileStream = createFileStream("json", s"${dir.getCanonicalPath}")
+        val filtered = fileStream.filter($"value" contains "keep")
+        testStream(filtered)(
+          // Append to same partition=foo sub dir
+          AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
+          CheckAnswer(("keep2", "foo")),
+
+          // Append to same partition=foo sub dir
+          AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
+          CheckAnswer(("keep2", "foo"), ("keep3", "foo")),
+
+          // Create new partition sub dir and write to it
+          AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
+          CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar")),
+
+          // Append to same partition=bar sub dir
+          AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
+          CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar")),
+
+          AddTextFileData("{'value': 'keep6'}", partitionBarSubDir, tmp),
+          CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"),
+            ("keep6", "bar"))
+        )
+      }
+    }
+  }
+
   test("fault tolerance") {
     withTempDirs { case (src, tmp) =>
       val fileStream = createFileStream("text", src.getCanonicalPath)
@@ -589,6 +713,294 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+      )
+    }
+  }
+
+  test("max files per trigger") {
+    withTempDir { case src =>
+      var lastFileModTime: Option[Long] = None
+
+      /** Create a text file with a single data item */
+      def createFile(data: Int): File = {
+        val file = stringToFile(new File(src, s"$data.txt"), data.toString)
+        if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
+        lastFileModTime = Some(file.lastModified)
+        file
+      }
+
+      createFile(1)
+      createFile(2)
+      createFile(3)
+
+      // Set up a query to read text files 2 at a time
+      val df = spark
+        .readStream
+        .option("maxFilesPerTrigger", 2)
+        .text(src.getCanonicalPath)
+      val q = df
+        .writeStream
+        .format("memory")
+        .queryName("file_data")
+        .start()
+        .asInstanceOf[StreamExecution]
+      q.processAllAvailable()
+      val memorySink = q.sink.asInstanceOf[MemorySink]
+      val fileSource = q.logicalPlan.collect {
+        case StreamingExecutionRelation(source, _) if source.isInstanceOf[FileStreamSource] =>
+          source.asInstanceOf[FileStreamSource]
+      }.head
+
+      /** Check the data read in the last batch */
+      def checkLastBatchData(data: Int*): Unit = {
+        val schema = StructType(Seq(StructField("value", StringType)))
+        val df = spark.createDataFrame(
+          spark.sparkContext.makeRDD(memorySink.latestBatchData), schema)
+        checkAnswer(df, data.map(_.toString).toDF("value"))
+      }
+
+      def checkAllData(data: Seq[Int]): Unit = {
+        val schema = StructType(Seq(StructField("value", StringType)))
+        val df = spark.createDataFrame(
+          spark.sparkContext.makeRDD(memorySink.allData), schema)
+        checkAnswer(df, data.map(_.toString).toDF("value"))
+      }
+
+      /** Check how many batches have executed since the last time this check was made */
+      var lastBatchId = -1L
+      def checkNumBatchesSinceLastCheck(numBatches: Int): Unit = {
+        require(lastBatchId >= 0)
+        assert(memorySink.latestBatchId.get === lastBatchId + numBatches)
+        lastBatchId = memorySink.latestBatchId.get
+      }
+
+      checkLastBatchData(3)  // (1 and 2) should be in batch 1, (3) should be in batch 2 (last)
+      checkAllData(1 to 3)
+      lastBatchId = memorySink.latestBatchId.get
+
+      fileSource.withBatchingLocked {
+        createFile(4)
+        createFile(5)   // 4 and 5 should be in a batch
+        createFile(6)
+        createFile(7)   // 6 and 7 should be in the last batch
+      }
+      q.processAllAvailable()
+      checkNumBatchesSinceLastCheck(2)
+      checkLastBatchData(6, 7)
+      checkAllData(1 to 7)
+
+      fileSource.withBatchingLocked {
+        createFile(8)
+        createFile(9)    // 8 and 9 should be in a batch
+        createFile(10)
+        createFile(11)   // 10 and 11 should be in a batch
+        createFile(12)   // 12 should be in the last batch
+      }
+      q.processAllAvailable()
+      checkNumBatchesSinceLastCheck(3)
+      checkLastBatchData(12)
+      checkAllData(1 to 12)
+
+      q.stop()
+    }
+  }
+
+  test("max files per trigger - incorrect values") {
+    withTempDir { case src =>
+      def testMaxFilePerTriggerValue(value: String): Unit = {
+        val df = spark.readStream.option("maxFilesPerTrigger", value).text(src.getCanonicalPath)
+        val e = intercept[IllegalArgumentException] {
+          testStream(df)()
+        }
+        Seq("maxFilesPerTrigger", value, "positive integer").foreach { s =>
+          assert(e.getMessage.contains(s))
+        }
+      }
+
+      testMaxFilePerTriggerValue("not-a-integer")
+      testMaxFilePerTriggerValue("-1")
+      testMaxFilePerTriggerValue("0")
+      testMaxFilePerTriggerValue("10.1")
+    }
+  }
+
+  test("explain") {
+    withTempDirs { case (src, tmp) =>
+      src.mkdirs()
+
+      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
+      // Test `explain` not throwing errors
+      df.explain()
+
+      val q = df.writeStream.queryName("file_explain").format("memory").start()
+        .asInstanceOf[StreamExecution]
+      try {
+        assert("No physical plan. Waiting for data." === q.explainInternal(false))
+        assert("No physical plan. Waiting for data." === q.explainInternal(true))
+
+        val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+        val finalFile = new File(src, tempFile.getName)
+        require(stringToFile(tempFile, "foo").renameTo(finalFile))
+
+        q.processAllAvailable()
+
+        val explainWithoutExtended = q.explainInternal(false)
+        // `extended = false` only displays the physical plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithoutExtended).size === 0)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithoutExtended).size === 1)
+
+        val explainWithExtended = q.explainInternal(true)
+        // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+        // plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithExtended).size === 3)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithExtended).size === 1)
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
+  test("SPARK-17372 - write file names to WAL as Array[String]") {
+    // Note: If this test takes longer than the timeout, then its likely that this is actually
+    // running a Spark job with 10000 tasks. This test tries to avoid that by
+    // 1. Setting the threshold for parallel file listing to very high
+    // 2. Using a query that should use constant folding to eliminate reading of the files
+
+    val numFiles = 10000
+
+    // This is to avoid running a spark job to list of files in parallel
+    // by the InMemoryFileIndex.
+    spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
+
+    withTempDirs { case (root, tmp) =>
+      val src = new File(root, "a=1")
+      src.mkdirs()
+
+      (1 to numFiles).map { _.toString }.foreach { i =>
+        val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+        val finalFile = new File(src, tempFile.getName)
+        stringToFile(finalFile, i)
+      }
+      assert(src.listFiles().size === numFiles)
+
+      val files = spark.readStream.text(root.getCanonicalPath).as[(String, Int)]
+
+      // Note this query will use constant folding to eliminate the file scan.
+      // This is to avoid actually running a Spark job with 10000 tasks
+      val df = files.filter("1 == 0").groupBy().count()
+
+      testStream(df, InternalOutputModes.Complete)(
+        AddTextFileData("0", src, tmp),
+        CheckAnswer(0)
+      )
+    }
+  }
+
+  test("compacat metadata log") {
+    val _sources = PrivateMethod[Seq[Source]]('sources)
+    val _metadataLog = PrivateMethod[FileStreamSourceLog]('metadataLog)
+
+    def verify(execution: StreamExecution)
+      (batchId: Long, expectedBatches: Int): Boolean = {
+      import CompactibleFileStreamLog._
+
+      val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
+      val metadataLog = fileSource invokePrivate _metadataLog()
+
+      if (isCompactionBatch(batchId, 2)) {
+        val path = metadataLog.batchIdToPath(batchId)
+
+        // Assert path name should be ended with compact suffix.
+        assert(path.getName.endsWith(COMPACT_FILE_SUFFIX))
+
+        // Compacted batch should include all entries from start.
+        val entries = metadataLog.get(batchId)
+        assert(entries.isDefined)
+        assert(entries.get.length === metadataLog.allFiles().length)
+        assert(metadataLog.get(None, Some(batchId)).flatMap(_._2).length === entries.get.length)
+      }
+
+      assert(metadataLog.allFiles().sortBy(_.batchId) ===
+        metadataLog.get(None, Some(batchId)).flatMap(_._2).sortBy(_.batchId))
+
+      metadataLog.get(None, Some(batchId)).flatMap(_._2).length === expectedBatches
+    }
+
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(
+        SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2"
+      ) {
+        val fileStream = createFileStream("text", src.getCanonicalPath)
+        val filtered = fileStream.filter($"value" contains "keep")
+
+        testStream(filtered)(
+          AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
+          CheckAnswer("keep2", "keep3"),
+          AssertOnQuery(verify(_)(0L, 1)),
+          AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+          AssertOnQuery(verify(_)(1L, 2)),
+          AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9"),
+          AssertOnQuery(verify(_)(2L, 3)),
+          StopStream,
+          StartStream(),
+          AssertOnQuery(verify(_)(2L, 3)),
+          AddTextFileData("drop10\nkeep11", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11"),
+          AssertOnQuery(verify(_)(3L, 4)),
+          AddTextFileData("drop12\nkeep13", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11", "keep13"),
+          AssertOnQuery(verify(_)(4L, 5))
+        )
+      }
+    }
+  }
+
+  test("get arbitrary batch from FileStreamSource") {
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(
+        SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
+        // Force deleting the old logs
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+      ) {
+        val fileStream = createFileStream("text", src.getCanonicalPath)
+        val filtered = fileStream.filter($"value" contains "keep")
+
+        testStream(filtered)(
+          AddTextFileData("keep1", src, tmp),
+          CheckAnswer("keep1"),
+          AddTextFileData("keep2", src, tmp),
+          CheckAnswer("keep1", "keep2"),
+          AddTextFileData("keep3", src, tmp),
+          CheckAnswer("keep1", "keep2", "keep3"),
+          AssertOnQuery("check getBatch") { execution: StreamExecution =>
+            val _sources = PrivateMethod[Seq[Source]]('sources)
+            val fileSource =
+              (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
+            assert(fileSource.getBatch(None, LongOffset(2)).as[String].collect() ===
+              List("keep1", "keep2", "keep3"))
+            assert(fileSource.getBatch(Some(LongOffset(0)), LongOffset(2)).as[String].collect() ===
+              List("keep2", "keep3"))
+            assert(fileSource.getBatch(Some(LongOffset(1)), LongOffset(2)).as[String].collect() ===
+              List("keep3"))
+            true
+          }
+        )
+      }
+    }
+  }
+
+  test("input row metrics") {
+    withTempDirs { case (src, tmp) =>
+      val input = spark.readStream.format("text").load(src.getCanonicalPath)
+      testStream(input)(
+        AddTextFileData("100", src, tmp),
+        CheckAnswer("100"),
+        AssertOnLastQueryStatus { status =>
+          assert(status.triggerDetails.get("numRows.input.total") === "1")
+          assert(status.sourceStatuses(0).processingRate > 0.0)
+        }
       )
     }
   }

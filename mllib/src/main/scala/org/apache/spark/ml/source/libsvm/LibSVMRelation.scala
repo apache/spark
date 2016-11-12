@@ -25,17 +25,17 @@ import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
-import org.apache.spark.annotation.Since
+import org.apache.spark.TaskContext
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -51,11 +51,7 @@ private[libsvm] class LibSVMOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        new Path(path)
       }
     }.getRecordWriter(context)
   }
@@ -77,44 +73,10 @@ private[libsvm] class LibSVMOutputWriter(
   }
 }
 
-/**
- * `libsvm` package implements Spark SQL data source API for loading LIBSVM data as [[DataFrame]].
- * The loaded [[DataFrame]] has two columns: `label` containing labels stored as doubles and
- * `features` containing feature vectors stored as [[Vector]]s.
- *
- * To use LIBSVM data source, you need to set "libsvm" as the format in [[DataFrameReader]] and
- * optionally specify options, for example:
- * {{{
- *   // Scala
- *   val df = spark.read.format("libsvm")
- *     .option("numFeatures", "780")
- *     .load("data/mllib/sample_libsvm_data.txt")
- *
- *   // Java
- *   Dataset<Row> df = spark.read().format("libsvm")
- *     .option("numFeatures, "780")
- *     .load("data/mllib/sample_libsvm_data.txt");
- * }}}
- *
- * LIBSVM data source supports the following options:
- *  - "numFeatures": number of features.
- *    If unspecified or nonpositive, the number of features will be determined automatically at the
- *    cost of one additional pass.
- *    This is also useful when the dataset is already split into multiple files and you want to load
- *    them separately, because some features may not present in certain files, which leads to
- *    inconsistent feature dimensions.
- *  - "vectorType": feature vector type, "sparse" (default) or "dense".
- *
- *  @see [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets]]
- *
- * Note that this class is public for documentation purpose. Please don't use this class directly.
- * Rather, use the data source API as illustrated above.
- */
+/** @see [[LibSVMDataSource]] for public documentation. */
 // If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
-@Since("1.6.0")
-class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
+private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
-  @Since("1.6.0")
   override def shortName(): String = "libsvm"
 
   override def toString: String = "LibSVM"
@@ -168,11 +130,13 @@ class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
     new OutputWriterFactory {
       override def newInstance(
           path: String,
-          bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        if (bucketId.isDefined) { sys.error("LibSVM doesn't support bucketing") }
         new LibSVMOutputWriter(path, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        ".libsvm" + TextOutputWriter.getCompressionExtension(context)
       }
     }
   }
@@ -195,8 +159,10 @@ class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val points =
-        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+
+      val points = linesReader
           .map(_.toString.trim)
           .filterNot(line => line.isEmpty || line.startsWith("#"))
           .map { line =>

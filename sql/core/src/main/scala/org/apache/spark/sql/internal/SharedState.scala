@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.internal
 
+import scala.reflect.ClassTag
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, InMemoryCatalog}
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, GlobalTempViewManager, InMemoryCatalog}
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
+import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 
@@ -33,35 +38,14 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  */
 private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
-  /**
-   * Class for caching query results reused in future executions.
-   */
-  val cacheManager: CacheManager = new CacheManager
-
-  /**
-   * A listener for SQL-specific [[org.apache.spark.scheduler.SparkListenerEvent]]s.
-   */
-  val listener: SQLListener = createListenerAndUI(sparkContext)
-
+  // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
+  // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
   {
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
       sparkContext.hadoopConfiguration.addResource(configFile)
     }
-  }
 
-  /**
-   * A catalog that interacts with external systems.
-   */
-  lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog(sparkContext.hadoopConfiguration)
-
-  /**
-   * A classloader used to load all user-added jar.
-   */
-  val jarClassLoader = new NonClosableMutableURLClassLoader(
-    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
-
-  {
     // Set the Hive metastore warehouse path to the one we use
     val tempConf = new SQLConf
     sparkContext.conf.getAll.foreach { case (k, v) => tempConf.setConfString(k, v) }
@@ -86,6 +70,48 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   }
 
   /**
+   * Class for caching query results reused in future executions.
+   */
+  val cacheManager: CacheManager = new CacheManager
+
+  /**
+   * A listener for SQL-specific [[org.apache.spark.scheduler.SparkListenerEvent]]s.
+   */
+  val listener: SQLListener = createListenerAndUI(sparkContext)
+
+  /**
+   * A catalog that interacts with external systems.
+   */
+  val externalCatalog: ExternalCatalog =
+    SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
+      SharedState.externalCatalogClassName(sparkContext.conf),
+      sparkContext.conf,
+      sparkContext.hadoopConfiguration)
+
+  /**
+   * A manager for global temporary views.
+   */
+  val globalTempViewManager = {
+    // System preserved database should not exists in metastore. However it's hard to guarantee it
+    // for every session, because case-sensitivity differs. Here we always lowercase it to make our
+    // life easier.
+    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase
+    if (externalCatalog.databaseExists(globalTempDB)) {
+      throw new SparkException(
+        s"$globalTempDB is a system preserved database, please rename your existing database " +
+          "to resolve the name conflict, or set a different value for " +
+          s"${GLOBAL_TEMP_DATABASE.key}, and launch your Spark application again.")
+    }
+    new GlobalTempViewManager(globalTempDB)
+  }
+
+  /**
+   * A classloader used to load all user-added jar.
+   */
+  val jarClassLoader = new NonClosableMutableURLClassLoader(
+    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
+
+  /**
    * Create a SQLListener then add it into SparkContext, and create a SQLTab if there is SparkUI.
    */
   private def createListenerAndUI(sc: SparkContext): SQLListener = {
@@ -97,6 +123,39 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
       }
     }
     SparkSession.sqlListener.get()
+  }
+}
+
+object SharedState {
+
+  private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
+
+  private def externalCatalogClassName(conf: SparkConf): String = {
+    conf.get(CATALOG_IMPLEMENTATION) match {
+      case "hive" => HIVE_EXTERNAL_CATALOG_CLASS_NAME
+      case "in-memory" => classOf[InMemoryCatalog].getCanonicalName
+    }
+  }
+
+  /**
+   * Helper method to create an instance of [[T]] using a single-arg constructor that
+   * accepts an [[Arg1]] and an [[Arg2]].
+   */
+  private def reflect[T, Arg1 <: AnyRef, Arg2 <: AnyRef](
+      className: String,
+      ctorArg1: Arg1,
+      ctorArg2: Arg2)(
+      implicit ctorArgTag1: ClassTag[Arg1],
+      ctorArgTag2: ClassTag[Arg2]): T = {
+    try {
+      val clazz = Utils.classForName(className)
+      val ctor = clazz.getDeclaredConstructor(ctorArgTag1.runtimeClass, ctorArgTag2.runtimeClass)
+      val args = Array[AnyRef](ctorArg1, ctorArg2)
+      ctor.newInstance(args: _*).asInstanceOf[T]
+    } catch {
+      case NonFatal(e) =>
+        throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
+    }
   }
 }
 
