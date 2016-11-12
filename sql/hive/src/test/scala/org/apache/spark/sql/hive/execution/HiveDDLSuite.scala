@@ -270,13 +270,10 @@ class HiveDDLSuite
       checkAnswer(sql("SHOW PARTITIONS sales"),
         Row("country=KR/quarter=3") :: Nil)
 
-      val m = intercept[AnalysisException] {
-        sql("ALTER TABLE sales DROP PARTITION (quarter <= 4), PARTITION (quarter <= '3')")
-      }.getMessage
-      // `PARTITION (quarter <= '3')` should raises exceptions because `PARTITION (quarter <= 4)`
-      // already removes all partitions.
+      // According to the declarative partition spec definitions, this drops the union of target
+      // partitions without exceptions. Hive raises exceptions because it handle them sequentially.
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= 4), PARTITION (quarter <= '3')")
       checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
-      assert(m.contains("There is no partition for (`quarter` <= '3')"))
     }
   }
 
