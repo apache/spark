@@ -113,7 +113,15 @@ try:
                   file=sys.stderr)
 
     if not os.path.isdir(SCRIPTS_TARGET):
-        print("You must first create a source dist and install that source dist.", file=sys.stderr)
+        print("""If you are installing pyspark from spark source, you must first
+        build Spark and run sdist.
+
+        To build Spark with maven you can run:
+          ./build/mvn -DskipTests clean package
+        Building the source dist is done in the Python directory:
+          cd python
+          python setup.py sdist
+          pip install dist/*.tar.gz""", file=sys.stderr)
         exit(-1)
 
     # Scripts directive requires a list of each script path and does not take wild cards.
