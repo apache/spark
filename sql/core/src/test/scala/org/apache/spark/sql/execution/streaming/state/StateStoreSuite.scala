@@ -523,7 +523,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     store2.commit()   // commit should also create a temp file
     assert(numTempFiles === 0)
     assert(numDeltaFiles === 3)
-
   }
 
   def getDataFromFiles(
