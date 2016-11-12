@@ -324,7 +324,7 @@ case class DataSource(
           StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         }.orElse {
           if (allPaths.isEmpty && !format.isInstanceOf[TextFileFormat]) {
-            throw new IllegalArgumentException(s"'path' is not specified")
+            throw new IllegalArgumentException("'path' is not specified")
           }
           format.inferSchema(
             sparkSession,
