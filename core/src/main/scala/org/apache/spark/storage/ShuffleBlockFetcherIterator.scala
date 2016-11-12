@@ -65,8 +65,8 @@ final class ShuffleBlockFetcherIterator(
   val conf = blockManager.conf
 
   /**
-    *  Get the configuration of nvme over fabrics.
-    */
+   *  Get the configuration of nvme over fabrics.
+   */
     // TODO(lxy): Set the default as false.
   val nvmeEnabled: Boolean = conf.get("spark.shuffle.nvme.enabled", "true").toBoolean
 
@@ -218,8 +218,8 @@ final class ShuffleBlockFetcherIterator(
       totalBlocks += blockInfos.size
 
       /**
-        *  If the `NVMe over fabrics` is enabled, all the block are looks as local.
-        */
+       *  If the `NVMe over fabrics` is enabled, all the block are looks as local.
+       */
       if (nvmeEnabled || address.executorId == blockManager.blockManagerId.executorId) {
         // Filter out zero-sized blocks
         localBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
