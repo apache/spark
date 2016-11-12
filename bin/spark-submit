@@ -18,7 +18,7 @@
 #
 
 if [ -z "${SPARK_HOME}" ]; then
-  source `dirname $0`/find-spark-home
+  source "$(dirname "$0")"/find-spark-home
 fi
 
 # disable randomized hash for string in Python 3.3+
