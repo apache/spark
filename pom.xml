@@ -552,7 +552,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.41.Final</version>
+        <version>4.0.42.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
