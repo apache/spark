@@ -494,33 +494,40 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       result
     }
 
+    // Getting the store should not create temp file
     val store0 = shouldNotCreateTempFile {
       StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf)
     }
+
+    // Put should create a temp file
     assert(numTempFiles === 0)
-    put(store0, "a", 1)         // put should create a temp file
+    put(store0, "a", 1)
     assert(numTempFiles === 1)
     assert(numDeltaFiles === 0)
 
+    // Commit should remove temp file and create a delta file
     store0.commit()
     assert(numTempFiles === 0)
     assert(numDeltaFiles === 1)
 
+    // Remove should create a temp file
     val store1 = shouldNotCreateTempFile {
       StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf)
     }
-    remove(store1, _ == "a") // remove should create a temp file
+    remove(store1, _ == "a")
     assert(numTempFiles === 1)
     assert(numDeltaFiles === 1)
 
+    // Commit should remove temp file and create a delta file
     store1.commit()
     assert(numTempFiles === 0)
     assert(numDeltaFiles === 2)
 
+    // Commit without any updates should create a delta file
     val store2 = shouldNotCreateTempFile {
       StateStore.get(storeId, keySchema, valueSchema, 2, storeConf, hadoopConf)
     }
-    store2.commit()   // commit should also create a temp file
+    store2.commit()
     assert(numTempFiles === 0)
     assert(numDeltaFiles === 3)
   }
