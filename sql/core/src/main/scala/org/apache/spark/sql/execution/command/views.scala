@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.MetadataBuilder
  * [[CreateViewCommand]].
  */
 sealed trait ViewType {
-  override def toString: String = getClass.getSimpleName.filter(_ != '$')
+  override def toString: String = getClass.getSimpleName.stripSuffix("$")
 }
 
 /**
