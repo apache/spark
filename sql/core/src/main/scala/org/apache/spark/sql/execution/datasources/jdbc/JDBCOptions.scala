@@ -44,7 +44,7 @@ class JDBCOptions(
   val asConnectionProperties: Properties = {
     val properties = new Properties()
     // We should avoid to pass the options into properties. See SPARK-17776.
-    parameters.filterKeys(!jdbcOptionNames.contains(_))
+    parameters.filterKeys(key => !jdbcOptionNames.contains(key.toLowerCase))
       .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
@@ -129,7 +129,7 @@ object JDBCOptions {
   private val jdbcOptionNames = ArrayBuffer.empty[String]
 
   private def newOption(name: String): String = {
-    jdbcOptionNames += name
+    jdbcOptionNames += name.toLowerCase
     name
   }
 
