@@ -407,9 +407,11 @@ case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) 
   override def output: Seq[Attribute] = child.output
 
   override def simpleString: String = {
-    val cteAliases = Utils.truncatedString(cteRelations.flatMap(_._1), "[", ", ", "]")
+    val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
     s"CTE $cteAliases"
   }
+
+  override def innerChildren: Seq[QueryPlan[_]] = cteRelations.map(_._2)
 }
 
 case class WithWindowDefinition(
