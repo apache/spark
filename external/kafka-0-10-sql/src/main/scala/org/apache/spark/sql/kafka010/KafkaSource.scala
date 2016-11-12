@@ -236,13 +236,13 @@ private[kafka010] case class KafkaSource(
 
     // Calculate offset ranges
     val offsetRanges = topicPartitions.map { tp =>
-      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
+      val fromOffset = fromPartitionOffsets.getOrElse(tp, {
         newPartitionOffsets.getOrElse(tp, {
           // This should not happen since newPartitionOffsets contains all partitions not in
           // fromPartitionOffsets
           throw new IllegalStateException(s"$tp doesn't have a from offset")
         })
-      }
+      })
       val untilOffset = untilPartitionOffsets(tp)
       val preferredLoc = if (numExecutors > 0) {
         // This allows cached KafkaConsumers in the executors to be re-used to read the same
