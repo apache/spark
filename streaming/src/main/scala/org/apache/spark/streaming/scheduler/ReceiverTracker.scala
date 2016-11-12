@@ -455,7 +455,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     endpoint.send(StartAllReceivers(receivers))
   }
 
-  /** Check if tracker has been marked for starting */
+  /** Check if tracker has been marked for initiated */
   private def isTrackerInitialized: Boolean = trackerState == Initialized
 
   /** Check if tracker has been marked for starting */
