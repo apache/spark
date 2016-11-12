@@ -468,6 +468,41 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(e.getCause.getMessage.contains("Failed to rename"))
   }
 
+  test("SPARK-XXXXX: do not create temp delta file until the store is updated") {
+    val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    val storeId = StateStoreId(dir, 0, 0)
+    val storeConf = StateStoreConf.empty
+    val hadoopConf = new Configuration()
+    val deltaFileDir = new File(s"$dir/0/0/")
+
+    def numTempFiles: Int = {
+      if (deltaFileDir.exists) {
+        deltaFileDir.listFiles.map(_.getName).count(n => n.contains("temp") && !n.startsWith("."))
+      } else 0
+    }
+
+    def shouldNotCreateTempFile[T](body: => T): T = {
+      val before = numTempFiles
+      val result = body
+      assert(numTempFiles === before)
+      result
+    }
+
+    // Increase version of the store
+    val store0 = shouldNotCreateTempFile {
+      StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf)
+    }
+    assert(numTempFiles === 0)
+    put(store0, "a", 1)
+    assert(numTempFiles === 1)
+    store0.commit()
+    assert(numTempFiles === 0)
+    assert(StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf).version == 1)
+    assert(numTempFiles === 0)
+    assert(StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf).version == 0)
+    assert(numTempFiles === 0)
+  }
+
   def getDataFromFiles(
       provider: HDFSBackedStateStoreProvider,
     version: Int = -1): Set[(String, Int)] = {
