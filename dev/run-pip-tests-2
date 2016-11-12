@@ -22,7 +22,7 @@ set -e
 # Set nullglob for when we are checking existence based on globs
 shopt -s nullglob
 
-FWDIR="$(cd "`dirname $0`"/..; pwd)"
+FWDIR="$(cd "$(dirname $0)"/..; pwd)"
 cd "$FWDIR"
 # Some systems don't have pip or virtualenv - in those cases our tests won't work.
 if ! hash virtualenv 2>/dev/null; then
@@ -50,10 +50,10 @@ fi
 
 echo "Constucting virtual env for testing"
 mktemp -d > ./virtual_env_temp_dir
-VIRTUALENV_BASE=`cat ./virtual_env_temp_dir`
+VIRTUALENV_BASE=$(cat ./virtual_env_temp_dir)
 
 # Determine which version of PySpark we are building for archive name
-PYSPARK_VERSION=`python -c "exec(open('python/pyspark/version.py').read());print __version__"`
+PYSPARK_VERSION=$(python -c "exec(open('python/pyspark/version.py').read());print __version__")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
 PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall "
@@ -75,7 +75,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     pip install --upgrade pip
 
     echo "Creating pip installable source dist"
-    cd $FWDIR/python
+    cd "$FWDIR"/python
     $python setup.py sdist
 
 
@@ -88,19 +88,19 @@ for python in "${PYTHON_EXECS[@]}"; do
       exit -1
     fi
     # Do the actual installation
-    cd $FWDIR
+    cd "$FWDIR"
     $install_command
 
     cd /
 
     echo "Run basic sanity check on pip installed version with spark-submit"
-    spark-submit $FWDIR/dev/pip-sanity-check.py
+    spark-submit "$FWDIR"/dev/pip-sanity-check.py
     echo "Run basic sanity check with import based"
-    python $FWDIR/dev/pip-sanity-check.py
+    python "$FWDIR"/dev/pip-sanity-check.py
     echo "Run the tests for context.py"
-    python $FWDIR/python/pyspark/context.py
+    python "$FWDIR"/python/pyspark/context.py
 
-    cd $FWDIR
+    cd "$FWDIR"
 
   done
 done
