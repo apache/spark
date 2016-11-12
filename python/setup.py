@@ -39,6 +39,18 @@ VERSION = __version__
 TEMP_PATH = "deps"
 SPARK_HOME = os.path.abspath("../")
 
+# Provide guidance about how to use setup.py
+incorrect_invocation_message = """
+If you are installing pyspark from spark source, you must first build Spark and
+run sdist.
+
+    To build Spark with maven you can run:
+      ./build/mvn -DskipTests clean package
+    Building the source dist is done in the Python directory:
+      cd python
+      python setup.py sdist
+      pip install dist/*.tar.gz"""
+
 # Figure out where the jars are we need to package with PySpark.
 JARS_PATH = glob.glob(os.path.join(SPARK_HOME, "assembly/target/scala-*/jars/"))
 
@@ -52,7 +64,7 @@ elif len(JARS_PATH) > 1:
           file=sys.stderr)
     sys.exit(-1)
 elif len(JARS_PATH) == 0 and not os.path.exists(TEMP_PATH):
-    print("Assembly jars missing, please build Spark before packaging Python", file=sys.stderr)
+    print(incorrect_invocation_message, file=sys.stderr)
     sys.exit(-1)
 
 EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
@@ -60,6 +72,7 @@ SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
 SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 EXAMPLES_TARGET = os.path.join(TEMP_PATH, "examples")
+
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
 # This is important because we only want to build the symlink farm while under Spark otherwise we
@@ -113,15 +126,7 @@ try:
                   file=sys.stderr)
 
     if not os.path.isdir(SCRIPTS_TARGET):
-        print("""If you are installing pyspark from spark source, you must first
-        build Spark and run sdist.
-
-        To build Spark with maven you can run:
-          ./build/mvn -DskipTests clean package
-        Building the source dist is done in the Python directory:
-          cd python
-          python setup.py sdist
-          pip install dist/*.tar.gz""", file=sys.stderr)
+        print(incorrect_invocation_message, file=sys.stderr)
         exit(-1)
 
     # Scripts directive requires a list of each script path and does not take wild cards.
