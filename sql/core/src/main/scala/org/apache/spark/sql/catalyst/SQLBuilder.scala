@@ -138,8 +138,13 @@ class SQLBuilder private (
     case g: Generate =>
       generateToSQL(g)
 
-    case Limit(limitExpr, child) =>
+    // This prevents a pattern of `((...) AS gen_subquery_0 LIMIT 1)` which does not work.
+    // For example, `SELECT * FROM (SELECT id FROM tbl TABLESAMPLE (2 ROWS))` makes this plan.
+    case Limit(limitExpr, child: SubqueryAlias) =>
       s"${toSQL(child)} LIMIT ${limitExpr.sql}"
+
+    case Limit(limitExpr, child) =>
+      s"(${toSQL(child)} LIMIT ${limitExpr.sql})"
 
     case Filter(condition, child) =>
       val whereOrHaving = child match {

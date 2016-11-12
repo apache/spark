@@ -1137,4 +1137,14 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       )
     }
   }
+
+  test("SPARK-17982 - limit") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(id INT, name STRING)")
+      checkSQL(
+        "SELECT * FROM (SELECT id FROM tbl LIMIT 2)",
+        "limit"
+      )
+    }
+  }
 }
