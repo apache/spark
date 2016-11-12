@@ -33,7 +33,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
 
 /**
@@ -197,6 +197,9 @@ class SparkHadoopMapRedWriterConfig[K, V: ClassTag](conf: SerializableJobConf)
       jobId: Int,
       splitId: Int,
       taskAttemptId: Int): NewTaskAttemptContext = {
+    // Update JobConf.
+    HadoopRDD.addLocalConfiguration(jobTrackerId, jobId, splitId, taskAttemptId, conf.value)
+    // Create taskContext.
     val attemptId = new TaskAttemptID(jobTrackerId, jobId, TaskType.MAP, splitId, taskAttemptId)
     new TaskAttemptContextImpl(getConf(), attemptId)
   }
@@ -206,6 +209,9 @@ class SparkHadoopMapRedWriterConfig[K, V: ClassTag](conf: SerializableJobConf)
   // --------------------------------------------------------------------------
 
   def createCommitter(jobId: Int): HadoopMapReduceCommitProtocol = {
+    // Update JobConf.
+    HadoopRDD.addLocalConfiguration("", 0, 0, 0, getConf())
+    // Create commit protocol.
     FileCommitProtocol.instantiate(
       className = classOf[HadoopMapRedCommitProtocol].getName,
       jobId = jobId.toString,
