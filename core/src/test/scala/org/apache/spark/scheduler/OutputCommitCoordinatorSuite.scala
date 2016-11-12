@@ -21,13 +21,11 @@ import java.io.File
 import java.util.Date
 import java.util.concurrent.TimeoutException
 
-import org.apache.hadoop.mapreduce.TaskType
-import org.apache.spark.internal.io.{SparkHadoopWriterUtils, HadoopMapRedCommitProtocol, FileCommitProtocol}
-
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.hadoop.mapred._
+import org.apache.hadoop.mapreduce.TaskType
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -35,6 +33,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapRedCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -245,7 +244,8 @@ private case class OutputCommitFunctions(tempDirPath: String) {
 
     // Create TaskAttemptContext.
     val taskAttemptId = (ctx.taskAttemptId % Int.MaxValue).toInt
-    val attemptId = new TaskAttemptID(new TaskID(jobId.value, TaskType.MAP, ctx.partitionId), taskAttemptId)
+    val attemptId = new TaskAttemptID(
+      new TaskID(jobId.value, TaskType.MAP, ctx.partitionId), taskAttemptId)
     val taskContext = new TaskAttemptContextImpl(jobConf, attemptId)
 
     committer.setupTask(taskContext)

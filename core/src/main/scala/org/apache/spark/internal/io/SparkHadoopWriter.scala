@@ -17,27 +17,31 @@
 
 package org.apache.spark.internal.io
 
-import java.util.Date
+import java.text.NumberFormat
+import java.util.{Date, Locale}
 
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.mapred._
+import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttemptContext, TaskAttemptID => NewTaskAttemptID, TaskType}
+import org.apache.hadoop.mapreduce.task.{TaskAttemptContextImpl => NewTaskAttemptContextImpl}
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SerializableWritable, SparkException, TaskContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
 
 /**
  * A helper object that saves an RDD using a Hadoop OutputFormat
- * (from the newer mapreduce API, not the old mapred API).
+ * (from the old mapred API).
  */
 private[spark]
-object SparkHadoopMapReduceWriter extends Logging {
+object SparkHadoopWriter extends Logging {
   import SparkHadoopWriterUtils._
 
   /**
@@ -53,13 +57,11 @@ object SparkHadoopMapReduceWriter extends Logging {
    */
   def write[K, V: ClassTag](
       rdd: RDD[(K, V)],
-      config: SparkHadoopWriterConfig[K, V],
-      hadoopConf: Configuration): Unit = {
+      config: SparkHadoopWriterConfig[K, V]): Unit = {
     // Extract context and configuration from RDD.
     val sparkContext = rdd.context
     val stageId = rdd.id
     val sparkConf = rdd.conf
-    val conf = new SerializableConfiguration(hadoopConf)
 
     // Set up a job.
     val jobTrackerId = createJobTrackerID(new Date())
@@ -79,6 +81,8 @@ object SparkHadoopMapReduceWriter extends Logging {
 
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
+    // There is an example in https://issues.apache.org/jira/browse/SPARK-10063 to show the bad
+    // result of using direct output committer with speculation enabled.
     if (isSpeculationEnabled(sparkConf) && committer.isDirectOutput) {
       val warningMessage =
         s"$committer may be an output committer that writes data directly to " +
@@ -99,7 +103,6 @@ object SparkHadoopMapReduceWriter extends Logging {
           sparkPartitionId = context.partitionId,
           sparkAttemptNumber = context.attemptNumber,
           committer = committer,
-          hadoopConf = conf,
           iterator = iter)
       })
 
@@ -113,7 +116,7 @@ object SparkHadoopMapReduceWriter extends Logging {
     }
   }
 
-  /** Write an RDD partition out in a single Spark task. */
+  /** Write a RDD partition out in a single Spark task. */
   private def executeTask[K, V: ClassTag](
       context: TaskContext,
       config: SparkHadoopWriterConfig[K, V],
@@ -122,7 +125,6 @@ object SparkHadoopMapReduceWriter extends Logging {
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
-      hadoopConf: SerializableConfiguration,
       iterator: Iterator[(K, V)]): TaskCommitMessage = {
     // Set up a task.
     val taskContext = config.createTaskAttemptContext(
@@ -169,12 +171,142 @@ object SparkHadoopMapReduceWriter extends Logging {
   }
 }
 
+/**
+ * A helper class that reads JobConf from older mapred API, creates output Format/Committer/Writer.
+ */
 private[spark]
-class SparkHadoopMapReduceWriterConfig[K, V: ClassTag](conf: SerializableConfiguration)
-  extends SparkHadoopWriterConfig[K, V] with Serializable with Logging {
+class SparkHadoopMapRedWriterConfig[K, V: ClassTag](conf: SerializableJobConf)
+  extends SparkHadoopWriterConfig[K, V] with Logging {
 
   private var outputFormat: Class[_ <: OutputFormat[K, V]] = null
   private var writer: RecordWriter[K, V] = null
+
+  private def getConf(): JobConf = conf.value
+
+  // --------------------------------------------------------------------------
+  // Create JobContext/TaskAttemptContext
+  // --------------------------------------------------------------------------
+
+  def createJobContext(jobTrackerId: String, jobId: Int): NewJobContext = {
+    val jobAttemptId = new SerializableWritable(new JobID(jobTrackerId, jobId))
+    new JobContextImpl(getConf(), jobAttemptId.value)
+  }
+
+  def createTaskAttemptContext(
+      jobTrackerId: String,
+      jobId: Int,
+      splitId: Int,
+      taskAttemptId: Int): NewTaskAttemptContext = {
+    val attemptId = new TaskAttemptID(jobTrackerId, jobId, TaskType.MAP, splitId, taskAttemptId)
+    new TaskAttemptContextImpl(getConf(), attemptId)
+  }
+
+  // --------------------------------------------------------------------------
+  // Create committer
+  // --------------------------------------------------------------------------
+
+  def createCommitter(jobId: Int): HadoopMapReduceCommitProtocol = {
+    FileCommitProtocol.instantiate(
+      className = classOf[HadoopMapRedCommitProtocol].getName,
+      jobId = jobId.toString,
+      outputPath = getConf().get("mapred.output.dir"),
+      isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
+  }
+
+  // --------------------------------------------------------------------------
+  // Create writer
+  // --------------------------------------------------------------------------
+
+  def initWriter(taskContext: NewTaskAttemptContext, splitId: Int): Unit = {
+    val numfmt = NumberFormat.getInstance(Locale.US)
+    numfmt.setMinimumIntegerDigits(5)
+    numfmt.setGroupingUsed(false)
+
+    val outputName = "part-" + numfmt.format(splitId)
+    val path = FileOutputFormat.getOutputPath(getConf())
+    val fs: FileSystem = {
+      if (path != null) {
+        path.getFileSystem(getConf())
+      } else {
+        FileSystem.get(getConf())
+      }
+    }
+
+    writer = getConf().getOutputFormat
+      .getRecordWriter(fs, getConf(), outputName, Reporter.NULL)
+      .asInstanceOf[RecordWriter[K, V]]
+
+    require(writer != null, "Unable to obtain RecordWriter")
+  }
+
+  def write(pair: (K, V)): Unit = {
+    require(writer != null, "Must call createWriter before write.")
+    writer.write(pair._1, pair._2)
+  }
+
+  def closeWriter(taskContext: NewTaskAttemptContext): Unit = {
+    if (writer != null) {
+      writer.close(Reporter.NULL)
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Create OutputFormat
+  // --------------------------------------------------------------------------
+
+  def initOutputFormat(jobContext: NewJobContext): Unit = {
+    if (outputFormat == null) {
+      outputFormat = getConf().getOutputFormat.getClass
+        .asInstanceOf[Class[_ <: OutputFormat[K, V]]]
+    }
+  }
+
+  private def getOutputFormat(): OutputFormat[K, V] = {
+    require(outputFormat != null, "Must call initOutputFormat first.")
+
+    outputFormat.newInstance()
+  }
+
+  // --------------------------------------------------------------------------
+  // Verify hadoop config
+  // --------------------------------------------------------------------------
+
+  def assertConf(): Unit = {
+    val outputFormatInstance = getOutputFormat()
+    val keyClass = getConf().getOutputKeyClass
+    val valueClass = getConf().getOutputValueClass
+    if (outputFormatInstance == null) {
+      throw new SparkException("Output format class not set")
+    }
+    if (keyClass == null) {
+      throw new SparkException("Output key class not set")
+    }
+    if (valueClass == null) {
+      throw new SparkException("Output value class not set")
+    }
+    SparkHadoopUtil.get.addCredentials(getConf())
+
+    logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
+      valueClass.getSimpleName + ")")
+  }
+
+  def checkOutputSpecs(jobContext: NewJobContext): Unit = {
+    val ignoredFs = FileSystem.get(getConf())
+    getOutputFormat().checkOutputSpecs(ignoredFs, getConf())
+  }
+
+}
+
+/**
+ * A helper class that reads Configuration from newer mapreduce API, creates output
+ * Format/Committer/Writer.
+ */
+private[spark]
+class SparkHadoopMapReduceWriterConfig[K, V: ClassTag](conf: SerializableConfiguration)
+  extends SparkHadoopWriterConfig[K, V] with Logging {
+
+  private var outputFormat: Class[_ <: NewOutputFormat[K, V]] = null
+  private var writer: NewRecordWriter[K, V] = null
 
   private def getConf(): Configuration = conf.value
 
@@ -182,18 +314,19 @@ class SparkHadoopMapReduceWriterConfig[K, V: ClassTag](conf: SerializableConfigu
   // Create JobContext/TaskAttemptContext
   // --------------------------------------------------------------------------
 
-  def createJobContext(jobTrackerId: String, jobId: Int): JobContext = {
-    val jobAttemptId = new TaskAttemptID(jobTrackerId, jobId, TaskType.MAP, 0, 0)
-    new TaskAttemptContextImpl(getConf(), jobAttemptId)
+  def createJobContext(jobTrackerId: String, jobId: Int): NewJobContext = {
+    val jobAttemptId = new NewTaskAttemptID(jobTrackerId, jobId, TaskType.MAP, 0, 0)
+    new NewTaskAttemptContextImpl(getConf(), jobAttemptId)
   }
 
   def createTaskAttemptContext(
       jobTrackerId: String,
       jobId: Int,
       splitId: Int,
-      taskAttemptId: Int): TaskAttemptContext = {
-    val attemptId = new TaskAttemptID(jobTrackerId, jobId, TaskType.REDUCE, splitId, taskAttemptId)
-    new TaskAttemptContextImpl(getConf(), attemptId)
+      taskAttemptId: Int): NewTaskAttemptContext = {
+    val attemptId = new NewTaskAttemptID(
+      jobTrackerId, jobId, TaskType.REDUCE, splitId, taskAttemptId)
+    new NewTaskAttemptContextImpl(getConf(), attemptId)
   }
 
   // --------------------------------------------------------------------------
@@ -212,7 +345,7 @@ class SparkHadoopMapReduceWriterConfig[K, V: ClassTag](conf: SerializableConfigu
   // Create writer
   // --------------------------------------------------------------------------
 
-  def initWriter(taskContext: TaskAttemptContext, splitId: Int): Unit = {
+  def initWriter(taskContext: NewTaskAttemptContext, splitId: Int): Unit = {
     val taskFormat = getOutputFormat()
     // If OutputFormat is Configurable, we should set conf to it.
     taskFormat match {
@@ -221,7 +354,7 @@ class SparkHadoopMapReduceWriterConfig[K, V: ClassTag](conf: SerializableConfigu
     }
 
     writer = taskFormat.getRecordWriter(taskContext)
-      .asInstanceOf[RecordWriter[K, V]]
+      .asInstanceOf[NewRecordWriter[K, V]]
 
     require(writer != null, "Unable to obtain RecordWriter")
   }
@@ -231,7 +364,7 @@ class SparkHadoopMapReduceWriterConfig[K, V: ClassTag](conf: SerializableConfigu
     writer.write(pair._1, pair._2)
   }
 
-  def closeWriter(taskContext: TaskAttemptContext): Unit = {
+  def closeWriter(taskContext: NewTaskAttemptContext): Unit = {
     if (writer != null) {
       writer.close(taskContext)
     }
@@ -241,13 +374,14 @@ class SparkHadoopMapReduceWriterConfig[K, V: ClassTag](conf: SerializableConfigu
   // Create OutputFormat
   // --------------------------------------------------------------------------
 
-  def initOutputFormat(jobContext: JobContext): Unit = {
+  def initOutputFormat(jobContext: NewJobContext): Unit = {
     if (outputFormat == null) {
-      outputFormat = jobContext.getOutputFormatClass.asInstanceOf[Class[_ <: OutputFormat[K, V]]]
+      outputFormat = jobContext.getOutputFormatClass
+        .asInstanceOf[Class[_ <: NewOutputFormat[K, V]]]
     }
   }
 
-  private def getOutputFormat(): OutputFormat[K, V] = {
+  private def getOutputFormat(): NewOutputFormat[K, V] = {
     require(outputFormat != null, "Must call initOutputFormat first.")
 
     outputFormat.newInstance()
@@ -261,7 +395,7 @@ class SparkHadoopMapReduceWriterConfig[K, V: ClassTag](conf: SerializableConfigu
     // Do nothing for mapreduce API.
   }
 
-  def checkOutputSpecs(jobContext: JobContext): Unit = {
+  def checkOutputSpecs(jobContext: NewJobContext): Unit = {
     getOutputFormat().checkOutputSpecs(jobContext)
   }
 

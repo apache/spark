@@ -27,7 +27,6 @@ import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
@@ -36,13 +35,11 @@ import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob, OutputFormat => NewO
 import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.OutputMetrics
 import org.apache.spark.internal.io._
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
@@ -1016,11 +1013,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
-   *
-   * @note We should make sure our tasks are idempotent when speculation is enabled, i.e. do
-   * not use output committer that writes data directly.
-   * There is an example in https://issues.apache.org/jira/browse/SPARK-10063 to show the bad
-   * result of using direct output committer with speculation enabled.
    */
   def saveAsHadoopFile(
       path: String,
@@ -1047,19 +1039,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       hadoopConf.setOutputCommitter(classOf[FileOutputCommitter])
     }
 
-    // When speculation is on and output committer class name contains "Direct", we should warn
-    // users that they may loss data if they are using a direct output committer.
-    val speculationEnabled = self.conf.getBoolean("spark.speculation", false)
-    val outputCommitterClass = hadoopConf.get("mapred.output.committer.class", "")
-    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
-      val warningMessage =
-        s"$outputCommitterClass may be an output committer that writes data directly to " +
-          "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
-          "committer that does not have this behavior (e.g. FileOutputCommitter)."
-      logWarning(warningMessage)
-    }
-
     FileOutputFormat.setOutputPath(hadoopConf,
       SparkHadoopWriterUtils.createPathFromString(path, hadoopConf))
     saveAsHadoopDataset(hadoopConf)
@@ -1070,20 +1049,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Configuration object for that storage system. The Conf should set an OutputFormat and any
    * output paths required (e.g. a table name to write to) in the same way as it would be
    * configured for a Hadoop MapReduce job.
-   *
-   * @note We should make sure our tasks are idempotent when speculation is enabled, i.e. do
-   * not use output committer that writes data directly.
-   * There is an example in https://issues.apache.org/jira/browse/SPARK-10063 to show the bad
-   * result of using direct output committer with speculation enabled.
    */
   def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = self.withScope {
     val config = SparkHadoopWriterConfig.instantiate[K, V](
       className = classOf[SparkHadoopMapReduceWriterConfig[K, V]].getName,
       conf = conf)
-    SparkHadoopMapReduceWriter.write(
+    SparkHadoopWriter.write(
       rdd = self,
-      config = config,
-      hadoopConf = conf)
+      config = config)
   }
 
   /**
@@ -1096,7 +1069,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val config = SparkHadoopWriterConfig.instantiate[K, V](
       className = classOf[SparkHadoopMapRedWriterConfig[K, V]].getName,
       conf = conf)
-    SparkHadoopMapRedWriter.write(
+    SparkHadoopWriter.write(
       rdd = self,
       config = config)
   }

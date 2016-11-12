@@ -17,14 +17,13 @@
 
 package org.apache.spark.internal.io
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapred.JobConf
-
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 
-import org.apache.spark.util.{SerializableJobConf, Utils, SerializableConfiguration}
+import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
 
 /**
  * Interface for create output format/committer/writer used during saving an RDD using a Hadoop
@@ -33,7 +32,7 @@ import org.apache.spark.util.{SerializableJobConf, Utils, SerializableConfigurat
  * Notes:
  * 1. Implementations should throw [[IllegalArgumentException]] when wrong hadoop API is
  *    referenced;
- * 2. Implementations must be serializable, as the committer instance instantiated on the driver
+ * 2. Implementations must be serializable, as the instance instantiated on the driver
  *    will be used for tasks on executors;
  * 3. Implementations should have a constructor with exactly one argument:
  *    (conf: SerializableConfiguration) or (conf: SerializableJobConf).
@@ -85,22 +84,24 @@ abstract class SparkHadoopWriterConfig[K, V: ClassTag] extends Serializable {
 }
 
 object SparkHadoopWriterConfig {
+
   /**
    * Instantiates a SparkHadoopWriterConfig using the given configuration.
    */
-  def instantiate[K, V](
-      className: String, conf: Configuration)(
+  def instantiate[K, V](className: String, conf: Configuration)(
       implicit ctorArgTag: ClassTag[(K, V)]): SparkHadoopWriterConfig[K, V] = {
     val clazz = Utils.classForName(className).asInstanceOf[Class[SparkHadoopWriterConfig[K, V]]]
 
     // First try the one with argument (conf: SerializableConfiguration).
     // If that doesn't exist, try the one with (conf: SerializableJobConf).
     try {
-      val ctor = clazz.getDeclaredConstructor(classOf[SerializableConfiguration], classOf[ClassTag[(K, V)]])
+      val ctor = clazz.getDeclaredConstructor(
+        classOf[SerializableConfiguration], classOf[ClassTag[(K, V)]])
       ctor.newInstance(new SerializableConfiguration(conf), ctorArgTag)
     } catch {
       case _: NoSuchMethodException =>
-        val ctor = clazz.getDeclaredConstructor(classOf[SerializableJobConf], classOf[ClassTag[(K, V)]])
+        val ctor = clazz.getDeclaredConstructor(
+          classOf[SerializableJobConf], classOf[ClassTag[(K, V)]])
         ctor.newInstance(new SerializableJobConf(conf.asInstanceOf[JobConf]), ctorArgTag)
     }
   }

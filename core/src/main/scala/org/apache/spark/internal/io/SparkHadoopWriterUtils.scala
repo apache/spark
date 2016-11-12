@@ -18,15 +18,16 @@
 package org.apache.spark.internal.io
 
 import java.text.SimpleDateFormat
-import java.util.{Locale, Date}
+import java.util.{Date, Locale}
 
 import scala.util.DynamicVariable
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.{JobConf, JobID}
+
+import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
-import org.apache.spark.{TaskContext, SparkConf}
 
 /**
  * A helper object that provide common utils used during saving an RDD using a Hadoop OutputFormat
