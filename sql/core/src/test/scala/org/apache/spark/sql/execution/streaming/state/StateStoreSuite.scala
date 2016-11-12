@@ -488,7 +488,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       result
     }
 
-    // Increase version of the store
     val store0 = shouldNotCreateTempFile {
       StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf)
     }
