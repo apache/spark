@@ -87,12 +87,11 @@ private[state] class HDFSBackedStateStoreProvider(
 
     private val newVersion = version + 1
     private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
-
+    private lazy val tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
     private val allUpdates = new java.util.HashMap[UnsafeRow, StoreUpdate]()
 
     @volatile private var state: STATE = UPDATING
     @volatile private var finalDeltaFile: Path = null
-    @volatile private var tempDeltaFileStream: DataOutputStream = null
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.id
 
@@ -119,7 +118,7 @@ private[state] class HDFSBackedStateStoreProvider(
           val update = if (isNewKey) ValueAdded(key, value) else ValueUpdated(key, value)
           allUpdates.put(key, update)
       }
-      writeToTempDeltaFile(ValueUpdated(key, value))
+      writeToDeltaFile(tempDeltaFileStream, ValueUpdated(key, value))
     }
 
     /** Remove keys that match the following condition */
@@ -142,7 +141,7 @@ private[state] class HDFSBackedStateStoreProvider(
             case Some(KeyRemoved(_)) =>
               // Remove already in update map, no need to change
           }
-          writeToTempDeltaFile(KeyRemoved(key))
+          writeToDeltaFile(tempDeltaFileStream, KeyRemoved(key))
         }
       }
     }
@@ -209,13 +208,6 @@ private[state] class HDFSBackedStateStoreProvider(
 
     override def toString(): String = {
       s"HDFSStateStore[id = (op=${id.operatorId}, part=${id.partitionId}), dir = $baseDir]"
-    }
-
-    private def writeToTempDeltaFile(update: StoreUpdate) {
-      if (tempDeltaFileStream == null) {
-        tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
-      }
-      writeToDeltaFile(tempDeltaFileStream, update)
     }
   }
 

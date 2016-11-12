@@ -481,6 +481,12 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       } else 0
     }
 
+    def numDeltaFiles: Int = {
+      if (deltaFileDir.exists) {
+        deltaFileDir.listFiles.map(_.getName).count(n => n.contains(".delta") && !n.startsWith("."))
+      } else 0
+    }
+
     def shouldNotCreateTempFile[T](body: => T): T = {
       val before = numTempFiles
       val result = body
@@ -492,14 +498,32 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf)
     }
     assert(numTempFiles === 0)
-    put(store0, "a", 1)
+    put(store0, "a", 1)         // put should create a temp file
     assert(numTempFiles === 1)
+    assert(numDeltaFiles === 0)
+
     store0.commit()
     assert(numTempFiles === 0)
-    assert(StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf).version == 1)
+    assert(numDeltaFiles === 1)
+
+    val store1 = shouldNotCreateTempFile {
+      StateStore.get(storeId, keySchema, valueSchema, 1, storeConf, hadoopConf)
+    }
+    remove(store1, _ == "a") // remove should create a temp file
+    assert(numTempFiles === 1)
+    assert(numDeltaFiles === 1)
+
+    store1.commit()
     assert(numTempFiles === 0)
-    assert(StateStore.get(storeId, keySchema, valueSchema, 0, storeConf, hadoopConf).version == 0)
+    assert(numDeltaFiles === 2)
+
+    val store2 = shouldNotCreateTempFile {
+      StateStore.get(storeId, keySchema, valueSchema, 2, storeConf, hadoopConf)
+    }
+    store2.commit()   // commit should also create a temp file
     assert(numTempFiles === 0)
+    assert(numDeltaFiles === 3)
+
   }
 
   def getDataFromFiles(
