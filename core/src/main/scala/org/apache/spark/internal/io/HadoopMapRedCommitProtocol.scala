@@ -17,11 +17,6 @@
 
 package org.apache.spark.internal.io
 
-import java.text.NumberFormat
-import java.util.Locale
-
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => NewTaskAttemptContext}
 

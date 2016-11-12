@@ -38,11 +38,11 @@ import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
-import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol, SparkHadoopMapReduceWriter, SparkHadoopWriterUtils}
+import org.apache.spark.internal.io._
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
@@ -1077,8 +1077,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * result of using direct output committer with speculation enabled.
    */
   def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = self.withScope {
+    val config = SparkHadoopWriterConfig.instantiate[K, V](
+      className = classOf[SparkHadoopMapReduceWriterConfig[K, V]].getName,
+      conf = conf)
     SparkHadoopMapReduceWriter.write(
       rdd = self,
+      config = config,
       hadoopConf = conf)
   }
 
@@ -1089,29 +1093,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * MapReduce job.
    */
   def saveAsHadoopDataset(conf: JobConf): Unit = self.withScope {
-    // Rename this as hadoopConf internally to avoid shadowing (see SPARK-2038).
-    val hadoopConf = conf
-    val outputFormatInstance = hadoopConf.getOutputFormat
-    val keyClass = hadoopConf.getOutputKeyClass
-    val valueClass = hadoopConf.getOutputValueClass
-    if (outputFormatInstance == null) {
-      throw new SparkException("Output format class not set")
-    }
-    if (keyClass == null) {
-      throw new SparkException("Output key class not set")
-    }
-    if (valueClass == null) {
-      throw new SparkException("Output value class not set")
-    }
-    SparkHadoopUtil.get.addCredentials(hadoopConf)
-
-    logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
-      valueClass.getSimpleName + ")")
-
+    val config = SparkHadoopWriterConfig.instantiate[K, V](
+      className = classOf[SparkHadoopMapRedWriterConfig[K, V]].getName,
+      conf = conf)
     SparkHadoopMapRedWriter.write(
       rdd = self,
-      hadoopConf = conf
-    )
+      config = config)
   }
 
   /**

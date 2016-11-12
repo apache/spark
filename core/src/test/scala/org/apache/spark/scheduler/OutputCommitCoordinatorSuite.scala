@@ -201,6 +201,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
  */
 private case class OutputCommitFunctions(tempDirPath: String) {
 
+  private val jobId = new SerializableWritable(SparkHadoopWriterUtils.createJobID(new Date, 0))
+
   // Mock output committer that simulates a successful commit (after commit is authorized)
   private def successfulOutputCommitter = new FakeOutputCommitter {
     override def commitTask(context: TaskAttemptContext): Unit = {
@@ -226,8 +228,6 @@ private case class OutputCommitFunctions(tempDirPath: String) {
       if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
   }
 
-  private val jobId = new SerializableWritable(SparkHadoopWriterUtils.createJobID(new Date, 0))
-
   private def runCommitWithProvidedCommitter(
       ctx: TaskContext,
       iter: Iterator[Int],
@@ -235,14 +235,19 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     def jobConf = new JobConf {
       override def getOutputCommitter(): OutputCommitter = outputCommitter
     }
+
+    // Instantiate committer.
     val committer = FileCommitProtocol.instantiate(
       className = classOf[HadoopMapRedCommitProtocol].getName,
       jobId = jobId.value.getId.toString,
       outputPath = jobConf.get("mapred.output.dir"),
       isAppend = false)
+
+    // Create TaskAttemptContext.
     val taskAttemptId = (ctx.taskAttemptId % Int.MaxValue).toInt
     val attemptId = new TaskAttemptID(new TaskID(jobId.value, TaskType.MAP, ctx.partitionId), taskAttemptId)
     val taskContext = new TaskAttemptContextImpl(jobConf, attemptId)
+
     committer.setupTask(taskContext)
     committer.commitTask(taskContext)
   }
