@@ -468,7 +468,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(e.getCause.getMessage.contains("Failed to rename"))
   }
 
-  test("SPARK-XXXXX: do not create temp delta file until the store is updated") {
+  test("SPARK-18416: do not create temp delta file until the store is updated") {
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val storeId = StateStoreId(dir, 0, 0)
     val storeConf = StateStoreConf.empty
