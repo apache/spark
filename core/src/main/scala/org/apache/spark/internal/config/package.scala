@@ -207,6 +207,10 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
+    .stringConf
+    .createOptional
+
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
