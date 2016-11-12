@@ -500,7 +500,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     }
 
     // Put should create a temp file
-    assert(numTempFiles === 0)
     put(store0, "a", 1)
     assert(numTempFiles === 1)
     assert(numDeltaFiles === 0)
