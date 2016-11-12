@@ -273,7 +273,7 @@ class HiveDDLSuite
       val m = intercept[AnalysisException] {
         sql("ALTER TABLE sales DROP PARTITION (quarter <= 4), PARTITION (quarter <= '3')")
       }.getMessage
-      // `PARTITION (quarter <= '2')` should raises exceptions because `PARTITION (quarter <= 4)`
+      // `PARTITION (quarter <= '3')` should raises exceptions because `PARTITION (quarter <= 4)`
       // already removes all partitions.
       checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
       assert(m.contains("There is no partition for (`quarter` <= '3')"))
