@@ -1031,6 +1031,35 @@ class Analyzer(
         }
       }
 
+      // SPARK-17348: A potential incorrect result case.
+      // When a correlated predicate is a non-equality predicate,
+      // certain operators are not permitted from the operator
+      // hosting the correlated predicate up to the operator on the outer table.
+      // Otherwise, the pull up of the correlated predicate
+      // will generate a plan with a different semantics
+      // which could return incorrect result.
+      // Currently we check for Aggregate and Window operators
+      //
+      // Below shows an example of a Logical Plan during Analyzer phase that
+      // show this problem. Pulling the correlated predicate [outer(c2#77) >= ..]
+      // through the Aggregate (or Window) operator could alter the result of
+      // the Aggregate.
+      //
+      // Project [c1#76]
+      // +- Project [c1#87, c2#88]
+      // :  (Aggregate or Window operator)
+      // :  +- Filter [outer(c2#77) >= c2#88)]
+      // :     +- SubqueryAlias t2, `t2`
+      // :        +- Project [_1#84 AS c1#87, _2#85 AS c2#88]
+      // :           +- LocalRelation [_1#84, _2#85]
+      // +- SubqueryAlias t1, `t1`
+      // +- Project [_1#73 AS c1#76, _2#74 AS c2#77]
+      // +- LocalRelation [_1#73, _2#74]
+      def failOnNonEqualCorrelatedPredicate(p: LogicalPlan): Unit = {
+        // Report a non-supported case as an exception
+        failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n$p")
+      }
+
       /** Determine which correlated predicate references are missing from this plan. */
       def missingReferences(p: LogicalPlan): AttributeSet = {
         val localPredicateReferences = p.collect(predicateMap)
@@ -1041,11 +1070,23 @@ class Analyzer(
         localPredicateReferences -- p.outputSet
       }
 
+      var foundNonEqualCorrelatedPred : Boolean = false
+
       // Simplify the predicates before pulling them out.
       val transformed = BooleanSimplification(sub) transformUp {
         case f @ Filter(cond, child) =>
           // Find all predicates with an outer reference.
           val (correlated, local) = splitConjunctivePredicates(cond).partition(containsOuter)
+
+          // Find any non-equality correlated predicates
+          for (p <- correlated) if (!foundNonEqualCorrelatedPred) {
+            p match {
+              case EqualTo(_, _) | EqualNullSafe(_, _) =>
+                None
+              case _ =>
+                foundNonEqualCorrelatedPred = true
+            }
+          }
 
           // Rewrite the filter without the correlated predicates if any.
           correlated match {
@@ -1069,11 +1110,19 @@ class Analyzer(
         case a @ Aggregate(grouping, expressions, child) =>
           failOnOuterReference(a)
           val referencesToAdd = missingReferences(a)
+          if (foundNonEqualCorrelatedPred) {
+            failOnNonEqualCorrelatedPredicate(a)
+          }
           if (referencesToAdd.nonEmpty) {
             Aggregate(grouping ++ referencesToAdd, expressions ++ referencesToAdd, child)
           } else {
             a
           }
+        case w : Window =>
+          if (foundNonEqualCorrelatedPred) {
+            failOnNonEqualCorrelatedPredicate(w)
+          }
+          w
         case j @ Join(left, _, RightOuter, _) =>
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(left, "a RIGHT OUTER JOIN")
@@ -1108,34 +1157,6 @@ class Analyzer(
           failOnOuterReference(p)
           p
       }
-
-      // SPARK-17348
-      // Looking for a potential incorrect result case.
-      // When a correlated predicate is a non-equality predicate
-      // it must be placed at the immediate child operator.
-      // Otherwise, the pull up of the correlated predicate
-      // will generate a plan with a different semantics
-      // which could return incorrect result.
-      var continue : Boolean = true
-      for (pm <- predicateMap if continue) {
-        assert(pm._2.nonEmpty, "Correlated predicate(s) does not exist.")
-        for (p <- pm._2 if continue)
-          p match {
-            case EqualTo(_, _) | EqualNullSafe(_, _) =>
-              None
-            case _ =>
-              assert(transformed.children.nonEmpty)
-              if (!(transformed.isInstanceOf[Project]) ||
-                  !(pm._1 fastEquals transformed.asInstanceOf[Project].child)) {
-                continue = false
-              }
-          }
-      }
-      if (!continue) {
-        // Report a non-supported case as an exception
-        failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n$sub")
-      }
-
       (transformed, predicateMap.values.flatten.toSeq)
     }
 
