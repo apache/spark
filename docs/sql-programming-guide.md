@@ -1087,6 +1087,13 @@ the following case-sensitive options:
   </tr>
 
   <tr>
+     <td><code>maxConnections</code></td>
+     <td>
+       The number of JDBC connections, which specifies the maximum number of simultaneous JDBC connections that are allowed. This option applies only to writing. It defaults to the number of partitions of RDD.
+     </td>
+  </tr>
+
+  <tr>
      <td><code>isolationLevel</code></td>
      <td>
        The transaction isolation level, which applies to current connection. It can be one of <code>NONE<code>, <code>READ_COMMITTED<code>, <code>READ_UNCOMMITTED<code>, <code>REPEATABLE_READ<code>, or <code>SERIALIZABLE<code>, corresponding to standard transaction isolation levels defined by JDBC's Connection object, with default of <code>READ_UNCOMMITTED<code>. This option applies only to writing. Please refer the documentation in <code>java.sql.Connection</code>.
