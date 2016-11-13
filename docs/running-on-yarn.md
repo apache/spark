@@ -118,19 +118,6 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.driver.memory</code></td>
-  <td>1g</td>
-  <td>
-    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
-    (e.g. <code>1g</code>, <code>2g</code>).
-
-    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
-    directly in your application, because the driver JVM has already started at that point.
-    Instead, please set this through the <code>--driver-memory</code> command line option
-    or in your default properties file.
-  </td>
-</tr>
-<tr>
   <td><code>spark.driver.cores</code></td>
   <td><code>1</code></td>
   <td>
@@ -238,20 +225,6 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
   <td>
     The number of cores to use on each executor. For YARN and standalone mode only.
-  </td>
-</tr>
-<tr>
- <td><code>spark.executor.instances</code></td>
-  <td><code>2</code></td>
-  <td>
-    The number of executors for static allocation. With <code>spark.dynamicAllocation.enabled</code>, the initial set of executors will be at least this large.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>1g</td>
-  <td>
-    Amount of memory to use per executor process (e.g. <code>2g</code>, <code>8g</code>).
   </td>
 </tr>
 <tr>
@@ -493,6 +466,20 @@ To use a custom metrics.properties for the application master and executors, upd
   Java Regex to filter the log files which match the defined exclude pattern
   and those log files will not be aggregated in a rolling fashion. If the log file
   name matches both the include and the exclude pattern, this file will be excluded eventually.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.report.interval</code></td>
+  <td>1s</td>
+  <td>
+  Interval between reports of the current app status in Yarn cluster mode.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.services</code></td>
+  <td>Nil</td>
+  <td>
+  A comma-separated list of class names of services to add to the scheduler.
   </td>
 </tr>
 </table>
