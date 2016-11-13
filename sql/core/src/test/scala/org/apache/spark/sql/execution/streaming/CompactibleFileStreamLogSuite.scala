@@ -35,6 +35,8 @@ class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext 
 
   import CompactibleFileStreamLog._
 
+  /** -- testing of `object CompactibleFileStreamLog` begins -- */
+
   test("getBatchIdFromFileName") {
     assert(1234L === getBatchIdFromFileName("1234"))
     assert(1234L === getBatchIdFromFileName("1234.compact"))
@@ -90,18 +92,148 @@ class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext 
     assert(Seq(8) === getAllValidBatches(8, compactInterval = 3))
   }
 
+  /** -- testing of `object CompactibleFileStreamLog` ends -- */
+
   test("batchIdToPath") {
-    withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
-      withFileStreamSinkLog { sinkLog =>
-        assert("0" === sinkLog.batchIdToPath(0).getName)
-        assert("1" === sinkLog.batchIdToPath(1).getName)
-        assert("2.compact" === sinkLog.batchIdToPath(2).getName)
-        assert("3" === sinkLog.batchIdToPath(3).getName)
-        assert("4" === sinkLog.batchIdToPath(4).getName)
-        assert("5.compact" === sinkLog.batchIdToPath(5).getName)
-      }
-    }
+    withFakeCompactibleFileStreamLog(
+      fileCleanupDelayMs = Long.MaxValue,
+      compactInterval = 3,
+      compactibleLog => {
+        assert("0" === compactibleLog.batchIdToPath(0).getName)
+        assert("1" === compactibleLog.batchIdToPath(1).getName)
+        assert("2.compact" === compactibleLog.batchIdToPath(2).getName)
+        assert("3" === compactibleLog.batchIdToPath(3).getName)
+        assert("4" === compactibleLog.batchIdToPath(4).getName)
+        assert("5.compact" === compactibleLog.batchIdToPath(5).getName)
+      })
   }
 
+  test("serialize") {
+    withFakeCompactibleFileStreamLog(
+      fileCleanupDelayMs = Long.MaxValue,
+      compactInterval = 3,
+      compactibleLog => {
+        val logs = Array("entry_1", "entry_2", "entry_3")
+        val expected = s"""${FakeCompactibleFileStreamLog.VERSION}
+            |"entry_1"
+            |"entry_2"
+            |"entry_3"""".stripMargin
+        val baos = new ByteArrayOutputStream()
+        compactibleLog.serialize(logs, baos)
+        assert(expected === baos.toString(UTF_8.name()))
 
+        baos.reset()
+        compactibleLog.serialize(Array(), baos)
+        assert(FakeCompactibleFileStreamLog.VERSION === baos.toString(UTF_8.name()))
+      })
+  }
+
+  test("deserialize") {
+    withFakeCompactibleFileStreamLog(
+      fileCleanupDelayMs = Long.MaxValue,
+      compactInterval = 3,
+      compactibleLog => {
+        val logs = s"""${FakeCompactibleFileStreamLog.VERSION}
+            |"entry_1"
+            |"entry_2"
+            |"entry_3"""".stripMargin
+        val expected = Array("entry_1", "entry_2", "entry_3")
+        assert(expected ===
+          compactibleLog.deserialize(new ByteArrayInputStream(logs.getBytes(UTF_8))))
+
+        assert(Nil ===
+          compactibleLog.deserialize(
+            new ByteArrayInputStream(FakeCompactibleFileStreamLog.VERSION.getBytes(UTF_8))))
+      })
+  }
+
+  testWithUninterruptibleThread("compact") {
+    withFakeCompactibleFileStreamLog(
+      fileCleanupDelayMs = Long.MaxValue,
+      compactInterval = 3,
+      compactibleLog => {
+        for (batchId <- 0 to 10) {
+          compactibleLog.add(batchId, Array("some_path_" + batchId))
+          val expectedFiles = (0 to batchId).map { id => "some_path_" + id }
+          assert(compactibleLog.allFiles() === expectedFiles)
+          if (isCompactionBatch(batchId, 3)) {
+            // Since batchId is a compaction batch, the batch log file should contain all logs
+            assert(compactibleLog.get(batchId).getOrElse(Nil) === expectedFiles)
+          }
+        }
+      })
+  }
+
+  testWithUninterruptibleThread("delete expired file") {
+    // Set `fileCleanupDelayMs` to 0 so that we can detect the deleting behaviour deterministically
+    withFakeCompactibleFileStreamLog(
+      fileCleanupDelayMs = 0,
+      compactInterval = 3,
+      compactibleLog => {
+        val fs = compactibleLog.metadataPath.getFileSystem(spark.sessionState.newHadoopConf())
+
+        def listBatchFiles(): Set[String] = {
+          fs.listStatus(compactibleLog.metadataPath).map(_.getPath.getName).filter { fileName =>
+            try {
+              getBatchIdFromFileName(fileName)
+              true
+            } catch {
+              case _: NumberFormatException => false
+            }
+          }.toSet
+        }
+
+        compactibleLog.add(0, Array("some_path_0"))
+        assert(Set("0") === listBatchFiles())
+        compactibleLog.add(1, Array("some_path_1"))
+        assert(Set("0", "1") === listBatchFiles())
+        compactibleLog.add(2, Array("some_path_2"))
+        assert(Set("2.compact") === listBatchFiles())
+        compactibleLog.add(3, Array("some_path_3"))
+        assert(Set("2.compact", "3") === listBatchFiles())
+        compactibleLog.add(4, Array("some_path_4"))
+        assert(Set("2.compact", "3", "4") === listBatchFiles())
+        compactibleLog.add(5, Array("some_path_5"))
+        assert(Set("5.compact") === listBatchFiles())
+      })
+  }
+
+  private def withFakeCompactibleFileStreamLog(
+    fileCleanupDelayMs: Long,
+    compactInterval: Int,
+    f: FakeCompactibleFileStreamLog => Unit
+  ): Unit = {
+    withTempDir { file =>
+      val compactibleLog = new FakeCompactibleFileStreamLog(
+        fileCleanupDelayMs,
+        compactInterval,
+        spark,
+        file.getCanonicalPath)
+      f(compactibleLog)
+    }
+  }
+}
+
+object FakeCompactibleFileStreamLog {
+  val VERSION = "test_version"
+}
+
+class FakeCompactibleFileStreamLog(
+    _fileCleanupDelayMs: Long,
+    _compactInterval: Int,
+    sparkSession: SparkSession,
+    path: String)
+  extends CompactibleFileStreamLog[String](
+    FakeCompactibleFileStreamLog.VERSION,
+    sparkSession,
+    path
+  ) {
+
+  override protected def fileCleanupDelayMs: Long = _fileCleanupDelayMs
+
+  override protected def isDeletingExpiredLog: Boolean = true
+
+  override protected def compactInterval: Int = _compactInterval
+
+  override def compactLogs(logs: Seq[String]): Seq[String] = logs
 }
