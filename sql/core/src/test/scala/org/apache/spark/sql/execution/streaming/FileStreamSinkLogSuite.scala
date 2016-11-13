@@ -29,6 +29,12 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
   import CompactibleFileStreamLog._
   import FileStreamSinkLog._
 
+  private val emptyKnownCompactionBatches = Array[Long]()
+  private val knownCompactionBatches = Array[Long](
+    1, 3, // produced with interval = 2
+    6     // produced with interval = 3
+  )
+
   test("compactLogs") {
     withFileStreamSinkLog { sinkLog =>
       val logs = Seq(
@@ -140,7 +146,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
             id => newFakeSinkFileStatus("/a/b/" + id, FileStreamSinkLog.ADD_ACTION)
           }
           assert(sinkLog.allFiles() === expectedFiles)
-          if (isCompactionBatch(batchId, 3)) {
+          if (isCompactionBatch(emptyKnownCompactionBatches, batchId, 0, 3)) {
             // Since batchId is a compaction batch, the batch log file should contain all logs
             assert(sinkLog.get(batchId).getOrElse(Nil) === expectedFiles)
           }

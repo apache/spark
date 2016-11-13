@@ -907,7 +907,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
       val metadataLog = fileSource invokePrivate _metadataLog()
 
-      if (isCompactionBatch(batchId, 2)) {
+      if (isCompactionBatch(
+        metadataLog.asInstanceOf[CompactibleFileStreamLog[AnyRef]].knownCompactionBatches,
+        metadataLog.asInstanceOf[CompactibleFileStreamLog[AnyRef]].zeroBatch,
+        batchId,
+        2)) {
         val path = metadataLog.batchIdToPath(batchId)
 
         // Assert path name should be ended with compact suffix.
