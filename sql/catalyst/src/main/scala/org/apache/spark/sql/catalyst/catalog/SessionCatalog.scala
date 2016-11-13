@@ -83,7 +83,7 @@ class SessionCatalog(
   // check whether the temporary table or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb = DEFAULT_DATABASE
+  protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
 
   /**
    * Format table name, taking into account case sensitivity.
