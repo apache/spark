@@ -21,15 +21,14 @@ import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
-import org.apache.spark.sql.catalyst.util.MapData
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.types.{BinaryType, DataType}
 import org.apache.spark.util.Utils
 
 /**
@@ -42,15 +41,55 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
   }
 
+  protected def convertToCatalystUnsafe(a: Any): Any = a match {
+    case arr: Array[Boolean] => UnsafeArrayData.fromPrimitiveArray(arr)
+    case arr: Array[Byte] => UnsafeArrayData.fromPrimitiveArray(arr)
+    case arr: Array[Short] => UnsafeArrayData.fromPrimitiveArray(arr)
+    case arr: Array[Int] => UnsafeArrayData.fromPrimitiveArray(arr)
+    case arr: Array[Long] => UnsafeArrayData.fromPrimitiveArray(arr)
+    case arr: Array[Float] => UnsafeArrayData.fromPrimitiveArray(arr)
+    case arr: Array[Double] => UnsafeArrayData.fromPrimitiveArray(arr)
+    case other => CatalystTypeConverters.convertToCatalyst(other)
+  }
+
   protected def checkEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
     val expr: Expression = serializer.deserialize(serializer.serialize(expression))
-    val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
+    // No codegen version expects GenericArrayData
+    val catalystValue = expected match {
+      case arr: Array[Byte] if expression.dataType == BinaryType => arr
+      case arr: Array[_] => new GenericArrayData(arr.map(CatalystTypeConverters.convertToCatalyst))
+      case _ => CatalystTypeConverters.convertToCatalyst(expected)
+    }
+    // Codegen version expects UnsafeArrayData for array expect Array(Binarytype)
+    val catalystValueUnsafe = expected match {
+       case arr: Array[Byte] if expression.dataType == BinaryType => arr
+       case _ => convertToCatalystUnsafe(expected)
+    }
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
-    checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
+    checkEvaluationWithGeneratedMutableProjection(expr, catalystValueUnsafe, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkEvalutionWithUnsafeProjection(expr, catalystValue, inputRow)
+      checkEvalutionWithUnsafeProjection(expr, catalystValueUnsafe, inputRow)
+    }
+    checkEvaluationWithOptimization(expr, catalystValue, inputRow)
+  }
+
+  protected def checkEvaluationMap(expression: => Expression, expectedMap: Any,
+      expectedKey: Any, expectedValue: Any, inputRow: InternalRow = EmptyRow): Unit = {
+    val serializer = new JavaSerializer(new SparkConf()).newInstance
+    val expr: Expression = serializer.deserialize(serializer.serialize(expression))
+    // No codegen version expects GenericArrayData for map
+    val catalystValue = CatalystTypeConverters.convertToCatalyst(expectedMap)
+    // Codegen version expects UnsafeArrayData for map
+    val catalystValueUnsafe = new ArrayBasedMapData(
+      convertToCatalystUnsafe(expectedKey).asInstanceOf[ArrayData],
+      convertToCatalystUnsafe(expectedValue).asInstanceOf[ArrayData])
+
+    checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
+    checkEvaluationWithGeneratedMutableProjection(expr, catalystValueUnsafe, inputRow)
+    if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
+      checkEvalutionWithUnsafeProjection(expr, catalystValueUnsafe, inputRow)
     }
     checkEvaluationWithOptimization(expr, catalystValue, inputRow)
   }
