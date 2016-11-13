@@ -881,7 +881,8 @@ test_that("spark.kstest", {
   expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
 })
 
-test_that("spark.randomForest Regression", {
+test_that("spark.randomForest", {
+  # regression
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.randomForest(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
                               numTrees = 1)
@@ -923,9 +924,8 @@ test_that("spark.randomForest Regression", {
   expect_equal(stats$treeWeights, stats2$treeWeights)
 
   unlink(modelPath)
-})
 
-test_that("spark.randomForest Classification", {
+  # classification
   data <- suppressWarnings(createDataFrame(iris))
   model <- spark.randomForest(data, Species ~ Petal_Length + Petal_Width, "classification",
                               maxDepth = 5, maxBins = 16)
@@ -979,7 +979,8 @@ test_that("spark.randomForest Classification", {
   expect_equal(summary(model)$numFeatures, 4)
 })
 
-test_that("spark.gbt regression", {
+test_that("spark.gbt", {
+  # regression
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.gbt(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16, seed = 123)
   predictions <- collect(predict(model, data))
@@ -1008,9 +1009,8 @@ test_that("spark.gbt regression", {
   expect_equal(stats$treeWeights, stats2$treeWeights)
 
   unlink(modelPath)
-})
 
-test_that("spark.gbt classification", {
+  # classification
   # label must be binary - GBTClassifier currently only supports binary classification.
   iris2 <- iris[iris$Species != "virginica", ]
   data <- suppressWarnings(createDataFrame(iris2))
