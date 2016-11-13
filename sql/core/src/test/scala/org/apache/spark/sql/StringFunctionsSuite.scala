@@ -53,7 +53,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     val allTypeData = AllTypeTestData(spark)
     val df = allTypeData.dataFrame
 
-    Seq(allTypeData.mapCol, allTypeData.arrayCol, allTypeData.structCol).foreach { col =>
+    Seq(allTypeData.mapCol, allTypeData.arrayIntCol, allTypeData.structCol).foreach { col =>
       val e = intercept[AnalysisException] {
         df.select(concat(allTypeData.stringCol, col))
       }.getMessage
@@ -61,7 +61,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("string concat_ws") {
+  test("string concat_ws - basic") {
     val df = Seq[(String, String, String)](("a", "b", null)).toDF("a", "b", "c")
 
     checkAnswer(
@@ -71,6 +71,47 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("concat_ws('||', a, b, c)"),
       Row("a||b"))
+
+    checkAnswer(
+      df.selectExpr("concat_ws(null, a, b, c)"),
+      Row(null))
+
+    checkAnswer(
+      df.selectExpr("concat_ws(a, b, b)"),
+      Row("bab"))
+
+    val df1 = Seq[(String, String)]((null, null)).toDF("a", "b")
+
+    checkAnswer(
+      df1.selectExpr("concat_ws('||', a, b)"),
+      Row(""))
+
+    val e = intercept[AnalysisException] {
+      df1.selectExpr("concat_ws('||', b)")
+    }.getMessage
+    assert(e.contains("requires at least three arguments"))
+  }
+
+  test("string concat_ws - all compatible types") {
+    val allTypeData = AllTypeTestData(spark)
+    val df = allTypeData.dataFrame
+    checkAnswer(
+      df.select(concat_ws("_",
+        allTypeData.getStringCompatibleColumns :+ allTypeData.arrayStringCol: _*)),
+      Row("1_1_1_1_1.01_1.01_1.01000_1970-01-01_1970-01-01 00:00:00_a_a_true_a_b") ::
+        Row("2_2_2_2_2.02_2.02_2.02000_1970-02-02_1970-01-01 00:00:05_bb_bb_false_c_d") :: Nil)
+  }
+
+  test("string concat_ws - unsupported types") {
+    val allTypeData = AllTypeTestData(spark)
+    val df = allTypeData.dataFrame
+
+    Seq(allTypeData.mapCol, allTypeData.arrayIntCol, allTypeData.structCol).foreach { col =>
+      val e = intercept[AnalysisException] {
+        df.select(concat_ws("_", col, col))
+      }.getMessage
+      assert(e.contains("argument 2 requires (array<string> or string) type"))
+    }
   }
 
   test("string elt") {
@@ -486,7 +527,8 @@ case class AllTypeTestData (spark: SparkSession) {
   private val dateSeq = Seq("1970-01-01", "1970-02-02").map(Date.valueOf)
   private val timestampSeq = Seq("1970-01-01 00:00:00", "1970-01-01 00:00:05")
     .map(Timestamp.valueOf)
-  private val arraySeq = Seq(Seq(1), Seq(2))
+  private val arrayIntSeq = Seq(Seq(1), Seq(2))
+  private val arrayStringSeq = Seq(Seq("a", "b"), Seq("c", "d"))
   private val mapSeq = Seq(Map("a" -> "1", "b" -> "2"), Map("d" -> "3", "e" -> "4"))
   private val structSeq = Seq(Row("d"), Row("c"))
 
@@ -503,7 +545,8 @@ case class AllTypeTestData (spark: SparkSession) {
     StructField("stringCol", StringType),
     StructField("binaryCol", BinaryType),
     StructField("booleanCol", BooleanType),
-    StructField("arrayCol", ArrayType(IntegerType, containsNull = true)),
+    StructField("arrayIntCol", ArrayType(IntegerType, containsNull = true)),
+    StructField("arrayStringCol", ArrayType(StringType, containsNull = true)),
     StructField("mapCol", MapType(StringType, StringType)),
     StructField("structCol", new StructType().add("a", StringType))
   ))
@@ -514,7 +557,8 @@ case class AllTypeTestData (spark: SparkSession) {
       dateSeq(i), timestampSeq(i),
       stringSeq(i), stringSeq(i).getBytes,
       booleanSeq(i),
-      arraySeq(i),
+      arrayIntSeq(i),
+      arrayStringSeq(i),
       mapSeq(i),
       structSeq(i))
   })
@@ -533,7 +577,8 @@ case class AllTypeTestData (spark: SparkSession) {
   val stringCol = Column("stringCol")
   val binaryCol = Column("binaryCol")
   val booleanCol = Column("booleanCol")
-  val arrayCol = Column("arrayCol")
+  val arrayIntCol = Column("arrayIntCol")
+  val arrayStringCol = Column("arrayStringCol")
   val mapCol = Column("mapCol")
   val structCol = Column("structCol")
 
