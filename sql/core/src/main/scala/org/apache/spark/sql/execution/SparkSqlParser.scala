@@ -883,13 +883,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * {{{
    *   ALTER TABLE table CHANGE COLUMN `col` `col` dataType "comment" (FIRST | AFTER `otherCol`)
    *   [, `col2` `col2` dataType "comment" (FIRST | AFTER `otherCol`), ...]
-   *   ALTER VIEW view CHANGE COLUMN `col` `col` dataType "comment" (FIRST | AFTER `otherCol`)
-   *   [, `col2` `col2` dataType "comment" (FIRST | AFTER `otherCol`), ...]
    * }}}
    */
   override def visitChangeColumns(ctx: ChangeColumnsContext): LogicalPlan = withOrigin(ctx) {
     val tableName = visitTableIdentifier(ctx.tableIdentifier)
-    val isView = ctx.VIEW != null
 
     val columns = ctx.expandColTypeList.expandColType.asScala.map { col =>
       if (col.colPosition != null) {
@@ -899,7 +896,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       col.identifier.getText -> visitColType(col.colType)
     }.toMap
 
-    AlterTableChangeColumnsCommand(tableName, columns, isView)
+    AlterTableChangeColumnsCommand(tableName, columns)
   }
 
   /**
