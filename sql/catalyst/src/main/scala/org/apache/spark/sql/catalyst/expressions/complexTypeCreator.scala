@@ -56,32 +56,15 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val unsafeArrayClass = classOf[UnsafeArrayData].getName
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
+    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+
     val ArrayType(dt, _) = dataType
-    val isPrimitive = ctx.isPrimitiveType(dt)
     val evals = children.map(e => e.genCode(ctx))
-    val allNonNull = evals.forall(_.isNull == "false")
-    if (isPrimitive && allNonNull) {
-      val javaDataType = ctx.javaType(dt)
-      ctx.addMutableState(s"${javaDataType}[]", values,
-        s"this.$values = new ${javaDataType}[${children.size}];")
-
-      ev.copy(code =
-        ctx.splitExpressions(
-          ctx.INPUT_ROW,
-            evals.zipWithIndex.map { case (eval, i) =>
-              eval.code +
-                s"\n$values[$i] = ${eval.value};"
-            }) +
-       s"""
-      /* final ArrayData ${ev.value} = $arrayClass.allocate($values); */
-      final ArrayData ${ev.value} = new $arrayClass($values);
-     """,
-       isNull = "false")
-    } else {
-      ctx.addMutableState("Object[]", values, s"this.$values = null;")
-
+    val isPrimitiveArray = ctx.isPrimitiveType(dt) && evals.forall(_.isNull == "false")
+    if (!isPrimitiveArray) {
       ev.copy(code = s"""
        final boolean ${ev.isNull} = false;
        this.$values = new Object[${children.size}];""" +
@@ -97,10 +80,24 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
           """
           }) +
         s"""
-         /* final ArrayData ${ev.value} = $arrayClass.allocate($values); */
          final ArrayData ${ev.value} = new $arrayClass($values);
          this.$values = null;
        """)
+    } else {
+      val javaDataType = ctx.javaType(dt)
+      ctx.addMutableState(s"${javaDataType}[]", values,
+      s"this.$values = new ${javaDataType}[${children.size}];")
+      ev.copy(code =
+        ctx.splitExpressions(
+        ctx.INPUT_ROW,
+        evals.zipWithIndex.map { case (eval, i) =>
+          eval.code +
+          s"\n$values[$i] = ${eval.value};"
+        }) +
+        s"""
+         final ArrayData ${ev.value} = $unsafeArrayClass.fromPrimitiveArray($values);
+       """,
+        isNull = "false")
     }
   }
 
