@@ -118,14 +118,12 @@ class FoldablePropagationSuite extends PlanTest {
       Seq(
         testRelation.select(Literal(1).as('x), 'a).select('x + 'a),
         testRelation.select(Literal(2).as('x), 'a).select('x + 'a)))
-      .select('x)
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = Union(
       Seq(
         testRelation.select(Literal(1).as('x), 'a).select((Literal(1).as('x) + 'a).as("(x + a)")),
         testRelation.select(Literal(2).as('x), 'a).select((Literal(2).as('x) + 'a).as("(x + a)"))))
-      .select('x).analyze
-
+      .analyze
     comparePlans(optimized, correctAnswer)
   }
 
