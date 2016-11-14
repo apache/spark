@@ -400,8 +400,9 @@ object SQLConf {
     SQLConfigBuilder("spark.sql.sources.parallelPartitionDiscovery.parallelism")
       .doc("The number of parallelism to list a collection of path recursively, Set the " +
         "number to prevent file listing from generating too many tasks.")
+      .internal()
       .intConf
-      .createWithDefault(100)
+      .createWithDefault(10000)
 
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
