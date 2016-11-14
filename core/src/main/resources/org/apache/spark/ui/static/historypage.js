@@ -139,6 +139,9 @@ $(document).ready(function() {
                         {name: 'eighth'},
                         {name: 'ninth'},
                     ],
+                    "columnDefs": [
+                        {"searchable": false, "targets": [5]}
+                    ],
                     "autoWidth": false,
                     "order": [[ 4, "desc" ]]
         };
