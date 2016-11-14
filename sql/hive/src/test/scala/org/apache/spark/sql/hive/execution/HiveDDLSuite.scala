@@ -271,7 +271,7 @@ class HiveDDLSuite
         Row("country=KR/quarter=3") :: Nil)
 
       // According to the declarative partition spec definitions, this drops the union of target
-      // partitions without exceptions. Hive raises exceptions because it handle them sequentially.
+      // partitions without exceptions. Hive raises exceptions because it handles them sequentially.
       sql("ALTER TABLE sales DROP PARTITION (quarter <= 4), PARTITION (quarter <= '3')")
       checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
     }

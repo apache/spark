@@ -194,7 +194,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
-    val parts = ctx.partitionVal.asScala.map { pVal =>
+    val parts = ctx.expression.asScala.map { pVal =>
       expression(pVal) match {
         case UnresolvedAttribute(name :: Nil) =>
           name -> None
@@ -215,7 +215,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a partition filter specification.
    */
   def visitPartitionFilterSpec(ctx: PartitionSpecContext): Expression = withOrigin(ctx) {
-    val parts = ctx.partitionVal.asScala.map { pVal =>
+    val parts = ctx.expression.asScala.map { pVal =>
       expression(pVal) match {
         case EqualNullSafe(_, _) =>
           throw new ParseException("'<=>' operator is not allowed in partition specification.", ctx)

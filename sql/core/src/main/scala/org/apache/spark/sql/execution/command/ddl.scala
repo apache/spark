@@ -445,22 +445,19 @@ case class AlterTableDropPartitionCommand(
     }
 
     if (specs.exists(isRangeComparison)) {
-      val partitionSet = scala.collection.mutable.Set.empty[CatalogTablePartition]
-      specs.foreach { spec =>
-        val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(spec))
-        if (partitions.nonEmpty) {
-          partitionSet ++= partitions
-        } else if (!ifExists) {
+      val partitionSet = specs.flatMap { spec =>
+        val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(spec)).map(_.spec)
+        if (partitions.isEmpty && !ifExists) {
           throw new AnalysisException(s"There is no partition for ${spec.sql}")
         }
-      }
-      catalog.dropPartitions(table.identifier, partitionSet.map(_.spec).toSeq,
-        ignoreIfNotExists = ifExists, purge = purge)
+        partitions
+      }.distinct
+      catalog.dropPartitions(
+        table.identifier, partitionSet, ignoreIfNotExists = ifExists, purge = purge)
     } else {
       val normalizedSpecs = specs.map { expr =>
         val spec = splitConjunctivePredicates(expr).map {
-          case BinaryComparison(left, right) =>
-            left.asInstanceOf[AttributeReference].name -> right.toString
+          case BinaryComparison(AttributeReference(name, _, _, _), right) => name -> right.toString
         }.toMap
         PartitioningUtils.normalizePartitionSpec(
           spec,

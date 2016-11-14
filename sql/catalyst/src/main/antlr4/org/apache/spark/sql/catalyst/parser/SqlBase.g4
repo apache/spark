@@ -239,11 +239,7 @@ partitionSpecLocation
     ;
 
 partitionSpec
-    : PARTITION '(' partitionVal (',' partitionVal)* ')'
-    ;
-
-partitionVal
-    : expression
+    : PARTITION '(' expression (',' expression)* ')'
     ;
 
 describeFuncName

@@ -219,7 +219,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
               val expressions = deletedPartitions.map { specs =>
                 specs.map { case (key, value) =>
                   EqualTo(AttributeReference(key, StringType)(), Literal.create(value, StringType))
-                }.reduceLeft(org.apache.spark.sql.catalyst.expressions.And)
+                }.reduceLeft(And)
               }.toSeq
               AlterTableDropPartitionCommand(
                 l.catalogTable.get.identifier, expressions,
