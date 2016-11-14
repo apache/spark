@@ -28,9 +28,7 @@ The implementation in `spark.mllib` has the following parameters:
 * *maxIterations* is the maximum number of iterations to run.
 * *initializationMode* specifies either random initialization or
 initialization via k-means\|\|.
-* *runs* is the number of times to run the k-means algorithm (k-means is not
-guaranteed to find a globally optimal solution, and when run multiple times on
-a given dataset, the algorithm returns the best clustering result).
+* *runs* This param has no effect since Spark 2.0.0.
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged.
 * *initialModel* is an optional set of cluster centers used for initialization. If this parameter is supplied, only one run is performed.
