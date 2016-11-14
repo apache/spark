@@ -65,7 +65,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   protected def defaultCompactInterval: Int
 
-  protected val compactInterval: Int = {
+  protected final val compactInterval: Int = {
     // SPARK-18187: "compactInterval" can be set by user via defaultCompactInterval.
     // If there are existing log entries, then we should ensure a compatible compactInterval
     // is used, irrespective of the defaultCompactInterval. There are three cases:
@@ -73,35 +73,50 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     // 1. If there is no '.compact' file, we can use the default setting directly.
     // 2. If there are two or more '.compact' files, we use the interval of patch id suffix with
     // '.compact' as compactInterval.
-    // 3. If there is only one '.compact' file, then use the max of (1) default setting directly
-    // or (2) the difference between the latest batchId + 1 - (batchId of the only '.compact' file)
-    // i.e., using the default in case 3.2 would mean that we missed a '.compact' file entry.
-    // e.g., if defaultCompactInterval is 2, and the log is: 0, 1, 2.compact, 3, 4 then case 3.2
-    // will ensure we use the correct compactInterval = 4 + 1 - 2 = 3
+    // 3. If there is only one '.compact' file, then we must find a compact interval
+    // that is compatible with (i.e., a divisor of) the previous compact file, and that
+    // faithfully tries to represent the revised default compact interval i.e., is at least
+    // is large if possible.
+    // e.g., if defaultCompactInterval is 5 (and previous compact interval could have
+    // been any 2,3,4,6,12), then a log could be: 11.compact, 12, 13, in which case
+    // will ensure that the new compactInterval = 6 > 5 and (11 + 1) % 6 == 0
     val compactibleBatchIds = fileManager.list(metadataPath, batchFilesFilter)
       .filter(f => f.getPath.toString.endsWith(CompactibleFileStreamLog.COMPACT_FILE_SUFFIX))
       .map(f => pathToBatchId(f.getPath))
       .sorted
       .reverse
 
+    var interval = defaultCompactInterval
     if (compactibleBatchIds.length >= 2) {
       // Case 2
       val latestCompactBatchId = compactibleBatchIds(0)
       val previousCompactBatchId = compactibleBatchIds(1)
-      (latestCompactBatchId - previousCompactBatchId).toInt
+      interval = (latestCompactBatchId - previousCompactBatchId).toInt
+      logInfo(s"Compact interval case 2 = $interval")
     } else if (compactibleBatchIds.length == 1) {
       // Case 3
       val latestCompactBatchId = compactibleBatchIds(0).toInt
-      val latestBatchId = getLatest().map(_._1).getOrElse(
-        throw new IllegalStateException("Incomplete log file")
-      ).toInt
-      assert(latestBatchId >= latestCompactBatchId,
-        s"Latest batch id $latestBatchId is less than latest compact id $latestCompactBatchId")
-      Math.max(defaultCompactInterval, latestBatchId + 1 - latestCompactBatchId)
+      if (latestCompactBatchId + 1 <= defaultCompactInterval) {
+        interval = latestCompactBatchId + 1
+      } else if (defaultCompactInterval < (latestCompactBatchId + 1) / 2) {
+        // Find the first divisor >= default compact interval
+        def properDivisors(n: Int, min: Int) =
+          (min to n/2).filter(i => n % i == 0) :+ n
+
+        interval = properDivisors(latestCompactBatchId + 1, defaultCompactInterval)(0)
+      }
+      else {
+        // default compact interval > than any divisor other than latest compact id
+        interval = latestCompactBatchId + 1
+      }
+      logInfo(s"Compact interval case 3 = $interval")
     } else {
       // Case 1
-      defaultCompactInterval
+      interval = defaultCompactInterval
+      logInfo(s"Compact interval case 1 = $interval")
     }
+    assert(interval > 0, "Compact interval must be greater than zero")
+    interval
   }
 
   /**
