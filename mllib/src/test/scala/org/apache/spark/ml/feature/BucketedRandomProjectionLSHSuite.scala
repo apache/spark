@@ -51,7 +51,6 @@ class BucketedRandomProjectionLSHSuite
 
   test("BucketedRandomProjectionLSH: default params") {
     val brp = new BucketedRandomProjectionLSH
-    assert(brp.getNumHashFunctions === 1.0)
     assert(brp.getNumHashTables === 1.0)
   }
 
@@ -69,15 +68,12 @@ class BucketedRandomProjectionLSHSuite
   }
 
   test("hashFunction") {
-    val randUnitVectors = Array(Vectors.dense(0.0, 1.0),
-      Vectors.dense(1.0, 0.0), Vectors.dense(0.25, 0.75), Vectors.dense(0.75, 0.25))
+    val randUnitVectors = Array(Vectors.dense(0.0, 1.0), Vectors.dense(1.0, 0.0))
     val model = new BucketedRandomProjectionModel("brp", randUnitVectors)
     model.set(model.bucketLength, 0.5)
-    model.set(model.numHashTables, 2)
-    model.set(model.numHashFunctions, 2)
     val res = model.hashFunction(Vectors.dense(1.23, 4.56))
-    assert(res(0).equals(Vectors.dense(9.0, 2.0)))
-    assert(res(1).equals(Vectors.dense(7.0, 4.0)))
+    assert(res(0).equals(Vectors.dense(9.0)))
+    assert(res(1).equals(Vectors.dense(2.0)))
   }
 
   test("keyDistance") {
@@ -88,7 +84,6 @@ class BucketedRandomProjectionLSHSuite
 
   test("BucketedRandomProjectionLSH: randUnitVectors") {
     val brp = new BucketedRandomProjectionLSH()
-      .setNumHashFunctions(10)
       .setNumHashTables(20)
       .setInputCol("keys")
       .setOutputCol("values")
@@ -123,7 +118,6 @@ class BucketedRandomProjectionLSHSuite
 
     // Project from 100 dimensional Euclidean Space to 10 dimensions
     val brp = new BucketedRandomProjectionLSH()
-      .setNumHashFunctions(5)
       .setNumHashTables(10)
       .setInputCol("keys")
       .setOutputCol("values")
@@ -155,7 +149,6 @@ class BucketedRandomProjectionLSHSuite
     val key = Vectors.dense(1.2, 3.4)
 
     val brp = new BucketedRandomProjectionLSH()
-      .setNumHashFunctions(10)
       .setNumHashTables(20)
       .setInputCol("keys")
       .setOutputCol("values")

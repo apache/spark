@@ -46,7 +46,6 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   test("MinHashLSH: default params") {
     val rp = new MinHashLSH
     assert(rp.getNumHashTables === 1.0)
-    assert(rp.getNumHashFunctions === 1.0)
   }
 
   test("read/write") {
@@ -60,12 +59,11 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   }
 
   test("hashFunction") {
-    val model = new MinHashModel("mh", numEntries = 20, randCoefficients = Array(0, 1, 2, 3))
-    model.set(model.numHashTables, 2)
-    model.set(model.numHashFunctions, 2)
+    val model = new MinHashModel("mh", numEntries = 20, randCoefficients = Array(0, 1, 3))
     val res = model.hashFunction(Vectors.sparse(10, Seq((2, 1.0), (3, 1.0), (5, 1.0), (7, 1.0))))
-    assert(res(0).equals(Vectors.dense(0.0, 3.0)))
-    assert(res(1).equals(Vectors.dense(6.0, 4.0)))
+    assert(res(0).equals(Vectors.dense(0.0)))
+    assert(res(1).equals(Vectors.dense(3.0)))
+    assert(res(2).equals(Vectors.dense(4.0)))
   }
 
   test("keyDistance") {
@@ -115,7 +113,6 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val df2 = spark.createDataFrame(data2.map(Tuple1.apply)).toDF("keys")
 
     val mh = new MinHashLSH()
-      .setNumHashFunctions(2)
       .setNumHashTables(20)
       .setInputCol("keys")
       .setOutputCol("values")

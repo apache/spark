@@ -43,24 +43,10 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
     "tables, where increasing number of hash tables lowers the false negative rate, and " +
     "decreasing it improves the running performance", ParamValidators.gt(0))
 
-  /**
-   * Param for the dimension of LSH AND-amplification.
-   *
-   * LSH AND-amplification can be used to reduce the false positive rate. The higher the dimension
-   * is, the lower the false positive rate.
-   * @group param
-   */
-  final val numHashFunctions: IntParam = new IntParam(this, "numHashFunctions", "number of hash " +
-    "functions in each hash table, where increasing the number improves the running performance, " +
-    "and decreasing it raises the false negative rate", ParamValidators.gt(0))
-
-  /** @group getParam */
-  final def getNumHashFunctions: Int = $(numHashFunctions)
-
   /** @group getParam */
   final def getNumHashTables: Int = $(numHashTables)
 
-  setDefault(numHashTables -> 1, numHashFunctions -> 1)
+  setDefault(numHashTables -> 1)
 
   /**
    * Transform the Schema for LSH
@@ -103,10 +89,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    */
   protected[ml] def hashDistance(x: Seq[Vector], y: Seq[Vector]): Double
 
-  protected[ml] def validateDimension(): Unit
-
   override def transform(dataset: Dataset[_]): DataFrame = {
-    validateDimension()
     transformSchema(dataset.schema, logging = true)
     val transformUDF = udf(hashFunction, DataTypes.createArrayType(new VectorUDT))
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
@@ -337,9 +320,6 @@ private[ml] abstract class LSH[T <: LSHModel[T]]
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /** @group setParam */
-  def setNumHashFunctions(value: Int): this.type = set(numHashFunctions, value)
 
   /** @group setParam */
   def setNumHashTables(value: Int): this.type = set(numHashTables, value)

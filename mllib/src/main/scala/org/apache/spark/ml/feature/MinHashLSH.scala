@@ -56,7 +56,8 @@ class MinHashModel private[ml] (
           (1 + elem) * randCoefficient.toLong % MinHashLSH.prime % numEntries
         }).min.toDouble
       })
-      hashValues.grouped($(numHashFunctions)).map(Vectors.dense).toArray
+      // TODO: For AND-amplification, output vectors of dimension numHashFunctions
+      hashValues.grouped(1).map(Vectors.dense).toArray
     }
   }
 
@@ -77,11 +78,6 @@ class MinHashModel private[ml] (
     x.zip(y).map(vectorPair =>
       vectorPair._1.toArray.zip(vectorPair._2.toArray).count(pair => pair._1 != pair._2)
     ).min
-  }
-
-  @Since("2.1.0")
-  override protected[ml] def validateDimension(): Unit = {
-    require(randCoefficients.length == ($(numHashFunctions) * $(numHashTables)))
   }
 
   @Since("2.1.0")
@@ -116,9 +112,6 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashModel] with HasSee
   override def setOutputCol(value: String): this.type = super.setOutputCol(value)
 
   @Since("2.1.0")
-  override def setNumHashFunctions(value: Int): this.type = super.setNumHashFunctions(value)
-
-  @Since("2.1.0")
   override def setNumHashTables(value: Int): this.type = super.setNumHashTables(value)
 
   @Since("2.1.0")
@@ -136,8 +129,7 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashModel] with HasSee
       s"The input vector dimension $inputDim exceeds the threshold ${MinHashLSH.prime / 2}.")
     val rand = new Random($(seed))
     val numEntry = inputDim * 2
-    val randCoofs: Array[Int] = Array
-      .fill($(numHashTables) * $(numHashFunctions))(1 + rand.nextInt(MinHashLSH.prime - 1))
+    val randCoofs: Array[Int] = Array.fill($(numHashTables))(1 + rand.nextInt(MinHashLSH.prime - 1))
     new MinHashModel(uid, numEntry, randCoofs)
   }
 
