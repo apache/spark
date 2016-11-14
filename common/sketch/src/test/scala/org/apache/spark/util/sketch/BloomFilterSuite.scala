@@ -104,9 +104,7 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     testMergeInPlace[T](typeName, numItems)(itemGen)
   }
 
-  testItemType[Byte]("Byte", 160) { _.nextInt().toByte }
-
-  testItemType[Short]("Short", 1000) { _.nextInt().toShort }
+  testItemType[Short]("Short", 1000) { _.nextInt(Short.MaxValue + 1).toShort }
 
   testItemType[Int]("Int", 100000) { _.nextInt() }
 
@@ -131,4 +129,37 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
       filter1.mergeInPlace(filter2)
     }
   }
+
+  /**
+    * Instead of random generator we can check
+    * BloomFilter for every Byte value
+    * since it has only 256 values
+    */
+  test(s"accuracy - Byte") {
+    // Byte is from -128 to 127 inclusive
+    val allBytes = (-128 to 127).map(_.toByte)
+    val fpp = 0.05
+    val filter = BloomFilter.create(129, fpp)
+
+    val isEven: Byte => Boolean = _ % 2 == 0
+    val even = allBytes.filter(isEven)
+    val odd = allBytes.filterNot(isEven)
+    // insert first `numInsertion` items.
+    even.foreach(filter.put)
+
+    // false negative is not allowed.
+    assert(even.forall(filter.mightContain))
+
+    // The number of inserted items doesn't exceed `expectedNumItems`, so the `expectedFpp`
+    // should not be significantly higher than the one we passed in to create this bloom filter.
+    assert(filter.expectedFpp() - fpp < EPSILON)
+
+    val errorCount = odd.count(filter.mightContain)
+    // Also check the actual fpp is not significantly higher than we expected.
+    val actualFpp = errorCount.toDouble / odd.length
+    assert(actualFpp - fpp < EPSILON)
+
+    checkSerDe(filter)
+  }
+
 }

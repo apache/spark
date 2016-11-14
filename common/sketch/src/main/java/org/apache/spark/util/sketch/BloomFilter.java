@@ -233,4 +233,5 @@ public abstract class BloomFilter {
 
     return new BloomFilterImpl(optimalNumOfHashFunctions(expectedNumItems, numBits), numBits);
   }
+
 }
