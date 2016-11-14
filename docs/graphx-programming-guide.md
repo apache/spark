@@ -293,8 +293,17 @@ class Graph[VD, ED] {
   def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
   def mapTriplets[ED2](map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2])
     : Graph[VD, ED2]
+  def filter[VD2: ClassTag, ED2: ClassTag](
+      preprocess: Graph[VD, ED] => Graph[VD2, ED2],
+      epred: (EdgeTriplet[VD2, ED2]) => Boolean = (x: EdgeTriplet[VD2, ED2]) => true,
+      vpred: (VertexId, VD2) => Boolean = (v: VertexId, d: VD2) => true)
+    : Graph[VD, ED]
   // Modify the graph structure ====================================================================
   def reverse: Graph[VD, ED]
+  def removeSelfEdges(): Graph[VD, ED]
+  def convertToCanonicalEdges(
+      mergeFunc: (ED, ED) => ED = (e1, e2) => e1)
+    : Graph[VD, ED]
   def subgraph(
       epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
       vpred: (VertexID, VD) => Boolean = ((v, d) => true))
@@ -309,6 +318,7 @@ class Graph[VD, ED] {
   // Aggregate information about adjacent triplets =================================================
   def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexID]]
   def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexID, VD)]]
+  def collectEdges(edgeDirection: EdgeDirection): VertexRDD[Array[Edge[ED]]]
   def aggregateMessages[Msg: ClassTag](
       sendMsg: EdgeContext[VD, ED, Msg] => Unit,
       mergeMsg: (Msg, Msg) => Msg,
@@ -322,9 +332,17 @@ class Graph[VD, ED] {
     : Graph[VD, ED]
   // Basic graph algorithms ========================================================================
   def pageRank(tol: Double, resetProb: Double = 0.15): Graph[Double, Double]
-  def connectedComponents(): Graph[VertexID, ED]
-  def triangleCount(): Graph[Int, ED]
+  def staticPageRank(numIter: Int, resetProb: Double = 0.15): Graph[Double, Double]
+  def personalizedPageRank(src: VertexId, tol: Double, resetProb: Double = 0.15)
+    : Graph[Double, Double]
+  def staticPersonalizedPageRank(src: VertexId, numIter: Int, resetProb: Double = 0.15)
+    : Graph[Double, Double]
+  def staticParallelPersonalizedPageRank(sources: Array[VertexId], numIter: Int,
+      resetProb: Double = 0.15)
+    : Graph[Vector, Double]
+  def connectedComponents(maxIterations: Int): Graph[VertexID, ED]
   def stronglyConnectedComponents(numIter: Int): Graph[VertexID, ED]
+  def triangleCount(): Graph[Int, ED]
 }
 {% endhighlight %}
 
