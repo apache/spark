@@ -105,7 +105,10 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
       checkpointer: IRecordProcessorCheckpointer,
       reason: ShutdownReason): Unit = {
     logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
-    if (shardId != null) { // null if not initialized before shutdown
+    // null if not initialized before shutdown:
+    if (shardId == null) {
+      logWarning(s"No shardId for workerId $workerId?")
+    } else {
       reason match {
         /*
          * TERMINATE Use Case.  Checkpoint.
