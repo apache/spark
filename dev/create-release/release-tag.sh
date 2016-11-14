@@ -76,9 +76,9 @@ $MVN versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs
 # Remove -SNAPSHOT before setting the R version as R expects version strings to only have numbers
 R_NEXT_VERSION=`echo $NEXT_VERSION | sed 's/-SNAPSHOT//g'`
 sed -i".tmp4" 's/Version.*$/Version: '"$R_NEXT_VERSION"'/g' R/pkg/DESCRIPTION
-# Write out the NAME and VERSION to PySpark version info we use dev0 instead of snapshot to closer
+# Write out the R_NEXT_VERSION to PySpark version info we use dev0 instead of SNAPSHOT to be closer
 # to PEP440.
-sed -i".tmp5" 's/__version__ = .*$/__version__ = "'"$RELEASE_VERSION.dev0"'"/' python/pyspark/version.py
+sed -i".tmp5" 's/__version__ = .*$/__version__ = "'"$R_NEXT_VERSION.dev0"'"/' python/pyspark/version.py
 
 
 # Update docs with next version
