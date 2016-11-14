@@ -23,7 +23,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.{CompressionCodecs, ParseModes}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -34,35 +34,42 @@ private[sql] class JSONOptions(
     @transient private val parameters: Map[String, String])
   extends Logging with Serializable  {
 
+  private val caseInsensitiveOptions = new CaseInsensitiveMap(parameters)
+
   val samplingRatio =
-    parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+    caseInsensitiveOptions.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
   val primitivesAsString =
-    parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
+    caseInsensitiveOptions.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
   val prefersDecimal =
-    parameters.get("prefersDecimal").map(_.toBoolean).getOrElse(false)
+    caseInsensitiveOptions.get("prefersDecimal").map(_.toBoolean).getOrElse(false)
   val allowComments =
-    parameters.get("allowComments").map(_.toBoolean).getOrElse(false)
+    caseInsensitiveOptions.get("allowComments").map(_.toBoolean).getOrElse(false)
   val allowUnquotedFieldNames =
-    parameters.get("allowUnquotedFieldNames").map(_.toBoolean).getOrElse(false)
+    caseInsensitiveOptions.get("allowUnquotedFieldNames").map(_.toBoolean).getOrElse(false)
   val allowSingleQuotes =
-    parameters.get("allowSingleQuotes").map(_.toBoolean).getOrElse(true)
+    caseInsensitiveOptions.get("allowSingleQuotes").map(_.toBoolean).getOrElse(true)
   val allowNumericLeadingZeros =
-    parameters.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false)
+    caseInsensitiveOptions.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false)
   val allowNonNumericNumbers =
-    parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
+    caseInsensitiveOptions.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
   val allowBackslashEscapingAnyCharacter =
-    parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
-  val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
-  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
+    caseInsensitiveOptions.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean)
+      .getOrElse(false)
+  val compressionCodec =
+    caseInsensitiveOptions.get("compression").map(CompressionCodecs.getCodecClassName)
+  private val parseMode = caseInsensitiveOptions.getOrElse("mode", "PERMISSIVE")
+  val columnNameOfCorruptRecord = caseInsensitiveOptions.get("columnNameOfCorruptRecord")
 
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =
-    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"), Locale.US)
+    FastDateFormat.getInstance(
+      caseInsensitiveOptions.getOrElse("dateFormat", "yyyy-MM-dd"),
+      Locale.US)
 
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
-      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), Locale.US)
+      caseInsensitiveOptions.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"),
+      Locale.US)
 
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {

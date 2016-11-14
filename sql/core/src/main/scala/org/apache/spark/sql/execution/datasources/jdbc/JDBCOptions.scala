@@ -22,6 +22,8 @@ import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+
 /**
  * Options for the JDBC data source.
  */
@@ -30,6 +32,8 @@ class JDBCOptions(
   extends Serializable {
 
   import JDBCOptions._
+
+  private val caseInsensitiveOptions = new CaseInsensitiveMap(parameters)
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
     this(parameters ++ Map(
@@ -40,7 +44,7 @@ class JDBCOptions(
   val asConnectionProperties: Properties = {
     val properties = new Properties()
     // We should avoid to pass the options into properties. See SPARK-17776.
-    parameters.filterKeys(!jdbcOptionNames.contains(_))
+    caseInsensitiveOptions.filterKeys(!jdbcOptionNames.contains(_))
       .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
@@ -48,18 +52,19 @@ class JDBCOptions(
   // ------------------------------------------------------------
   // Required parameters
   // ------------------------------------------------------------
-  require(parameters.isDefinedAt(JDBC_URL), s"Option '$JDBC_URL' is required.")
-  require(parameters.isDefinedAt(JDBC_TABLE_NAME), s"Option '$JDBC_TABLE_NAME' is required.")
+  require(caseInsensitiveOptions.isDefinedAt(JDBC_URL), s"Option '$JDBC_URL' is required.")
+  require(caseInsensitiveOptions.isDefinedAt(JDBC_TABLE_NAME),
+    s"Option '$JDBC_TABLE_NAME' is required.")
   // a JDBC URL
-  val url = parameters(JDBC_URL)
+  val url = caseInsensitiveOptions(JDBC_URL)
   // name of table
-  val table = parameters(JDBC_TABLE_NAME)
+  val table = caseInsensitiveOptions(JDBC_TABLE_NAME)
 
   // ------------------------------------------------------------
   // Optional parameters
   // ------------------------------------------------------------
   val driverClass = {
-    val userSpecifiedDriverClass = parameters.get(JDBC_DRIVER_CLASS)
+    val userSpecifiedDriverClass = caseInsensitiveOptions.get(JDBC_DRIVER_CLASS)
     userSpecifiedDriverClass.foreach(DriverRegistry.register)
 
     // Performing this part of the logic on the driver guards against the corner-case where the
@@ -74,19 +79,19 @@ class JDBCOptions(
   // Optional parameters only for reading
   // ------------------------------------------------------------
   // the column used to partition
-  val partitionColumn = parameters.getOrElse(JDBC_PARTITION_COLUMN, null)
+  val partitionColumn = caseInsensitiveOptions.getOrElse(JDBC_PARTITION_COLUMN, null)
   // the lower bound of partition column
-  val lowerBound = parameters.getOrElse(JDBC_LOWER_BOUND, null)
+  val lowerBound = caseInsensitiveOptions.getOrElse(JDBC_LOWER_BOUND, null)
   // the upper bound of the partition column
-  val upperBound = parameters.getOrElse(JDBC_UPPER_BOUND, null)
+  val upperBound = caseInsensitiveOptions.getOrElse(JDBC_UPPER_BOUND, null)
   // the number of partitions
-  val numPartitions = parameters.getOrElse(JDBC_NUM_PARTITIONS, null)
+  val numPartitions = caseInsensitiveOptions.getOrElse(JDBC_NUM_PARTITIONS, null)
   require(partitionColumn == null ||
     (lowerBound != null && upperBound != null && numPartitions != null),
     s"If '$JDBC_PARTITION_COLUMN' is specified then '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND'," +
       s" and '$JDBC_NUM_PARTITIONS' are required.")
   val fetchSize = {
-    val size = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
+    val size = caseInsensitiveOptions.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
     require(size >= 0,
       s"Invalid value `${size.toString}` for parameter " +
         s"`$JDBC_BATCH_FETCH_SIZE`. The minimum value is 0. When the value is 0, " +
@@ -98,20 +103,20 @@ class JDBCOptions(
   // Optional parameters only for writing
   // ------------------------------------------------------------
   // if to truncate the table from the JDBC database
-  val isTruncate = parameters.getOrElse(JDBC_TRUNCATE, "false").toBoolean
+  val isTruncate = caseInsensitiveOptions.getOrElse(JDBC_TRUNCATE, "false").toBoolean
   // the create table option , which can be table_options or partition_options.
   // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
   // TODO: to reuse the existing partition parameters for those partition specific options
-  val createTableOptions = parameters.getOrElse(JDBC_CREATE_TABLE_OPTIONS, "")
+  val createTableOptions = caseInsensitiveOptions.getOrElse(JDBC_CREATE_TABLE_OPTIONS, "")
   val batchSize = {
-    val size = parameters.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
+    val size = caseInsensitiveOptions.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
     require(size >= 1,
       s"Invalid value `${size.toString}` for parameter " +
         s"`$JDBC_BATCH_INSERT_SIZE`. The minimum value is 1.")
     size
   }
   val isolationLevel =
-    parameters.getOrElse(JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
+    caseInsensitiveOptions.getOrElse(JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
       case "NONE" => Connection.TRANSACTION_NONE
       case "READ_UNCOMMITTED" => Connection.TRANSACTION_READ_UNCOMMITTED
       case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED

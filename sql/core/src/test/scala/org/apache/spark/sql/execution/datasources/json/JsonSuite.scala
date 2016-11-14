@@ -1749,4 +1749,18 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
     }
   }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val records = sparkContext
+      .parallelize("""{"a": 3, "b": 1.1}""" :: """{"a": 3.1, "b": 0.000001}""" :: Nil)
+
+    val schema = StructType(
+      StructField("a", DecimalType(21, 1), true) ::
+      StructField("b", DecimalType(7, 6), true) :: Nil)
+
+    val df1 = spark.read.option("prefersDecimal", "true").json(records)
+    assert(df1.schema == schema)
+    val df2 = spark.read.option("PREfersdecimaL", "true").json(records)
+    assert(df2.schema == schema)
+  }
 }

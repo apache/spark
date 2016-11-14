@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -808,6 +809,13 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     val df4 = read.parquet(filePath2)
     checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
     assert(df4.columns === Array("str", "max_int"))
+  }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
+      val option = new ParquetOptions(Map("Compression" -> "uncompressed"), spark.sessionState.conf)
+      assert(option.compressionCodecClassName == "UNCOMPRESSED")
+    }
   }
 }
 
