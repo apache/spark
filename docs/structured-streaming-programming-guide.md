@@ -58,7 +58,7 @@ from pyspark.sql.functions import explode
 from pyspark.sql.functions import split
 
 spark = SparkSession \
-    .builder() \
+    .builder \
     .appName("StructuredNetworkWordCount") \
     .getOrCreate()
 {% endhighlight %}
