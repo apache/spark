@@ -102,6 +102,27 @@ object functions {
     Column(literalExpr)
   }
 
+  /**
+   * Creates a [[Column]] of literal value.
+   *
+   * The passed in object is returned directly if it is already a [[Column]].
+   * If the object is a Scala Symbol, it is converted into a [[Column]] also.
+   * Otherwise, a new [[Column]] is created to represent the literal value.
+   *
+   * @group normal_funcs
+   * @since 2.2.0
+   */
+  def lit2[T : TypeTag](literal: T): Column = {
+    literal match {
+      case c: Column => return c
+      case s: Symbol => return new ColumnName(literal.asInstanceOf[Symbol].name)
+      case _ =>  // continue
+    }
+
+    val literalExpr = Literal.create(literal)
+    Column(literalExpr)
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Sort functions
   //////////////////////////////////////////////////////////////////////////////////////////////

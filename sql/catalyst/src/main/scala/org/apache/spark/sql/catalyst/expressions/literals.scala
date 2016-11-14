@@ -32,11 +32,12 @@ import java.util.Objects
 import javax.xml.bind.DatatypeConverter
 
 import scala.math.{BigDecimal, BigInt}
+import scala.reflect.runtime.universe.TypeTag
 
 import org.json4s.JsonAST._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -151,6 +152,12 @@ object Literal {
 
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+  }
+
+  def create[T : TypeTag](v: T): Literal = {
+    val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
+    val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+    Literal(convert(v), dataType)
   }
 
   /**
