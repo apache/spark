@@ -165,15 +165,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean): Unit = synchronized {
-    if (isTrackerInitialized) {
-      trackerState = Stopping
-      // `ReceivedBlockTracker` is open when this instance is created. We should
-      // close this even if this `ReceiverTracker` is not started.
-      receivedBlockTracker.stop()
-      logInfo("ReceiverTracker stopped")
-      trackerState = Stopped
-    }
-
     if (isTrackerStarted) {
       // First, stop the receivers
       trackerState = Stopping
@@ -203,6 +194,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Finally, stop the endpoint
       ssc.env.rpcEnv.stop(endpoint)
       endpoint = null
+      receivedBlockTracker.stop()
+      logInfo("ReceiverTracker stopped")
+      trackerState = Stopped
+    } else if (isTrackerInitialized) {
+      trackerState = Stopping
+      // `ReceivedBlockTracker` is open when this instance is created. We should
+      // close this even if this `ReceiverTracker` is not started.
       receivedBlockTracker.stop()
       logInfo("ReceiverTracker stopped")
       trackerState = Stopped
