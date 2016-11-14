@@ -46,6 +46,12 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("concat_ws('||', a, b, c)"),
       Row("a||b"))
+
+    // Argument number exception
+    val e = intercept[AnalysisException] {
+      df.selectExpr("concat_ws()")
+    }.getMessage
+    assert(e.contains("concat_ws requires at least one argument"))
   }
 
   test("string elt") {
@@ -182,6 +188,12 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("printf(a, b, c)"),
       Row("aa123cc"))
+
+    // Argument number exception
+    val e = intercept[AnalysisException] {
+      df.selectExpr("format_string()")
+    }.getMessage
+    assert(e.contains("format_string() should take at least 1 argument"))
   }
 
   test("soundex function") {
