@@ -601,7 +601,8 @@ case class ExternalMapToCatalyst private(
 
   override def foldable: Boolean = false
 
-  override def dataType: MapType = MapType(keyConverter.dataType, valueConverter.dataType)
+  override def dataType: MapType = MapType(
+    keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
