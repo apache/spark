@@ -1055,9 +1055,11 @@ class Analyzer(
       // +- SubqueryAlias t1, `t1`
       // +- Project [_1#73 AS c1#76, _2#74 AS c2#77]
       // +- LocalRelation [_1#73, _2#74]
-      def failOnNonEqualCorrelatedPredicate(p: LogicalPlan): Unit = {
-        // Report a non-supported case as an exception
-        failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n$p")
+      def failOnNonEqualCorrelatedPredicate(found: Boolean, p: LogicalPlan): Unit = {
+        if (found) {
+          // Report a non-supported case as an exception
+          failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n$p")
+        }
       }
 
       /** Determine which correlated predicate references are missing from this plan. */
@@ -1079,13 +1081,9 @@ class Analyzer(
           val (correlated, local) = splitConjunctivePredicates(cond).partition(containsOuter)
 
           // Find any non-equality correlated predicates
-          for (p <- correlated) if (!foundNonEqualCorrelatedPred) {
-            p match {
-              case EqualTo(_, _) | EqualNullSafe(_, _) =>
-                None
-              case _ =>
-                foundNonEqualCorrelatedPred = true
-            }
+          foundNonEqualCorrelatedPred = foundNonEqualCorrelatedPred || correlated.exists {
+            case _: EqualTo | _: EqualNullSafe => false
+            case _ => true
           }
 
           // Rewrite the filter without the correlated predicates if any.
@@ -1109,19 +1107,16 @@ class Analyzer(
           }
         case a @ Aggregate(grouping, expressions, child) =>
           failOnOuterReference(a)
+          failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
+
           val referencesToAdd = missingReferences(a)
-          if (foundNonEqualCorrelatedPred) {
-            failOnNonEqualCorrelatedPredicate(a)
-          }
           if (referencesToAdd.nonEmpty) {
             Aggregate(grouping ++ referencesToAdd, expressions ++ referencesToAdd, child)
           } else {
             a
           }
         case w : Window =>
-          if (foundNonEqualCorrelatedPred) {
-            failOnNonEqualCorrelatedPredicate(w)
-          }
+          failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, w)
           w
         case j @ Join(left, _, RightOuter, _) =>
           failOnOuterReference(j)
