@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -152,7 +151,7 @@ class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  val offsetLog = new HDFSMetadataLog[CompositeOffset](sparkSession, checkpointFile("offsets"))
+  val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
 
   /** Whether the query is currently active or not */
   override def isActive: Boolean = state == ACTIVE
@@ -252,7 +251,7 @@ class StreamExecution(
           this,
           s"Query $name terminated with exception: ${e.getMessage}",
           e,
-          Some(committedOffsets.toCompositeOffset(sources)))
+          Some(committedOffsets.toOffsetSeq(sources)))
         logError(s"Query $name terminated with error", e)
         // Rethrow the fatal errors to allow the user using `Thread.UncaughtExceptionHandler` to
         // handle them
@@ -346,7 +345,7 @@ class StreamExecution(
     }
     if (hasNewData) {
       reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
-        assert(offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
+        assert(offsetLog.add(currentBatchId, availableOffsets.toOffsetSeq(sources)),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
         logInfo(s"Committed offsets for batch $currentBatchId.")
 
@@ -707,14 +706,14 @@ class StreamExecution(
     val sourceStatuses = sources.map { s =>
       SourceStatus(
         s.toString,
-        localAvailableOffsets.get(s).map(_.toString).getOrElse("-"), // TODO: use json if available
+        localAvailableOffsets.get(s).map(_.json).getOrElse("-"),
         streamMetrics.currentSourceInputRate(s),
         streamMetrics.currentSourceProcessingRate(s),
         streamMetrics.currentSourceTriggerDetails(s))
     }.toArray
     val sinkStatus = SinkStatus(
       sink.toString,
-      committedOffsets.toCompositeOffset(sources).toString)
+      committedOffsets.toOffsetSeq(sources).toString)
 
     currentStatus =
       StreamingQueryStatus(

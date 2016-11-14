@@ -110,7 +110,12 @@ private[this] object SharedFactory {
  * of the extracted json object. It will return null if the input json string is invalid.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(json_txt, path) - Extract a json object from path")
+  usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('{"a":"b"}', '$.a');
+       b
+  """)
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -326,7 +331,12 @@ case class GetJsonObject(json: Expression, path: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - like get_json_object, but it takes multiple names and return a tuple. All the input parameters and output column types are string.")
+  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Return a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
+       1  2
+  """)
 // scalastyle:on line.size.limit
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
@@ -474,7 +484,7 @@ case class JsonTuple(children: Seq[Expression])
  * Converts an json input string to a [[StructType]] with the specified schema.
  */
 case class JsonToStruct(schema: StructType, options: Map[String, String], child: Expression)
-  extends Expression with CodegenFallback with ExpectsInputTypes {
+  extends UnaryExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
 
   @transient
@@ -485,10 +495,9 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
       new JSONOptions(options ++ Map("mode" -> ParseModes.FAIL_FAST_MODE)))
 
   override def dataType: DataType = schema
-  override def children: Seq[Expression] = child :: Nil
 
-  override def eval(input: InternalRow): Any = {
-    try parser.parse(child.eval(input).toString).head catch {
+  override def nullSafeEval(json: Any): Any = {
+    try parser.parse(json.toString).head catch {
       case _: SparkSQLJsonProcessingException => null
     }
   }
@@ -500,7 +509,7 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
  * Converts a [[StructType]] to a json output string.
  */
 case class StructToJson(options: Map[String, String], child: Expression)
-  extends Expression with CodegenFallback with ExpectsInputTypes {
+  extends UnaryExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
 
   @transient
@@ -511,7 +520,6 @@ case class StructToJson(options: Map[String, String], child: Expression)
     new JacksonGenerator(child.dataType.asInstanceOf[StructType], writer)
 
   override def dataType: DataType = StringType
-  override def children: Seq[Expression] = child :: Nil
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (StructType.acceptsType(child.dataType)) {
@@ -528,8 +536,8 @@ case class StructToJson(options: Map[String, String], child: Expression)
     }
   }
 
-  override def eval(input: InternalRow): Any = {
-    gen.write(child.eval(input).asInstanceOf[InternalRow])
+  override def nullSafeEval(row: Any): Any = {
+    gen.write(row.asInstanceOf[InternalRow])
     gen.flush()
     val json = writer.toString
     writer.reset()

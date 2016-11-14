@@ -1117,7 +1117,8 @@ object functions {
   def not(e: Column): Column = !e
 
   /**
-   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   * Generate a random column with independent and identically distributed (i.i.d.) samples
+   * from U[0.0, 1.0].
    *
    * Note that this is indeterministic when data partitions are not fixed.
    *
@@ -1127,7 +1128,8 @@ object functions {
   def rand(seed: Long): Column = withExpr { Rand(seed) }
 
   /**
-   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   * Generate a random column with independent and identically distributed (i.i.d.) samples
+   * from U[0.0, 1.0].
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1135,7 +1137,8 @@ object functions {
   def rand(): Column = rand(Utils.random.nextLong)
 
   /**
-   * Generate a column with i.i.d. samples from the standard normal distribution.
+   * Generate a column with independent and identically distributed (i.i.d.) samples from
+   * the standard normal distribution.
    *
    * Note that this is indeterministic when data partitions are not fixed.
    *
@@ -1145,7 +1148,8 @@ object functions {
   def randn(seed: Long): Column = withExpr { Randn(seed) }
 
   /**
-   * Generate a column with i.i.d. samples from the standard normal distribution.
+   * Generate a column with independent and identically distributed (i.i.d.) samples from
+   * the standard normal distribution.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1153,7 +1157,7 @@ object functions {
   def randn(): Column = randn(Utils.random.nextLong)
 
   /**
-   * Partition ID of the Spark task.
+   * Partition ID.
    *
    * Note that this is indeterministic because it depends on data partitioning and task scheduling.
    *
@@ -1877,8 +1881,8 @@ object functions {
   def shiftLeft(e: Column, numBits: Int): Column = withExpr { ShiftLeft(e.expr, lit(numBits).expr) }
 
   /**
-   * Shift the given value numBits right. If the given value is a long value, it will return
-   * a long value else it will return an integer value.
+   * (Signed) shift the given value numBits right. If the given value is a long value, it will
+   * return a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -2203,7 +2207,7 @@ object functions {
    * Locate the position of the first occurrence of substr column in the given string.
    * Returns null if either of the arguments are null.
    *
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2238,7 +2242,7 @@ object functions {
 
   /**
    * Locate the position of the first occurrence of substr.
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2666,7 +2670,8 @@ object functions {
   }
 
   /**
-   * Assumes given timestamp is UTC and converts to given timezone.
+   * Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
+   * that corresponds to the same time of day in the given timezone.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2675,7 +2680,8 @@ object functions {
   }
 
   /**
-   * Assumes given timestamp is in given timezone and converts to UTC.
+   * Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
+   * another timestamp that corresponds to the same time of day in UTC.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2996,7 +3002,7 @@ object functions {
   def sort_array(e: Column): Column = sort_array(e, asc = true)
 
   /**
-   * Sorts the input array for the given column in ascending / descending order,
+   * Sorts the input array for the given column in ascending or descending order,
    * according to the natural ordering of the array elements.
    *
    * @group collection_funcs

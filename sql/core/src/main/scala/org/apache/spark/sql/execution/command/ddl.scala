@@ -29,7 +29,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, PartitioningUtils}
@@ -485,14 +485,6 @@ case class AlterTableRecoverPartitionsCommand(
     }
   }
 
-  private def getBasePath(table: CatalogTable): Option[String] = {
-    if (table.provider == Some("hive")) {
-      table.storage.locationUri
-    } else {
-      new CaseInsensitiveMap(table.storage.properties).get("path")
-    }
-  }
-
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
@@ -503,13 +495,12 @@ case class AlterTableRecoverPartitionsCommand(
         s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
     }
 
-    val tablePath = getBasePath(table)
-    if (tablePath.isEmpty) {
+    if (table.storage.locationUri.isEmpty) {
       throw new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
         s"location provided: $tableIdentWithDB")
     }
 
-    val root = new Path(tablePath.get)
+    val root = new Path(table.location)
     logInfo(s"Recover all the partitions in $root")
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
 
@@ -532,7 +523,7 @@ case class AlterTableRecoverPartitionsCommand(
     // Updates the table to indicate that its partition metadata is stored in the Hive metastore.
     // This is always the case for Hive format tables, but is not true for Datasource tables created
     // before Spark 2.1 unless they are converted via `msck repair table`.
-    spark.sessionState.catalog.alterTable(table.copy(partitionProviderIsHive = true))
+    spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
     catalog.refreshTable(tableName)
     logInfo(s"Recovered all partitions ($total).")
     Seq.empty[Row]
@@ -567,9 +558,9 @@ case class AlterTableRecoverPartitionsCommand(
       val name = st.getPath.getName
       if (st.isDirectory && name.contains("=")) {
         val ps = name.split("=", 2)
-        val columnName = PartitioningUtils.unescapePathName(ps(0))
+        val columnName = ExternalCatalogUtils.unescapePathName(ps(0))
         // TODO: Validate the value
-        val value = PartitioningUtils.unescapePathName(ps(1))
+        val value = ExternalCatalogUtils.unescapePathName(ps(1))
         if (resolver(columnName, partitionNames.head)) {
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(partitionNames.head -> value),
             partitionNames.drop(1), threshold, resolver)
@@ -688,15 +679,7 @@ case class AlterTableSetLocationCommand(
         catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>
         // No partition spec is specified, so we set the location for the table itself
-        val newTable =
-          if (DDLUtils.isDatasourceTable(table)) {
-            table.withNewStorage(
-              locationUri = Some(location),
-              properties = table.storage.properties ++ Map("path" -> location))
-          } else {
-            table.withNewStorage(locationUri = Some(location))
-          }
-        catalog.alterTable(newTable)
+        catalog.alterTable(table.withNewStorage(locationUri = Some(location)))
     }
     Seq.empty[Row]
   }
@@ -704,8 +687,10 @@ case class AlterTableSetLocationCommand(
 
 
 object DDLUtils {
+  val HIVE_PROVIDER = "hive"
+
   def isDatasourceTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get != "hive"
+    table.provider.isDefined && table.provider.get != HIVE_PROVIDER
   }
 
   /**
@@ -719,7 +704,7 @@ object DDLUtils {
         s"$action is not allowed on $tableName since filesource partition management is " +
           "disabled (spark.sql.hive.manageFilesourcePartitions = false).")
     }
-    if (!table.partitionProviderIsHive && isDatasourceTable(table)) {
+    if (!table.tracksPartitionsInCatalog && isDatasourceTable(table)) {
       throw new AnalysisException(
         s"$action is not allowed on $tableName since its partition metadata is not stored in " +
           "the Hive metastore. To import this information into the metastore, run " +

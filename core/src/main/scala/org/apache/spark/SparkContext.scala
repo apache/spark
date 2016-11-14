@@ -183,6 +183,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
 
+  warnDeprecatedVersions()
+
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
    | not accessible by the outside world. They're mutable since we want to initialize all  |
@@ -344,6 +346,16 @@ class SparkContext(config: SparkConf) extends Logging {
     logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
       "deprecated, please use spark.executor.memory instead.")
     value
+  }
+
+  private def warnDeprecatedVersions(): Unit = {
+    val javaVersion = System.getProperty("java.version").split("[+.\\-]+", 3)
+    if (javaVersion.length >= 2 && javaVersion(1).toInt == 7) {
+      logWarning("Support for Java 7 is deprecated as of Spark 2.0.0")
+    }
+    if (scala.util.Properties.releaseVersion.exists(_.startsWith("2.10"))) {
+      logWarning("Support for Scala 2.10 is deprecated as of Spark 2.1.0")
+    }
   }
 
   /** Control our logLevel. This overrides any user-defined log settings.
@@ -1745,8 +1757,26 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def listJars(): Seq[String] = addedJars.keySet.toSeq
 
-  // Shut down the SparkContext.
-  def stop() {
+  /**
+   * Shut down the SparkContext.
+   */
+  def stop(): Unit = {
+    if (env.rpcEnv.isInRPCThread) {
+      // `stop` will block until all RPC threads exit, so we cannot call stop inside a RPC thread.
+      // We should launch a new thread to call `stop` to avoid dead-lock.
+      new Thread("stop-spark-context") {
+        setDaemon(true)
+
+        override def run(): Unit = {
+          _stop()
+        }
+      }.start()
+    } else {
+      _stop()
+    }
+  }
+
+  private def _stop() {
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
         s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")

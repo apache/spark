@@ -160,8 +160,6 @@ class SessionCatalog(
     val dbName = formatDatabaseName(db)
     if (dbName == DEFAULT_DATABASE) {
       throw new AnalysisException(s"Can not drop default database")
-    } else if (dbName == getCurrentDatabase) {
-      throw new AnalysisException(s"Can not drop current database `$dbName`")
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
@@ -923,6 +921,24 @@ class SessionCatalog(
     if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
       throw new NoSuchTempFunctionException(name)
     }
+  }
+
+  /**
+   * Returns whether it is a temporary function. If not existed, returns false.
+   */
+  def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
+    // copied from HiveSessionCatalog
+    val hiveFunctions = Seq(
+      "hash",
+      "histogram_numeric",
+      "percentile")
+
+    // A temporary function is a function that has been registered in functionRegistry
+    // without a database name, and is neither a built-in function nor a Hive function
+    name.database.isEmpty &&
+      functionRegistry.functionExists(name.funcName) &&
+      !FunctionRegistry.builtin.functionExists(name.funcName) &&
+      !hiveFunctions.contains(name.funcName.toLowerCase)
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
