@@ -88,12 +88,12 @@ class DirectKafkaInputDStream[
 
   protected val kc = new KafkaCluster(kafkaParams)
 
-  private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
+  private val maxRateLimitPerPartition: Long = context.sparkContext.getConf.getLong(
       "spark.streaming.kafka.maxRatePerPartition", 0)
 
   protected[streaming] def maxMessagesPerPartition(
       offsets: Map[TopicAndPartition, Long]): Option[Map[TopicAndPartition, Long]] = {
-    val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
+    val estimatedRateLimit = rateController.map(_.getLatestRate())
 
     // calculate a per-partition rate limit based on current lag
     val effectiveRateLimitPerPartition = estimatedRateLimit.filter(_ > 0) match {
