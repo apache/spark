@@ -1,32 +1,50 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.streaming.status.api.v1
 
-import org.apache.spark.status.api.v1.UIRoot
+import javax.servlet.ServletContext
+import javax.ws.rs.Path
+import javax.ws.rs.core.Context
+
+import com.sun.jersey.spi.container.servlet.ServletContainer
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.eclipse.jetty.servlet.ServletHolder
 
-import com.sun.jersey.spi.container.servlet.ServletContainer
-
-import javax.servlet.ServletContext
-import javax.ws.rs.Path
-import javax.ws.rs.Produces
-import javax.ws.rs.core.Context
+import org.apache.spark.status.api.v1.UIRoot
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
-
 
 @Path("/v1")
 private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
 
   @Path("streaminginfo")
   def getStreamingInfo(): StreamingInfoResource = {
-    new StreamingInfoResource(uiRoot,listener)
+    new StreamingInfoResource(uiRoot, listener)
   }
   
 }
 
 private[spark] object StreamingApiRootResource {
 
-  def getServletHandler(uiRoot: UIRoot, listener:StreamingJobProgressListener): ServletContextHandler = {
+  def getServletHandler(
+    uiRoot: UIRoot,
+    listener: StreamingJobProgressListener
+  ): ServletContextHandler = {
 
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/streamingapi")
@@ -35,8 +53,8 @@ private[spark] object StreamingApiRootResource {
       "com.sun.jersey.api.core.PackagesResourceConfig")
     holder.setInitParameter("com.sun.jersey.config.property.packages",
       "org.apache.spark.streaming.status.api.v1")
-    //holder.setInitParameter(ResourceConfig.PROPERTY_CONTAINER_REQUEST_FILTERS,
-    //  classOf[SecurityFilter].getCanonicalName)
+    // holder.setInitParameter(ResourceConfig.PROPERTY_CONTAINER_REQUEST_FILTERS,
+    // classOf[SecurityFilter].getCanonicalName)
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     UIRootFromServletContext.setListener(jerseyContext, listener)
     jerseyContext.addServlet(holder, "/*")
@@ -48,12 +66,12 @@ private[v1] object UIRootFromServletContext {
 
   private val attribute = getClass.getCanonicalName
 
-  def setListener(contextHandler:ContextHandler, listener: StreamingJobProgressListener):Unit={
-   contextHandler.setAttribute(attribute+"_listener", listener) 
+  def setListener(contextHandler: ContextHandler, listener: StreamingJobProgressListener): Unit = {
+   contextHandler.setAttribute(attribute + "_listener", listener)
   }
   
-  def getListener(context:ServletContext):StreamingJobProgressListener={
-    context.getAttribute(attribute+"_listener").asInstanceOf[StreamingJobProgressListener]
+  def getListener(context: ServletContext): StreamingJobProgressListener = {
+    context.getAttribute(attribute + "_listener").asInstanceOf[StreamingJobProgressListener]
   }
   
   def setUiRoot(contextHandler: ContextHandler, uiRoot: UIRoot): Unit = {
