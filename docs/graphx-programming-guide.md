@@ -679,15 +679,17 @@ val maxDegrees: (VertexId, Int)   = graph.degrees.reduce(max)
 
 ### Collecting Neighbors
 
-In some cases it may be easier to express computation by collecting neighboring vertices and their
+In some cases it may be easier to express computation by collecting neighboring vertices/edges and their
 attributes at each vertex. This can be easily accomplished using the
-[`collectNeighborIds`][GraphOps.collectNeighborIds] and the
-[`collectNeighbors`][GraphOps.collectNeighbors] operators.
+[`collectNeighborIds`][GraphOps.collectNeighborIds],
+[`collectNeighbors`][GraphOps.collectNeighbors] and
+[`collectEdges`][GraphOps.collectEdges] operators.
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
   def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexId]]
-  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[ Array[(VertexId, VD)] ]
+  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[ Array[(VertexId, VD)]
+  def collectEdges(edgeDirection: EdgeDirection): VertexRDD[Array[Edge[ED]]] ]
 }
 {% endhighlight %}
 
@@ -849,6 +851,8 @@ additional functionality:
 
 {% highlight scala %}
 class VertexRDD[VD] extends RDD[(VertexID, VD)] {
+  // Construct a new VertexRDD based on a different index
+  def reindex(): VertexRDD[VD]
   // Filter the vertex set but preserves the internal index
   def filter(pred: Tuple2[VertexId, VD] => Boolean): VertexRDD[VD]
   // Transform the values without changing the ids (preserves the internal index)
@@ -856,13 +860,21 @@ class VertexRDD[VD] extends RDD[(VertexID, VD)] {
   def mapValues[VD2](map: (VertexId, VD) => VD2): VertexRDD[VD2]
   // Show only vertices unique to this set based on their VertexId's
   def minus(other: RDD[(VertexId, VD)])
+  def minus(other: VertexRDD[VD]): VertexRDD[VD]
   // Remove vertices from this set that appear in the other set
+  def diff(other: RDD[(VertexId, VD)]): VertexRDD[VD]
   def diff(other: VertexRDD[VD]): VertexRDD[VD]
   // Join operators that take advantage of the internal indexing to accelerate joins (substantially)
   def leftJoin[VD2, VD3](other: RDD[(VertexId, VD2)])(f: (VertexId, VD, Option[VD2]) => VD3): VertexRDD[VD3]
   def innerJoin[U, VD2](other: RDD[(VertexId, U)])(f: (VertexId, VD, U) => VD2): VertexRDD[VD2]
+  def leftZipJoin[VD2: ClassTag, VD3: ClassTag](other: VertexRDD[VD2])(f: (VertexId, VD, Option[VD2]) => VD3)
+    : VertexRDD[VD3]
+  def innerZipJoin[U: ClassTag, VD2: ClassTag](other: VertexRDD[U])(f: (VertexId, VD, U) => VD2)
+    : VertexRDD[VD2]
   // Use the index on this RDD to accelerate a `reduceByKey` operation on the input RDD.
   def aggregateUsingIndex[VD2](other: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2]
+  // Prepares this VertexRDD for efficient joins with the given EdgeRDD
+  def withEdges(edges: EdgeRDD[_]): VertexRDD[VD]
 }
 {% endhighlight %}
 
