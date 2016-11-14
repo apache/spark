@@ -192,25 +192,27 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
   @Since("1.3.0")
   def this(numTopFeatures: Int) {
     this()
+    require(numTopFeatures > 0, s"numTopFeatures must be positive but got $numTopFeatures")
     this.numTopFeatures = numTopFeatures
   }
 
   @Since("1.6.0")
   def setNumTopFeatures(value: Int): this.type = {
+    require(value > 0, s"numTopFeatures must be positive but got $value")
     numTopFeatures = value
     this
   }
 
   @Since("2.1.0")
   def setPercentile(value: Double): this.type = {
-    require(0.0 <= value && value <= 1.0, "Percentile must be in [0,1]")
+    require(0.0 <= value && value <= 1.0, s"Percentile must be in [0,1] but got $value")
     percentile = value
     this
   }
 
   @Since("2.1.0")
   def setFpr(value: Double): this.type = {
-    require(0.0 <= value && value <= 1.0, "FPR must be in [0,1]")
+    require(0.0 <= value && value <= 1.0, s"FPR must be in [0,1] but got $value")
     fpr = value
     this
   }

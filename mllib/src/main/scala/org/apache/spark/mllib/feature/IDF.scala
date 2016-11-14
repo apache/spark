@@ -38,6 +38,7 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.1.0")
 class IDF @Since("1.2.0") (@Since("1.2.0") val minDocFreq: Int) {
+  require(minDocFreq > 0, s"minDocFreq must be positive but got $minDocFreq")
 
   @Since("1.1.0")
   def this() = this(0)
