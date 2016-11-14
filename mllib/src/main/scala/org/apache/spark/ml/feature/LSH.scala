@@ -50,9 +50,9 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
    * is, the lower the false positive rate.
    * @group param
    */
-  final val numHashFunctions: IntParam = new IntParam(this, "numHashFunctions", "output dimension, where" +
-    "increasing dimensionality lowers the false negative rate, and decreasing dimensionality" +
-    " improves the running performance", ParamValidators.gt(0))
+  final val numHashFunctions: IntParam = new IntParam(this, "numHashFunctions", "number of hash " +
+    "functions in each hash table, where increasing the number improves the running performance, " +
+    "and decreasing it raises the false negative rate", ParamValidators.gt(0))
 
   /** @group getParam */
   final def getNumHashFunctions: Int = $(numHashFunctions)

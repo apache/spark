@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructType
 @Since("2.1.0")
 class MinHashModel private[ml] (
     override val uid: String,
-    @Since("2.1.0") val numEntries: Int,
+    @Since("2.1.0") private[ml] val numEntries: Int,
     @Since("2.1.0") private[ml] val randCoefficients: Array[Int])
   extends LSHModel[MinHashModel] {
 
