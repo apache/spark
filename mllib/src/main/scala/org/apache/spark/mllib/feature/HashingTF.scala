@@ -38,7 +38,6 @@ import org.apache.spark.util.Utils
  */
 @Since("1.1.0")
 class HashingTF(val numFeatures: Int) extends Serializable {
-  require(numFeatures > 0, s"numFeatures must be positive but got $numFeatures")
 
   import HashingTF._
 
@@ -66,7 +65,6 @@ class HashingTF(val numFeatures: Int) extends Serializable {
    */
   @Since("2.0.0")
   def setHashAlgorithm(value: String): this.type = {
-    require(Array(Murmur3, Native).contains(value), s"hashAlgorithm: $value was not supported.")
     hashAlgorithm = value
     this
   }
