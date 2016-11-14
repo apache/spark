@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream, PrintStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -25,12 +25,15 @@ import java.nio.charset.StandardCharsets
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
 import com.google.common.io.Files
+import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -39,6 +42,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
+
+  test("truncatedString") {
+    assert(Utils.truncatedString(Nil, "[", ", ", "]", 2) == "[]")
+    assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", -5) == "[, ... 3 more fields]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), ", ") == "1, 2, 3")
+  }
 
   test("timeConversion") {
     // Test -1
@@ -253,7 +264,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val hour = minute * 60
     def str: (Long) => String = Utils.msDurationToString(_)
 
-    val sep = new DecimalFormatSymbols(Locale.getDefault()).getDecimalSeparator()
+    val sep = new DecimalFormatSymbols(Locale.US).getDecimalSeparator
 
     assert(str(123) === "123 ms")
     assert(str(second) === "1" + sep + "0 s")
@@ -265,63 +276,107 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11" + sep + "00 h")
   }
 
-  test("reading offset bytes of a file") {
+  def getSuffix(isCompressed: Boolean): String = {
+    if (isCompressed) {
+      ".gz"
+    } else {
+      ""
+    }
+  }
+
+  def writeLogFile(path: String, content: Array[Byte]): Unit = {
+    val outputStream = if (path.endsWith(".gz")) {
+      new GZIPOutputStream(new FileOutputStream(path))
+    } else {
+      new FileOutputStream(path)
+    }
+    IOUtils.write(content, outputStream)
+    outputStream.close()
+    content.size
+  }
+
+  private val workerConf = new SparkConf()
+
+  def testOffsetBytes(isCompressed: Boolean): Unit = {
     val tmpDir2 = Utils.createTempDir()
-    val f1Path = tmpDir2 + "/f1"
-    val f1 = new FileOutputStream(f1Path)
-    f1.write("1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
-    f1.close()
+    val suffix = getSuffix(isCompressed)
+    val f1Path = tmpDir2 + "/f1" + suffix
+    writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
+    val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 
     // Read first few bytes
-    assert(Utils.offsetBytes(f1Path, 0, 5) === "1\n2\n3")
+    assert(Utils.offsetBytes(f1Path, f1Length, 0, 5) === "1\n2\n3")
 
     // Read some middle bytes
-    assert(Utils.offsetBytes(f1Path, 4, 11) === "3\n4\n5\n6")
+    assert(Utils.offsetBytes(f1Path, f1Length, 4, 11) === "3\n4\n5\n6")
 
     // Read last few bytes
-    assert(Utils.offsetBytes(f1Path, 12, 18) === "7\n8\n9\n")
+    assert(Utils.offsetBytes(f1Path, f1Length, 12, 18) === "7\n8\n9\n")
 
     // Read some nonexistent bytes in the beginning
-    assert(Utils.offsetBytes(f1Path, -5, 5) === "1\n2\n3")
+    assert(Utils.offsetBytes(f1Path, f1Length, -5, 5) === "1\n2\n3")
 
     // Read some nonexistent bytes at the end
-    assert(Utils.offsetBytes(f1Path, 12, 22) === "7\n8\n9\n")
+    assert(Utils.offsetBytes(f1Path, f1Length, 12, 22) === "7\n8\n9\n")
 
     // Read some nonexistent bytes on both ends
-    assert(Utils.offsetBytes(f1Path, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
+    assert(Utils.offsetBytes(f1Path, f1Length, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
 
     Utils.deleteRecursively(tmpDir2)
   }
 
-  test("reading offset bytes across multiple files") {
+  test("reading offset bytes of a file") {
+    testOffsetBytes(isCompressed = false)
+  }
+
+  test("reading offset bytes of a file (compressed)") {
+    testOffsetBytes(isCompressed = true)
+  }
+
+  def testOffsetBytesMultipleFiles(isCompressed: Boolean): Unit = {
     val tmpDir = Utils.createTempDir()
-    val files = (1 to 3).map(i => new File(tmpDir, i.toString))
-    Files.write("0123456789", files(0), StandardCharsets.UTF_8)
-    Files.write("abcdefghij", files(1), StandardCharsets.UTF_8)
-    Files.write("ABCDEFGHIJ", files(2), StandardCharsets.UTF_8)
+    val suffix = getSuffix(isCompressed)
+    val files = (1 to 3).map(i => new File(tmpDir, i.toString + suffix)) :+ new File(tmpDir, "4")
+    writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
+    writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
+    writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8))
+    writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(StandardCharsets.UTF_8))
+    val fileLengths = files.map(Utils.getFileLength(_, workerConf))
 
     // Read first few bytes in the 1st file
-    assert(Utils.offsetBytes(files, 0, 5) === "01234")
+    assert(Utils.offsetBytes(files, fileLengths, 0, 5) === "01234")
 
     // Read bytes within the 1st file
-    assert(Utils.offsetBytes(files, 5, 8) === "567")
+    assert(Utils.offsetBytes(files, fileLengths, 5, 8) === "567")
 
     // Read bytes across 1st and 2nd file
-    assert(Utils.offsetBytes(files, 8, 18) === "89abcdefgh")
+    assert(Utils.offsetBytes(files, fileLengths, 8, 18) === "89abcdefgh")
 
     // Read bytes across 1st, 2nd and 3rd file
-    assert(Utils.offsetBytes(files, 5, 24) === "56789abcdefghijABCD")
+    assert(Utils.offsetBytes(files, fileLengths, 5, 24) === "56789abcdefghijABCD")
+
+    // Read bytes across 3rd and 4th file
+    assert(Utils.offsetBytes(files, fileLengths, 25, 35) === "FGHIJ98765")
 
     // Read some nonexistent bytes in the beginning
-    assert(Utils.offsetBytes(files, -5, 18) === "0123456789abcdefgh")
+    assert(Utils.offsetBytes(files, fileLengths, -5, 18) === "0123456789abcdefgh")
 
     // Read some nonexistent bytes at the end
-    assert(Utils.offsetBytes(files, 18, 35) === "ijABCDEFGHIJ")
+    assert(Utils.offsetBytes(files, fileLengths, 18, 45) === "ijABCDEFGHIJ9876543210")
 
     // Read some nonexistent bytes on both ends
-    assert(Utils.offsetBytes(files, -5, 35) === "0123456789abcdefghijABCDEFGHIJ")
+    assert(Utils.offsetBytes(files, fileLengths, -5, 45) ===
+      "0123456789abcdefghijABCDEFGHIJ9876543210")
 
     Utils.deleteRecursively(tmpDir)
+  }
+
+  test("reading offset bytes across multiple files") {
+    testOffsetBytesMultipleFiles(isCompressed = false)
+  }
+
+  test("reading offset bytes across multiple files (compressed)") {
+    testOffsetBytesMultipleFiles(isCompressed = true)
   }
 
   test("deserialize long value") {
@@ -339,6 +394,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.getIteratorSize(empty.toIterator) === 0L)
     val iterator = Iterator.range(0, 5)
     assert(Utils.getIteratorSize(iterator) === 5L)
+  }
+
+  test("getIteratorZipWithIndex") {
+    val iterator = Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L + Int.MaxValue)
+    assert(iterator.toArray === Array(
+      (0, -1L + Int.MaxValue), (1, 0L + Int.MaxValue), (2, 1L + Int.MaxValue)
+    ))
+    intercept[IllegalArgumentException] {
+      Utils.getIteratorZipWithIndex(Iterator(0, 1, 2), -1L)
+    }
   }
 
   test("doesDirectoryContainFilesNewerThan") {
@@ -681,14 +746,37 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(!Utils.isInDirectory(nullFile, childFile3))
   }
 
-  test("circular buffer") {
-    val buffer = new CircularBuffer(25)
-    val stream = new java.io.PrintStream(buffer, true, "UTF-8")
+  test("circular buffer: if nothing was written to the buffer, display nothing") {
+    val buffer = new CircularBuffer(4)
+    assert(buffer.toString === "")
+  }
 
-    // scalastyle:off println
-    stream.println("test circular test circular test circular test circular test circular")
-    // scalastyle:on println
-    assert(buffer.toString === "t circular test circular\n")
+  test("circular buffer: if the buffer isn't full, print only the contents written") {
+    val buffer = new CircularBuffer(10)
+    val stream = new PrintStream(buffer, true, "UTF-8")
+    stream.print("test")
+    assert(buffer.toString === "test")
+  }
+
+  test("circular buffer: data written == size of the buffer") {
+    val buffer = new CircularBuffer(4)
+    val stream = new PrintStream(buffer, true, "UTF-8")
+
+    // fill the buffer to its exact size so that it just hits overflow
+    stream.print("test")
+    assert(buffer.toString === "test")
+
+    // add more data to the buffer
+    stream.print("12")
+    assert(buffer.toString === "st12")
+  }
+
+  test("circular buffer: multiple overflow") {
+    val buffer = new CircularBuffer(25)
+    val stream = new PrintStream(buffer, true, "UTF-8")
+
+    stream.print("test circular test circular test circular test circular test circular")
+    assert(buffer.toString === "st circular test circular")
   }
 
   test("nanSafeCompareDoubles") {
@@ -723,18 +811,47 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
-    conf.set("spark.master", "yarn-client")
+    conf.set("spark.master", "yarn")
+    conf.set("spark.submit.deployMode", "client")
     assert(Utils.isDynamicAllocationEnabled(conf) === false)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.dynamicAllocation.enabled", "false")) === false)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.dynamicAllocation.enabled", "true")) === true)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "1")) === false)
+      conf.set("spark.executor.instances", "1")) === true)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "0")) === true)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.dynamicAllocation.testing", "true")))
+  }
+
+  test("getDynamicAllocationInitialExecutors") {
+    val conf = new SparkConf()
+    assert(Utils.getDynamicAllocationInitialExecutors(conf) === 0)
+    assert(Utils.getDynamicAllocationInitialExecutors(
+      conf.set("spark.dynamicAllocation.minExecutors", "3")) === 3)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
+      conf.set("spark.executor.instances", "2")) === 3)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
+      conf.set("spark.executor.instances", "4")) === 4)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
+      conf.set("spark.dynamicAllocation.initialExecutors", "3")) === 4)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
+      conf.set("spark.dynamicAllocation.initialExecutors", "5")) === 5)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
+      conf.set("spark.dynamicAllocation.initialExecutors", "2")
+        .set("spark.executor.instances", "1")) === 3)
+  }
+
+  test("Set Spark CallerContext") {
+    val context = "test"
+    new CallerContext(context).setCurrentContext()
+    if (CallerContext.callerContextSupported) {
+      val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+      assert(s"SPARK_$context" ===
+        callerContext.getMethod("getCurrent").invoke(null).toString)
+    }
   }
 
   test("encodeFileNameToURIRawPath") {
@@ -815,12 +932,46 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
           assert(terminated.isDefined)
           Utils.waitForProcess(process, 5000)
           val duration = System.currentTimeMillis() - start
-          assert(duration < 5000)
+          assert(duration < 6000) // add a little extra time to allow a force kill to finish
           assert(!pidExists(pid))
         } finally {
           signal(pid, "SIGKILL")
         }
       }
     }
+  }
+
+  test("chi square test of randomizeInPlace") {
+    // Parameters
+    val arraySize = 10
+    val numTrials = 1000
+    val threshold = 0.05
+    val seed = 1L
+
+    // results(i)(j): how many times Utils.randomize moves an element from position j to position i
+    val results = Array.ofDim[Long](arraySize, arraySize)
+
+    // This must be seeded because even a fair random process will fail this test with
+    // probability equal to the value of `threshold`, which is inconvenient for a unit test.
+    val rand = new java.util.Random(seed)
+    val range = 0 until arraySize
+
+    for {
+      _ <- 0 until numTrials
+      trial = Utils.randomizeInPlace(range.toArray, rand)
+      i <- range
+    } results(i)(trial(i)) += 1L
+
+    val chi = new ChiSquareTest()
+
+    // We expect an even distribution; this array will be rescaled by `chiSquareTest`
+    val expected = Array.fill(arraySize * arraySize)(1.0)
+    val observed = results.flatten
+
+    // Performs Pearson's chi-squared test. Using the sum-of-squares as the test statistic, gives
+    // the probability of a uniform distribution producing results as extreme as `observed`
+    val pValue = chi.chiSquareTest(expected, observed)
+
+    assert(pValue > threshold)
   }
 }

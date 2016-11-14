@@ -45,7 +45,7 @@ import org.apache.spark.rdd.RDD
  * many elements are in each partition. Once these three values have been returned for every
  * partition, we can collect and operate locally. Locally, we can now adjust each distance by the
  * appropriate constant (the cumulative sum of number of elements in the prior partitions divided by
- * thedata set size). Finally, we take the maximum absolute value, and this is the statistic.
+ * the data set size). Finally, we take the maximum absolute value, and this is the statistic.
  */
 private[stat] object KolmogorovSmirnovTest extends Logging {
 
@@ -124,7 +124,8 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
     val pResults = partDiffs.foldLeft(initAcc) { case ((pMin, pMax, pCt), (dl, dp)) =>
       (math.min(pMin, dl), math.max(pMax, dp), pCt + 1)
     }
-    val results = if (pResults == initAcc) Array[(Double, Double, Double)]() else Array(pResults)
+    val results =
+      if (pResults == initAcc) Array.empty[(Double, Double, Double)] else Array(pResults)
     results.iterator
   }
 
@@ -166,7 +167,7 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
     : KolmogorovSmirnovTestResult = {
     val distObj =
       distName match {
-        case "norm" => {
+        case "norm" =>
           if (params.nonEmpty) {
             // parameters are passed, then can only be 2
             require(params.length == 2, "Normal distribution requires mean and standard " +
@@ -178,7 +179,6 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
               "initialized to standard normal (i.e. N(0, 1))")
             new NormalDistribution(0, 1)
           }
-        }
         case  _ => throw new UnsupportedOperationException(s"$distName not yet supported through" +
           s" convenience method. Current options are:['norm'].")
       }

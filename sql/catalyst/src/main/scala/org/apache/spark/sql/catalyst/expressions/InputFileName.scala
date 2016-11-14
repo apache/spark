@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.rdd.SqlNewHadoopRDDState
+import org.apache.spark.rdd.InputFileNameHolder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Expression that returns the name of the current file being read in using [[SqlNewHadoopRDD]]
+ * Expression that returns the name of the current file being read.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the name of the current file being read if available",
-  extended = "> SELECT _FUNC_();\n ''")
+  usage = "_FUNC_() - Returns the name of the current file being read if available.")
 case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def nullable: Boolean = true
@@ -37,15 +36,14 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def prettyName: String = "input_file_name"
 
-  override protected def initInternal(): Unit = {}
+  override protected def initializeInternal(partitionIndex: Int): Unit = {}
 
   override protected def evalInternal(input: InternalRow): UTF8String = {
-    SqlNewHadoopRDDState.getInputFileName()
+    InputFileNameHolder.getInputFileName()
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    ev.isNull = "false"
-    s"final ${ctx.javaType(dataType)} ${ev.value} = " +
-      "org.apache.spark.rdd.SqlNewHadoopRDDState.getInputFileName();"
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = " +
+      "org.apache.spark.rdd.InputFileNameHolder.getInputFileName();", isNull = "false")
   }
 }

@@ -39,6 +39,8 @@ import static org.mockito.Mockito.mock;
 
 public class UnsafeInMemorySorterSuite {
 
+  protected boolean shouldUseRadixSort() { return false; }
+
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int length) {
     final byte[] strBytes = new byte[length];
     Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, length);
@@ -54,7 +56,8 @@ public class UnsafeInMemorySorterSuite {
       memoryManager,
       mock(RecordComparator.class),
       mock(PrefixComparator.class),
-      100);
+      100,
+      shouldUseRadixSort());
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
     Assert.assertFalse(iter.hasNext());
   }
@@ -75,7 +78,7 @@ public class UnsafeInMemorySorterSuite {
     final TaskMemoryManager memoryManager = new TaskMemoryManager(
       new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
-    final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);
+    final MemoryBlock dataPage = memoryManager.allocatePage(2048, consumer);
     final Object baseObject = dataPage.getBaseObject();
     // Write the records into the data page:
     long position = dataPage.getBaseOffset();
@@ -102,26 +105,22 @@ public class UnsafeInMemorySorterSuite {
     // Compute key prefixes based on the records' partition ids
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
     // Use integer comparison for comparing prefixes (which are partition ids, in this case)
-    final PrefixComparator prefixComparator = new PrefixComparator() {
-      @Override
-      public int compare(long prefix1, long prefix2) {
-        return (int) prefix1 - (int) prefix2;
-      }
-    };
-    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager, recordComparator,
-      prefixComparator, dataToSort.length);
+    final PrefixComparator prefixComparator = PrefixComparators.LONG;
+    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager,
+      recordComparator, prefixComparator, dataToSort.length, shouldUseRadixSort());
     // Given a page of records, insert those records into the sorter one-by-one:
     position = dataPage.getBaseOffset();
     for (int i = 0; i < dataToSort.length; i++) {
       if (!sorter.hasSpaceForAnotherRecord()) {
-        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 2 * 2));
+        sorter.expandPointerArray(
+          consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
       }
       // position now points to the start of a record (which holds its length).
       final int recordLength = Platform.getInt(baseObject, position);
       final long address = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final String str = getStringFromDataPage(baseObject, position + 4, recordLength);
       final int partitionId = hashPartitioner.getPartition(str);
-      sorter.insertRecord(address, partitionId);
+      sorter.insertRecord(address, partitionId, false);
       position += 4 + recordLength;
     }
     final UnsafeSorterIterator iter = sorter.getSortedIterator();

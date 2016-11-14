@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Linear Methods - spark.mllib
-displayTitle: Linear Methods - spark.mllib
+title: Linear Methods - RDD-based API
+displayTitle: Linear Methods - RDD-based API
 ---
 
 * Table of contents
@@ -78,6 +78,11 @@ methods `spark.mllib` supports:
   </tbody>
 </table>
 
+Note that, in the mathematical formulation above, a binary label $y$ is denoted as either
+$+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
+*However*, the negative label is represented by $0$ in `spark.mllib` instead of $-1$, to be consistent with
+multiclass labeling.
+
 ### Regularizers
 
 The purpose of the
@@ -136,10 +141,6 @@ multiclass classification problems.
 For both methods, `spark.mllib` supports L1 and L2 regularized variants.
 The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib,
 where labels are class indices starting from zero: $0, 1, 2, \ldots$.
-Note that, in the mathematical formulation in this guide, a binary label $y$ is denoted as either
-$+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
-*However*, the negative label is represented by $0$ in `spark.mllib` instead of $-1$, to be consistent with
-multiclass labeling.
 
 ### Linear Support Vector Machines (SVMs)
 
@@ -185,10 +186,10 @@ algorithm for 200 iterations.
 import org.apache.spark.mllib.optimization.L1Updater
 
 val svmAlg = new SVMWithSGD()
-svmAlg.optimizer.
-  setNumIterations(200).
-  setRegParam(0.1).
-  setUpdater(new L1Updater)
+svmAlg.optimizer
+  .setNumIterations(200)
+  .setRegParam(0.1)
+  .setUpdater(new L1Updater)
 val modelL1 = svmAlg.run(training)
 {% endhighlight %}
 
@@ -395,7 +396,7 @@ section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 
-###Streaming linear regression
+### Streaming linear regression
 
 When data arrive in a streaming fashion, it is useful to fit regression models online,
 updating the parameters of the model as new data arrives. `spark.mllib` currently supports

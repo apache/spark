@@ -55,7 +55,7 @@ class ExpressionSet protected(
   protected def add(e: Expression): Unit = {
     if (!baseSet.contains(e.canonicalized)) {
       baseSet.add(e.canonicalized)
-      originals.append(e)
+      originals += e
     }
   }
 

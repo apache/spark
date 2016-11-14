@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
@@ -29,18 +27,22 @@ import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.feature.*;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 // $example off$
 
 public class JavaGradientBoostedTreeClassifierExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaGradientBoostedTreeClassifierExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaGradientBoostedTreeClassifierExample")
+      .getOrCreate();
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
-    Dataset<Row> data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> data = spark
+      .read()
+      .format("libsvm")
+      .load("data/mllib/sample_libsvm_data.txt");
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.
@@ -73,11 +75,11 @@ public class JavaGradientBoostedTreeClassifierExample {
       .setOutputCol("predictedLabel")
       .setLabels(labelIndexer.labels());
 
-    // Chain indexers and GBT in a Pipeline
+    // Chain indexers and GBT in a Pipeline.
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[] {labelIndexer, featureIndexer, gbt, labelConverter});
 
-    // Train model.  This also runs the indexers.
+    // Train model. This also runs the indexers.
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
@@ -86,11 +88,11 @@ public class JavaGradientBoostedTreeClassifierExample {
     // Select example rows to display.
     predictions.select("predictedLabel", "label", "features").show(5);
 
-    // Select (prediction, true label) and compute test error
+    // Select (prediction, true label) and compute test error.
     MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
       .setLabelCol("indexedLabel")
       .setPredictionCol("prediction")
-      .setMetricName("precision");
+      .setMetricName("accuracy");
     double accuracy = evaluator.evaluate(predictions);
     System.out.println("Test Error = " + (1.0 - accuracy));
 
@@ -98,6 +100,6 @@ public class JavaGradientBoostedTreeClassifierExample {
     System.out.println("Learned classification GBT model:\n" + gbtModel.toDebugString());
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

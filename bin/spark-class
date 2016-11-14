@@ -36,20 +36,19 @@ else
 fi
 
 # Find Spark jars.
-# TODO: change the directory name when Spark jars move from "lib".
 if [ -f "${SPARK_HOME}/RELEASE" ]; then
-  SPARK_JARS_DIR="${SPARK_HOME}/lib"
+  SPARK_JARS_DIR="${SPARK_HOME}/jars"
 else
-  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION"
+  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"
 fi
 
-if [ ! -d "$SPARK_JARS_DIR" ]; then
+if [ ! -d "$SPARK_JARS_DIR" ] && [ -z "$SPARK_TESTING$SPARK_SQL_TESTING" ]; then
   echo "Failed to find Spark jars directory ($SPARK_JARS_DIR)." 1>&2
-  echo "You need to build Spark before running this program." 1>&2
+  echo "You need to build Spark with the target \"package\" before running this program." 1>&2
   exit 1
+else
+  LAUNCH_CLASSPATH="$SPARK_JARS_DIR/*"
 fi
-
-LAUNCH_CLASSPATH="$SPARK_JARS_DIR/*"
 
 # Add the launcher build dir to the classpath if requested.
 if [ -n "$SPARK_PREPEND_CLASSES" ]; then
@@ -65,8 +64,34 @@ fi
 # The launcher library will print arguments separated by a NULL character, to allow arguments with
 # characters that would be otherwise interpreted by the shell. Read that in a while loop, populating
 # an array that will be used to exec the final command.
+#
+# The exit code of the launcher is appended to the output, so the parent shell removes it from the
+# command array and checks the value to see if the launcher succeeded.
+build_command() {
+  "$RUNNER" -Xmx128m -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@"
+  printf "%d\0" $?
+}
+
 CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
-done < <("$RUNNER" -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@")
+done < <(build_command "$@")
+
+COUNT=${#CMD[@]}
+LAST=$((COUNT - 1))
+LAUNCHER_EXIT_CODE=${CMD[$LAST]}
+
+# Certain JVM failures result in errors being printed to stdout (instead of stderr), which causes
+# the code that parses the output of the launcher to get confused. In those cases, check if the
+# exit code is an integer, and if it's not, handle it as a special error case.
+if ! [[ $LAUNCHER_EXIT_CODE =~ ^[0-9]+$ ]]; then
+  echo "${CMD[@]}" | head -n-1 1>&2
+  exit 1
+fi
+
+if [ $LAUNCHER_EXIT_CODE != 0 ]; then
+  exit $LAUNCHER_EXIT_CODE
+fi
+
+CMD=("${CMD[@]:0:$LAST}")
 exec "${CMD[@]}"

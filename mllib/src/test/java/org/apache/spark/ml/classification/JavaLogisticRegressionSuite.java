@@ -17,48 +17,34 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
-import java.lang.Math;
+import java.io.IOException;
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.regression.LabeledPoint;
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+import org.apache.spark.ml.feature.LabeledPoint;
+import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
 
+public class JavaLogisticRegressionSuite extends SharedSparkSession {
 
-public class JavaLogisticRegressionSuite implements Serializable {
-
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
   private transient Dataset<Row> dataset;
 
   private transient JavaRDD<LabeledPoint> datasetRDD;
   private double eps = 1e-5;
 
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
-    jsql = new SQLContext(jsc);
+  @Override
+  public void setUp() throws IOException {
+    super.setUp();
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
-    dataset = jsql.createDataFrame(datasetRDD, LabeledPoint.class);
-    dataset.registerTempTable("dataset");
-  }
-
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
+    dataset.createOrReplaceTempView("dataset");
   }
 
   @Test
@@ -66,8 +52,8 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegression lr = new LogisticRegression();
     Assert.assertEquals(lr.getLabelCol(), "label");
     LogisticRegressionModel model = lr.fit(dataset);
-    model.transform(dataset).registerTempTable("prediction");
-    Dataset<Row> predictions = jsql.sql("SELECT label, probability, prediction FROM prediction");
+    model.transform(dataset).createOrReplaceTempView("prediction");
+    Dataset<Row> predictions = spark.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
     // Check defaults
     Assert.assertEquals(0.5, model.getThreshold(), eps);
@@ -95,24 +81,24 @@ public class JavaLogisticRegressionSuite implements Serializable {
 
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0);
-    model.transform(dataset).registerTempTable("predAllZero");
-    Dataset<Row> predAllZero = jsql.sql("SELECT prediction, myProbability FROM predAllZero");
-    for (Row r: predAllZero.collectAsList()) {
+    model.transform(dataset).createOrReplaceTempView("predAllZero");
+    Dataset<Row> predAllZero = spark.sql("SELECT prediction, myProbability FROM predAllZero");
+    for (Row r : predAllZero.collectAsList()) {
       Assert.assertEquals(0.0, r.getDouble(0), eps);
     }
     // Call transform with params, and check that the params worked.
     model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
-      .registerTempTable("predNotAllZero");
-    Dataset<Row> predNotAllZero = jsql.sql("SELECT prediction, myProb FROM predNotAllZero");
+      .createOrReplaceTempView("predNotAllZero");
+    Dataset<Row> predNotAllZero = spark.sql("SELECT prediction, myProb FROM predNotAllZero");
     boolean foundNonZero = false;
-    for (Row r: predNotAllZero.collectAsList()) {
+    for (Row r : predNotAllZero.collectAsList()) {
       if (r.getDouble(0) != 0.0) foundNonZero = true;
     }
     Assert.assertTrue(foundNonZero);
 
     // Call fit() with new params, and check as many params as we can.
     LogisticRegressionModel model2 = lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1),
-        lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
+      lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
     LogisticRegression parent2 = (LogisticRegression) model2.parent();
     Assert.assertEquals(5, parent2.getMaxIter());
     Assert.assertEquals(0.1, parent2.getRegParam(), eps);
@@ -128,11 +114,11 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegressionModel model = lr.fit(dataset);
     Assert.assertEquals(2, model.numClasses());
 
-    model.transform(dataset).registerTempTable("transformed");
-    Dataset<Row> trans1 = jsql.sql("SELECT rawPrediction, probability FROM transformed");
-    for (Row row: trans1.collectAsList()) {
-      Vector raw = (Vector)row.get(0);
-      Vector prob = (Vector)row.get(1);
+    model.transform(dataset).createOrReplaceTempView("transformed");
+    Dataset<Row> trans1 = spark.sql("SELECT rawPrediction, probability FROM transformed");
+    for (Row row : trans1.collectAsList()) {
+      Vector raw = (Vector) row.get(0);
+      Vector prob = (Vector) row.get(1);
       Assert.assertEquals(raw.size(), 2);
       Assert.assertEquals(prob.size(), 2);
       double probFromRaw1 = 1.0 / (1.0 + Math.exp(-raw.apply(1)));
@@ -140,11 +126,11 @@ public class JavaLogisticRegressionSuite implements Serializable {
       Assert.assertEquals(0, Math.abs(prob.apply(0) - (1.0 - probFromRaw1)), eps);
     }
 
-    Dataset<Row> trans2 = jsql.sql("SELECT prediction, probability FROM transformed");
-    for (Row row: trans2.collectAsList()) {
+    Dataset<Row> trans2 = spark.sql("SELECT prediction, probability FROM transformed");
+    for (Row row : trans2.collectAsList()) {
       double pred = row.getDouble(0);
-      Vector prob = (Vector)row.get(1);
-      double probOfPred = prob.apply((int)pred);
+      Vector prob = (Vector) row.get(1);
+      double probOfPred = prob.apply((int) pred);
       for (int i = 0; i < prob.size(); ++i) {
         Assert.assertTrue(probOfPred >= prob.apply(i));
       }

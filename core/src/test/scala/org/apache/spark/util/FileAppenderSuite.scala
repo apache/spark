@@ -20,11 +20,13 @@ package org.apache.spark.util
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CountDownLatch
+import java.util.zip.GZIPInputStream
 
 import scala.collection.mutable.HashSet
 import scala.reflect._
 
 import com.google.common.io.Files
+import org.apache.commons.io.IOUtils
 import org.apache.log4j.{Appender, Level, Logger}
 import org.apache.log4j.spi.LoggingEvent
 import org.mockito.ArgumentCaptor
@@ -72,6 +74,25 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     testRolling(appender, testOutputStream, textToAppend, rolloverIntervalMillis)
   }
 
+  test("rolling file appender - time-based rolling (compressed)") {
+    // setup input stream and appender
+    val testOutputStream = new PipedOutputStream()
+    val testInputStream = new PipedInputStream(testOutputStream, 100 * 1000)
+    val rolloverIntervalMillis = 100
+    val durationMillis = 1000
+    val numRollovers = durationMillis / rolloverIntervalMillis
+    val textToAppend = (1 to numRollovers).map( _.toString * 10 )
+
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.executor.logs.rolling.enableCompression", "true")
+    val appender = new RollingFileAppender(testInputStream, testFile,
+      new TimeBasedRollingPolicy(rolloverIntervalMillis, s"--HH-mm-ss-SSSS", false),
+      sparkConf, 10)
+
+    testRolling(
+      appender, testOutputStream, textToAppend, rolloverIntervalMillis, isCompressed = true)
+  }
+
   test("rolling file appender - size-based rolling") {
     // setup input stream and appender
     val testOutputStream = new PipedOutputStream()
@@ -86,6 +107,25 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     files.foreach { file =>
       logInfo(file.toString + ": " + file.length + " bytes")
       assert(file.length <= rolloverSize)
+    }
+  }
+
+  test("rolling file appender - size-based rolling (compressed)") {
+    // setup input stream and appender
+    val testOutputStream = new PipedOutputStream()
+    val testInputStream = new PipedInputStream(testOutputStream, 100 * 1000)
+    val rolloverSize = 1000
+    val textToAppend = (1 to 3).map( _.toString * 1000 )
+
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.executor.logs.rolling.enableCompression", "true")
+    val appender = new RollingFileAppender(testInputStream, testFile,
+      new SizeBasedRollingPolicy(rolloverSize, false), sparkConf, 99)
+
+    val files = testRolling(appender, testOutputStream, textToAppend, 0, isCompressed = true)
+    files.foreach { file =>
+      logInfo(file.toString + ": " + file.length + " bytes")
+      assert(file.length < rolloverSize)
     }
   }
 
@@ -201,24 +241,29 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
     // Make sure only logging errors
     val logger = Logger.getRootLogger
+    val oldLogLevel = logger.getLevel
     logger.setLevel(Level.ERROR)
-    logger.addAppender(mockAppender)
+    try {
+      logger.addAppender(mockAppender)
 
-    val testOutputStream = new PipedOutputStream()
-    val testInputStream = new PipedInputStream(testOutputStream)
+      val testOutputStream = new PipedOutputStream()
+      val testInputStream = new PipedInputStream(testOutputStream)
 
-    // Close the stream before appender tries to read will cause an IOException
-    testInputStream.close()
-    testOutputStream.close()
-    val appender = FileAppender(testInputStream, testFile, new SparkConf)
+      // Close the stream before appender tries to read will cause an IOException
+      testInputStream.close()
+      testOutputStream.close()
+      val appender = FileAppender(testInputStream, testFile, new SparkConf)
 
-    appender.awaitTermination()
+      appender.awaitTermination()
 
-    // If InputStream was closed without first stopping the appender, an exception will be logged
-    verify(mockAppender, atLeast(1)).doAppend(loggingEventCaptor.capture)
-    val loggingEvent = loggingEventCaptor.getValue
-    assert(loggingEvent.getThrowableInformation !== null)
-    assert(loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
+      // If InputStream was closed without first stopping the appender, an exception will be logged
+      verify(mockAppender, atLeast(1)).doAppend(loggingEventCaptor.capture)
+      val loggingEvent = loggingEventCaptor.getValue
+      assert(loggingEvent.getThrowableInformation !== null)
+      assert(loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
+    } finally {
+      logger.setLevel(oldLogLevel)
+    }
   }
 
   test("file appender async close stream gracefully") {
@@ -228,30 +273,35 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
     // Make sure only logging errors
     val logger = Logger.getRootLogger
+    val oldLogLevel = logger.getLevel
     logger.setLevel(Level.ERROR)
-    logger.addAppender(mockAppender)
+    try {
+      logger.addAppender(mockAppender)
 
-    val testOutputStream = new PipedOutputStream()
-    val testInputStream = new PipedInputStream(testOutputStream) with LatchedInputStream
+      val testOutputStream = new PipedOutputStream()
+      val testInputStream = new PipedInputStream(testOutputStream) with LatchedInputStream
 
-    // Close the stream before appender tries to read will cause an IOException
-    testInputStream.close()
-    testOutputStream.close()
-    val appender = FileAppender(testInputStream, testFile, new SparkConf)
+      // Close the stream before appender tries to read will cause an IOException
+      testInputStream.close()
+      testOutputStream.close()
+      val appender = FileAppender(testInputStream, testFile, new SparkConf)
 
-    // Stop the appender before an IOException is called during read
-    testInputStream.latchReadStarted.await()
-    appender.stop()
-    testInputStream.latchReadProceed.countDown()
+      // Stop the appender before an IOException is called during read
+      testInputStream.latchReadStarted.await()
+      appender.stop()
+      testInputStream.latchReadProceed.countDown()
 
-    appender.awaitTermination()
+      appender.awaitTermination()
 
-    // Make sure no IOException errors have been logged as a result of appender closing gracefully
-    verify(mockAppender, atLeast(0)).doAppend(loggingEventCaptor.capture)
-    import scala.collection.JavaConverters._
-    loggingEventCaptor.getAllValues.asScala.foreach { loggingEvent =>
-      assert(loggingEvent.getThrowableInformation === null
-        || !loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
+      // Make sure no IOException errors have been logged as a result of appender closing gracefully
+      verify(mockAppender, atLeast(0)).doAppend(loggingEventCaptor.capture)
+      import scala.collection.JavaConverters._
+      loggingEventCaptor.getAllValues.asScala.foreach { loggingEvent =>
+        assert(loggingEvent.getThrowableInformation === null
+          || !loggingEvent.getThrowableInformation.getThrowable.isInstanceOf[IOException])
+      }
+    } finally {
+      logger.setLevel(oldLogLevel)
     }
   }
 
@@ -263,7 +313,8 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       appender: FileAppender,
       outputStream: OutputStream,
       textToAppend: Seq[String],
-      sleepTimeBetweenTexts: Long
+      sleepTimeBetweenTexts: Long,
+      isCompressed: Boolean = false
     ): Seq[File] = {
     // send data to appender through the input stream, and wait for the data to be written
     val expectedText = textToAppend.mkString("")
@@ -280,10 +331,23 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     // verify whether all the data written to rolled over files is same as expected
     val generatedFiles = RollingFileAppender.getSortedRolledOverFiles(
       testFile.getParentFile.toString, testFile.getName)
-    logInfo("Filtered files: \n" + generatedFiles.mkString("\n"))
+    logInfo("Generate files: \n" + generatedFiles.mkString("\n"))
     assert(generatedFiles.size > 1)
+    if (isCompressed) {
+      assert(
+        generatedFiles.filter(_.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)).size > 0)
+    }
     val allText = generatedFiles.map { file =>
-      Files.toString(file, StandardCharsets.UTF_8)
+      if (file.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)) {
+        val inputStream = new GZIPInputStream(new FileInputStream(file))
+        try {
+          IOUtils.toString(inputStream, StandardCharsets.UTF_8)
+        } finally {
+          IOUtils.closeQuietly(inputStream)
+        }
+      } else {
+        Files.toString(file, StandardCharsets.UTF_8)
+      }
     }.mkString("")
     assert(allText === expectedText)
     generatedFiles

@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
+import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -134,7 +135,7 @@ public final class UnsafeFixedWidthAggregationMap {
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
-      boolean putSucceeded = loc.putNewKey(
+      boolean putSucceeded = loc.append(
         key.getBaseObject(),
         key.getBaseOffset(),
         key.getSizeInBytes(),
@@ -236,12 +237,18 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Sorts the map's records in place, spill them to disk, and returns an [[UnsafeKVExternalSorter]]
    *
-   * Note that the map will be reset for inserting new records, and the returned sorter can NOT be used
-   * to insert records.
+   * Note that the map will be reset for inserting new records, and the returned sorter can NOT be
+   * used to insert records.
    */
   public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
     return new UnsafeKVExternalSorter(
-      groupingKeySchema, aggregationBufferSchema,
-      SparkEnv.get().blockManager(), map.getPageSizeBytes(), map);
+      groupingKeySchema,
+      aggregationBufferSchema,
+      SparkEnv.get().blockManager(),
+      SparkEnv.get().serializerManager(),
+      map.getPageSizeBytes(),
+      SparkEnv.get().conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+        UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
+      map);
   }
 }

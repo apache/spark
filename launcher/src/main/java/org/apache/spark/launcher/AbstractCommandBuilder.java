@@ -57,7 +57,7 @@ abstract class AbstractCommandBuilder {
   // properties files multiple times.
   private Map<String, String> effectiveConfig;
 
-  public AbstractCommandBuilder() {
+  AbstractCommandBuilder() {
     this.appArgs = new ArrayList<>();
     this.childEnv = new HashMap<>();
     this.conf = new HashMap<>();
@@ -74,7 +74,8 @@ abstract class AbstractCommandBuilder {
    *            SparkLauncher constructor that takes an environment), and may be modified to
    *            include other variables needed by the process to be executed.
    */
-  abstract List<String> buildCommand(Map<String, String> env) throws IOException;
+  abstract List<String> buildCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException;
 
   /**
    * Builds a list of arguments to run java.
@@ -144,10 +145,26 @@ abstract class AbstractCommandBuilder {
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
-      List<String> projects = Arrays.asList("core", "repl", "mllib", "graphx",
-        "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
-        "yarn", "launcher",
-        "common/network-common", "common/network-shuffle", "common/network-yarn");
+      List<String> projects = Arrays.asList(
+        "common/network-common",
+        "common/network-shuffle",
+        "common/network-yarn",
+        "common/sketch",
+        "common/tags",
+        "common/unsafe",
+        "core",
+        "examples",
+        "graphx",
+        "launcher",
+        "mllib",
+        "repl",
+        "sql/catalyst",
+        "sql/core",
+        "sql/hive",
+        "sql/hive-thriftserver",
+        "streaming",
+        "yarn"
+      );
       if (prependClasses) {
         if (!isTesting) {
           System.err.println(
@@ -174,29 +191,10 @@ abstract class AbstractCommandBuilder {
     // Add Spark jars to the classpath. For the testing case, we rely on the test code to set and
     // propagate the test classpath appropriately. For normal invocation, look for the jars
     // directory under SPARK_HOME.
-    String jarsDir = findJarsDir(!isTesting);
+    boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
+    String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
     if (jarsDir != null) {
       addToClassPath(cp, join(File.separator, jarsDir, "*"));
-    }
-
-    // Datanucleus jars must be included on the classpath. Datanucleus jars do not work if only
-    // included in the uber jar as plugin.xml metadata is lost. Both sbt and maven will populate
-    // "lib_managed/jars/" with the datanucleus jars when Spark is built with Hive
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
-    } else {
-      libdir = new File(sparkHome, "lib_managed/jars");
-    }
-
-    if (libdir.isDirectory()) {
-      for (File jar : libdir.listFiles()) {
-        if (jar.getName().startsWith("datanucleus-")) {
-          addToClassPath(cp, jar.getAbsolutePath());
-        }
-      }
-    } else {
-      checkState(isTesting, "Library directory '%s' does not exist.", libdir.getAbsolutePath());
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
@@ -309,27 +307,6 @@ abstract class AbstractCommandBuilder {
     }
 
     return props;
-  }
-
-  private String findJarsDir(boolean failIfNotFound) {
-    // TODO: change to the correct directory once the assembly build is changed.
-    String sparkHome = getSparkHome();
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
-      checkState(!failIfNotFound || libdir.isDirectory(),
-        "Library directory '%s' does not exist.",
-        libdir.getAbsolutePath());
-    } else {
-      libdir = new File(sparkHome, String.format("assembly/target/scala-%s", getScalaVersion()));
-      if (!libdir.isDirectory()) {
-        checkState(!failIfNotFound,
-          "Library directory '%s' does not exist; make sure Spark is built.",
-          libdir.getAbsolutePath());
-        libdir = null;
-      }
-    }
-    return libdir != null ? libdir.getAbsolutePath() : null;
   }
 
   private String getConfDir() {

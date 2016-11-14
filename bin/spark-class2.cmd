@@ -29,15 +29,14 @@ if "x%1"=="x" (
 )
 
 rem Find Spark jars.
-rem TODO: change the directory name when Spark jars move from "lib".
 if exist "%SPARK_HOME%\RELEASE" (
-  set SPARK_JARS_DIR="%SPARK_HOME%\lib"
+  set SPARK_JARS_DIR="%SPARK_HOME%\jars"
 ) else (
-  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%"
+  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars"
 )
 
 if not exist "%SPARK_JARS_DIR%"\ (
-  echo Failed to find Spark assembly JAR.
+  echo Failed to find Spark jars directory.
   echo You need to build Spark before running this program.
   exit /b 1
 )
@@ -56,7 +55,7 @@ if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
 rem The launcher library prints the command to be executed in a single line suitable for being
 rem executed by the batch interpreter. So read all the output of the launcher into a variable.
 set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%RANDOM%.txt
-"%RUNNER%" -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
+"%RUNNER%" -Xmx128m -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
 for /f "tokens=*" %%i in (%LAUNCHER_OUTPUT%) do (
   set SPARK_CMD=%%i
 )

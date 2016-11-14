@@ -142,14 +142,14 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
-    val listenerBus = new LiveListenerBus
+    val listenerBus = new LiveListenerBus(sc)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
 
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
     eventLogger.start()
-    listenerBus.start(sc)
+    listenerBus.start()
     listenerBus.addListener(eventLogger)
     listenerBus.postToAll(applicationStart)
     listenerBus.postToAll(applicationEnd)
@@ -181,7 +181,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
       .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
-    val sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
+    sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
     val eventLogPath = eventLogger.logPath
@@ -202,8 +202,6 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
     // Make sure expected events exist in the log file.
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
-    val logStart = SparkListenerLogStart(SPARK_VERSION)
-    val lines = readLines(logData)
     val eventSet = mutable.Set(
       SparkListenerApplicationStart,
       SparkListenerBlockManagerAdded,
@@ -216,19 +214,25 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       SparkListenerTaskStart,
       SparkListenerTaskEnd,
       SparkListenerApplicationEnd).map(Utils.getFormattedClassName)
-    lines.foreach { line =>
-      eventSet.foreach { event =>
-        if (line.contains(event)) {
-          val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
-          val eventType = Utils.getFormattedClassName(parsedEvent)
-          if (eventType == event) {
-            eventSet.remove(event)
+    Utils.tryWithSafeFinally {
+      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      val lines = readLines(logData)
+      lines.foreach { line =>
+        eventSet.foreach { event =>
+          if (line.contains(event)) {
+            val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
+            val eventType = Utils.getFormattedClassName(parsedEvent)
+            if (eventType == event) {
+              eventSet.remove(event)
+            }
           }
         }
       }
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
+    } {
+      logData.close()
     }
-    assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
-    assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
   }
 
   private def readLines(in: InputStream): Seq[String] = {

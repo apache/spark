@@ -76,8 +76,6 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
 
 class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     """
-    .. note:: Experimental
-
     A decision tree model for classification or regression.
 
     .. versionadded:: 1.1.0
@@ -130,8 +128,6 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
 class DecisionTree(object):
     """
-    .. note:: Experimental
-
     Learning algorithm for a decision tree model for classification or
     regression.
 
@@ -283,8 +279,6 @@ class DecisionTree(object):
 @inherit_doc
 class RandomForestModel(TreeEnsembleModel, JavaLoader):
     """
-    .. note:: Experimental
-
     Represents a random forest model.
 
     .. versionadded:: 1.2.0
@@ -297,8 +291,6 @@ class RandomForestModel(TreeEnsembleModel, JavaLoader):
 
 class RandomForest(object):
     """
-    .. note:: Experimental
-
     Learning algorithm for a random forest model for classification or
     regression.
 
@@ -486,8 +478,6 @@ class RandomForest(object):
 @inherit_doc
 class GradientBoostedTreesModel(TreeEnsembleModel, JavaLoader):
     """
-    .. note:: Experimental
-
     Represents a gradient-boosted tree model.
 
     .. versionadded:: 1.3.0
@@ -500,8 +490,6 @@ class GradientBoostedTreesModel(TreeEnsembleModel, JavaLoader):
 
 class GradientBoostedTrees(object):
     """
-    .. note:: Experimental
-
     Learning algorithm for a gradient boosted trees model for
     classification or regression.
 
@@ -657,9 +645,14 @@ class GradientBoostedTrees(object):
 def _test():
     import doctest
     globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    from pyspark.sql import SparkSession
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.tree tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

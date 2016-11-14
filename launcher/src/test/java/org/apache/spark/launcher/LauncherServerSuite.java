@@ -83,13 +83,13 @@ public class LauncherServerSuite extends BaseSuite {
 
       client = new TestClient(s);
       client.send(new Hello(handle.getSecret(), "1.4.0"));
-      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
 
       // Make sure the server matched the client to the handle.
       assertNotNull(handle.getConnection());
 
       client.send(new SetAppId("app-id"));
-      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
       assertEquals("app-id", handle.getAppId());
 
       client.send(new SetState(SparkAppHandle.State.RUNNING));
@@ -97,7 +97,7 @@ public class LauncherServerSuite extends BaseSuite {
       assertEquals(SparkAppHandle.State.RUNNING, handle.getState());
 
       handle.stop();
-      Message stopMsg = client.inbound.poll(10, TimeUnit.SECONDS);
+      Message stopMsg = client.inbound.poll(30, TimeUnit.SECONDS);
       assertTrue(stopMsg instanceof Stop);
     } finally {
       kill(handle);
@@ -152,6 +152,37 @@ public class LauncherServerSuite extends BaseSuite {
     }
   }
 
+  @Test
+  public void testSparkSubmitVmShutsDown() throws Exception {
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    TestClient client = null;
+    final Semaphore semaphore = new Semaphore(0);
+    try {
+      Socket s = new Socket(InetAddress.getLoopbackAddress(),
+        LauncherServer.getServerInstance().getPort());
+      handle.addListener(new SparkAppHandle.Listener() {
+        public void stateChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+        public void infoChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+      });
+      client = new TestClient(s);
+      client.send(new Hello(handle.getSecret(), "1.4.0"));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      // Make sure the server matched the client to the handle.
+      assertNotNull(handle.getConnection());
+      close(client);
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      assertEquals(SparkAppHandle.State.LOST, handle.getState());
+    } finally {
+      kill(handle);
+      close(client);
+      client.clientThread.join();
+    }
+  }
+
   private void kill(SparkAppHandle handle) {
     if (handle != null) {
       handle.kill();
@@ -175,7 +206,7 @@ public class LauncherServerSuite extends BaseSuite {
 
     TestClient(Socket s) throws IOException {
       super(s);
-      this.inbound = new LinkedBlockingQueue<Message>();
+      this.inbound = new LinkedBlockingQueue<>();
       this.clientThread = new Thread(this);
       clientThread.setName("TestClient");
       clientThread.setDaemon(true);

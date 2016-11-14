@@ -33,21 +33,74 @@ object SortPrefixUtils {
     override def compare(prefix1: Long, prefix2: Long): Int = 0
   }
 
+  /**
+   * Dummy sort prefix result to use for empty rows.
+   */
+  private val emptyPrefix = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+
   def getPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
     sortOrder.dataType match {
-      case StringType =>
-        if (sortOrder.isAscending) PrefixComparators.STRING else PrefixComparators.STRING_DESC
-      case BinaryType =>
-        if (sortOrder.isAscending) PrefixComparators.BINARY else PrefixComparators.BINARY_DESC
+      case StringType => stringPrefixComparator(sortOrder)
+      case BinaryType => binaryPrefixComparator(sortOrder)
       case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
-        if (sortOrder.isAscending) PrefixComparators.LONG else PrefixComparators.LONG_DESC
+        longPrefixComparator(sortOrder)
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        if (sortOrder.isAscending) PrefixComparators.LONG else PrefixComparators.LONG_DESC
-      case FloatType | DoubleType =>
-        if (sortOrder.isAscending) PrefixComparators.DOUBLE else PrefixComparators.DOUBLE_DESC
-      case dt: DecimalType =>
-        if (sortOrder.isAscending) PrefixComparators.DOUBLE else PrefixComparators.DOUBLE_DESC
+        longPrefixComparator(sortOrder)
+      case FloatType | DoubleType => doublePrefixComparator(sortOrder)
+      case dt: DecimalType => doublePrefixComparator(sortOrder)
       case _ => NoOpPrefixComparator
+    }
+  }
+
+  private def stringPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
+    sortOrder.direction match {
+      case Ascending if (sortOrder.nullOrdering == NullsLast) =>
+        PrefixComparators.STRING_NULLS_LAST
+      case Ascending =>
+        PrefixComparators.STRING
+      case Descending if (sortOrder.nullOrdering == NullsFirst) =>
+        PrefixComparators.STRING_DESC_NULLS_FIRST
+      case Descending =>
+        PrefixComparators.STRING_DESC
+    }
+  }
+
+  private def binaryPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
+    sortOrder.direction match {
+      case Ascending if (sortOrder.nullOrdering == NullsLast) =>
+        PrefixComparators.BINARY_NULLS_LAST
+      case Ascending =>
+        PrefixComparators.BINARY
+      case Descending if (sortOrder.nullOrdering == NullsFirst) =>
+        PrefixComparators.BINARY_DESC_NULLS_FIRST
+      case Descending =>
+        PrefixComparators.BINARY_DESC
+    }
+  }
+
+  private def longPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
+    sortOrder.direction match {
+      case Ascending if (sortOrder.nullOrdering == NullsLast) =>
+        PrefixComparators.LONG_NULLS_LAST
+      case Ascending =>
+        PrefixComparators.LONG
+      case Descending if (sortOrder.nullOrdering == NullsFirst) =>
+        PrefixComparators.LONG_DESC_NULLS_FIRST
+      case Descending =>
+        PrefixComparators.LONG_DESC
+    }
+  }
+
+  private def doublePrefixComparator(sortOrder: SortOrder): PrefixComparator = {
+    sortOrder.direction match {
+      case Ascending if (sortOrder.nullOrdering == NullsLast) =>
+        PrefixComparators.DOUBLE_NULLS_LAST
+      case Ascending =>
+        PrefixComparators.DOUBLE
+      case Descending if (sortOrder.nullOrdering == NullsFirst) =>
+        PrefixComparators.DOUBLE_DESC_NULLS_FIRST
+      case Descending =>
+        PrefixComparators.DOUBLE_DESC
     }
   }
 
@@ -66,21 +119,56 @@ object SortPrefixUtils {
   }
 
   /**
+   * Returns whether the specified SortOrder can be satisfied with a radix sort on the prefix.
+   */
+  def canSortFullyWithPrefix(sortOrder: SortOrder): Boolean = {
+    sortOrder.dataType match {
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType |
+           TimestampType | FloatType | DoubleType =>
+        true
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+        true
+      case _ =>
+        false
+    }
+  }
+
+  /**
+   * Returns whether the fully sorting on the specified key field is possible with radix sort.
+   */
+  def canSortFullyWithPrefix(field: StructField): Boolean = {
+    canSortFullyWithPrefix(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
+  }
+
+  /**
    * Creates the prefix computer for the first field in the given schema, in ascending order.
    */
   def createPrefixGenerator(schema: StructType): UnsafeExternalRowSorter.PrefixComputer = {
     if (schema.nonEmpty) {
       val boundReference = BoundReference(0, schema.head.dataType, nullable = true)
-      val prefixProjection = UnsafeProjection.create(
-        SortPrefix(SortOrder(boundReference, Ascending)))
+      val prefixExpr = SortPrefix(SortOrder(boundReference, Ascending))
+      val prefixProjection = UnsafeProjection.create(prefixExpr)
       new UnsafeExternalRowSorter.PrefixComputer {
-        override def computePrefix(row: InternalRow): Long = {
-          prefixProjection.apply(row).getLong(0)
+        private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+        override def computePrefix(row: InternalRow):
+            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+          val prefix = prefixProjection.apply(row)
+          if (prefix.isNullAt(0)) {
+            result.isNull = true
+            result.value = prefixExpr.nullValue
+          } else {
+            result.isNull = false
+            result.value = prefix.getLong(0)
+          }
+          result
         }
       }
     } else {
       new UnsafeExternalRowSorter.PrefixComputer {
-        override def computePrefix(row: InternalRow): Long = 0
+        override def computePrefix(row: InternalRow):
+            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+          emptyPrefix
+        }
       }
     }
   }

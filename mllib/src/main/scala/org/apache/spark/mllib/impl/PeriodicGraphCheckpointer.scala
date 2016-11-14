@@ -69,7 +69,8 @@ import org.apache.spark.storage.StorageLevel
  *  // checkpointed: graph4
  * }}}
  *
- * @param checkpointInterval Graphs will be checkpointed at this interval
+ * @param checkpointInterval Graphs will be checkpointed at this interval.
+ *                           If this interval was set as -1, then checkpointing will be disabled.
  * @tparam VD  Vertex descriptor type
  * @tparam ED  Edge descriptor type
  *
@@ -86,7 +87,10 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
 
   override protected def persist(data: Graph[VD, ED]): Unit = {
     if (data.vertices.getStorageLevel == StorageLevel.NONE) {
-      data.persist()
+      data.vertices.persist()
+    }
+    if (data.edges.getStorageLevel == StorageLevel.NONE) {
+      data.edges.persist()
     }
   }
 

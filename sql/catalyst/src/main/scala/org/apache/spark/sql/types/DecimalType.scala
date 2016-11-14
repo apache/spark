@@ -19,14 +19,13 @@ package org.apache.spark.sql.types
 
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
 /**
- * :: DeveloperApi ::
  * The data type representing `java.math.BigDecimal` values.
  * A Decimal that must have fixed precision (the maximum number of digits) and scale (the number
  * of digits on right side of dot).
@@ -36,8 +35,10 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * The default precision and scale is (10, 0).
  *
  * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   if (scale > precision) {
@@ -101,7 +102,12 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 }
 
 
-/** Extra factory methods and pattern matchers for Decimals */
+/**
+ * Extra factory methods and pattern matchers for Decimals.
+ *
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object DecimalType extends AbstractDataType {
   import scala.math.min
 
@@ -117,6 +123,7 @@ object DecimalType extends AbstractDataType {
   private[sql] val LongDecimal = DecimalType(20, 0)
   private[sql] val FloatDecimal = DecimalType(14, 7)
   private[sql] val DoubleDecimal = DecimalType(30, 15)
+  private[sql] val BigIntDecimal = DecimalType(38, 0)
 
   private[sql] def forType(dataType: DataType): DecimalType = dataType match {
     case ByteType => ByteDecimal
@@ -151,7 +158,7 @@ object DecimalType extends AbstractDataType {
   }
 
   /**
-   * Returns if dt is a DecimalType that fits inside a int
+   * Returns if dt is a DecimalType that fits inside an int
    */
   def is32BitDecimalType(dt: DataType): Boolean = {
     dt match {

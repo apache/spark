@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
@@ -32,7 +33,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   setupTestData()
 
   test("simple columnar query") {
-    val plan = sqlContext.executePlan(testData.logicalPlan).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -41,15 +42,15 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("default size avoids broadcast") {
     // TODO: Improve this test when we have better statistics
     sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
-      .toDF().registerTempTable("sizeTst")
-    sqlContext.cacheTable("sizeTst")
+      .toDF().createOrReplaceTempView("sizeTst")
+    spark.catalog.cacheTable("sizeTst")
     assert(
-      sqlContext.table("sizeTst").queryExecution.analyzed.statistics.sizeInBytes >
-        sqlContext.conf.autoBroadcastJoinThreshold)
+      spark.table("sizeTst").queryExecution.analyzed.statistics.sizeInBytes >
+        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
   }
 
   test("projection") {
-    val plan = sqlContext.executePlan(testData.select('value, 'key).logicalPlan).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.select('value, 'key).logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().map {
@@ -58,7 +59,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
-    val plan = sqlContext.executePlan(testData.logicalPlan).sparkPlan
+    val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None)
 
     checkAnswer(scan, testData.collect().toSeq)
@@ -70,7 +71,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT * FROM repeatedData"),
       repeatedData.collect().toSeq.map(Row.fromTuple))
 
-    sqlContext.cacheTable("repeatedData")
+    spark.catalog.cacheTable("repeatedData")
 
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
@@ -82,7 +83,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT * FROM nullableRepeatedData"),
       nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
 
-    sqlContext.cacheTable("nullableRepeatedData")
+    spark.catalog.cacheTable("nullableRepeatedData")
 
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
@@ -91,13 +92,13 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-2729 regression: timestamp data type") {
     val timestamps = (0 to 3).map(i => Tuple1(new Timestamp(i))).toDF("time")
-    timestamps.registerTempTable("timestamps")
+    timestamps.createOrReplaceTempView("timestamps")
 
     checkAnswer(
       sql("SELECT time FROM timestamps"),
       timestamps.collect().toSeq)
 
-    sqlContext.cacheTable("timestamps")
+    spark.catalog.cacheTable("timestamps")
 
     checkAnswer(
       sql("SELECT time FROM timestamps"),
@@ -109,7 +110,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT * FROM withEmptyParts"),
       withEmptyParts.collect().toSeq.map(Row.fromTuple))
 
-    sqlContext.cacheTable("withEmptyParts")
+    spark.catalog.cacheTable("withEmptyParts")
 
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
@@ -126,13 +127,13 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("decimal type") {
     // Casting is required here because ScalaReflection can't capture decimal precision information.
     val df = (1 to 10)
-      .map(i => Tuple1(Decimal(i, 15, 10)))
+      .map(i => Tuple1(Decimal(i, 15, 10).toJavaBigDecimal))
       .toDF("dec")
       .select($"dec" cast DecimalType(15, 10))
 
     assert(df.schema.head.dataType === DecimalType(15, 10))
 
-    df.cache().registerTempTable("test_fixed_decimal")
+    df.cache().createOrReplaceTempView("test_fixed_decimal")
     checkAnswer(
       sql("SELECT * FROM test_fixed_decimal"),
       (1 to 10).map(i => Row(Decimal(i, 15, 10).toJavaBigDecimal)))
@@ -178,35 +179,35 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
           (i to i + 10).map(j => s"map_key_$j" -> (Long.MaxValue - j)).toMap,
           Row((i - 0.25).toFloat, Seq(true, false, null)))
       }
-    sqlContext.createDataFrame(rdd, schema).registerTempTable("InMemoryCache_different_data_types")
+    spark.createDataFrame(rdd, schema).createOrReplaceTempView("InMemoryCache_different_data_types")
     // Cache the table.
     sql("cache table InMemoryCache_different_data_types")
     // Make sure the table is indeed cached.
-    sqlContext.table("InMemoryCache_different_data_types").queryExecution.executedPlan
+    spark.table("InMemoryCache_different_data_types").queryExecution.executedPlan
     assert(
-      sqlContext.isCached("InMemoryCache_different_data_types"),
+      spark.catalog.isCached("InMemoryCache_different_data_types"),
       "InMemoryCache_different_data_types should be cached.")
     // Issue a query and check the results.
     checkAnswer(
       sql(s"SELECT DISTINCT ${allColumns} FROM InMemoryCache_different_data_types"),
-      sqlContext.table("InMemoryCache_different_data_types").collect())
-    sqlContext.dropTempTable("InMemoryCache_different_data_types")
+      spark.table("InMemoryCache_different_data_types").collect())
+    spark.catalog.dropTempView("InMemoryCache_different_data_types")
   }
 
   test("SPARK-10422: String column in InMemoryColumnarCache needs to override clone method") {
-    val df = sqlContext.range(1, 100).selectExpr("id % 10 as id")
+    val df = spark.range(1, 100).selectExpr("id % 10 as id")
       .rdd.map(id => Tuple1(s"str_$id")).toDF("i")
     val cached = df.cache()
     // count triggers the caching action. It should not throw.
     cached.count()
 
     // Make sure, the DataFrame is indeed cached.
-    assert(sqlContext.cacheManager.lookupCachedData(cached).nonEmpty)
+    assert(spark.sharedState.cacheManager.lookupCachedData(cached).nonEmpty)
 
     // Check result.
     checkAnswer(
       cached,
-      sqlContext.range(1, 100).selectExpr("id % 10 as id")
+      spark.range(1, 100).selectExpr("id % 10 as id")
         .rdd.map(id => Tuple1(s"str_$id")).toDF("i")
     )
 
@@ -215,9 +216,34 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10859: Predicates pushed to InMemoryColumnarTableScan are not evaluated correctly") {
-    val data = sqlContext.range(10).selectExpr("id", "cast(id as string) as s")
+    val data = spark.range(10).selectExpr("id", "cast(id as string) as s")
     data.cache()
     assert(data.count() === 10)
     assert(data.filter($"s" === "3").count() === 1)
   }
+
+  test("SPARK-14138: Generated SpecificColumnarIterator can exceed JVM size limit for cached DF") {
+    val length1 = 3999
+    val columnTypes1 = List.fill(length1)(IntegerType)
+    val columnarIterator1 = GenerateColumnAccessor.generate(columnTypes1)
+
+    // SPARK-16664: the limit of janino is 8117
+    val length2 = 8117
+    val columnTypes2 = List.fill(length2)(IntegerType)
+    val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
+  }
+
+  test("SPARK-17549: cached table size should be correctly calculated") {
+    val data = spark.sparkContext.parallelize(1 to 10, 5).toDF()
+    val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
+    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None)
+
+    // Materialize the data.
+    val expectedAnswer = data.collect()
+    checkAnswer(cached, expectedAnswer)
+
+    // Check that the right size was calculated.
+    assert(cached.batchStats.value === expectedAnswer.size * INT.defaultSize)
+  }
+
 }

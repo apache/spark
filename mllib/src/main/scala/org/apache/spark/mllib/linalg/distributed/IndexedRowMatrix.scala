@@ -188,7 +188,8 @@ class IndexedRowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the Gramian matrix `A^T A`.
+   * Computes the Gramian matrix `A^T A`. Note that this cannot be
+   * computed on matrices with more than 65535 columns.
    */
   @Since("1.0.0")
   def computeGramianMatrix(): Matrix = {

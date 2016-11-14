@@ -43,7 +43,8 @@ import org.apache.spark.network.util.TransportFrameDecoder;
 
 /**
  * Contains the context to create a {@link TransportServer}, {@link TransportClientFactory}, and to
- * setup Netty Channel pipelines with a {@link org.apache.spark.network.server.TransportChannelHandler}.
+ * setup Netty Channel pipelines with a
+ * {@link org.apache.spark.network.server.TransportChannelHandler}.
  *
  * There are two communication protocols that the TransportClient provides, control-plane RPCs and
  * data-plane "chunk fetching". The handling of the RPCs is performed outside of the scope of the
@@ -55,7 +56,7 @@ import org.apache.spark.network.util.TransportFrameDecoder;
  * processes to send messages back to the client on an existing channel.
  */
 public class TransportContext {
-  private final Logger logger = LoggerFactory.getLogger(TransportContext.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportContext.class);
 
   private final TransportConf conf;
   private final RpcHandler rpcHandler;

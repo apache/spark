@@ -438,12 +438,12 @@ class StandaloneDynamicAllocationSuite
     val executorIdToTaskCount = taskScheduler invokePrivate getMap()
     executorIdToTaskCount(executors.head) = 1
     // kill the busy executor without force; this should fail
-    assert(!killExecutor(sc, executors.head, force = false))
+    assert(killExecutor(sc, executors.head, force = false).isEmpty)
     apps = getApplications()
     assert(apps.head.executors.size === 2)
 
     // force kill busy executor
-    assert(killExecutor(sc, executors.head, force = true))
+    assert(killExecutor(sc, executors.head, force = true).nonEmpty)
     apps = getApplications()
     // kill executor successfully
     assert(apps.head.executors.size === 1)
@@ -518,7 +518,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   /** Kill the given executor, specifying whether to force kill it. */
-  private def killExecutor(sc: SparkContext, executorId: String, force: Boolean): Boolean = {
+  private def killExecutor(sc: SparkContext, executorId: String, force: Boolean): Seq[String] = {
     syncExecutors(sc)
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
@@ -559,9 +559,9 @@ class StandaloneDynamicAllocationSuite
       val endpointRef = mock(classOf[RpcEndpointRef])
       val mockAddress = mock(classOf[RpcAddress])
       when(endpointRef.address).thenReturn(mockAddress)
-      val message = RegisterExecutor(id, endpointRef, 10, Map.empty)
+      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
-      backend.driverEndpoint.askWithRetry[CoarseGrainedClusterMessage](message)
+      backend.driverEndpoint.askWithRetry[Boolean](message)
     }
   }
 

@@ -26,7 +26,7 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("intConf") {
     val key = "spark.sql.SQLConfEntrySuite.int"
-    val confEntry = SQLConfEntry.intConf(key)
+    val confEntry = SQLConfigBuilder(key).intConf.createWithDefault(1)
     assert(conf.getConf(confEntry, 5) === 5)
 
     conf.setConf(confEntry, 10)
@@ -45,7 +45,7 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("longConf") {
     val key = "spark.sql.SQLConfEntrySuite.long"
-    val confEntry = SQLConfEntry.longConf(key)
+    val confEntry = SQLConfigBuilder(key).longConf.createWithDefault(1L)
     assert(conf.getConf(confEntry, 5L) === 5L)
 
     conf.setConf(confEntry, 10L)
@@ -64,7 +64,7 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("booleanConf") {
     val key = "spark.sql.SQLConfEntrySuite.boolean"
-    val confEntry = SQLConfEntry.booleanConf(key)
+    val confEntry = SQLConfigBuilder(key).booleanConf.createWithDefault(true)
     assert(conf.getConf(confEntry, false) === false)
 
     conf.setConf(confEntry, true)
@@ -83,7 +83,7 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("doubleConf") {
     val key = "spark.sql.SQLConfEntrySuite.double"
-    val confEntry = SQLConfEntry.doubleConf(key)
+    val confEntry = SQLConfigBuilder(key).doubleConf.createWithDefault(1d)
     assert(conf.getConf(confEntry, 5.0) === 5.0)
 
     conf.setConf(confEntry, 10.0)
@@ -102,7 +102,7 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("stringConf") {
     val key = "spark.sql.SQLConfEntrySuite.string"
-    val confEntry = SQLConfEntry.stringConf(key)
+    val confEntry = SQLConfigBuilder(key).stringConf.createWithDefault(null)
     assert(conf.getConf(confEntry, "abc") === "abc")
 
     conf.setConf(confEntry, "abcd")
@@ -116,7 +116,10 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("enumConf") {
     val key = "spark.sql.SQLConfEntrySuite.enum"
-    val confEntry = SQLConfEntry.enumConf(key, v => v, Set("a", "b", "c"), defaultValue = Some("a"))
+    val confEntry = SQLConfigBuilder(key)
+      .stringConf
+      .checkValues(Set("a", "b", "c"))
+      .createWithDefault("a")
     assert(conf.getConf(confEntry) === "a")
 
     conf.setConf(confEntry, "b")
@@ -135,8 +138,10 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("stringSeqConf") {
     val key = "spark.sql.SQLConfEntrySuite.stringSeq"
-    val confEntry = SQLConfEntry.stringSeqConf("spark.sql.SQLConfEntrySuite.stringSeq",
-      defaultValue = Some(Nil))
+    val confEntry = SQLConfigBuilder(key)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
     assert(conf.getConf(confEntry, Seq("a", "b", "c")) === Seq("a", "b", "c"))
 
     conf.setConf(confEntry, Seq("a", "b", "c", "d"))
@@ -146,5 +151,24 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConfString(key, "a,b,c") === "a,b,c,d,e")
     assert(conf.getConfString(key) === "a,b,c,d,e")
     assert(conf.getConf(confEntry, Seq("a", "b", "c")) === Seq("a", "b", "c", "d", "e"))
+  }
+
+  test("optionalConf") {
+    val key = "spark.sql.SQLConfEntrySuite.optional"
+    val confEntry = SQLConfigBuilder(key)
+      .stringConf
+      .createOptional
+
+    assert(conf.getConf(confEntry) === None)
+    conf.setConfString(key, "a")
+    assert(conf.getConf(confEntry) === Some("a"))
+  }
+
+  test("duplicate entry") {
+    val key = "spark.sql.SQLConfEntrySuite.duplicate"
+    SQLConfigBuilder(key).stringConf.createOptional
+    intercept[IllegalArgumentException] {
+      SQLConfigBuilder(key).stringConf.createOptional
+    }
   }
 }

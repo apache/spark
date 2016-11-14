@@ -20,7 +20,7 @@ package org.apache.spark.deploy.worker
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
-import java.util.{Date, UUID}
+import java.util.{Date, Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
@@ -68,7 +68,7 @@ private[deploy] class Worker(
     ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
 
   // For worker and executor IDs
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   private val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
 
@@ -203,6 +203,9 @@ private[deploy] class Worker(
     activeMasterWebUiUrl = uiUrl
     master = Some(masterRef)
     connected = true
+    if (conf.getBoolean("spark.ui.reverseProxy", false)) {
+      logInfo(s"WorkerWebUI is available at $activeMasterWebUiUrl/proxy/$workerId")
+    }
     // Cancel any outstanding re-registration attempts because we found a new master
     cancelLastRegistrationRetry()
   }
@@ -480,7 +483,7 @@ private[deploy] class Worker(
           memoryUsed += memory_
           sendToMaster(ExecutorStateChanged(appId, execId, manager.state, None, None))
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
@@ -488,7 +491,6 @@ private[deploy] class Worker(
             }
             sendToMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
               Some(e.toString), None))
-          }
         }
       }
 
@@ -497,7 +499,7 @@ private[deploy] class Worker(
 
     case KillExecutor(masterUrl, appId, execId) =>
       if (masterUrl != activeMasterUrl) {
-        logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor " + execId)
+        logWarning("Invalid Master (" + masterUrl + ") attempted to kill executor " + execId)
       } else {
         val fullId = appId + "/" + execId
         executors.get(fullId) match {
@@ -509,7 +511,7 @@ private[deploy] class Worker(
         }
       }
 
-    case LaunchDriver(driverId, driverDesc) => {
+    case LaunchDriver(driverId, driverDesc) =>
       logInfo(s"Asked to launch driver $driverId")
       val driver = new DriverRunner(
         conf,
@@ -525,9 +527,8 @@ private[deploy] class Worker(
 
       coresUsed += driverDesc.cores
       memoryUsed += driverDesc.mem
-    }
 
-    case KillDriver(driverId) => {
+    case KillDriver(driverId) =>
       logInfo(s"Asked to kill driver $driverId")
       drivers.get(driverId) match {
         case Some(runner) =>
@@ -535,11 +536,9 @@ private[deploy] class Worker(
         case None =>
           logError(s"Asked to kill unknown driver $driverId")
       }
-    }
 
-    case driverStateChanged @ DriverStateChanged(driverId, state, exception) => {
+    case driverStateChanged @ DriverStateChanged(driverId, state, exception) =>
       handleDriverStateChanged(driverStateChanged)
-    }
 
     case ReregisterWithMaster =>
       reregisterWithMaster()

@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import com.amazonaws.regions.RegionUtils;
-import org.apache.log4j.Logger;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
@@ -81,9 +80,8 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
  */
 public final class JavaKinesisWordCountASL { // needs to be public for access from run-example
   private static final Pattern WORD_SEPARATOR = Pattern.compile(" ");
-  private static final Logger logger = Logger.getLogger(JavaKinesisWordCountASL.class);
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     // Check that all required args were passed in.
     if (args.length != 3) {
       System.err.println(
@@ -140,7 +138,8 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     for (int i = 0; i < numStreams; i++) {
       streamsList.add(
           KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,
-              InitialPositionInStream.LATEST, kinesisCheckpointInterval, StorageLevel.MEMORY_AND_DISK_2())
+              InitialPositionInStream.LATEST, kinesisCheckpointInterval,
+              StorageLevel.MEMORY_AND_DISK_2())
       );
     }
 
@@ -167,7 +166,7 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
         new PairFunction<String, String, Integer>() {
           @Override
           public Tuple2<String, Integer> call(String s) {
-            return new Tuple2<String, Integer>(s, 1);
+            return new Tuple2<>(s, 1);
           }
         }
     ).reduceByKey(

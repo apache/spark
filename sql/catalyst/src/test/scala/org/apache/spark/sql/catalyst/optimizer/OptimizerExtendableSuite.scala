@@ -15,30 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
-  * This is a test for SPARK-7727 if the Optimizer is kept being extendable
-  */
+ * This is a test for SPARK-7727 if the Optimizer is kept being extendable
+ */
 class OptimizerExtendableSuite extends SparkFunSuite {
 
   /**
-    * Dummy rule for test batches
-    */
+   * Dummy rule for test batches
+   */
   object DummyRule extends Rule[LogicalPlan] {
     def apply(p: LogicalPlan): LogicalPlan = p
   }
 
   /**
-    * This class represents a dummy extended optimizer that takes the batches of the
-    * Optimizer and adds custom ones.
-    */
-  class ExtendedOptimizer extends Optimizer {
+   * This class represents a dummy extended optimizer that takes the batches of the
+   * Optimizer and adds custom ones.
+   */
+  class ExtendedOptimizer extends SimpleTestOptimizer {
 
     // rules set to DummyRule, would not be executed anyways
     val myBatches: Seq[Batch] = {

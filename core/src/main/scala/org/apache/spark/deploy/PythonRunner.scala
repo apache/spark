@@ -24,8 +24,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConverters._
 import scala.util.Try
 
-import org.apache.spark.SparkUserAppException
+import org.apache.spark.{SparkConf, SparkUserAppException}
 import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.internal.config._
 import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
@@ -37,8 +38,12 @@ object PythonRunner {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
-    val pythonExec =
-      sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python"))
+    val sparkConf = new SparkConf()
+    val pythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
+      .orElse(sparkConf.get(PYSPARK_PYTHON))
+      .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
+      .orElse(sys.env.get("PYSPARK_PYTHON"))
+      .getOrElse("python")
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
@@ -62,7 +67,7 @@ object PythonRunner {
     // ready to serve connections.
     thread.join()
 
-    // Build up a PYTHONPATH that includes the Spark assembly JAR (where this class is), the
+    // Build up a PYTHONPATH that includes the Spark assembly (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
     val pathElements = new ArrayBuffer[String]
     pathElements ++= formattedPyFiles
@@ -77,6 +82,9 @@ object PythonRunner {
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string
     env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
+    // pass conf spark.pyspark.python to python process, the only way to pass info to
+    // python process is through environment variable.
+    sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
       val process = builder.start()

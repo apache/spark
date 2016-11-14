@@ -35,6 +35,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, TestUtils}
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
@@ -71,7 +72,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
   /**
    * Tests a streaming operation under checkpointing, by restarting the operation
    * from checkpoint file and verifying whether the final output is correct.
-   * The output is assumed to have come from a reliable queue which an replay
+   * The output is assumed to have come from a reliable queue which a replay
    * data as required.
    *
    * NOTE: This takes into consideration that the last batch processed before
@@ -228,6 +229,11 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     }
   }
 
+  test("non-existent checkpoint dir") {
+    // SPARK-13211
+    intercept[IllegalArgumentException](new StreamingContext("nosuchdirectory"))
+  }
+
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
 
     assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
@@ -262,10 +268,9 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
       "No checkpointed RDDs in state stream before first failure")
     stateStream.checkpointData.currentCheckpointFiles.foreach {
-      case (time, file) => {
+      case (time, file) =>
         assert(fs.exists(new Path(file)), "Checkpoint file '" + file +"' for time " + time +
             " for state stream before first failure does not exist")
-      }
     }
 
     // Run till a further time such that previous checkpoint files in the stream would be deleted
@@ -292,10 +297,9 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
       "No checkpointed RDDs in state stream before second failure")
     stateStream.checkpointData.currentCheckpointFiles.foreach {
-      case (time, file) => {
+      case (time, file) =>
         assert(fs.exists(new Path(file)), "Checkpoint file '" + file +"' for time " + time +
           " for state stream before seconds failure does not exist")
-      }
     }
     ssc.stop()
 
@@ -403,7 +407,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     // explicitly.
     ssc = new StreamingContext(null, newCp, null)
     val restoredConf1 = ssc.conf
-    assert(restoredConf1.get("spark.driver.host") === "localhost")
+    val defaultConf = new SparkConf()
+    assert(restoredConf1.get("spark.driver.host") === defaultConf.get(DRIVER_HOST_ADDRESS))
     assert(restoredConf1.get("spark.driver.port") !== "9999")
   }
 
@@ -637,16 +642,18 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
         val fileStream = ssc.textFileStream(testDir.toString)
         // Make value 3 take a large time to process, to ensure that the driver
         // shuts down in the middle of processing the 3rd batch
-        CheckpointSuite.batchThreeShouldBlockIndefinitely = true
-        val mappedStream = fileStream.map(s => {
+        CheckpointSuite.batchThreeShouldBlockALongTime = true
+        val mappedStream = fileStream.map { s =>
           val i = s.toInt
           if (i == 3) {
-            while (CheckpointSuite.batchThreeShouldBlockIndefinitely) {
-              Thread.sleep(Long.MaxValue)
+            if (CheckpointSuite.batchThreeShouldBlockALongTime) {
+              // It's not a good idea to let the thread run forever
+              // as resource won't be correctly released
+              Thread.sleep(6000)
             }
           }
           i
-        })
+        }
 
         // Reducing over a large window to ensure that recovery from driver failure
         // requires reprocessing of all the files seen before the failure
@@ -686,7 +693,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       }
 
       // The original StreamingContext has now been stopped.
-      CheckpointSuite.batchThreeShouldBlockIndefinitely = false
+      CheckpointSuite.batchThreeShouldBlockALongTime = false
 
       // Create files while the streaming driver is down
       for (i <- Seq(4, 5, 6)) {
@@ -808,6 +815,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     val ois = new ObjectInputStreamWithLoader(
       new ByteArrayInputStream(bos.toByteArray), loader)
     assert(ois.readObject().asInstanceOf[Class[_]].getName == "[LtestClz;")
+    ois.close()
   }
 
   test("SPARK-11267: the race condition of two checkpoints in a batch") {
@@ -923,5 +931,5 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
 }
 
 private object CheckpointSuite extends Serializable {
-  var batchThreeShouldBlockIndefinitely: Boolean = true
+  var batchThreeShouldBlockALongTime: Boolean = true
 }

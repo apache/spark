@@ -141,7 +141,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
       LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
-    primitiveTypes.map { t =>
+    primitiveTypes.foreach { t =>
       val dataGen = RandomDataGenerator.forType(t, nullable = true).get
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()
@@ -182,7 +182,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
       LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
-    primitiveTypes.map { t =>
+    primitiveTypes.foreach { t =>
       val dataGen = RandomDataGenerator.forType(t, nullable = true).get
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()
@@ -273,7 +273,8 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: null test") {
-    val normalInt = Literal(1)
+    // Use -1 (default value for codegen) which can trigger some weird bugs, e.g. SPARK-14757
+    val normalInt = Literal(-1)
     val nullInt = Literal.create(null, IntegerType)
 
     def nullTest(op: (Expression, Expression) => Expression): Unit = {

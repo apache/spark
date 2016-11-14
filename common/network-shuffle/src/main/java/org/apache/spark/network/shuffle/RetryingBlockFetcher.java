@@ -46,7 +46,7 @@ public class RetryingBlockFetcher {
    * Used to initiate the first fetch for all blocks, and subsequently for retrying the fetch on any
    * remaining blocks.
    */
-  public static interface BlockFetchStarter {
+  public interface BlockFetchStarter {
     /**
      * Creates a new BlockFetcher to fetch the given block ids which may do some synchronous
      * bootstrapping followed by fully asynchronous block fetching.
@@ -64,7 +64,7 @@ public class RetryingBlockFetcher {
   private static final ExecutorService executorService = Executors.newCachedThreadPool(
     NettyUtils.createThreadFactory("Block Fetch Retry"));
 
-  private final Logger logger = LoggerFactory.getLogger(RetryingBlockFetcher.class);
+  private static final Logger logger = LoggerFactory.getLogger(RetryingBlockFetcher.class);
 
   /** Used to initiate new Block Fetches on our remaining blocks. */
   private final BlockFetchStarter fetchStarter;

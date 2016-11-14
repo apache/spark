@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
@@ -28,11 +29,12 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -98,6 +100,8 @@ class DAGSchedulerSuiteDummyException extends Exception
 
 class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeouts {
 
+  import DAGSchedulerSuite._
+
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
@@ -112,7 +116,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def stop() = {}
     override def executorHeartbeatReceived(
         execId: String,
-        accumUpdates: Array[(Long, Seq[AccumulableInfo])],
+        accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
         blockManagerId: BlockManagerId): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
@@ -157,6 +161,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   var mapOutputTracker: MapOutputTrackerMaster = null
+  var broadcastManager: BroadcastManager = null
+  var securityMgr: SecurityManager = null
   var scheduler: DAGScheduler = null
   var dagEventProcessLoopTester: DAGSchedulerEventProcessLoop = null
 
@@ -197,7 +203,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    sc = new SparkContext("local", "DAGSchedulerSuite")
+    init(new SparkConf())
+  }
+
+  private def init(testConf: SparkConf): Unit = {
+    sc = new SparkContext("local", "DAGSchedulerSuite", testConf)
     sparkListener.submittedStageInfos.clear()
     sparkListener.successfulStages.clear()
     sparkListener.failedStages.clear()
@@ -208,7 +218,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     cancelledStages.clear()
     cacheLocations.clear()
     results.clear()
-    mapOutputTracker = new MapOutputTrackerMaster(conf)
+    securityMgr = new SecurityManager(conf)
+    broadcastManager = new BroadcastManager(true, conf, securityMgr)
+    mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true) {
+      override def sendTracker(message: Any): Unit = {
+        // no-op, just so we can stop this to avoid leaking threads
+      }
+    }
     scheduler = new DAGScheduler(
       sc,
       taskScheduler,
@@ -222,6 +238,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   override def afterEach(): Unit = {
     try {
       scheduler.stop()
+      dagEventProcessLoopTester.stop()
+      mapOutputTracker.stop()
+      broadcastManager.stop()
     } finally {
       super.afterEach()
     }
@@ -277,8 +296,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           taskSet.tasks(i),
           result._1,
           result._2,
-          Seq(new AccumulableInfo(
-            accumId, Some(""), Some(1), None, internal = false, countFailedValues = false))))
+          Seq(AccumulatorSuite.createLongAccum("", initValue = 1, id = accumId))))
       }
     }
   }
@@ -320,6 +338,60 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.stageByOrderOfExecution.length === 2)
     assert(sparkListener.stageByOrderOfExecution(0) < sparkListener.stageByOrderOfExecution(1))
+  }
+
+  /**
+   * This test ensures that DAGScheduler build stage graph correctly.
+   *
+   * Suppose you have the following DAG:
+   *
+   * [A] <--(s_A)-- [B] <--(s_B)-- [C] <--(s_C)-- [D]
+   *             \                /
+   *               <-------------
+   *
+   * Here, RDD B has a shuffle dependency on RDD A, and RDD C has shuffle dependency on both
+   * B and A. The shuffle dependency IDs are numbers in the DAGScheduler, but to make the example
+   * easier to understand, let's call the shuffled data from A shuffle dependency ID s_A and the
+   * shuffled data from B shuffle dependency ID s_B.
+   *
+   * Note: [] means an RDD, () means a shuffle dependency.
+   */
+  test("[SPARK-13902] Ensure no duplicate stages are created") {
+    val rddA = new MyRDD(sc, 1, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
+    val s_A = shuffleDepA.shuffleId
+
+    val rddB = new MyRDD(sc, 1, List(shuffleDepA), tracker = mapOutputTracker)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
+    val s_B = shuffleDepB.shuffleId
+
+    val rddC = new MyRDD(sc, 1, List(shuffleDepA, shuffleDepB), tracker = mapOutputTracker)
+    val shuffleDepC = new ShuffleDependency(rddC, new HashPartitioner(1))
+    val s_C = shuffleDepC.shuffleId
+
+    val rddD = new MyRDD(sc, 1, List(shuffleDepC), tracker = mapOutputTracker)
+
+    submit(rddD, Array(0))
+
+    assert(scheduler.shuffleIdToMapStage.size === 3)
+    assert(scheduler.activeJobs.size === 1)
+
+    val mapStageA = scheduler.shuffleIdToMapStage(s_A)
+    val mapStageB = scheduler.shuffleIdToMapStage(s_B)
+    val mapStageC = scheduler.shuffleIdToMapStage(s_C)
+    val finalStage = scheduler.activeJobs.head.finalStage
+
+    assert(mapStageA.parents.isEmpty)
+    assert(mapStageB.parents === List(mapStageA))
+    assert(mapStageC.parents === List(mapStageA, mapStageB))
+    assert(finalStage.parents === List(mapStageC))
+
+    complete(taskSets(0), Seq((Success, makeMapStatus("hostA", 1))))
+    complete(taskSets(1), Seq((Success, makeMapStatus("hostA", 1))))
+    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
+    complete(taskSets(3), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty()
   }
 
   test("zero split job") {
@@ -484,7 +556,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       override def defaultParallelism(): Int = 2
       override def executorHeartbeatReceived(
           execId: String,
-          accumUpdates: Array[(Long, Seq[AccumulableInfo])],
+          accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
           blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def applicationAttemptId(): Option[String] = None
@@ -555,13 +627,52 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assertDataStructuresEmpty()
   }
 
+  private val shuffleFileLossTests = Seq(
+    ("slave lost with shuffle service", SlaveLost("", false), true, false),
+    ("worker lost with shuffle service", SlaveLost("", true), true, true),
+    ("worker lost without shuffle service", SlaveLost("", true), false, true),
+    ("executor failure with shuffle service", ExecutorKilled, true, false),
+    ("executor failure without shuffle service", ExecutorKilled, false, true))
+
+  for ((eventDescription, event, shuffleServiceOn, expectFileLoss) <- shuffleFileLossTests) {
+    val maybeLost = if (expectFileLoss) {
+      "lost"
+    } else {
+      "not lost"
+    }
+    test(s"shuffle files $maybeLost when $eventDescription") {
+      // reset the test context with the right shuffle service config
+      afterEach()
+      val conf = new SparkConf()
+      conf.set("spark.shuffle.service.enabled", shuffleServiceOn.toString)
+      init(conf)
+      assert(sc.env.blockManager.externalShuffleServiceEnabled == shuffleServiceOn)
+
+      val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+      val shuffleId = shuffleDep.shuffleId
+      val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+      submit(reduceRdd, Array(0))
+      complete(taskSets(0), Seq(
+        (Success, makeMapStatus("hostA", 1)),
+        (Success, makeMapStatus("hostB", 1))))
+      runEvent(ExecutorLost("exec-hostA", event))
+      if (expectFileLoss) {
+        intercept[MetadataFetchFailedException] {
+          mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
+        }
+      } else {
+        assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+          HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+      }
+    }
+  }
 
   // Helper function to validate state when creating tests for task failures
   private def checkStageId(stageId: Int, attempt: Int, stageAttempt: TaskSet) {
     assert(stageAttempt.stageId === stageId)
     assert(stageAttempt.stageAttemptId == attempt)
   }
-
 
   // Helper functions to extract commonly used code in Fetch Failure test cases
   private def setupStageAbortTest(sc: SparkContext) {
@@ -997,10 +1108,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // complete two tasks
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(0), Success, 42,
-      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(0)))
+      Seq.empty, createFakeTaskInfoWithId(0)))
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(1), Success, 42,
-      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(1)))
+      Seq.empty, createFakeTaskInfoWithId(1)))
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     // verify stage exists
     assert(scheduler.stageIdToStage.contains(0))
@@ -1009,10 +1120,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // finish other 2 tasks
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(2), Success, 42,
-      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(2)))
+      Seq.empty, createFakeTaskInfoWithId(2)))
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(3), Success, 42,
-      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(3)))
+      Seq.empty, createFakeTaskInfoWithId(3)))
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.endedTasks.size == 4)
 
@@ -1023,14 +1134,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // with a speculative task and make sure the event is sent out
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(3), Success, 42,
-      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(5)))
+      Seq.empty, createFakeTaskInfoWithId(5)))
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.endedTasks.size == 5)
 
     // make sure non successful tasks also send out event
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(3), UnknownReason, 42,
-      Seq.empty[AccumulableInfo], createFakeTaskInfoWithId(6)))
+      Seq.empty, createFakeTaskInfoWithId(6)))
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.endedTasks.size == 6)
   }
@@ -1044,7 +1155,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
     // pretend we were told hostA went away
     val oldEpoch = mapOutputTracker.getEpoch
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
     val newEpoch = mapOutputTracker.getEpoch
     assert(newEpoch > oldEpoch)
 
@@ -1144,7 +1255,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // SPARK-9809 -- this stage is submitted without a task for each partition (because some of
     // the shuffle map output is still available from stage 0); make sure we've still got internal
     // accumulators setup
-    assert(scheduler.stageIdToStage(2).internalAccumulators.nonEmpty)
+    assert(scheduler.stageIdToStage(2).latestInfo.taskMetrics != null)
     completeShuffleMapStageSuccessfully(2, 0, 2)
     completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
     assert(results === Map(0 -> 1234, 1 -> 1235))
@@ -1175,7 +1286,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     ))
 
     // then one executor dies, and a task fails in stage 1
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(0),
       FetchFailed(null, firstShuffleId, 2, 0, "Fetch failed"),
@@ -1273,7 +1384,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       makeMapStatus("hostA", reduceRdd.partitions.length)))
 
     // now that host goes down
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
 
     // so we resubmit those tasks
     runEvent(makeCompletionEvent(taskSets(0).tasks(0), Resubmitted, null))
@@ -1466,7 +1577,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     submit(reduceRdd, Array(0))
     // blockManagerMaster.removeExecutor("exec-hostA")
     // pretend we were told hostA went away
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
     // DAGScheduler will immediately resubmit the stage after it appears to have no pending tasks
     // rather than marking it is as failed and waiting.
     complete(taskSets(0), Seq(
@@ -1543,13 +1654,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
-    val acc = new Accumulator[Int](0, new AccumulatorParam[Int] {
-      override def addAccumulator(t1: Int, t2: Int): Int = t1 + t2
-      override def zero(initialValue: Int): Int = 0
-      override def addInPlace(r1: Int, r2: Int): Int = {
-        throw new DAGSchedulerSuiteDummyException
-      }
-    })
+    val acc = new LongAccumulator {
+      override def add(v: java.lang.Long): Unit = throw new DAGSchedulerSuiteDummyException
+      override def add(v: Long): Unit = throw new DAGSchedulerSuiteDummyException
+    }
+    sc.register(acc)
 
     // Run this on executors
     sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
@@ -1613,41 +1722,47 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   test("accumulator not calculated for resubmitted result stage") {
     // just for register
-    val accum = new Accumulator[Int](0, AccumulatorParam.IntAccumulatorParam)
+    val accum = AccumulatorSuite.createLongAccum("a")
     val finalRdd = new MyRDD(sc, 1, Nil)
     submit(finalRdd, Array(0))
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
 
-    val accVal = Accumulators.originals(accum.id).get.get.value
-
-    assert(accVal === 1)
-
+    assert(accum.value === 1)
     assertDataStructuresEmpty()
   }
 
   test("accumulators are updated on exception failures") {
-    val acc1 = sc.accumulator(0L, "ingenieur")
-    val acc2 = sc.accumulator(0L, "boulanger")
-    val acc3 = sc.accumulator(0L, "agriculteur")
-    assert(Accumulators.get(acc1.id).isDefined)
-    assert(Accumulators.get(acc2.id).isDefined)
-    assert(Accumulators.get(acc3.id).isDefined)
-    val accInfo1 = acc1.toInfo(Some(15L), None)
-    val accInfo2 = acc2.toInfo(Some(13L), None)
-    val accInfo3 = acc3.toInfo(Some(18L), None)
-    val accumUpdates = Seq(accInfo1, accInfo2, accInfo3)
-    val exceptionFailure = new ExceptionFailure(new SparkException("fondue?"), accumUpdates)
+    val acc1 = AccumulatorSuite.createLongAccum("ingenieur")
+    val acc2 = AccumulatorSuite.createLongAccum("boulanger")
+    val acc3 = AccumulatorSuite.createLongAccum("agriculteur")
+    assert(AccumulatorContext.get(acc1.id).isDefined)
+    assert(AccumulatorContext.get(acc2.id).isDefined)
+    assert(AccumulatorContext.get(acc3.id).isDefined)
+    val accUpdate1 = new LongAccumulator
+    accUpdate1.metadata = acc1.metadata
+    accUpdate1.setValue(15)
+    val accUpdate2 = new LongAccumulator
+    accUpdate2.metadata = acc2.metadata
+    accUpdate2.setValue(13)
+    val accUpdate3 = new LongAccumulator
+    accUpdate3.metadata = acc3.metadata
+    accUpdate3.setValue(18)
+    val accumUpdates = Seq(accUpdate1, accUpdate2, accUpdate3)
+    val accumInfo = accumUpdates.map(AccumulatorSuite.makeInfo)
+    val exceptionFailure = new ExceptionFailure(
+      new SparkException("fondue?"),
+      accumInfo).copy(accums = accumUpdates)
     submit(new MyRDD(sc, 1, Nil), Array(0))
     runEvent(makeCompletionEvent(taskSets.head.tasks.head, exceptionFailure, "result"))
-    assert(Accumulators.get(acc1.id).get.value === 15L)
-    assert(Accumulators.get(acc2.id).get.value === 13L)
-    assert(Accumulators.get(acc3.id).get.value === 18L)
+    assert(AccumulatorContext.get(acc1.id).get.value === 15L)
+    assert(AccumulatorContext.get(acc2.id).get.value === 13L)
+    assert(AccumulatorContext.get(acc3.id).get.value === 18L)
   }
 
   test("reduce tasks should be placed locally with map output") {
-    // Create an shuffleMapRdd with 1 partition
+    // Create a shuffleMapRdd with 1 partition
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
@@ -1668,7 +1783,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   test("reduce task locality preferences should only include machines with largest map outputs") {
     val numMapTasks = 4
-    // Create an shuffleMapRdd with more partitions
+    // Create a shuffleMapRdd with more partitions
     val shuffleMapRdd = new MyRDD(sc, numMapTasks, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val shuffleId = shuffleDep.shuffleId
@@ -1929,7 +2044,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
     // Pretend host A was lost
     val oldEpoch = mapOutputTracker.getEpoch
-    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
     val newEpoch = mapOutputTracker.getEpoch
     assert(newEpoch > oldEpoch)
 
@@ -1961,6 +2076,92 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   /**
+   * Checks the DAGScheduler's internal logic for traversing a RDD DAG by making sure that
+   * getShuffleDependencies correctly returns the direct shuffle dependencies of a particular
+   * RDD. The test creates the following RDD graph (where n denotes a narrow dependency and s
+   * denotes a shuffle dependency):
+   *
+   * A <------------s---------,
+   *                           \
+   * B <--s-- C <--s-- D <--n---`-- E
+   *
+   * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
+   * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
+   */
+  test("getShuffleDependencies correctly returns only direct shuffle parents") {
+    val rddA = new MyRDD(sc, 2, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
+    val rddB = new MyRDD(sc, 2, Nil)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
+    val rddC = new MyRDD(sc, 1, List(shuffleDepB))
+    val shuffleDepC = new ShuffleDependency(rddC, new HashPartitioner(1))
+    val rddD = new MyRDD(sc, 1, List(shuffleDepC))
+    val narrowDepD = new OneToOneDependency(rddD)
+    val rddE = new MyRDD(sc, 1, List(shuffleDepA, narrowDepD), tracker = mapOutputTracker)
+
+    assert(scheduler.getShuffleDependencies(rddA) === Set())
+    assert(scheduler.getShuffleDependencies(rddB) === Set())
+    assert(scheduler.getShuffleDependencies(rddC) === Set(shuffleDepB))
+    assert(scheduler.getShuffleDependencies(rddD) === Set(shuffleDepC))
+    assert(scheduler.getShuffleDependencies(rddE) === Set(shuffleDepA, shuffleDepC))
+  }
+
+  test("SPARK-17644: After one stage is aborted for too many failed attempts, subsequent stages" +
+    "still behave correctly on fetch failures") {
+    // Runs a job that always encounters a fetch failure, so should eventually be aborted
+    def runJobWithPersistentFetchFailure: Unit = {
+      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+      val shuffleHandle =
+        rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+      rdd1.map {
+        case (x, _) if (x == 1) =>
+          throw new FetchFailedException(
+            BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+        case (x, _) => x
+      }.count()
+    }
+
+    // Runs a job that encounters a single fetch failure but succeeds on the second attempt
+    def runJobWithTemporaryFetchFailure: Unit = {
+      object FailThisAttempt {
+        val _fail = new AtomicBoolean(true)
+      }
+      val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).map(x => (x, 1)).groupByKey()
+      val shuffleHandle =
+        rdd1.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle
+      rdd1.map {
+        case (x, _) if (x == 1) && FailThisAttempt._fail.getAndSet(false) =>
+          throw new FetchFailedException(
+            BlockManagerId("1", "1", 1), shuffleHandle.shuffleId, 0, 0, "test")
+      }
+    }
+
+    failAfter(10.seconds) {
+      val e = intercept[SparkException] {
+        runJobWithPersistentFetchFailure
+      }
+      assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
+    }
+
+    // Run a second job that will fail due to a fetch failure.
+    // This job will hang without the fix for SPARK-17644.
+    failAfter(10.seconds) {
+      val e = intercept[SparkException] {
+        runJobWithPersistentFetchFailure
+      }
+      assert(e.getMessage.contains("org.apache.spark.shuffle.FetchFailedException"))
+    }
+
+    failAfter(10.seconds) {
+      try {
+        runJobWithTemporaryFetchFailure
+      } catch {
+        case e: Throwable => fail("A job with one fetch failure should eventually succeed")
+      }
+    }
+  }
+
+  /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
    */
@@ -1971,12 +2172,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     }
   }
 
-  private def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes))
-
-  private def makeBlockManagerId(host: String): BlockManagerId =
-    BlockManagerId("exec-" + host, host, 12345)
-
   private def assertDataStructuresEmpty(): Unit = {
     assert(scheduler.activeJobs.isEmpty)
     assert(scheduler.failedStages.isEmpty)
@@ -1984,7 +2179,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(scheduler.jobIdToStageIds.isEmpty)
     assert(scheduler.stageIdToStage.isEmpty)
     assert(scheduler.runningStages.isEmpty)
-    assert(scheduler.shuffleToMapStage.isEmpty)
+    assert(scheduler.shuffleIdToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
     assert(scheduler.outputCommitCoordinator.isEmpty)
   }
@@ -2007,14 +2202,21 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      extraAccumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo],
+      extraAccumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty,
       taskInfo: TaskInfo = createFakeTaskInfo()): CompletionEvent = {
     val accumUpdates = reason match {
-      case Success => task.initialAccumulators.map { a => a.toInfo(Some(a.zero), None) }
-      case ef: ExceptionFailure => ef.accumUpdates
-      case _ => Seq.empty[AccumulableInfo]
+      case Success => task.metrics.accumulators()
+      case ef: ExceptionFailure => ef.accums
+      case _ => Seq.empty
     }
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, taskInfo)
   }
+}
 
+object DAGSchedulerSuite {
+  def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2): MapStatus =
+    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes))
+
+  def makeBlockManagerId(host: String): BlockManagerId =
+    BlockManagerId("exec-" + host, host, 12345)
 }

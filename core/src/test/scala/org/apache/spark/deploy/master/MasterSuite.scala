@@ -157,6 +157,33 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
+  test("master/worker web ui available with reverseProxy") {
+    implicit val formats = org.json4s.DefaultFormats
+    val reverseProxyUrl = "http://localhost:8080"
+    val conf = new SparkConf()
+    conf.set("spark.ui.reverseProxy", "true")
+    conf.set("spark.ui.reverseProxyUrl", reverseProxyUrl)
+    val localCluster = new LocalSparkCluster(2, 2, 512, conf)
+    localCluster.start()
+    try {
+      eventually(timeout(5 seconds), interval(100 milliseconds)) {
+        val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
+          .getLines().mkString("\n")
+        val JArray(workers) = (parse(json) \ "workers")
+        workers.size should be (2)
+        workers.foreach { workerSummaryJson =>
+          val JString(workerId) = workerSummaryJson \ "id"
+          val url = s"http://localhost:${localCluster.masterWebUIPort}/proxy/${workerId}/json"
+          val workerResponse = parse(Source.fromURL(url).getLines().mkString("\n"))
+          (workerResponse \ "cores").extract[Int] should be (2)
+          (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl)
+        }
+      }
+    } finally {
+      localCluster.stop()
+    }
+  }
+
   test("basic scheduling - spread out") {
     basicScheduling(spreadOut = true)
   }
