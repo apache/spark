@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.net.URI
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import com.google.common.collect.{HashMultiset, Multiset}
+import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSystem}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
@@ -180,7 +182,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     withSQLConf(
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
-      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true"
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL"
     ) {
       testSchemaMerging(2)
     }
@@ -704,15 +706,86 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
+  // In order to make intent more readable for partition pruning tests, we increase
+  // openCostInBytes to disable file merging.
   test("SPARK-17059: Allow FileFormat to specify partition pruning strategy") {
-    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (128 * 1024 * 1024).toString) {
       withTempPath { path =>
-        Seq(1, 2, 3).toDF("x").write.parquet(path.getCanonicalPath)
-        val df = spark.read.parquet(path.getCanonicalPath).where("x = 0")
-        assert(df.rdd.partitions.length == 0)
+        spark.sparkContext.parallelize(Seq(1, 2, 3), 3)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+
+        val zeroPartitions = spark.read.parquet(path.getCanonicalPath).where("x = 0")
+        assert(zeroPartitions.rdd.partitions.length == 0)
+
+        val onePartition = spark.read.parquet(path.getCanonicalPath).where("x = 1")
+        assert(onePartition.rdd.partitions.length == 1)
       }
     }
   }
+
+  test("Do not filter out parquet file when missing in _metadata file") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (128 * 1024 * 1024).toString) {
+      withTempPath { path =>
+        spark.sparkContext.parallelize(Seq(1, 2, 3), 3)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+        withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "NONE") {
+          spark.sparkContext.parallelize(Seq(4), 1)
+            .toDF("x").write.mode(SaveMode.Append).parquet(path.getCanonicalPath)
+        }
+        val twoPartitions = spark.read.parquet(path.getCanonicalPath).where("x = 1")
+        assert(twoPartitions.rdd.partitions.length == 2)
+      }
+    }
+  }
+
+  test("Only read _metadata file once for a given root path") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      "fs.count.impl" -> classOf[CountingFileSystem].getName,
+      "fs.count.impl.disable.cache" -> "true") {
+      withTempPath { path =>
+        val mockedPath = s"count://some-bucket/${path.getCanonicalPath}"
+        val metadataPath: Path = new Path(s"$mockedPath/_metadata")
+        spark.sparkContext.parallelize(Seq(1, 2, 3), 3)
+          .toDF("x").write.parquet(mockedPath)
+        val onePartition = spark.read.parquet(mockedPath).where("x = 1")
+        assert(onePartition.rdd.partitions.length == 1)
+        assert(Counter.count(metadataPath) == 1)
+        Counter.reset()
+      }
+    }
+  }
+}
+
+class CountingFileSystem extends RawLocalFileSystem {
+  override def getScheme: String = "count"
+
+  override def getUri: URI = {
+    URI.create("count://some-bucket")
+  }
+
+  override def open(path: Path, bufferSize: Int): FSDataInputStream = {
+    Counter.increment(path)
+    super.open(path, bufferSize)
+  }
+}
+
+object Counter {
+  var counts: Multiset[Path] = HashMultiset.create()
+
+  def increment(path: Path): Unit = {
+    counts.add(path)
+  }
+
+  def count(path: Path): Int = {
+    counts.count(path)
+  }
+
+  def reset(): Unit = {
+    counts = HashMultiset.create()
+  }
+
 }
 
 object TestingUDT {

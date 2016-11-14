@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -79,21 +80,6 @@ trait FileFormat {
   }
 
   /**
-   * Allow FileFormats to have a pluggable way to utilize pushed filters to eliminate partitions
-   * before execution. By default no pruning is performed and the original partitioning is
-   * preserved.
-   */
-  def filterPartitions(
-      filters: Seq[Filter],
-      schema: StructType,
-      conf: Configuration,
-      allFiles: Seq[FileStatus],
-      root: Path,
-      partitions: Seq[PartitionDirectory]): Seq[PartitionDirectory] = {
-    partitions
-  }
-
-  /**
    * Returns whether a file with `path` could be splitted or not.
    */
   def isSplitable(
@@ -101,6 +87,19 @@ trait FileFormat {
       options: Map[String, String],
       path: Path): Boolean = {
     false
+  }
+
+  /**
+   * For a file, return valid splits that may pass the given data filter.
+   */
+  def getSplits(
+      sparkSession: SparkSession,
+      fileIndex: FileIndex,
+      fileStatus: FileStatus,
+      filters: Seq[Filter],
+      schema: StructType,
+      hadoopConf: Configuration): Seq[FileSplit] = {
+    Seq(new FileSplit(fileStatus.getPath, 0, fileStatus.getLen, Array.empty))
   }
 
   /**

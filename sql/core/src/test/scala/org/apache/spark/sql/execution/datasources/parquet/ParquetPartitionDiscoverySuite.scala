@@ -939,7 +939,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+      withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
         spark.range(3).write.parquet(s"$path/p0=0/p1=0")
       }
 

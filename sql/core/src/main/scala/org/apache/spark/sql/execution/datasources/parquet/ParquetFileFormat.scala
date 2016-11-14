@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.FileNotFoundException
 import java.net.URI
 import java.util.logging.{Logger => JLogger}
 
@@ -59,8 +60,8 @@ class ParquetFileFormat
   with Logging
   with Serializable {
 
-  // Attempt to cache parquet metadata
-  @transient @volatile private var cachedMetadata: ParquetMetadata = _
+  @transient private val cachedMetadata: mutable.LinkedHashMap[Path, ParquetMetadata] =
+    new mutable.LinkedHashMap[Path, ParquetMetadata]
 
   override def shortName(): String = "parquet"
 
@@ -277,6 +278,94 @@ class ParquetFileFormat
     true
   }
 
+  override def getSplits(
+      sparkSession: SparkSession,
+      fileIndex: FileIndex,
+      fileStatus: FileStatus,
+      filters: Seq[Filter],
+      schema: StructType,
+      hadoopConf: Configuration): Seq[FileSplit] = {
+    if (filters.isEmpty || !sparkSession.sessionState.conf.parquetPartitionPruningEnabled) {
+      // Return immediately to save FileSystem overhead
+      super.getSplits(sparkSession, fileIndex, fileStatus, filters, schema, hadoopConf)
+    } else {
+      val filePath = fileStatus.getPath
+      val rootOption: Option[Path] = fileIndex.rootPaths
+        .find(root => filePath.toString.startsWith(root.toString))
+      val metadataOption = rootOption.flatMap { root =>
+        cachedMetadata.get(root).orElse(getMetadataForPath(filePath, root, hadoopConf))
+          .map { metadata =>
+            cachedMetadata.put(root, metadata)
+            metadata
+          }
+      }
+      // If the metadata exists, filter the splits.
+      // Otherwise, fall back to the default implementation.
+      metadataOption
+        .map(filterToSplits(fileStatus, _, rootOption.get, filters, schema, hadoopConf))
+        .getOrElse(super.getSplits(sparkSession, fileIndex, fileStatus,
+          filters, schema, hadoopConf))
+    }
+  }
+
+  private def filterToSplits(
+      fileStatus: FileStatus,
+      metadata: ParquetMetadata,
+      metadataRoot: Path,
+      filters: Seq[Filter],
+      schema: StructType,
+      hadoopConf: Configuration): Seq[FileSplit] = {
+    val metadataBlocks = metadata.getBlocks
+
+    // Ensure that the metadata has an entry for the file.
+    // If it does not, do not filter at this stage.
+    val metadataContainsPath = metadataBlocks.asScala.exists { bmd =>
+      new Path(metadataRoot, bmd.getPath) == fileStatus.getPath
+    }
+    if (!metadataContainsPath) {
+      log.warn(s"Found _metadata file for $metadataRoot," +
+        s" but no entries for blocks in ${fileStatus.getPath}. Retaining whole file.")
+      return Seq(new FileSplit(fileStatus.getPath, 0, fileStatus.getLen, Array.empty))
+    }
+
+    val parquetSchema = metadata.getFileMetaData.getSchema
+    val filter = FilterCompat.get(filters
+      .flatMap(ParquetFilters.createFilter(schema, _))
+      .reduce(FilterApi.and))
+    val filteredMetadata =
+      RowGroupFilter.filterRowGroups(filter, metadataBlocks, parquetSchema).asScala
+    filteredMetadata.flatMap { bmd =>
+      val bmdPath = new Path(metadataRoot, bmd.getPath)
+      val fsPath = fileStatus.getPath
+      if (bmdPath == fsPath) {
+        Some(new FileSplit(bmdPath, bmd.getStartingPos, bmd.getTotalByteSize, Array.empty))
+      } else {
+        None
+      }
+    }
+  }
+
+  private def getMetadataForPath(
+      filePath: Path,
+      rootPath: Path,
+      conf: Configuration): Option[ParquetMetadata] = {
+    val fs = rootPath.getFileSystem(conf)
+    try {
+      val stat = fs.getFileStatus(rootPath)
+      // Mimic Parquet behavior. If given a directory, find the underlying _metadata file
+      // If given a single file, check the parent directory for a _metadata file
+      val directory = if (stat.isDirectory) stat.getPath else stat.getPath.getParent
+      val metadataFile = new Path(directory, ParquetFileWriter.PARQUET_METADATA_FILE)
+      val metadata =
+        ParquetFileReader.readFooter(conf, metadataFile, ParquetMetadataConverter.NO_FILTER)
+      Option(metadata)
+    } catch {
+      case notFound: FileNotFoundException =>
+        log.debug(s"No _metadata file found in root $rootPath")
+        None
+    }
+  }
+
   override def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
@@ -431,59 +520,6 @@ class ParquetFileFormat
       sqlContext.sessionState.newHadoopConf(),
       options)
   }
-
-  override def filterPartitions(
-      filters: Seq[Filter],
-      schema: StructType,
-      conf: Configuration,
-      allFiles: Seq[FileStatus],
-      root: Path,
-      partitions: Seq[PartitionDirectory]): Seq[PartitionDirectory] = {
-    // Read the "_metadata" file if available, contains all block headers. On S3 better to grab
-    // all of the footers in a batch rather than having to read every single file just to get its
-    // footer.
-    allFiles.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
-      .map { stat =>
-        val metadata = getOrReadMetadata(conf, stat)
-        partitions.map { partition =>
-          filterByMetadata(filters, schema, conf, root, metadata, partition)
-        }.filterNot(_.files.isEmpty)
-      }.getOrElse(partitions)
-  }
-
-  private def filterByMetadata(
-      filters: Seq[Filter],
-      schema: StructType,
-      conf: Configuration,
-      root: Path,
-      metadata: ParquetMetadata,
-      partition: PartitionDirectory): PartitionDirectory = {
-    val blockMetadatas = metadata.getBlocks.asScala
-    val parquetSchema = metadata.getFileMetaData.getSchema
-    val conjunctiveFilter = filters
-      .flatMap(ParquetFilters.createFilter(schema, _))
-      .reduceOption(FilterApi.and)
-    conjunctiveFilter.map { conjunction =>
-      val filteredBlocks = RowGroupFilter.filterRowGroups(
-        FilterCompat.get(conjunction), blockMetadatas.asJava, parquetSchema).asScala.map { bmd =>
-        new Path(root, bmd.getPath).toString
-      }
-      PartitionDirectory(partition.values, partition.files.filter { f =>
-        filteredBlocks.contains(f.getPath.toString)
-      })
-    }.getOrElse(partition)
-  }
-
-  private def getOrReadMetadata(conf: Configuration, stat: FileStatus): ParquetMetadata = {
-    if (cachedMetadata == null) {
-      logInfo("Reading summary metadata into cache in ParquetFileFormat")
-      cachedMetadata = ParquetFileReader.readFooter(conf, stat, ParquetMetadataConverter.NO_FILTER)
-    } else {
-      logInfo("Using cached summary metadata")
-    }
-    cachedMetadata
-  }
-
 }
 
 object ParquetFileFormat extends Logging {
