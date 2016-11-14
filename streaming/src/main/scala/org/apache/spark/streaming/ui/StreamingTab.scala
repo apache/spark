@@ -19,10 +19,10 @@ package org.apache.spark.streaming.ui
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.status.api.v1.StreamingApiRootResource
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 import StreamingTab._
-import org.apache.spark.streaming.status.api.v1.StreamingApiRootResource
 
 /**
  * Spark Web UI tab that shows statistics of a streaming job.
@@ -40,8 +40,8 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
   ssc.sc.addSparkListener(listener)
   attachPage(new StreamingPage(this))
   attachPage(new BatchPage(this))
-  
-  parent.attachHandler(StreamingApiRootResource.getServletHandler(parent,listener));
+
+  parent.attachHandler(StreamingApiRootResource.getServletHandler(parent, listener))
 
   def attach() {
     getSparkUI(ssc).attachTab(this)
