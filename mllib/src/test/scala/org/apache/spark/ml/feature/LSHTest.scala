@@ -58,12 +58,13 @@ private[ml] object LSHTest {
     val outputCol = model.getOutputCol
     val transformedData = model.transform(dataset)
 
-    SchemaUtils.checkColumnType(transformedData.schema, model.getOutputCol, new VectorUDT)
+    SchemaUtils.checkColumnType(
+      transformedData.schema, model.getOutputCol, DataTypes.createArrayType(new VectorUDT))
 
     // Perform a cross join and label each pair of same_bucket and distance
     val pairs = transformedData.as("a").crossJoin(transformedData.as("b"))
     val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y), DataTypes.DoubleType)
-    val sameBucket = udf((x: Vector, y: Vector) => model.hashDistance(x, y) == 0.0,
+    val sameBucket = udf((x: Seq[Vector], y: Seq[Vector]) => model.hashDistance(x, y) == 0.0,
       DataTypes.BooleanType)
     val result = pairs
       .withColumn("same_bucket", sameBucket(col(s"a.$outputCol"), col(s"b.$outputCol")))

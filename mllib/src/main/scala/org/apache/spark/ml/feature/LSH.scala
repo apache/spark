@@ -35,18 +35,32 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   /**
    * Param for the dimension of LSH OR-amplification.
    *
-   * In this implementation, we use LSH OR-amplification to reduce the false negative rate. The
-   * higher the dimension is, the lower the false negative rate.
+   * LSH OR-amplification can be used to reduce the false negative rate. The higher the dimension
+   * is, the lower the false negative rate.
    * @group param
    */
-  final val outputDim: IntParam = new IntParam(this, "outputDim", "output dimension, where" +
+  final val numHashTables: IntParam = new IntParam(this, "numHashTables", "number of hash " +
+    "tables, where increasing number of hash tables lowers the false negative rate, and " +
+    "decreasing it improves the running performance", ParamValidators.gt(0))
+
+  /**
+   * Param for the dimension of LSH AND-amplification.
+   *
+   * LSH AND-amplification can be used to reduce the false positive rate. The higher the dimension
+   * is, the lower the false positive rate.
+   * @group param
+   */
+  final val numHashFunctions: IntParam = new IntParam(this, "numHashFunctions", "output dimension, where" +
     "increasing dimensionality lowers the false negative rate, and decreasing dimensionality" +
     " improves the running performance", ParamValidators.gt(0))
 
   /** @group getParam */
-  final def getOutputDim: Int = $(outputDim)
+  final def getNumHashFunctions: Int = $(numHashFunctions)
 
-  setDefault(outputDim -> 1)
+  /** @group getParam */
+  final def getNumHashTables: Int = $(numHashTables)
+
+  setDefault(numHashTables -> 1, numHashFunctions -> 1)
 
   /**
    * Transform the Schema for LSH
@@ -54,7 +68,7 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
    * @return A derived schema with [[outputCol]] added
    */
   protected[this] final def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), DataTypes.createArrayType(new VectorUDT))
   }
 }
 
@@ -66,10 +80,10 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
   self: T =>
 
   /**
-   * The hash function of LSH, mapping a predefined KeyType to a Vector
+   * The hash function of LSH, mapping an input feature to multiple vectors
    * @return The mapping of LSH function.
    */
-  protected[ml] val hashFunction: Vector => Vector
+  protected[ml] val hashFunction: Vector => Array[Vector]
 
   /**
    * Calculate the distance between two different keys using the distance metric corresponding
@@ -87,24 +101,20 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    * @param y Another hash vector
    * @return The distance between hash vectors x and y
    */
-  protected[ml] def hashDistance(x: Vector, y: Vector): Double
+  protected[ml] def hashDistance(x: Seq[Vector], y: Seq[Vector]): Double
+
+  protected[ml] def validateDimension(): Unit
 
   override def transform(dataset: Dataset[_]): DataFrame = {
+    validateDimension()
     transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(hashFunction, new VectorUDT)
+    val transformUDF = udf(hashFunction, DataTypes.createArrayType(new VectorUDT))
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
-
-  /**
-   * Check prerequisite for nearest neighbor. This method will be overridden in subclasses.
-   *
-   * @param singleProbe True for using single-probe; false for multi-probe
-   */
-  protected[this] def checkNearestNeighbor(singleProbe: Boolean) = {}
 
   /**
    * Given a large dataset and an item, approximately find at most k items which have the closest
@@ -116,6 +126,8 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    *  - Single-probe: Fast, return at most k elements (Probing only one buckets)
    *  - Multi-probe: Slow, return exact k elements (Probing multiple buckets close to the key)
    *
+   * Currently it is made private since more discussion is needed for Multi-probe
+   *
    * @param dataset the dataset to search for nearest neighbors of the key
    * @param key Feature vector representing the item to search for
    * @param numNearestNeighbors The maximum number of nearest neighbors
@@ -124,14 +136,13 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    * @return A dataset containing at most k items closest to the key. A distCol is added to show
    *         the distance between each row and the key.
    */
-  def approxNearestNeighbors(
+  private[feature] def approxNearestNeighbors(
       dataset: Dataset[_],
       key: Vector,
       numNearestNeighbors: Int,
       singleProbe: Boolean,
       distCol: String): Dataset[_] = {
     require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
-    checkNearestNeighbor(singleProbe)
     // Get Hash Value of the key
     val keyHash = hashFunction(key)
     val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
@@ -140,14 +151,24 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
         dataset.toDF()
       }
 
-    // In the origin dataset, find the hash value that is closest to the key
-    val hashDistUDF = udf((x: Vector) => hashDistance(x, keyHash), DataTypes.DoubleType)
-    val hashDistCol = hashDistUDF(col($(outputCol)))
-
     val modelSubset = if (singleProbe) {
-      modelDataset.filter(hashDistCol === 0.0)
+      def sameBucket(x: Seq[Vector], y: Seq[Vector]): Boolean = {
+        x.zip(y).exists(tuple => tuple._1 == tuple._2)
+      }
+
+      // In the origin dataset, find the hash value that hash the same bucket with the key
+      val sameBucketWithKeyUDF = udf((x: Seq[Vector]) =>
+        sameBucket(x, keyHash), DataTypes.BooleanType)
+
+      modelDataset.filter(sameBucketWithKeyUDF(col($(outputCol))))
     } else {
+      // In the origin dataset, find the hash value that is closest to the key
+      // Limit the use of hashDist since it's controversial
+      val hashDistUDF = udf((x: Seq[Vector]) => hashDistance(x, keyHash), DataTypes.DoubleType)
+      val hashDistCol = hashDistUDF(col($(outputCol)))
+
       // Compute threshold to get exact k elements.
+      // TODO: SPARK-18409: Use approxQuantile to get the threshold
       val modelDatasetSortedByHash = modelDataset.sort(hashDistCol).limit(numNearestNeighbors)
       val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistCol))
       val hashThreshold = thresholdDataset.take(1).head.getDouble(0)
@@ -163,8 +184,28 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
   }
 
   /**
-   * Overloaded method for approxNearestNeighbors. Use Single Probing as default way to search
-   * nearest neighbors and "distCol" as default distCol.
+   * Given a large dataset and an item, approximately find at most k items which have the closest
+   * distance to the item. If the [[outputCol]] is missing, the method will transform the data; if
+   * the [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the
+   * transformed data when necessary.
+   *
+   * @param dataset the dataset to search for nearest neighbors of the key
+   * @param key Feature vector representing the item to search for
+   * @param numNearestNeighbors The maximum number of nearest neighbors
+   * @param distCol Output column for storing the distance between each result row and the key
+   * @return A dataset containing at most k items closest to the key. A distCol is added to show
+   *         the distance between each row and the key.
+   */
+  private[feature] def approxNearestNeighbors(
+    dataset: Dataset[_],
+    key: Vector,
+    numNearestNeighbors: Int,
+    distCol: String): Dataset[_] = {
+    approxNearestNeighbors(dataset, key, numNearestNeighbors, true, distCol)
+  }
+
+  /**
+   * Overloaded method for approxNearestNeighbors. Use "distCol" as default distCol.
    */
   def approxNearestNeighbors(
       dataset: Dataset[_],
@@ -187,16 +228,13 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       inputName: String,
       explodeCols: Seq[String]): Dataset[_] = {
     require(explodeCols.size == 2, "explodeCols must be two strings.")
-    val vectorToMap = udf((x: Vector) => x.asBreeze.iterator.toMap,
-      MapType(DataTypes.IntegerType, DataTypes.DoubleType))
     val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
       transform(dataset)
     } else {
       dataset.toDF()
     }
     modelDataset.select(
-      struct(col("*")).as(inputName),
-      explode(vectorToMap(col($(outputCol)))).as(explodeCols))
+      struct(col("*")).as(inputName), posexplode(col($(outputCol))).as(explodeCols))
   }
 
   /**
@@ -301,7 +339,10 @@ private[ml] abstract class LSH[T <: LSHModel[T]]
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  def setOutputDim(value: Int): this.type = set(outputDim, value)
+  def setNumHashFunctions(value: Int): this.type = set(numHashFunctions, value)
+
+  /** @group setParam */
+  def setNumHashTables(value: Int): this.type = set(numHashTables, value)
 
   /**
    * Validate and create a new instance of concrete LSHModel. Because different LSHModel may have
