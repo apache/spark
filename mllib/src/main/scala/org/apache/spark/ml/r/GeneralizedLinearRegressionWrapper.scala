@@ -29,6 +29,7 @@ import org.apache.spark.ml.regression._
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -64,6 +65,7 @@ private[r] class GeneralizedLinearRegressionWrapper private (
         .drop(PREDICTED_LABEL_PROB_COL)
         .drop(PREDICTED_LABEL_INDEX_COL)
         .drop(glm.getFeaturesCol)
+        .drop(glm.getLabelCol)
     } else {
       pipeline.transform(dataset)
         .drop(glm.getFeaturesCol)
@@ -92,7 +94,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       regParam: Double): GeneralizedLinearRegressionWrapper = {
     val rFormula = new RFormula().setFormula(formula)
     if (family == "binomial") rFormula.setForceIndexLabel(true)
-    RWrapperUtils.checkDataColumns(rFormula, data)
+    checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
     val schema = rFormulaModel.transform(data).schema
@@ -109,6 +111,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setWeightCol(weightCol)
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setLabelCol(rFormula.getLabelCol)
     val pipeline = if (family == "binomial") {
       // Convert prediction from probability to label index.
       val probToPred = new ProbabilityToPrediction()
