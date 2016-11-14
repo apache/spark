@@ -881,7 +881,8 @@ test_that("spark.kstest", {
   expect_match(capture.output(stats)[1], "Kolmogorov-Smirnov test summary:")
 })
 
-test_that("spark.randomForest Regression", {
+test_that("spark.randomForest", {
+  # regression
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.randomForest(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
                               numTrees = 1)
@@ -923,9 +924,8 @@ test_that("spark.randomForest Regression", {
   expect_equal(stats$treeWeights, stats2$treeWeights)
 
   unlink(modelPath)
-})
 
-test_that("spark.randomForest Classification", {
+  # classification
   data <- suppressWarnings(createDataFrame(iris))
   model <- spark.randomForest(data, Species ~ Petal_Length + Petal_Width, "classification",
                               maxDepth = 5, maxBins = 16)
@@ -935,6 +935,10 @@ test_that("spark.randomForest Classification", {
   expect_equal(stats$numTrees, 20)
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
+  # Test string prediction values
+  predictions <- collect(predict(model, data))$prediction
+  expect_equal(length(grep("setosa", predictions)), 50)
+  expect_equal(length(grep("versicolor", predictions)), 50)
 
   modelPath <- tempfile(pattern = "spark-randomForestClassification", fileext = ".tmp")
   write.ml(model, modelPath)
@@ -947,6 +951,32 @@ test_that("spark.randomForest Classification", {
   expect_equal(stats$numClasses, stats2$numClasses)
 
   unlink(modelPath)
+
+  # Test numeric response variable
+  labelToIndex <- function(species) {
+    switch(as.character(species),
+      setosa = 0.0,
+      versicolor = 1.0,
+      virginica = 2.0
+    )
+  }
+  iris$NumericSpecies <- lapply(iris$Species, labelToIndex)
+  data <- suppressWarnings(createDataFrame(iris[-5]))
+  model <- spark.randomForest(data, NumericSpecies ~ Petal_Length + Petal_Width, "classification",
+                              maxDepth = 5, maxBins = 16)
+  stats <- summary(model)
+  expect_equal(stats$numFeatures, 2)
+  expect_equal(stats$numTrees, 20)
+  # Test numeric prediction values
+  predictions <- collect(predict(model, data))$prediction
+  expect_equal(length(grep("1.0", predictions)), 50)
+  expect_equal(length(grep("2.0", predictions)), 50)
+
+  # spark.randomForest classification can work on libsvm data
+  data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
+                source = "libsvm")
+  model <- spark.randomForest(data, label ~ features, "classification")
+  expect_equal(summary(model)$numFeatures, 4)
 })
 
 test_that("spark.gbt", {
@@ -1015,6 +1045,12 @@ test_that("spark.gbt", {
   expect_equal(iris2$NumericSpecies, as.double(collect(predict(m, df))$prediction))
   expect_equal(s$numFeatures, 5)
   expect_equal(s$numTrees, 20)
+
+  # spark.gbt classification can work on libsvm data
+  data <- read.df(absoluteSparkPath("data/mllib/sample_binary_classification_data.txt"),
+                source = "libsvm")
+  model <- spark.gbt(data, label ~ features, "classification")
+  expect_equal(summary(model)$numFeatures, 692)
 })
 
 sparkR.session.stop()
