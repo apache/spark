@@ -1426,8 +1426,12 @@ private[spark] object Utils extends Logging {
             }
             callStack(0) = ste.toString // Put last Spark method on top of the stack trace.
           } else {
-            firstUserLine = ste.getLineNumber
-            firstUserFile = ste.getFileName
+            if (ste.getFileName != null) {
+              firstUserFile = ste.getFileName
+              if (ste.getLineNumber >= 0) {
+                firstUserLine = ste.getLineNumber
+              }
+            }
             callStack += ste.toString
             insideSpark = false
           }
