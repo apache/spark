@@ -87,8 +87,7 @@ private[state] class HDFSBackedStateStoreProvider(
 
     private val newVersion = version + 1
     private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
-    private val tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
-
+    private lazy val tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
     private val allUpdates = new java.util.HashMap[UnsafeRow, StoreUpdate]()
 
     @volatile private var state: STATE = UPDATING
@@ -101,7 +100,7 @@ private[state] class HDFSBackedStateStoreProvider(
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
-      verify(state == UPDATING, "Cannot remove after already committed or aborted")
+      verify(state == UPDATING, "Cannot put after already committed or aborted")
 
       val isNewKey = !mapToUpdate.containsKey(key)
       mapToUpdate.put(key, value)
@@ -125,6 +124,7 @@ private[state] class HDFSBackedStateStoreProvider(
     /** Remove keys that match the following condition */
     override def remove(condition: UnsafeRow => Boolean): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
+
       val keyIter = mapToUpdate.keySet().iterator()
       while (keyIter.hasNext) {
         val key = keyIter.next
@@ -154,7 +154,7 @@ private[state] class HDFSBackedStateStoreProvider(
         finalizeDeltaFile(tempDeltaFileStream)
         finalDeltaFile = commitUpdates(newVersion, mapToUpdate, tempDeltaFile)
         state = COMMITTED
-        logInfo(s"Committed version $newVersion for $this")
+        logInfo(s"Committed version $newVersion for $this to file $finalDeltaFile")
         newVersion
       } catch {
         case NonFatal(e) =>
@@ -174,7 +174,7 @@ private[state] class HDFSBackedStateStoreProvider(
       if (tempDeltaFile != null) {
         fs.delete(tempDeltaFile, true)
       }
-      logInfo("Aborted")
+      logInfo(s"Aborted version $newVersion for $this")
     }
 
     /**
