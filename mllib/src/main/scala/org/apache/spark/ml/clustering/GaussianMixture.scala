@@ -151,7 +151,7 @@ class GaussianMixtureModel private[ml] (
   private var trainingSummary: Option[GaussianMixtureSummary] = None
 
   private[clustering] def setSummary(summary: GaussianMixtureSummary): this.type = {
-    this.trainingSummary = Some(summary)
+    this.trainingSummary = Option(summary)
     this
   }
 

@@ -1114,7 +1114,8 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(len(s.clusterSizes), 2)
         self.assertEqual(s.k, 2)
 
-        # TODO: test when there is no summary
+        model._call_java("setSummary", None)
+        self.assertFalse(model.hasSummary)
 
     def test_bisecting_kmeans_summary(self):
         data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
@@ -1131,7 +1132,8 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(len(s.clusterSizes), 2)
         self.assertEqual(s.k, 2)
 
-        # TODO: test when there is no summary
+        model._call_java("setSummary", None)
+        self.assertFalse(model.hasSummary)
 
 
 class OneVsRestTests(SparkSessionTestCase):

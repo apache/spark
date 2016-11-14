@@ -133,7 +133,7 @@ class BisectingKMeansModel private[ml] (
   private var trainingSummary: Option[BisectingKMeansSummary] = None
 
   private[clustering] def setSummary(summary: BisectingKMeansSummary): this.type = {
-    this.trainingSummary = Some(summary)
+    this.trainingSummary = Option(summary)
     this
   }
 
