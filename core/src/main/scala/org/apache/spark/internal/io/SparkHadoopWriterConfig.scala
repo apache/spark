@@ -82,27 +82,3 @@ abstract class SparkHadoopWriterConfig[K, V: ClassTag] extends Serializable {
   def checkOutputSpecs(jobContext: JobContext): Unit
 
 }
-
-object SparkHadoopWriterConfig {
-
-  /**
-   * Instantiates a SparkHadoopWriterConfig using the given configuration.
-   */
-  def instantiate[K, V](className: String, conf: Configuration)(
-      implicit ctorArgTag: ClassTag[(K, V)]): SparkHadoopWriterConfig[K, V] = {
-    val clazz = Utils.classForName(className).asInstanceOf[Class[SparkHadoopWriterConfig[K, V]]]
-
-    // First try the one with argument (conf: SerializableConfiguration).
-    // If that doesn't exist, try the one with (conf: SerializableJobConf).
-    try {
-      val ctor = clazz.getDeclaredConstructor(
-        classOf[SerializableConfiguration], classOf[ClassTag[(K, V)]])
-      ctor.newInstance(new SerializableConfiguration(conf), ctorArgTag)
-    } catch {
-      case _: NoSuchMethodException =>
-        val ctor = clazz.getDeclaredConstructor(
-          classOf[SerializableJobConf], classOf[ClassTag[(K, V)]])
-        ctor.newInstance(new SerializableJobConf(conf.asInstanceOf[JobConf]), ctorArgTag)
-    }
-  }
-}

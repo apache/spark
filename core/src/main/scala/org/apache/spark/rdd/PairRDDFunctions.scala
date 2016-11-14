@@ -39,7 +39,7 @@ import org.apache.spark.internal.io._
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
@@ -1051,9 +1051,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * configured for a Hadoop MapReduce job.
    */
   def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = self.withScope {
-    val config = SparkHadoopWriterConfig.instantiate[K, V](
-      className = classOf[SparkHadoopMapReduceWriterConfig[K, V]].getName,
-      conf = conf)
+    val config = new SparkHadoopMapReduceWriterConfig[K, V](new SerializableConfiguration(conf))
     SparkHadoopWriter.write(
       rdd = self,
       config = config)
@@ -1066,9 +1064,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * MapReduce job.
    */
   def saveAsHadoopDataset(conf: JobConf): Unit = self.withScope {
-    val config = SparkHadoopWriterConfig.instantiate[K, V](
-      className = classOf[SparkHadoopMapRedWriterConfig[K, V]].getName,
-      conf = conf)
+    val config = new SparkHadoopMapRedWriterConfig[K, V](new SerializableJobConf(conf))
     SparkHadoopWriter.write(
       rdd = self,
       config = config)
