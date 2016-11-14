@@ -280,6 +280,7 @@ class Graph[VD, ED] {
   val vertices: VertexRDD[VD]
   val edges: EdgeRDD[ED]
   val triplets: RDD[EdgeTriplet[VD, ED]]
+  def pickRandomVertex(): VertexId
   // Functions for caching graphs ==================================================================
   def persist(newLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED]
   def cache(): Graph[VD, ED]
