@@ -498,10 +498,10 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("non-equal correlated scalar subquery") {
     val msg1 = intercept[AnalysisException] {
-      sql("select a, (select b from l l2 where l2.a < l1.a) sum_b from l l1")
+      sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1")
     }
     assert(msg1.getMessage.contains(
-      "The correlated scalar subquery can only contain equality predicates"))
+      "Correlated column is not allowed in a non-equality predicate:"))
   }
 
   test("disjunctive correlated scalar subquery") {
@@ -639,6 +639,97 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |         from   t1 left join t2 on t1.c1=t2.c2) t3
             | where  c3 not in (select c2 from t2)""".stripMargin),
         Row(2) :: Nil)
+     }
+   }
+
+   test("SPARK-17348: Correlated subqueries with non-equality predicate (good case)") {
+     withTempView("t1", "t2") {
+       Seq((1, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
+       Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t2")
+
+       // Simple case
+       checkAnswer(
+         sql(
+           """
+             | select c1
+             | from   t1
+             | where  c1 in (select t2.c1
+             |               from   t2
+             |               where  t1.c2 >= t2.c2)""".stripMargin),
+         Row(1) :: Nil)
+
+       // More complex case with OR predicate
+       checkAnswer(
+         sql(
+           """
+             | select t1.c1
+             | from   t1, t1 as t3
+             | where  t1.c1 = t3.c1
+             | and    (t1.c1 in (select t2.c1
+             |                   from   t2
+             |                   where  t1.c2 >= t2.c2
+             |                          or t3.c2 < t2.c2)
+             |         or t1.c2 >= 0)""".stripMargin),
+         Row(1) :: Nil)
+    }
+  }
+
+  test("SPARK-17348: Correlated subqueries with non-equality predicate (error case)") {
+    withTempView("t1", "t2", "t3", "t4") {
+      Seq((1, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 0)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      Seq((2, 1)).toDF("c1", "c2").createOrReplaceTempView("t3")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t4")
+
+      // Simplest case
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1
+            | where  t1.c1 in (select max(t2.c1)
+            |                  from   t2
+            |                  where  t1.c2 >= t2.c2)""".stripMargin).collect()
+      }
+
+      // Add a HAVING on top and augmented within an OR predicate
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1
+            | where  t1.c1 in (select max(t2.c1)
+            |                  from   t2
+            |                  where  t1.c2 >= t2.c2
+            |                  having count(*) > 0 )
+            |         or t1.c2 >= 0""".stripMargin).collect()
+      }
+
+      // Add a HAVING on top and augmented within an OR predicate
+      intercept[AnalysisException] {
+        sql(
+          """
+            | select t1.c1
+            | from   t1, t1 as t3
+            | where  t1.c1 = t3.c1
+            | and    (t1.c1 in (select max(t2.c1)
+            |                   from   t2
+            |                   where  t1.c2 = t2.c2
+            |                          or t3.c2 = t2.c2)
+            |        )""".stripMargin).collect()
+      }
+
+      // In Window expression: changing the data set to
+      // demonstrate if this query ran, it would return incorrect result.
+      intercept[AnalysisException] {
+        sql(
+          """
+          | select c1
+          | from   t3
+          | where  c1 in (select max(t4.c1) over ()
+          |               from   t4
+          |               where t3.c2 >= t4.c2)""".stripMargin).collect()
+      }
     }
   }
 }
