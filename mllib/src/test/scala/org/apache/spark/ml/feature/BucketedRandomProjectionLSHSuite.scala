@@ -77,6 +77,7 @@ class BucketedRandomProjectionLSHSuite
     model.set(model.numHashFunctions, 2)
     val res = model.hashFunction(Vectors.dense(1.23, 4.56))
     assert(res(0).equals(Vectors.dense(9.0, 2.0)))
+    assert(res(1).equals(Vectors.dense(7.0, 4.0)))
   }
 
   test("keyDistance") {
