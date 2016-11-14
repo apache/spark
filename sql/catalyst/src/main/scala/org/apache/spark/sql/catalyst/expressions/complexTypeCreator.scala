@@ -153,50 +153,80 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
   }
 
+  private def getAccessors(ctx: CodegenContext, dt: DataType, array: String,
+      isPrimitive : Boolean, size: Int): (String, String, String) = {
+    if (!isPrimitive) {
+      val arrayClass = classOf[GenericArrayData].getName
+      ctx.addMutableState("Object[]", array, s"this.$array = null;")
+      (s"new $arrayClass($array)",
+        s"$array = new Object[${size}];", s"this.$array = null;")
+    } else {
+      val unsafeArrayClass = classOf[UnsafeArrayData].getName
+      val javaDataType = ctx.javaType(dt)
+      ctx.addMutableState(s"${javaDataType}[]", array,
+        s"this.$array = new ${javaDataType}[${size}];")
+      (s"$unsafeArrayClass.fromPrimitiveArray($array)", "", "")
+    }
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val arrayClass = classOf[GenericArrayData].getName
     val mapClass = classOf[ArrayBasedMapData].getName
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
-    ctx.addMutableState("Object[]", keyArray, s"this.$keyArray = null;")
-    ctx.addMutableState("Object[]", valueArray, s"this.$valueArray = null;")
 
-    val keyData = s"new $arrayClass($keyArray)"
-    val valueData = s"new $arrayClass($valueArray)"
+    val MapType(keyDt, valueDt, _) = dataType
+    val evalKeys = keys.map(e => e.genCode(ctx))
+    val isPrimitiveArrayKey = ctx.isPrimitiveType(keyDt)
+    val isNonNullKey = evalKeys.forall(_.isNull == "false")
+    val evalValues = values.map(e => e.genCode(ctx))
+    val isPrimitiveArrayValue =
+      ctx.isPrimitiveType(valueDt) && evalValues.forall(_.isNull == "false")
+    val (keyData, keyArrayAllocate, keyArrayNullify) =
+      getAccessors(ctx, keyDt, keyArray, isPrimitiveArrayKey, keys.size)
+    val (valueData, valueArrayAllocate, valueArrayNullify) =
+      getAccessors(ctx, valueDt, valueArray, isPrimitiveArrayValue, values.size)
+
     ev.copy(code = s"""
-      $keyArray = new Object[${keys.size}];
-      $valueArray = new Object[${values.size}];""" +
+      final boolean ${ev.isNull} = false;
+      $keyArrayAllocate
+      $valueArrayAllocate""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
-        keys.zipWithIndex.map { case (key, i) =>
-          val eval = key.genCode(ctx)
-          s"""
-            ${eval.code}
-            if (${eval.isNull}) {
-              throw new RuntimeException("Cannot use null as map key!");
-            } else {
-              $keyArray[$i] = ${eval.value};
-            }
-          """
+        evalKeys.zipWithIndex.map { case (eval, i) =>
+          eval.code +
+            (if (isNonNullKey) {
+               s"$keyArray[$i] = ${eval.value};"
+             } else {
+               s"""
+             if (${eval.isNull}) {
+               throw new RuntimeException("Cannot use null as map key!");
+             } else {
+               $keyArray[$i] = ${eval.value};
+             }
+             """
+             })
         }) +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
-        values.zipWithIndex.map { case (value, i) =>
-          val eval = value.genCode(ctx)
-          s"""
-            ${eval.code}
-            if (${eval.isNull}) {
-              $valueArray[$i] = null;
-            } else {
-              $valueArray[$i] = ${eval.value};
-            }
-          """
+        evalValues.zipWithIndex.map { case (eval, i) =>
+          eval.code +
+            (if (isPrimitiveArrayValue) {
+               s"$valueArray[$i] = ${eval.value};"
+             } else {
+               s"""
+               if (${eval.isNull}) {
+                 $valueArray[$i] = null;
+               } else {
+                 $valueArray[$i] = ${eval.value};
+               }
+              """
+             })
         }) +
       s"""
         final MapData ${ev.value} = new $mapClass($keyData, $valueData);
-        this.$keyArray = null;
-        this.$valueArray = null;
-      """, isNull = "false")
+        $keyArrayNullify
+        $valueArrayNullify;
+      """)
   }
 
   override def prettyName: String = "map"

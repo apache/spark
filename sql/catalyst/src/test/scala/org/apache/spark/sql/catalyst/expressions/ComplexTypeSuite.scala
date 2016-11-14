@@ -150,20 +150,20 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val longArray = intArray.map(_.toLong)
     val strArray = intArray.map(_.toString)
     checkEvaluation(CreateMap(Nil), Map.empty)
-    checkEvaluation(
+    checkEvaluationMap(
       CreateMap(interlace(intArray.map(Literal(_)), longArray.map(Literal(_)))),
-      createMap(intArray, longArray))
-    checkEvaluation(
+      createMap(intArray, longArray), intArray, longArray)
+    checkEvaluationMap(
       CreateMap(interlace(strArray.map(Literal(_)), longArray.map(Literal(_)))),
-      createMap(strArray, longArray))
-    checkEvaluation(
+      createMap(strArray, longArray), strArray, longArray)
+    checkEvaluationMap(
       CreateMap(interlace(longArray.map(Literal(_)), strArray.map(Literal(_)))),
-      createMap(longArray, strArray))
+      createMap(longArray, strArray), longArray, strArray)
 
     val strWithNull = strArray.drop(1).map(Literal(_)) :+ Literal.create(null, StringType)
-    checkEvaluation(
+    checkEvaluationMap(
       CreateMap(interlace(intArray.map(Literal(_)), strWithNull)),
-      createMap(intArray, strWithNull.map(_.value)))
+      createMap(intArray, strWithNull.map(_.value)), intArray, strWithNull.map(_.value))
     intercept[RuntimeException] {
       checkEvaluationWithoutCodegen(
         CreateMap(interlace(strWithNull, intArray.map(Literal(_)))),
