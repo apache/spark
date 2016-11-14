@@ -72,7 +72,9 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     //
     // 1. If there is no '.compact' file, we can use the default setting directly.
     // 2. If there are two or more '.compact' files, we use the interval of patch id suffix with
-    // '.compact' as compactInterval.
+    // '.compact' as compactInterval. It is unclear whether this case will ever happen in the
+    // current code, since only the latest '.compact' file is retained i.e., other are garbage
+    // collected.
     // 3. If there is only one '.compact' file, then we must find a compact interval
     // that is compatible with (i.e., a divisor of) the previous compact file, and that
     // faithfully tries to represent the revised default compact interval i.e., is at least
