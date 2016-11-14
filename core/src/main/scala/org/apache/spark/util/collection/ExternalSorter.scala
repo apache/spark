@@ -273,7 +273,7 @@ private[spark] class ExternalSorter[K, V, C](
     var objectsWritten: Long = 0
     val spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics
     val writer: DiskBlockObjectWriter =
-      blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, spillMetrics)
+      blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, spillMetrics, false)
 
     // List of batch sizes (bytes) in the order they are written to disk
     val batchSizes = new ArrayBuffer[Long]
@@ -687,7 +687,7 @@ private[spark] class ExternalSorter[K, V, C](
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
     val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
-      context.taskMetrics().shuffleWriteMetrics)
+      context.taskMetrics().shuffleWriteMetrics, true)
 
     if (spills.isEmpty) {
       // Case where we only have in-memory data

@@ -206,7 +206,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private[this] def spillMemoryIteratorToDisk(inMemoryIterator: Iterator[(K, C)])
       : DiskMapIterator = {
     val (blockId, file) = diskBlockManager.createTempLocalBlock()
-    val writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics)
+    val writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics, false)
     var objectsWritten = 0
 
     // List of batch sizes (bytes) in the order they are written to disk

@@ -51,7 +51,7 @@ public abstract class ManagedBuffer {
    * necessarily check for the length of bytes read, so the caller is responsible for making sure
    * it does not go over the limit.
    */
-  public abstract InputStream createInputStream() throws IOException;
+  public abstract InputStream createInputStream(boolean checksum) throws IOException;
 
   /**
    * Increment the reference count by one if applicable.

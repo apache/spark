@@ -20,11 +20,11 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.File;
 import java.io.IOException;
 
-import org.apache.spark.serializer.SerializerManager;
 import scala.Tuple2;
 
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.serializer.DummySerializerInstance;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
@@ -66,7 +66,7 @@ public final class UnsafeSorterSpillWriter {
     // OutputStream methods), but DiskBlockObjectWriter still calls some methods on it. To work
     // around this, we pass a dummy no-op serializer.
     writer = blockManager.getDiskWriter(
-      blockId, file, DummySerializerInstance.INSTANCE, fileBufferSize, writeMetrics);
+      blockId, file, DummySerializerInstance.INSTANCE, fileBufferSize, writeMetrics, true);
     // Write the number of records
     writeIntToBuffer(numRecordsToWrite, 0);
     writer.write(writeBuffer, 0, 4);

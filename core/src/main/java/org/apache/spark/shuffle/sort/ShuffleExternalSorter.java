@@ -173,7 +173,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     final SerializerInstance ser = DummySerializerInstance.INSTANCE;
 
     final DiskBlockObjectWriter writer =
-      blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
+      blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse,
+        // only generate checksum for only spill
+        isLastFile && spills.isEmpty());
 
     int currentPartition = -1;
     while (sortedRecords.hasNext()) {

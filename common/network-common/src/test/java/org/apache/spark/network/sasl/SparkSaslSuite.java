@@ -17,9 +17,7 @@
 
 package org.apache.spark.network.sasl;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
-
+import javax.security.sasl.SaslException;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
@@ -27,10 +25,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.security.sasl.SaslException;
 
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
@@ -61,6 +58,9 @@ import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Jointly tests SparkSaslClient and SparkSaslServer, as both are black boxes.
@@ -296,7 +296,7 @@ public class SparkSaslSuite {
       verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
       verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
 
-      byte[] received = ByteStreams.toByteArray(response.get().createInputStream());
+      byte[] received = ByteStreams.toByteArray(response.get().createInputStream(false));
       assertTrue(Arrays.equals(data, received));
     } finally {
       file.delete();

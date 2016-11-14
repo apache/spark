@@ -39,7 +39,8 @@ class RecordingManagedBuffer(underlyingBuffer: NioManagedBuffer) extends Managed
 
   override def size(): Long = underlyingBuffer.size()
   override def nioByteBuffer(): ByteBuffer = underlyingBuffer.nioByteBuffer()
-  override def createInputStream(): InputStream = underlyingBuffer.createInputStream()
+  override def createInputStream(checksum: Boolean): InputStream =
+    underlyingBuffer.createInputStream(false)
   override def convertToNetty(): AnyRef = underlyingBuffer.convertToNetty()
 
   override def retain(): ManagedBuffer = {

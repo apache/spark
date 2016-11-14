@@ -59,8 +59,8 @@ public class TestManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public InputStream createInputStream() throws IOException {
-    return underlying.createInputStream();
+  public InputStream createInputStream(boolean checksum) throws IOException {
+    return underlying.createInputStream(checksum);
   }
 
   @Override
