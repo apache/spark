@@ -991,10 +991,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(df6.schema(1).nullable == false)
     assert(df6.schema(2).nullable == false)
 
-    val df7 = Seq(TestDataPoint(1, 2.2, "a"), TestDataPoint(3, 4.4, "null")).toDF
-    assert(df7.schema(0).nullable == false)
-    assert(df7.schema(1).nullable == false)
-    assert(df7.schema(2).nullable == true)
+    val df7 = (Tuple1(Array(1, 2, 3)) :: Nil).toDF("a")
+    assert(df7.schema(0).nullable == true)
+    assert(df7.schema(0).dataType.asInstanceOf[ArrayType].containsNull == false)
+
+    val df8 = (Tuple1(Map(2 -> 3)) :: Nil).toDF("m")
+    assert(df8.schema(0).nullable == true)
+    assert(df8.schema(0).dataType.asInstanceOf[MapType].valueContainsNull == false)
+
+    val df9 = Seq(TestDataPoint(1, 2.2, "a"), TestDataPoint(3, 4.4, "null")).toDF
+    assert(df9.schema(0).nullable == false)
+    assert(df9.schema(1).nullable == false)
+    assert(df9.schema(2).nullable == true)
   }
 
   Seq(true, false).foreach { eager =>
