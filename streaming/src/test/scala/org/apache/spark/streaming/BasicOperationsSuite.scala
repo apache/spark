@@ -471,6 +471,72 @@ class BasicOperationsSuite extends TestSuiteBase {
     testOperation(inputData, updateStateOperation, outputData, true)
   }
 
+  test("updateStateByKey - testing time stamps as input") {
+    type StreamingState = Long
+    val initial: Seq[(String, StreamingState)] = Seq(("a", 0L), ("c", 0L))
+
+    val inputData =
+      Seq(
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    // a -> 1000, 3000, 6000, 10000, 15000, 15000
+    // b -> 0, 2000, 5000, 9000, 9000, 9000
+    // c -> 1000, 1000, 3000, 3000, 3000, 3000
+
+    val outputData: Seq[Seq[(String, StreamingState)]] = Seq(
+        Seq(
+          ("a", 1000L),
+          ("c", 0L)), // t = 1000
+        Seq(
+          ("a", 3000L),
+          ("b", 2000L),
+          ("c", 0L)), // t = 2000
+        Seq(
+          ("a", 6000L),
+          ("b", 5000L),
+          ("c", 3000L)), // t = 3000
+        Seq(
+          ("a", 10000L),
+          ("b", 9000L),
+          ("c", 3000L)), // t = 4000
+        Seq(
+          ("a", 15000L),
+          ("b", 9000L),
+          ("c", 3000L)), // t = 5000
+        Seq(
+          ("a", 15000L),
+          ("b", 9000L),
+          ("c", 3000L)) // t = 6000
+      )
+
+    val updateStateOperation = (s: DStream[String]) => {
+      val initialRDD = s.context.sparkContext.makeRDD(initial)
+      val updateFunc = (time: Time,
+                        key: String,
+                        values: Seq[Int],
+                        state: Option[StreamingState]) => {
+        // Update only if we receive values for this key during the batch.
+        if (values.nonEmpty) {
+          Option(time.milliseconds + state.getOrElse(0L))
+        } else {
+          Option(state.getOrElse(0L))
+        }
+      }
+      s.map(x => (x, 1)).updateStateByKey[StreamingState](updateFunc = updateFunc,
+        partitioner = new HashPartitioner (numInputPartitions), rememberPartitioner = false,
+        initialRDD = Option(initialRDD))
+    }
+
+    testOperation(input = inputData, operation = updateStateOperation,
+      expectedOutput = outputData, useSet = true)
+  }
+
   test("updateStateByKey - with initial value RDD") {
     val initial = Seq(("a", 1), ("c", 2))
 
