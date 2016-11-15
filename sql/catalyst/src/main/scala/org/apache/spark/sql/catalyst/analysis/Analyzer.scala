@@ -2272,7 +2272,13 @@ object TimeWindowing extends Rule[LogicalPlan] {
           windowExpressions.head.timeColumn.resolved &&
           windowExpressions.head.checkInputDataTypes().isSuccess) {
         val window = windowExpressions.head
-        val windowAttr = AttributeReference("window", window.dataType)()
+
+        val metadata = window.timeColumn match {
+          case a: Attribute => a.metadata
+          case _ => Metadata.empty
+        }
+        val windowAttr =
+          AttributeReference("window", window.dataType, metadata = metadata)()
 
         val maxNumOverlapping = math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
         val windows = Seq.tabulate(maxNumOverlapping + 1) { i =>
