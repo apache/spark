@@ -165,7 +165,7 @@ object Encoders {
    * (Scala-specific) Creates an encoder that serializes objects of type T using generic Java
    * serialization. This encoder maps T into a single byte array (binary) field.
    *
-   * Note that this is extremely inefficient and should only be used as the last resort.
+   * '''Note:''' This is extremely inefficient and should only be used as the last resort.
    *
    * T must be publicly accessible.
    *
@@ -177,7 +177,7 @@ object Encoders {
    * Creates an encoder that serializes objects of type T using generic Java serialization.
    * This encoder maps T into a single byte array (binary) field.
    *
-   * Note that this is extremely inefficient and should only be used as the last resort.
+   * '''Note:''' This is extremely inefficient and should only be used as the last resort.
    *
    * T must be publicly accessible.
    *

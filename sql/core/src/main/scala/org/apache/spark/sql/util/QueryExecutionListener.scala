@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.QueryExecution
  * :: Experimental ::
  * The interface of query execution listener that can be used to analyze execution metrics.
  *
- * Note that implementations should guarantee thread-safety as they can be invoked by
+ * '''Note:''' Implementations should guarantee thread-safety as they can be invoked by
  * multiple different threads.
  */
 @Experimental
@@ -39,7 +39,8 @@ trait QueryExecutionListener {
 
   /**
    * A callback function that will be called when a query executed successfully.
-   * Note that this can be invoked by multiple different threads.
+   *
+   * '''Note:''' This can be invoked by multiple different threads.
    *
    * @param funcName name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
@@ -51,7 +52,8 @@ trait QueryExecutionListener {
 
   /**
    * A callback function that will be called when a query execution failed.
-   * Note that this can be invoked by multiple different threads.
+   *
+   * '''Note:''' This can be invoked by multiple different threads.
    *
    * @param funcName the name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,

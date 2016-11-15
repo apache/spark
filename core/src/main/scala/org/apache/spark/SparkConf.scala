@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
  * All setter methods in this class support chaining. For example, you can write
  * `new SparkConf().setMaster("local").setAppName("My app")`.
  *
- * Note that once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
+ * '''Note:''' Once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
  * by the user. Spark does not support modifying the configuration at runtime.
  *
  * @param loadDefaults whether to also load values from Java system properties

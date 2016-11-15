@@ -343,12 +343,13 @@ class BlockMatrix @Since("1.3.0") (
    * For given matrices `this` and `other` of compatible dimensions and compatible block dimensions,
    * it applies a binary function on their corresponding blocks.
    *
+   * '''Note:''' `blockMap` ONLY works for `add` and `subtract` methods and it does not support
+   * operators such as (a, b) => -a + b
+   *
    * @param other The second BlockMatrix argument for the operator specified by `binMap`
    * @param binMap A function taking two breeze matrices and returning a breeze matrix
    * @return A [[BlockMatrix]] whose blocks are the results of a specified binary map on blocks
    *         of `this` and `other`.
-   * '''Note:''' `blockMap` ONLY works for `add` and `subtract` methods and it does not support
-   * operators such as (a, b) => -a + b
    * TODO: Make the use of zero matrices more storage efficient.
    */
   private[mllib] def blockMap(

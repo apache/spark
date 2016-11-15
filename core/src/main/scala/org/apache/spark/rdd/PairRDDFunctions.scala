@@ -57,13 +57,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * :: Experimental ::
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
-   * Note that V and C can be different -- for example, one might group an RDD of type
-   * (Int, Int) into an RDD of type (Int, Seq[Int]). Users provide three functions:
    *
+   * '''Note:''' V and C can be different -- for example, one might group an RDD of type
+   * (Int, Int) into an RDD of type (Int, Seq[Int]). Users provide three functions:
    *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
    *  - `mergeCombiners`, to combine two C's into a single one.
-   *
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
@@ -361,7 +360,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Count the number of elements for each key, collecting the results to a local Map.
    *
-   * Note that this method should only be used if the resulting map is expected to be small, as
+   * '''Note:''' This method should only be used if the resulting map is expected to be small, as
    * the whole thing is loaded into the driver's memory.
    * To handle very large results, consider using rdd.mapValues(_ => 1L).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.
@@ -1014,7 +1013,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
    *
-   * Note that, we should make sure our tasks are idempotent when speculation is enabled, i.e. do
+   * '''Note:''' We should make sure our tasks are idempotent when speculation is enabled, i.e. do
    * not use output committer that writes data directly.
    * There is an example in https://issues.apache.org/jira/browse/SPARK-10063 to show the bad
    * result of using direct output committer with speculation enabled.
@@ -1068,7 +1067,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * output paths required (e.g. a table name to write to) in the same way as it would be
    * configured for a Hadoop MapReduce job.
    *
-   * Note that, we should make sure our tasks are idempotent when speculation is enabled, i.e. do
+   * '''Note:''' We should make sure our tasks are idempotent when speculation is enabled, i.e. do
    * not use output committer that writes data directly.
    * There is an example in https://issues.apache.org/jira/browse/SPARK-10063 to show the bad
    * result of using direct output committer with speculation enabled.

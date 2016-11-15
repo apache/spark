@@ -245,7 +245,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent,
    * in range (0, 1].
    *
-   * Note that this should be adjusted in synch with [[LDA.maxIter]]
+   * '''Note:''' This should be adjusted in synch with [[LDA.maxIter]]
    * so the entire corpus is used.  Specifically, set both so that
    * maxIterations * miniBatchFraction >= 1.
    *
@@ -291,7 +291,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * If using checkpointing, this indicates whether to keep the last
    * checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can
    * cause failures if a data partition is lost, so set this bit with care.
-   * Note that checkpoints will be cleaned up via reference counting, regardless.
+   *
+   * '''Note:''' Checkpoints will be cleaned up via reference counting, regardless.
    *
    * See [[DistributedLDAModel.getCheckpointFiles]] for getting remaining checkpoints and
    * [[DistributedLDAModel.deleteCheckpointFiles]] for removing remaining checkpoints.
@@ -722,7 +723,7 @@ class DistributedLDAModel private[ml] (
    * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
-   * Note that removing the checkpoints can cause failures if a partition is lost and is needed
+   * '''Note:''' Removing the checkpoints can cause failures if a partition is lost and is needed
    * by certain [[DistributedLDAModel]] methods.  Reference counting will clean up the checkpoints
    * when this model and derivative data go out of scope.
    *

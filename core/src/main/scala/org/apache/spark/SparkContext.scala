@@ -1330,16 +1330,18 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Register the given accumulator.  Note that accumulators must be registered before use, or it
-   * will throw exception.
+   * Register the given accumulator.
+   *
+   * '''Note:''' Accumulators must be registered before use, or it will throw exception.
    */
   def register(acc: AccumulatorV2[_, _]): Unit = {
     acc.register(this)
   }
 
   /**
-   * Register the given accumulator with given name.  Note that accumulators must be registered
-   * before use, or it will throw exception.
+   * Register the given accumulator with given name.
+   *
+   * '''Note:''' Accumulators must be registered before use, or it will throw exception.
    */
   def register(acc: AccumulatorV2[_, _], name: String): Unit = {
     acc.register(this, name = Some(name))
@@ -1639,7 +1641,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Returns an immutable map of RDDs that have marked themselves as persistent via cache() call.
-   * Note that this does not necessarily mean the caching or computation was successful.
+   *
+   * '''Note:''' This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
 

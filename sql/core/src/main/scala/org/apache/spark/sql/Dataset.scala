@@ -703,7 +703,7 @@ class Dataset[T] private[sql](
    *   df1.join(df2, "user_id")
    * }}}
    *
-   * Note that if you perform a self-join using this function without aliasing the input
+   * '''Note:''' If you perform a self-join using this function without aliasing the input
    * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
    *
@@ -728,7 +728,7 @@ class Dataset[T] private[sql](
    *   df1.join(df2, Seq("user_id", "user_name"))
    * }}}
    *
-   * Note that if you perform a self-join using this function without aliasing the input
+   * '''Note:''' If you perform a self-join using this function without aliasing the input
    * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
    *
@@ -748,7 +748,7 @@ class Dataset[T] private[sql](
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
    *
-   * Note that if you perform a self-join using this function without aliasing the input
+   * '''Note:''' If you perform a self-join using this function without aliasing the input
    * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
    *
@@ -856,7 +856,7 @@ class Dataset[T] private[sql](
   /**
    * Explicit cartesian join with another [[DataFrame]].
    *
-   * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
+   * '''Note:''' Cartesian joins are very expensive without an extra filter that can be pushed down.
    *
    * @param right Right side of the join operation.
    *
@@ -1044,7 +1044,8 @@ class Dataset[T] private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
-   * Note that the column name can also reference to a nested column like `a.b`.
+   *
+   * '''Note:''' The column name can also reference to a nested column like `a.b`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -1053,7 +1054,7 @@ class Dataset[T] private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
-   * Note that the column name can also reference to a nested column like `a.b`.
+   * '''Note:''' The column name can also reference to a nested column like `a.b`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -1621,7 +1622,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset.
    * This is equivalent to `INTERSECT` in SQL.
    *
-   * Note that, equality checking is performed directly on the encoded representation of the data
+   * '''Note:''' Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
@@ -1635,7 +1636,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset.
    * This is equivalent to `EXCEPT` in SQL.
    *
-   * Note that, equality checking is performed directly on the encoded representation of the data
+   * '''Note:''' Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
@@ -2453,7 +2454,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `dropDuplicates`.
    *
-   * Note that, equality checking is performed directly on the encoded representation of the data
+   * '''Note:''' Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel

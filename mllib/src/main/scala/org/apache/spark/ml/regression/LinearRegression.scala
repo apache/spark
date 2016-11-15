@@ -103,10 +103,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Whether to standardize the training features before fitting the model.
    * The coefficients of models will be always returned on the original scale,
-   * so it will be transparent for users. Note that with/without standardization,
-   * the models should be always converged to the same solution when no regularization
-   * is applied. In R's GLMNET package, the default behavior is true as well.
-   * Default is true.
+   * so it will be transparent for users.
+   *
+   * '''Note:''' With/without standardization, the models should be always converged
+   * to the same solution when no regularization is applied. In R's GLMNET package,
+   * the default behavior is true as well. Default is true.
    *
    * @group setParam
    */

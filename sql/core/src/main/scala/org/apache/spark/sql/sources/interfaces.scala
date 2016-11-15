@@ -207,7 +207,7 @@ abstract class BaseRelation {
    * large to broadcast. This method will be called multiple times during query planning
    * and thus should not perform expensive operations for each invocation.
    *
-   * Note that it is always better to overestimate size than underestimate, because underestimation
+   * '''Note:''' It is always better to overestimate size than underestimate, because underestimation
    * could lead to execution plans that are suboptimal (i.e. broadcasting a very large table).
    *
    * @since 1.3.0

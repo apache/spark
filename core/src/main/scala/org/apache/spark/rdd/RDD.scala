@@ -618,7 +618,7 @@ abstract class RDD[T: ClassTag](
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
    *
-   * Note that this method performs a shuffle internally.
+   * '''Note:''' This method performs a shuffle internally.
    */
   def intersection(other: RDD[T]): RDD[T] = withScope {
     this.map(v => (v, null)).cogroup(other.map(v => (v, null)))
@@ -630,7 +630,7 @@ abstract class RDD[T: ClassTag](
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
    *
-   * Note that this method performs a shuffle internally.
+   * '''Note:''' This method performs a shuffle internally.
    *
    * @param partitioner Partitioner to use for the resulting RDD
    */
@@ -646,7 +646,7 @@ abstract class RDD[T: ClassTag](
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.  Performs a hash partition across the cluster
    *
-   * Note that this method performs a shuffle internally.
+   * '''Note:''' This method performs a shuffle internally.
    *
    * @param numPartitions How many partitions to use in the resulting RDD
    */
@@ -1182,7 +1182,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return the count of each unique value in this RDD as a local map of (value, count) pairs.
    *
-   * Note that this method should only be used if the resulting map is expected to be small, as
+   * '''Note:''' This method should only be used if the resulting map is expected to be small, as
    * the whole thing is loaded into the driver's memory.
    * To handle very large results, consider using rdd.map(x =&gt; (x, 1L)).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.
@@ -1272,7 +1272,7 @@ abstract class RDD[T: ClassTag](
    * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
    * This method needs to trigger a spark job when this RDD contains more than one partitions.
    *
-   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * '''Note:''' Some RDDs, such as those returned by groupBy(), do not guarantee order of
    * elements in a partition. The index assigned to each element is therefore not guaranteed,
    * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
@@ -1286,7 +1286,7 @@ abstract class RDD[T: ClassTag](
    * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
    *
-   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * '''Note:''' Some RDDs, such as those returned by groupBy(), do not guarantee order of
    * elements in a partition. The unique ID assigned to each element is therefore not guaranteed,
    * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.

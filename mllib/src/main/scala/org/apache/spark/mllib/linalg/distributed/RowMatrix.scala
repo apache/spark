@@ -106,8 +106,9 @@ class RowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the Gramian matrix `A^T A`. Note that this cannot be computed on matrices with
-   * more than 65535 columns.
+   * Computes the Gramian matrix `A^T A`.
+   *
+   * '''Note:''' This cannot be computed on matrices with more than 65535 columns.
    */
   @Since("1.0.0")
   def computeGramianMatrix(): Matrix = {
@@ -319,8 +320,10 @@ class RowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the covariance matrix, treating each row as an observation. Note that this cannot
-   * be computed on matrices with more than 65535 columns.
+   * Computes the covariance matrix, treating each row as an observation.
+   *
+   * '''Note:''' This cannot be computed on matrices with more than 65535 columns.
+   *
    * @return a local dense matrix of size n x n
    */
   @Since("1.0.0")
@@ -369,7 +372,7 @@ class RowMatrix @Since("1.0.0") (
    * The row data do not need to be "centered" first; it is not necessary for
    * the mean of each column to be 0.
    *
-   * Note that this cannot be computed on matrices with more than 65535 columns.
+   * '''Note:''' This cannot be computed on matrices with more than 65535 columns.
    *
    * @param k number of top principal components.
    * @return a matrix of size n-by-k, whose columns are principal components, and

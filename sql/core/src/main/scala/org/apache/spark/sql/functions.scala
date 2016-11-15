@@ -1120,7 +1120,7 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
-   * Note that this is indeterministic when data partitions are not fixed.
+   * '''Note:''' This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1140,7 +1140,7 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
-   * Note that this is indeterministic when data partitions are not fixed.
+   * '''Note:''' This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1159,7 +1159,7 @@ object functions {
   /**
    * Partition ID.
    *
-   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
+   * '''Note:''' This is indeterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    * @since 1.6.0
