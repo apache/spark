@@ -206,7 +206,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return self.getOrDefault(self.splits)
 
     @since("2.1.0")
-    def setHandleInvalid(self):
+    def setHandleInvalid(self, value):
         """
         Sets the value of :py:attr:`handleInvalid`.
         """
@@ -1287,7 +1287,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
         return self.getOrDefault(self.relativeError)
 
     @since("2.1.0")
-    def setHandleInvalid(self):
+    def setHandleInvalid(self, value):
         """
         Sets the value of :py:attr:`handleInvalid`.
         """
