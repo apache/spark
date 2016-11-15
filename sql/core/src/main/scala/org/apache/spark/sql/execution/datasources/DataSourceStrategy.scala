@@ -215,8 +215,14 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
           if (overwrite.enabled) {
             val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
             if (deletedPartitions.nonEmpty) {
+              import org.apache.spark.sql.catalyst.expressions._
+              val expressions = deletedPartitions.map { specs =>
+                specs.map { case (key, value) =>
+                  EqualTo(AttributeReference(key, StringType)(), Literal.create(value, StringType))
+                }.reduceLeft(And)
+              }.toSeq
               AlterTableDropPartitionCommand(
-                l.catalogTable.get.identifier, deletedPartitions.toSeq,
+                l.catalogTable.get.identifier, expressions,
                 ifExists = true, purge = true).run(t.sparkSession)
             }
           }
