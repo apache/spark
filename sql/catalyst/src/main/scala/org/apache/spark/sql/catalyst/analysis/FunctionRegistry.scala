@@ -262,6 +262,7 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
+    expression[CountMinSketchAgg]("cmsketch"),
 
     // string functions
     expression[Ascii]("ascii"),

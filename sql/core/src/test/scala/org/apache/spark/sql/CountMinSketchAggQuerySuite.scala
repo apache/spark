@@ -40,58 +40,60 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
   private val confidence = 0.95
   private val seed = 11
 
-  test("compute count-min sketch for multiple columns of different types") {
-    val (allBytes, sampledBytesIndices, exactBytesFreq) =
-      generateTestData[Byte] { _.nextInt().toByte }
-    val (allShorts, sampledShortsIndices, exactShortsFreq) =
-      generateTestData[Short] { _.nextInt().toShort }
-    val (allInts, sampledIntsIndices, exactIntsFreq) =
-      generateTestData[Int] { _.nextInt() }
-    val (allLongs, sampledLongsIndices, exactLongsFreq) =
-      generateTestData[Long] { _.nextLong() }
-    val (allStrings, sampledStringsIndices, exactStringsFreq) =
-      generateTestData[String] { r => r.nextString(r.nextInt(20)) }
+  Seq("cmsketch", "count_min_sketch").foreach { cmsAgg =>
+    test(s"compute count-min sketch for multiple columns of different types - with name $cmsAgg") {
+      val (allBytes, sampledBytesIndices, exactBytesFreq) =
+        generateTestData[Byte] { _.nextInt().toByte }
+      val (allShorts, sampledShortsIndices, exactShortsFreq) =
+        generateTestData[Short] { _.nextInt().toShort }
+      val (allInts, sampledIntsIndices, exactIntsFreq) =
+        generateTestData[Int] { _.nextInt() }
+      val (allLongs, sampledLongsIndices, exactLongsFreq) =
+        generateTestData[Long] { _.nextLong() }
+      val (allStrings, sampledStringsIndices, exactStringsFreq) =
+        generateTestData[String] { r => r.nextString(r.nextInt(20)) }
 
-    val data = (0 until numSamples).map { i =>
-      Row(allBytes(sampledBytesIndices(i)),
-        allShorts(sampledShortsIndices(i)),
-        allInts(sampledIntsIndices(i)),
-        allLongs(sampledLongsIndices(i)),
-        allStrings(sampledStringsIndices(i)))
-    }
+      val data = (0 until numSamples).map { i =>
+        Row(allBytes(sampledBytesIndices(i)),
+          allShorts(sampledShortsIndices(i)),
+          allInts(sampledIntsIndices(i)),
+          allLongs(sampledLongsIndices(i)),
+          allStrings(sampledStringsIndices(i)))
+      }
 
-    val schema = StructType(Seq(
-      StructField("c1", ByteType),
-      StructField("c2", ShortType),
-      StructField("c3", IntegerType),
-      StructField("c4", LongType),
-      StructField("c5", StringType)))
+      val schema = StructType(Seq(
+        StructField("c1", ByteType),
+        StructField("c2", ShortType),
+        StructField("c3", IntegerType),
+        StructField("c4", LongType),
+        StructField("c5", StringType)))
 
-    val query =
-      s"""
-         |SELECT
-         |  count_min_sketch(c1, $eps, $confidence, $seed),
-         |  count_min_sketch(c2, $eps, $confidence, $seed),
-         |  count_min_sketch(c3, $eps, $confidence, $seed),
-         |  count_min_sketch(c4, $eps, $confidence, $seed),
-         |  count_min_sketch(c5, $eps, $confidence, $seed)
-         |FROM $table
+      val query =
+        s"""
+           |SELECT
+           |  $cmsAgg(c1, $eps, $confidence, $seed),
+           |  $cmsAgg(c2, $eps, $confidence, $seed),
+           |  $cmsAgg(c3, $eps, $confidence, $seed),
+           |  $cmsAgg(c4, $eps, $confidence, $seed),
+           |  $cmsAgg(c5, $eps, $confidence, $seed)
+           |FROM $table
        """.stripMargin
 
-    withTempView(table) {
-      val rdd: RDD[Row] = spark.sparkContext.parallelize(data)
-      spark.createDataFrame(rdd, schema).createOrReplaceTempView(table)
-      val result = sql(query).queryExecution.toRdd.collect().head
-      schema.indices.foreach { i =>
-        val binaryData = result.getBinary(i)
-        val in = new ByteArrayInputStream(binaryData)
-        val cms = CountMinSketch.readFrom(in)
-        schema.fields(i).dataType match {
-          case ByteType => checkResult(cms, allBytes, exactBytesFreq)
-          case ShortType => checkResult(cms, allShorts, exactShortsFreq)
-          case IntegerType => checkResult(cms, allInts, exactIntsFreq)
-          case LongType => checkResult(cms, allLongs, exactLongsFreq)
-          case StringType => checkResult(cms, allStrings, exactStringsFreq)
+      withTempView(table) {
+        val rdd: RDD[Row] = spark.sparkContext.parallelize(data)
+        spark.createDataFrame(rdd, schema).createOrReplaceTempView(table)
+        val result = sql(query).queryExecution.toRdd.collect().head
+        schema.indices.foreach { i =>
+          val binaryData = result.getBinary(i)
+          val in = new ByteArrayInputStream(binaryData)
+          val cms = CountMinSketch.readFrom(in)
+          schema.fields(i).dataType match {
+            case ByteType => checkResult(cms, allBytes, exactBytesFreq)
+            case ShortType => checkResult(cms, allShorts, exactShortsFreq)
+            case IntegerType => checkResult(cms, allInts, exactIntsFreq)
+            case LongType => checkResult(cms, allLongs, exactLongsFreq)
+            case StringType => checkResult(cms, allStrings, exactStringsFreq)
+          }
         }
       }
     }
