@@ -281,6 +281,7 @@ def exec_sbt(sbt_args=()):
                                 stdout=subprocess.PIPE)
     echo_proc.wait()
     for line in iter(sbt_proc.stdout.readline, ''):
+        line = line.decode()
         if not sbt_output_filter.match(line):
             print(line, end='')
     retcode = sbt_proc.wait()
