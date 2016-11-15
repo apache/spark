@@ -309,10 +309,12 @@ object PartitioningAwareFileIndex extends Logging {
     val sparkContext = sparkSession.sparkContext
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
     val serializedPaths = paths.map(_.toString)
+    val parallelPartitionDiscoveryParallelism =
+      sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
 
     // Set the number of parallelism to prevent following file listing from generating many tasks
     // in case of large #defaultParallelism.
-    val numParallelism = Math.min(paths.size, 10000)
+    val numParallelism = Math.min(paths.size, parallelPartitionDiscoveryParallelism)
 
     val statusMap = sparkContext
       .parallelize(serializedPaths, numParallelism)

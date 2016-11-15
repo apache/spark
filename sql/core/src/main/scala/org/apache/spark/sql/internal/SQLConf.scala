@@ -391,6 +391,14 @@ object SQLConf {
       .intConf
       .createWithDefault(32)
 
+  val PARALLEL_PARTITION_DISCOVERY_PARALLELISM =
+    SQLConfigBuilder("spark.sql.sources.parallelPartitionDiscovery.parallelism")
+      .doc("The number of parallelism to list a collection of path recursively, Set the " +
+        "number to prevent file listing from generating too many tasks.")
+      .internal()
+      .intConf
+      .createWithDefault(10000)
+
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY =
@@ -768,6 +776,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
+
+  def parallelPartitionDiscoveryParallelism: Int =
+    getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
