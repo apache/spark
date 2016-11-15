@@ -60,8 +60,8 @@ elif (os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar"))
     # Release mode puts the jars in a jars directory
     JARS_PATH = os.path.join(SPARK_HOME, "jars")
 elif len(JARS_PATH) > 1:
-    print("Assembly jars exist for multiple scalas, please cleanup assembly/target",
-          file=sys.stderr)
+    print("Assembly jars exist for multiple scalas ({0}), please cleanup assembly/target".format(
+        JARS_PATH), file=sys.stderr)
     sys.exit(-1)
 elif len(JARS_PATH) == 0 and not os.path.exists(TEMP_PATH):
     print(incorrect_invocation_message, file=sys.stderr)
