@@ -75,8 +75,8 @@ trait CollectionGenerator extends Generator {
   /** Rows will be inlined during generation. */
   def inline: Boolean
 
-  /** The schema of the returned collection object. */
-  def collectionSchema: DataType = dataType
+  /** The type of the returned collection object. */
+  def collectionType: DataType = dataType
 }
 
 /**
@@ -174,22 +174,22 @@ case class Stack(children: Seq[Expression]) extends Generator {
     ctx.addMutableState("InternalRow[]", rowData, s"this.$rowData = new InternalRow[$numRows];")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
-    val rows = for (row <- 0 until numRows) yield {
-      val fields = for (col <- 0 until numFields) yield {
+    val code = ctx.splitExpressions(ctx.INPUT_ROW, Seq.tabulate(numRows) { row =>
+      val fields = Seq.tabulate(numFields) { col =>
         val index = row * numFields + col
         if (index < values.length) values(index) else Literal(null, dataTypes(col))
       }
       val eval = CreateStruct(fields).genCode(ctx)
       s"${eval.code}\nthis.$rowData[$row] = ${eval.value};"
-    }
+    })
 
-    // Create the iterator.
+    // Create the collection.
     val wrapperClass = classOf[mutable.WrappedArray[_]].getName
     ctx.addMutableState(
       s"$wrapperClass<InternalRow>",
       ev.value,
       s"this.${ev.value} = $wrapperClass$$.MODULE$$.make(this.$rowData);")
-    ev.copy(code = rows.mkString("\n"), isNull = "false")
+    ev.copy(code = code, isNull = "false")
   }
 }
 
@@ -260,7 +260,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
     }
   }
 
-  override def collectionSchema: DataType = child.dataType
+  override def collectionType: DataType = child.dataType
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.genCode(ctx)
@@ -340,7 +340,7 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
     case ArrayType(st: StructType, _) => st
   }
 
-  override def collectionSchema: DataType = child.dataType
+  override def collectionType: DataType = child.dataType
 
   private lazy val numFields = elementSchema.fields.length
 

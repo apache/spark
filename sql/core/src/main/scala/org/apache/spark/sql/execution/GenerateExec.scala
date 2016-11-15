@@ -43,6 +43,9 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * programming with one important additional feature, which allows the input rows to be joined with
  * their output.
  *
+ * This operator supports whole stage code generation for generators that do not implement
+ * terminate().
+ *
  * @param generator the generator expression
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
@@ -112,7 +115,6 @@ case class GenerateExec(
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
-    // We need to add some code here for terminating generators.
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
@@ -127,12 +129,9 @@ case class GenerateExec(
       Seq.empty
     }
 
-    // Generate the driving expression.
-    val data = boundGenerator.genCode(ctx)
-
     boundGenerator match {
-      case e: CollectionGenerator => codeGenCollection(ctx, e, values, data, row)
-      case g => codeGenTraversableOnce(ctx, g, values, data, row)
+      case e: CollectionGenerator => codeGenCollection(ctx, e, values, row)
+      case g => codeGenTraversableOnce(ctx, g, values, row)
     }
   }
 
@@ -143,8 +142,10 @@ case class GenerateExec(
       ctx: CodegenContext,
       e: CollectionGenerator,
       input: Seq[ExprCode],
-      data: ExprCode,
       row: ExprCode): String = {
+
+    // Generate code for the generator.
+    val data = e.genCode(ctx)
 
     // Generate looping variables.
     val index = ctx.freshName("index")
@@ -160,7 +161,7 @@ case class GenerateExec(
     }
 
     // Generate code for either ArrayData or MapData
-    val (initMapData, updateRowData, values) = e.collectionSchema match {
+    val (initMapData, updateRowData, values) = e.collectionType match {
       case ArrayType(st: StructType, nullable) if e.inline =>
         val row = codeGenAccessor(ctx, data.value, "col", index, st, nullable, checks)
         val fieldChecks = checks ++ optionalCode(nullable, row.isNull)
@@ -212,8 +213,10 @@ case class GenerateExec(
       ctx: CodegenContext,
       e: Expression,
       input: Seq[ExprCode],
-      data: ExprCode,
       row: ExprCode): String = {
+
+    // Generate the code for the generator
+    val data = e.genCode(ctx)
 
     // Generate looping variables.
     val iterator = ctx.freshName("iterator")
