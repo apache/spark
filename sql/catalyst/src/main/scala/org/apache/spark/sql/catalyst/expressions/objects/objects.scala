@@ -33,6 +33,49 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
 
 /**
+ * Common base class for [[StaticInvoke]], [[Invoke]], and [[NewInstance]].
+ */
+trait InvokeLike extends Expression {
+
+  def arguments: Seq[Expression]
+
+  def propagateNull: Boolean
+
+  def prepareArguments(ctx: CodegenContext, ev: ExprCode): (String, String, String) = {
+
+    val argIsNulls = ctx.freshName("argIsNulls")
+    ctx.addMutableState("boolean[]", argIsNulls,
+      s"$argIsNulls = new boolean[${arguments.size}];")
+    val argValues = arguments.zipWithIndex.map { case (e, i) =>
+      val argValue = ctx.freshName("argValue")
+      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
+      argValue
+    }
+
+    val argCodes = arguments.zipWithIndex.map { case (e, i) =>
+      val expr = e.genCode(ctx)
+      expr.code + s"""
+        $argIsNulls[$i] = ${expr.isNull};
+        ${argValues(i)} = ${expr.value};
+      """
+    }
+    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
+
+    val setIsNull = if (propagateNull && arguments.nonEmpty) {
+      s"""
+        for (int idx = 0; idx < ${arguments.length}; idx++) {
+          if ($argIsNulls[idx]) { ${ev.isNull} = true; break; }
+        }
+      """
+    } else {
+      ""
+    }
+
+    (argCode, argValues.mkString(", "), setIsNull)
+  }
+}
+
+/**
  * Invokes a static function, returning the result.  By default, any of the arguments being null
  * will result in returning null instead of calling the function.
  *
@@ -50,7 +93,7 @@ case class StaticInvoke(
     dataType: DataType,
     functionName: String,
     arguments: Seq[Expression] = Nil,
-    propagateNull: Boolean = true) extends Expression with NonSQLExpression {
+    propagateNull: Boolean = true) extends Expression with InvokeLike with NonSQLExpression {
 
   val objectName = staticObject.getName.stripSuffix("$")
 
@@ -62,16 +105,10 @@ case class StaticInvoke(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val argGen = arguments.map(_.genCode(ctx))
-    val argString = argGen.map(_.value).mkString(", ")
+
+    val (argCode, argString, setIsNull) = prepareArguments(ctx, ev)
 
     val callFunc = s"$objectName.$functionName($argString)"
-
-    val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"boolean ${ev.isNull} = ${argGen.map(_.isNull).mkString(" || ")};"
-    } else {
-      s"boolean ${ev.isNull} = false;"
-    }
 
     // If the function can return null, we do an extra check to make sure our null bit is still set
     // correctly.
@@ -82,7 +119,8 @@ case class StaticInvoke(
     }
 
     val code = s"""
-      ${argGen.map(_.code).mkString("\n")}
+      $argCode
+      boolean ${ev.isNull} = false;
       $setIsNull
       final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : $callFunc;
       $postNullCheck
@@ -109,7 +147,7 @@ case class Invoke(
     functionName: String,
     dataType: DataType,
     arguments: Seq[Expression] = Nil,
-    propagateNull: Boolean = true) extends Expression with NonSQLExpression {
+    propagateNull: Boolean = true) extends Expression with InvokeLike with NonSQLExpression {
 
   override def nullable: Boolean = true
   override def children: Seq[Expression] = targetObject +: arguments
@@ -131,8 +169,8 @@ case class Invoke(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val obj = targetObject.genCode(ctx)
-    val argGen = arguments.map(_.genCode(ctx))
-    val argString = argGen.map(_.value).mkString(", ")
+
+    val (argCode, argString, setIsNull) = prepareArguments(ctx, ev)
 
     val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
     val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
@@ -164,12 +202,6 @@ case class Invoke(
       """
     }
 
-    val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"boolean ${ev.isNull} = ${obj.isNull} || ${argGen.map(_.isNull).mkString(" || ")};"
-    } else {
-      s"boolean ${ev.isNull} = ${obj.isNull};"
-    }
-
     // If the function can return null, we do an extra check to make sure our null bit is still set
     // correctly.
     val postNullCheck = if (ctx.defaultValue(dataType) == "null") {
@@ -179,7 +211,8 @@ case class Invoke(
     }
     val code = s"""
       ${obj.code}
-      ${argGen.map(_.code).mkString("\n")}
+      $argCode
+      boolean ${ev.isNull} = ${obj.isNull};
       $setIsNull
       $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
@@ -223,7 +256,7 @@ case class NewInstance(
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[() => AnyRef]) extends Expression with NonSQLExpression {
+    outerPointer: Option[() => AnyRef]) extends Expression with InvokeLike with NonSQLExpression {
   private val className = cls.getName
 
   override def nullable: Boolean = propagateNull
@@ -245,48 +278,29 @@ case class NewInstance(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val argIsNulls = ctx.freshName("argIsNulls")
-    ctx.addMutableState("boolean[]", argIsNulls,
-      s"$argIsNulls = new boolean[${arguments.size}];")
-    val argValues = arguments.zipWithIndex.map { case (e, i) =>
-      val argValue = ctx.freshName("argValue")
-      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
-      argValue
-    }
 
-    val argCodes = arguments.zipWithIndex.map { case (e, i) =>
-      val expr = e.genCode(ctx)
-      expr.code + s"""
-       $argIsNulls[$i] = ${expr.isNull};
-       ${argValues(i)} = ${expr.value};
-     """
-    }
-    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
+    val (argCode, argString, setIsNull) = prepareArguments(ctx, ev)
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
-    val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"""
-       boolean $isNull = false;
-       for (int idx = 0; idx < ${arguments.length}; idx++) {
-         if ($argIsNulls[idx]) { $isNull = true; break; }
-       }
-     """
+    val prepareIsNull = if (propagateNull && arguments.nonEmpty) {
+      s"boolean $isNull = false;"
     } else {
       isNull = "false"
       ""
     }
 
     val constructorCall = outer.map { gen =>
-      s"""${gen.value}.new ${cls.getSimpleName}(${argValues.mkString(", ")})"""
+      s"${gen.value}.new ${cls.getSimpleName}($argString)"
     }.getOrElse {
-      s"new $className(${argValues.mkString(", ")})"
+      s"new $className($argString)"
     }
 
     val code = s"""
       $argCode
       ${outer.map(_.code).getOrElse("")}
+      $prepareIsNull
       $setIsNull
       final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
      """
