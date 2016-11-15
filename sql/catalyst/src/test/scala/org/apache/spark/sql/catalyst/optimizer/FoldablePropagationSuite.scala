@@ -116,14 +116,17 @@ class FoldablePropagationSuite extends PlanTest {
   test("Propagate in subqueries of Union queries") {
     val query = Union(
       Seq(
-        testRelation.select(Literal(1).as('x), 'a).select('x + 'a),
-        testRelation.select(Literal(2).as('x), 'a).select('x + 'a)))
+        testRelation.select(Literal(1).as('x), 'a).select('x, 'x + 'a),
+        testRelation.select(Literal(2).as('x), 'a).select('x, 'x + 'a)))
+      .select('x)
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = Union(
       Seq(
-        testRelation.select(Literal(1).as('x), 'a).select((Literal(1).as('x) + 'a).as("(x + a)")),
-        testRelation.select(Literal(2).as('x), 'a).select((Literal(2).as('x) + 'a).as("(x + a)"))))
-      .analyze
+        testRelation.select(Literal(1).as('x), 'a)
+          .select(Literal(1).as('x), (Literal(1).as('x) + 'a).as("(x + a)")),
+        testRelation.select(Literal(2).as('x), 'a)
+          .select(Literal(2).as('x), (Literal(2).as('x) + 'a).as("(x + a)"))))
+      .select('x).analyze
     comparePlans(optimized, correctAnswer)
   }
 

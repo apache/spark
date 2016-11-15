@@ -437,7 +437,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     } else {
       var stop = false
       CleanupAliases(plan.transformUp {
-        // Allow all leafnodes
+        // A leaf node should not stop the folding process (note that we are traversing up the
+        // tree, starting at the leaf nodes); so we are allowing it.
         case l: LeafNode =>
           l
 
@@ -459,6 +460,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         // We can fold the projections an expand holds. However expand changes the output columns
         // and often reuses the underlying attributes; so we cannot assume that a column is still
         // foldable after the expand has been applied.
+        // TODO(hvanhovell): Expand should use new attributes as the output attributes.
         case expand: Expand if !stop =>
           val newExpand = expand.copy(projections = expand.projections.map { projection =>
             projection.map(_.transform(replaceFoldable))
