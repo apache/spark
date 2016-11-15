@@ -428,43 +428,49 @@ object FoldablePropagation extends Rule[LogicalPlan] {
       }
       case _ => Nil
     })
+    val replaceFoldable: PartialFunction[Expression, Expression] = {
+      case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
+    }
 
     if (foldableMap.isEmpty) {
       plan
     } else {
       var stop = false
       CleanupAliases(plan.transformUp {
-        case u: Union =>
-          stop = true
-          u
-        case c: Command =>
-          stop = true
-          c
-        // For outer join, although its output attributes are derived from its children, they are
-        // actually different attributes: the output of outer join is not always picked from its
-        // children, but can also be null.
+        // A leaf node should not stop the folding process (note that we are traversing up the
+        // tree, starting at the leaf nodes); so we are allowing it.
+        case l: LeafNode =>
+          l
+
+        // Whitelist of all nodes we are allowed to apply this rule to.
+        case p @ (_: Project | _: Filter | _: SubqueryAlias | _: Aggregate | _: Window |
+                  _: Sample | _: GlobalLimit | _: LocalLimit | _: Generate | _: Distinct |
+                  _: AppendColumns | _: AppendColumnsWithObject | _: BroadcastHint |
+                  _: RedistributeData | _: Repartition | _: Sort | _: TypedFilter) if !stop =>
+          p.transformExpressions(replaceFoldable)
+
+        // Allow inner joins. We do not allow outer join, although its output attributes are
+        // derived from its children, they are actually different attributes: the output of outer
+        // join is not always picked from its children, but can also be null.
         // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
         // of outer join.
-        case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, _) =>
-          stop = true
-          j
+        case j @ Join(_, _, Inner, _) =>
+          j.transformExpressions(replaceFoldable)
 
-        // These 3 operators take attributes as constructor parameters, and these attributes
-        // can't be replaced by alias.
-        case m: MapGroups =>
+        // We can fold the projections an expand holds. However expand changes the output columns
+        // and often reuses the underlying attributes; so we cannot assume that a column is still
+        // foldable after the expand has been applied.
+        // TODO(hvanhovell): Expand should use new attributes as the output attributes.
+        case expand: Expand if !stop =>
+          val newExpand = expand.copy(projections = expand.projections.map { projection =>
+            projection.map(_.transform(replaceFoldable))
+          })
           stop = true
-          m
-        case f: FlatMapGroupsInR =>
-          stop = true
-          f
-        case c: CoGroup =>
-          stop = true
-          c
+          newExpand
 
-        case p: LogicalPlan if !stop => p.transformExpressions {
-          case a: AttributeReference if foldableMap.contains(a) =>
-            foldableMap(a)
-        }
+        case other =>
+          stop = true
+          other
       })
     }
   }
