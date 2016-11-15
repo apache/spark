@@ -849,7 +849,7 @@ class VertexRDD[VD] extends RDD[(VertexId, VD)] {
 }
 {% endhighlight %}
 
-Notice, for example,  how the `filter`[VertexRDD.filter] operator returns an `VertexRDD`[VertexRDD].  Filter is actually
+Notice, for example,  how the `filter` operator returns an `VertexRDD`[VertexRDD].  Filter is actually
 implemented using a `BitSet` thereby reusing the index and preserving the ability to do fast joins
 with other `VertexRDD`s.  Likewise, the `mapValues` operators do not allow the `map` function to
 change the `VertexId` thereby enabling the same `HashMap` data structures to be reused.  Both the
