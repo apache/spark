@@ -65,7 +65,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   protected def defaultCompactInterval: Int
 
-  protected final val compactInterval: Int = {
+  protected final lazy val compactInterval: Int = {
     // SPARK-18187: "compactInterval" can be set by user via defaultCompactInterval.
     // If there are existing log entries, then we should ensure a compatible compactInterval
     // is used, irrespective of the defaultCompactInterval. There are three cases:
@@ -88,6 +88,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
       .sorted
       .reverse
 
+    // Case 1
     var interval = defaultCompactInterval
     if (compactibleBatchIds.length >= 2) {
       // Case 2
@@ -112,10 +113,6 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
         interval = latestCompactBatchId + 1
       }
       logInfo(s"Compact interval case 3 = $interval")
-    } else {
-      // Case 1
-      interval = defaultCompactInterval
-      logInfo(s"Compact interval case 1 = $interval")
     }
     assert(interval > 0, "Compact interval must be greater than zero")
     interval
