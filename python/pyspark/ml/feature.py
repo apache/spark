@@ -121,8 +121,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
 
 
 @inherit_doc
-class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid, JavaMLReadable,
-                 JavaMLWritable):
+class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     Maps a column of continuous features to a column of feature buckets.
 
@@ -165,6 +164,12 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid, J
               "splits specified will be treated as errors.",
               typeConverter=TypeConverters.toListFloat)
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
+                          "Options are skip (filter out rows with invalid values), " +
+                          "error (throw an error), or keep (keep invalid values in a special " +
+                          "additional bucket).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
     def __init__(self, splits=None, inputCol=None, outputCol=None, handleInvalid="error"):
         """
@@ -199,6 +204,20 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid, J
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
+
+    @since("2.1.0")
+    def setHandleInvalid(self):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("2.1.0")
+    def getHandleInvalid(self):
+        """
+        Gets the value of :py:attr:`handleInvalid` or its default value.
+        """
+        return self.getOrDefault(self.handleInvalid)
 
 
 @inherit_doc
@@ -1157,8 +1176,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid,
-                          JavaMLReadable, JavaMLWritable):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1207,6 +1225,12 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
                           "the approximate quantile algorithm used to generate buckets. " +
                           "Must be in the range [0, 1].",
                           typeConverter=TypeConverters.toFloat)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
+                          "Options are skip (filter out rows with invalid values), " +
+                          "error (throw an error), or keep (keep invalid values in a special " +
+                          "additional bucket).",
+                          typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001,
@@ -1261,6 +1285,20 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
         Gets the value of relativeError or its default value.
         """
         return self.getOrDefault(self.relativeError)
+
+    @since("2.1.0")
+    def setHandleInvalid(self):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("2.1.0")
+    def getHandleInvalid(self):
+        """
+        Gets the value of :py:attr:`handleInvalid` or its default value.
+        """
+        return self.getOrDefault(self.handleInvalid)
 
     def _create_model(self, java_model):
         """
