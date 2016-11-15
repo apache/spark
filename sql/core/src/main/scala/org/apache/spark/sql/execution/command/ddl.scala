@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BinaryComparison}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, PredicateHelper}
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -418,27 +419,55 @@ case class AlterTableRenamePartitionCommand(
  */
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
-    specs: Seq[TablePartitionSpec],
+    specs: Seq[Expression],
     ifExists: Boolean,
     purge: Boolean)
-  extends RunnableCommand {
+  extends RunnableCommand with PredicateHelper {
+
+  private def isRangeComparison(expr: Expression): Boolean = {
+    expr.find(e => e.isInstanceOf[BinaryComparison] && !e.isInstanceOf[EqualTo]).isDefined
+  }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
-    val normalizedSpecs = specs.map { spec =>
-      PartitioningUtils.normalizePartitionSpec(
-        spec,
-        table.partitionColumnNames,
-        table.identifier.quotedString,
-        sparkSession.sessionState.conf.resolver)
+    specs.foreach { expr =>
+      expr.references.foreach { attr =>
+        if (!table.partitionColumnNames.exists(resolver(_, attr.name))) {
+          throw new AnalysisException(s"${attr.name} is not a valid partition column " +
+            s"in table ${table.identifier.quotedString}.")
+        }
+      }
     }
 
-    catalog.dropPartitions(
-      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge)
+    if (specs.exists(isRangeComparison)) {
+      val partitionSet = specs.flatMap { spec =>
+        val partitions = catalog.listPartitionsByFilter(table.identifier, Seq(spec)).map(_.spec)
+        if (partitions.isEmpty && !ifExists) {
+          throw new AnalysisException(s"There is no partition for ${spec.sql}")
+        }
+        partitions
+      }.distinct
+      catalog.dropPartitions(
+        table.identifier, partitionSet, ignoreIfNotExists = ifExists, purge = purge)
+    } else {
+      val normalizedSpecs = specs.map { expr =>
+        val spec = splitConjunctivePredicates(expr).map {
+          case BinaryComparison(AttributeReference(name, _, _, _), right) => name -> right.toString
+        }.toMap
+        PartitioningUtils.normalizePartitionSpec(
+          spec,
+          table.partitionColumnNames,
+          table.identifier.quotedString,
+          resolver)
+      }
+      catalog.dropPartitions(
+        table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge)
+    }
     Seq.empty[Row]
   }
 
