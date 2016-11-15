@@ -11,6 +11,7 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 <!-- All the documentation links  -->
 
 [EdgeRDD]: api/scala/index.html#org.apache.spark.graphx.EdgeRDD
+[VertexRDD]: api/scala/index.html#org.apache.spark.graphx.VertexRDD
 [Edge]: api/scala/index.html#org.apache.spark.graphx.Edge
 [EdgeTriplet]: api/scala/index.html#org.apache.spark.graphx.EdgeTriplet
 [Graph]: api/scala/index.html#org.apache.spark.graphx.Graph
@@ -825,7 +826,7 @@ The `VertexRDD[A]` extends `RDD[(VertexId, A)]` and adds the additional constrai
 `VertexId` occurs only *once*.  Moreover, `VertexRDD[A]` represents a *set* of vertices each with an
 attribute of type `A`.  Internally, this is achieved by storing the vertex attributes in a reusable
 hash-map data-structure.  As a consequence if two `VertexRDD`s are derived from the same base
-`VertexRDD`[VertexRDD] (e.g., by `filter`[VertexRDD.filter] or `mapValues`[VertexRDD.mapValues]) they can be joined in constant time without hash
+`VertexRDD`[VertexRDD] (e.g., by `filter` or `mapValues`) they can be joined in constant time without hash
 evaluations. To leverage this indexed data structure, the `VertexRDD`[VertexRDD] exposes the following
 additional functionality:
 
@@ -850,12 +851,12 @@ class VertexRDD[VD] extends RDD[(VertexId, VD)] {
 
 Notice, for example,  how the `filter`[VertexRDD.filter] operator returns an `VertexRDD`[VertexRDD].  Filter is actually
 implemented using a `BitSet` thereby reusing the index and preserving the ability to do fast joins
-with other `VertexRDD`s.  Likewise, the `mapValues`[VertexRDD.mapValues] operators do not allow the `map` function to
+with other `VertexRDD`s.  Likewise, the `mapValues` operators do not allow the `map` function to
 change the `VertexId` thereby enabling the same `HashMap` data structures to be reused.  Both the
-`leftJoin`[VertexRDD.leftJoin] and `innerJoin`[VertexRDD.innerJoin] are able to identify when joining two `VertexRDD`s derived from the same
+`leftJoin` and `innerJoin` are able to identify when joining two `VertexRDD`s derived from the same
 `HashMap` and implement the join by linear scan rather than costly point lookups.
 
-The `aggregateUsingIndex`[VertexRDD.aggregateUsingIndex] operator is useful for efficient construction of a new `VertexRDD`[VertexRDD] from an
+The `aggregateUsingIndex` operator is useful for efficient construction of a new `VertexRDD`[VertexRDD] from an
 `RDD[(VertexId, A)]`.  Conceptually, if I have constructed a `VertexRDD[B]` over a set of vertices,
 *which is a super-set* of the vertices in some `RDD[(VertexId, A)]` then I can reuse the index to
 both aggregate and then subsequently index the `RDD[(VertexId, A)]`.  For example:
