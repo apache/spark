@@ -22,6 +22,7 @@ import java.util.{Objects, UUID}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types._
 
@@ -104,6 +105,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   def withNullability(newNullability: Boolean): Attribute
   def withQualifier(newQualifier: Option[String]): Attribute
   def withName(newName: String): Attribute
+  def withMetadata(newMetadata: Metadata): Attribute
 
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
@@ -292,11 +294,22 @@ case class AttributeReference(
     }
   }
 
+  override def withMetadata(newMetadata: Metadata): Attribute = {
+    AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier, isGenerated)
+  }
+
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: isGenerated :: Nil
   }
 
-  override def toString: String = s"$name#${exprId.id}$typeSuffix"
+  /** Used to signal the column used to calculate an eventTime watermark (e.g. a#1-T{delayMs}) */
+  private def delaySuffix = if (metadata.contains(EventTimeWatermark.delayKey)) {
+    s"-T${metadata.getLong(EventTimeWatermark.delayKey)}ms"
+  } else {
+    ""
+  }
+
+  override def toString: String = s"$name#${exprId.id}$typeSuffix$delaySuffix"
 
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.
@@ -332,6 +345,8 @@ case class PrettyAttribute(
   override def withQualifier(newQualifier: Option[String]): Attribute =
     throw new UnsupportedOperationException
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
+  override def withMetadata(newMetadata: Metadata): Attribute =
+    throw new UnsupportedOperationException
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = true

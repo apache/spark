@@ -668,11 +668,11 @@ private[state] object StateStoreSuite {
   }
 
   def updatesToSet(iterator: Iterator[StoreUpdate]): Set[TestUpdate] = {
-    iterator.map { _ match {
+    iterator.map {
       case ValueAdded(key, value) => Added(rowToString(key), rowToInt(value))
       case ValueUpdated(key, value) => Updated(rowToString(key), rowToInt(value))
-      case KeyRemoved(key) => Removed(rowToString(key))
-    }}.toSet
+      case ValueRemoved(key, _) => Removed(rowToString(key))
+    }.toSet
   }
 }
 

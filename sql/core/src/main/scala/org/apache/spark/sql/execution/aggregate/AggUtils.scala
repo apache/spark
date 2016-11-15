@@ -328,8 +328,13 @@ object AggUtils {
     }
     // Note: stateId and returnAllStates are filled in later with preparation rules
     // in IncrementalExecution.
-    val saved = StateStoreSaveExec(
-      groupingAttributes, stateId = None, returnAllStates = None, partialMerged2)
+    val saved =
+      StateStoreSaveExec(
+        groupingAttributes,
+        stateId = None,
+        outputMode = None,
+        eventTimeWatermark = None,
+        partialMerged2)
 
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))

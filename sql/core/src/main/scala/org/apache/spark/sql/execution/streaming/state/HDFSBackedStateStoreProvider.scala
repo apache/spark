@@ -109,7 +109,7 @@ private[state] class HDFSBackedStateStoreProvider(
         case Some(ValueAdded(_, _)) =>
           // Value did not exist in previous version and was added already, keep it marked as added
           allUpdates.put(key, ValueAdded(key, value))
-        case Some(ValueUpdated(_, _)) | Some(KeyRemoved(_)) =>
+        case Some(ValueUpdated(_, _)) | Some(ValueRemoved(_, _)) =>
           // Value existed in previous version and updated/removed, mark it as updated
           allUpdates.put(key, ValueUpdated(key, value))
         case None =>
@@ -124,24 +124,25 @@ private[state] class HDFSBackedStateStoreProvider(
     /** Remove keys that match the following condition */
     override def remove(condition: UnsafeRow => Boolean): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
-
-      val keyIter = mapToUpdate.keySet().iterator()
-      while (keyIter.hasNext) {
-        val key = keyIter.next
-        if (condition(key)) {
-          keyIter.remove()
+      val entryIter = mapToUpdate.entrySet().iterator()
+      while (entryIter.hasNext) {
+        val entry = entryIter.next
+        if (condition(entry.getKey)) {
+          val value = entry.getValue
+          val key = entry.getKey
+          entryIter.remove()
 
           Option(allUpdates.get(key)) match {
             case Some(ValueUpdated(_, _)) | None =>
               // Value existed in previous version and maybe was updated, mark removed
-              allUpdates.put(key, KeyRemoved(key))
+              allUpdates.put(key, ValueRemoved(key, value))
             case Some(ValueAdded(_, _)) =>
               // Value did not exist in previous version and was added, should not appear in updates
               allUpdates.remove(key)
-            case Some(KeyRemoved(_)) =>
+            case Some(ValueRemoved(_, _)) =>
               // Remove already in update map, no need to change
           }
-          writeToDeltaFile(tempDeltaFileStream, KeyRemoved(key))
+          writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
         }
       }
     }
@@ -334,7 +335,7 @@ private[state] class HDFSBackedStateStoreProvider(
         writeUpdate(key, value)
       case ValueUpdated(key, value) =>
         writeUpdate(key, value)
-      case KeyRemoved(key) =>
+      case ValueRemoved(key, value) =>
         writeRemove(key)
     }
   }
