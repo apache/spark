@@ -491,7 +491,7 @@ def main():
         os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
-        build_tool = "sbt"
+        build_tool = os.environ.get("SPARK_BUILD_TOOL", "sbt")
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.3")
         test_env = "local"
 
