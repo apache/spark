@@ -77,7 +77,7 @@ object Statistics {
    * Compute the Pearson correlation for the input RDDs.
    * Returns NaN if either vector has 0 variance.
    *
-   * Note: the two input RDDs need to have the same number of partitions and the same number of
+   * '''Note:''' the two input RDDs need to have the same number of partitions and the same number of
    * elements in each partition.
    *
    * @param x RDD[Double] of the same cardinality as y.
@@ -98,7 +98,7 @@ object Statistics {
    * Compute the correlation for the input RDDs using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
-   * Note: the two input RDDs need to have the same number of partitions and the same number of
+   * '''Note:''' the two input RDDs need to have the same number of partitions and the same number of
    * elements in each partition.
    *
    * @param x RDD[Double] of the same cardinality as y.
@@ -122,7 +122,7 @@ object Statistics {
    * Conduct Pearson's chi-squared goodness of fit test of the observed data against the
    * expected distribution.
    *
-   * Note: the two input Vectors need to have the same size.
+   * '''Note:''' the two input Vectors need to have the same size.
    *       `observed` cannot contain negative values.
    *       `expected` cannot contain nonpositive values.
    *
@@ -141,7 +141,7 @@ object Statistics {
    * Conduct Pearson's chi-squared goodness of fit test of the observed data against the uniform
    * distribution, with each category having an expected frequency of `1 / observed.size`.
    *
-   * Note: `observed` cannot contain negative values.
+   * '''Note:''' `observed` cannot contain negative values.
    *
    * @param observed Vector containing the observed categorical counts/relative frequencies.
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,

@@ -488,11 +488,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * The ordering of elements within each group is not guaranteed, and may even differ
    * each time the resulting RDD is evaluated.
    *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * '''Note:''' This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    *
-   * Note: As currently implemented, groupByKey must be able to hold all the key-value pairs for any
+   * '''Note:''' As currently implemented, groupByKey must be able to hold all the key-value pairs for any
    * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
    */
   def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = self.withScope {
@@ -512,11 +512,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * resulting RDD with into `numPartitions` partitions. The ordering of elements within
    * each group is not guaranteed, and may even differ each time the resulting RDD is evaluated.
    *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * '''Note:''' This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    *
-   * Note: As currently implemented, groupByKey must be able to hold all the key-value pairs for any
+   * '''Note:''' As currently implemented, groupByKey must be able to hold all the key-value pairs for any
    * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
    */
   def groupByKey(numPartitions: Int): RDD[(K, Iterable[V])] = self.withScope {
@@ -633,7 +633,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * within each group is not guaranteed, and may even differ each time the resulting RDD is
    * evaluated.
    *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * '''Note:''' This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */

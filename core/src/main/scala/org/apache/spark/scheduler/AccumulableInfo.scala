@@ -24,7 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
  * :: DeveloperApi ::
  * Information about an [[org.apache.spark.Accumulable]] modified during a task or stage.
  *
- * Note: once this is JSON serialized the types of `update` and `value` will be lost and be
+ * '''Note:''' once this is JSON serialized the types of `update` and `value` will be lost and be
  * cast to strings. This is because the user can define an accumulator of any type and it will
  * be difficult to preserve the type in consumers of the event log. This does not apply to
  * internal accumulators that represent task level metrics.

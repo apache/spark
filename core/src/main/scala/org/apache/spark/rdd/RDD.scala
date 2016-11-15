@@ -428,7 +428,7 @@ abstract class RDD[T: ClassTag](
    * current upstream partitions will be executed in parallel (per whatever
    * the current partitioning is).
    *
-   * Note: With shuffle = true, you can actually coalesce to a larger number
+   * '''Note:''' With shuffle = true, you can actually coalesce to a larger number
    * of partitions. This is useful if you have a small number of partitions,
    * say 100, potentially with a few partitions being abnormally large. Calling
    * coalesce(1000, shuffle = true) will result in 1000 partitions with the
@@ -674,7 +674,7 @@ abstract class RDD[T: ClassTag](
    * mapping to that key. The ordering of elements within each group is not guaranteed, and
    * may even differ each time the resulting RDD is evaluated.
    *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * '''Note:''' This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
@@ -687,7 +687,7 @@ abstract class RDD[T: ClassTag](
    * mapping to that key. The ordering of elements within each group is not guaranteed, and
    * may even differ each time the resulting RDD is evaluated.
    *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * '''Note:''' This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
@@ -702,7 +702,7 @@ abstract class RDD[T: ClassTag](
    * mapping to that key. The ordering of elements within each group is not guaranteed, and
    * may even differ each time the resulting RDD is evaluated.
    *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * '''Note:''' This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
@@ -934,7 +934,7 @@ abstract class RDD[T: ClassTag](
    *
    * The iterator will consume as much memory as the largest partition in this RDD.
    *
-   * Note: this results in multiple Spark jobs, and if the input RDD is the result
+   * '''Note:''' this results in multiple Spark jobs, and if the input RDD is the result
    * of a wide transformation (e.g. join with different partitioners), to avoid
    * recomputing the input RDD should be cached first.
    */

@@ -42,8 +42,10 @@ trait Loss extends Serializable {
 
   /**
    * Method to calculate error of the base learner for the gradient boosting calculation.
-   * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
+   *
+   * '''Note:''' This method is not used by the gradient boosting algorithm but is useful for debugging
    * purposes.
+   *
    * @param model Model of the weak learner.
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    * @return Measure of model error on data
@@ -55,8 +57,10 @@ trait Loss extends Serializable {
 
   /**
    * Method to calculate loss when the predictions are already known.
-   * Note: This method is used in the method evaluateEachIteration to avoid recomputing the
+   *
+   * '''Note:''' This method is used in the method evaluateEachIteration to avoid recomputing the
    * predicted values from previously fit trees.
+   *
    * @param prediction Predicted label.
    * @param label True label.
    * @return Measure of model error on datapoint.

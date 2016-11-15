@@ -112,7 +112,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *
    * This is the parameter to a symmetric Dirichlet distribution.
    *
-   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * '''Note:''' The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    *
    * If not set by the user, then topicConcentration is set automatically.
@@ -249,8 +249,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * so the entire corpus is used.  Specifically, set both so that
    * maxIterations * miniBatchFraction >= 1.
    *
-   * Note: This is the same as the `miniBatchFraction` parameter in
-   *       [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].
+   * '''Note:''' This is the same as the `miniBatchFraction` parameter in
+   * [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].
    *
    * Default: 0.05, i.e., 5% of total documents.
    *

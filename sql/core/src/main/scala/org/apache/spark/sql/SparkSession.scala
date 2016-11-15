@@ -200,7 +200,7 @@ class SparkSession private(
    * Start a new session with isolated SQL configurations, temporary tables, registered
    * functions are isolated, but sharing the underlying [[SparkContext]] and cached data.
    *
-   * Note: Other than the [[SparkContext]], all shared state is initialized lazily.
+   * '''Note:''' Other than the [[SparkContext]], all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.

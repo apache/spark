@@ -41,9 +41,9 @@ import org.apache.spark.util.Utils
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.
  *
- * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
- *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
- *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
+ * '''Note:''' For high-dimensional data (with many features), this algorithm may perform poorly.
+ * This is due to high-dimensional data (a) making it difficult to cluster at all (based
+ * on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  *
  * @param k Number of independent Gaussians in the mixture model.
  * @param convergenceTol Maximum change in log-likelihood at which convergence

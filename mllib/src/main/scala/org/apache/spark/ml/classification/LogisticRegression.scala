@@ -60,10 +60,9 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * A high threshold encourages the model to predict 0 more often;
    * a low threshold encourages the model to predict 1 more often.
    *
-   * Note: Calling this with threshold p is equivalent to calling `setThresholds(Array(1-p, p))`.
-   *       When [[setThreshold()]] is called, any user-set value for [[thresholds]] will be cleared.
-   *       If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be
-   *       equivalent.
+   * '''Note:''' Calling this with threshold p is equivalent to calling `setThresholds(Array(1-p, p))`.
+   * When [[setThreshold()]] is called, any user-set value for [[thresholds]] will be cleared.
+   * If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be equivalent.
    *
    * Default is 0.5.
    *
@@ -127,9 +126,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * The class with largest value p/t is predicted, where p is the original probability of that
    * class and t is the class's threshold.
    *
-   * Note: When [[setThresholds()]] is called, any user-set value for [[threshold]] will be cleared.
-   *       If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be
-   *       equivalent.
+   * '''Note:''' When [[setThresholds()]] is called, any user-set value for [[threshold]] will be cleared.
+   * If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be equivalent.
    *
    * @group setParam
    */
@@ -1191,8 +1189,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
    * See http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * '''Note:''' This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
@@ -1200,8 +1198,8 @@ class BinaryLogisticRegressionSummary private[classification] (
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * '''Note:''' This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
@@ -1210,8 +1208,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Returns the precision-recall curve, which is a Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * '''Note:''' This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
@@ -1219,8 +1217,8 @@ class BinaryLogisticRegressionSummary private[classification] (
   /**
    * Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * '''Note:''' This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val fMeasureByThreshold: DataFrame = {
@@ -1232,8 +1230,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * '''Note:''' This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val precisionByThreshold: DataFrame = {
@@ -1245,8 +1243,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the recall.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * '''Note:''' This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val recallByThreshold: DataFrame = {

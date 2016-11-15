@@ -700,7 +700,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Execute a block of code in a scope such that all new RDDs created in this body will
    * be part of the same scope. For more detail, see {{org.apache.spark.rdd.RDDOperationScope}}.
    *
-   * Note: Return statements are NOT allowed in the given body.
+   * '''Note:''' Return statements are NOT allowed in the given body.
    */
   private[spark] def withScope[U](body: => U): U = RDDOperationScope.withScope[U](this)(body)
 
@@ -961,6 +961,12 @@ class SparkContext(config: SparkConf) extends Logging {
    * necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable),
    * using the older MapReduce API (`org.apache.hadoop.mapred`).
    *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   *
    * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.
    *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
    *             sure you won't modify the conf. A safe approach is always creating a new conf for
@@ -969,12 +975,6 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
    * @param minPartitions Minimum number of Hadoop Splits to generate.
-   *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
-   * operation will create many references to the same object.
-   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
-   * copy them using a `map` function.
    */
   def hadoopRDD[K, V](
       conf: JobConf,
@@ -1116,6 +1116,12 @@ class SparkContext(config: SparkConf) extends Logging {
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
+   *
    * @param conf Configuration for setting up the dataset. Note: This will be put into a Broadcast.
    *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
    *             sure you won't modify the conf. A safe approach is always creating a new conf for
@@ -1123,12 +1129,6 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param fClass Class of the InputFormat
    * @param kClass Class of the keys
    * @param vClass Class of the values
-   *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
-   * operation will create many references to the same object.
-   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
-   * copy them using a `map` function.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
       conf: Configuration = hadoopConfiguration,
@@ -1550,7 +1550,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executors.
    *
-   * Note: This is an indication to the cluster manager that the application wishes to adjust
+   * '''Note:''' This is an indication to the cluster manager that the application wishes to adjust
    * its resource usage downwards. If the application wishes to replace the executors it kills
    * through this method with new ones, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
@@ -1572,7 +1572,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executor.
    *
-   * Note: This is an indication to the cluster manager that the application wishes to adjust
+   * '''Note:''' This is an indication to the cluster manager that the application wishes to adjust
    * its resource usage downwards. If the application wishes to replace the executor it kills
    * through this method with a new one, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
@@ -1590,7 +1590,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * this request. This assumes the cluster manager will automatically and eventually
    * fulfill all missing application resource requests.
    *
-   * Note: The replace is by no means guaranteed; another application on the same cluster
+   * '''Note:''' The replace is by no means guaranteed; another application on the same cluster
    * can steal the window of opportunity and acquire this application's resources in the
    * mean time.
    *
@@ -2298,7 +2298,7 @@ object SparkContext extends Logging {
    * singleton object. Because we can only have one active SparkContext per JVM,
    * this is useful when applications may wish to share a SparkContext.
    *
-   * Note: This function cannot be used to create multiple SparkContext instances
+   * '''Note:''' This function cannot be used to create multiple SparkContext instances
    * even if multiple contexts are allowed.
    */
   def getOrCreate(config: SparkConf): SparkContext = {
@@ -2323,7 +2323,7 @@ object SparkContext extends Logging {
    *
    * This method allows not passing a SparkConf (useful if just retrieving).
    *
-   * Note: This function cannot be used to create multiple SparkContext instances
+   * '''Note:''' This function cannot be used to create multiple SparkContext instances
    * even if multiple contexts are allowed.
    */
   def getOrCreate(): SparkContext = {

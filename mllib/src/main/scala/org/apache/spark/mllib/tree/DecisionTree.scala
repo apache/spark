@@ -75,9 +75,9 @@ object DecisionTree extends Serializable with Logging {
    * Method to train a decision tree model.
    * The method supports binary and multiclass classification and regression.
    *
-   * Note: Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   *       and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
-   *       is recommended to clearly separate classification and regression.
+   * '''Note:''' Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   * is recommended to clearly separate classification and regression.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
@@ -96,9 +96,9 @@ object DecisionTree extends Serializable with Logging {
    * Method to train a decision tree model.
    * The method supports binary and multiclass classification and regression.
    *
-   * Note: Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   *       and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
-   *       is recommended to clearly separate classification and regression.
+   * '''Note:''' Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   * is recommended to clearly separate classification and regression.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
@@ -123,9 +123,9 @@ object DecisionTree extends Serializable with Logging {
    * Method to train a decision tree model.
    * The method supports binary and multiclass classification and regression.
    *
-   * Note: Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   *       and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
-   *       is recommended to clearly separate classification and regression.
+   * '''Note:''' Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   * is recommended to clearly separate classification and regression.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
@@ -152,9 +152,9 @@ object DecisionTree extends Serializable with Logging {
    * Method to train a decision tree model.
    * The method supports binary and multiclass classification and regression.
    *
-   * Note: Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   *       and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
-   *       is recommended to clearly separate classification and regression.
+   * '''Note:''' Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
+   * is recommended to clearly separate classification and regression.
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.

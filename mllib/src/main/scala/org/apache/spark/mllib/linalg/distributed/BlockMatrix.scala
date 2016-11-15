@@ -347,7 +347,7 @@ class BlockMatrix @Since("1.3.0") (
    * @param binMap A function taking two breeze matrices and returning a breeze matrix
    * @return A [[BlockMatrix]] whose blocks are the results of a specified binary map on blocks
    *         of `this` and `other`.
-   * Note: `blockMap` ONLY works for `add` and `subtract` methods and it does not support
+   * '''Note:''' `blockMap` ONLY works for `add` and `subtract` methods and it does not support
    * operators such as (a, b) => -a + b
    * TODO: Make the use of zero matrices more storage efficient.
    */
@@ -451,7 +451,7 @@ class BlockMatrix @Since("1.3.0") (
    * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
    * some performance issues until support for multiplying two sparse matrices is added.
    *
-   * Note: The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
+   * '''Note:''' The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
    * there were blocks with duplicate indices. Now, the blocks with duplicate indices will be added
    * with each other.
    */

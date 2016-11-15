@@ -84,7 +84,7 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
  * sources in HBase, or S3), using the older MapReduce API (`org.apache.hadoop.mapred`).
  *
- * Note: Instantiating this class directly is not recommended, please use
+ * '''Note:''' Instantiating this class directly is not recommended, please use
  * [[org.apache.spark.SparkContext.hadoopRDD()]]
  *
  * @param sc The SparkContext to associate the RDD with.

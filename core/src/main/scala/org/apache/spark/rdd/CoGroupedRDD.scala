@@ -69,7 +69,7 @@ private[spark] class CoGroupPartition(
  * A RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
  * tuple with the list of values for that key.
  *
- * Note: This is an internal API. We recommend users use RDD.cogroup(...) instead of
+ * '''Note:''' This is an internal API. We recommend users use RDD.cogroup(...) instead of
  * instantiating this directly.
  *
  * @param rdds parent RDDs.
