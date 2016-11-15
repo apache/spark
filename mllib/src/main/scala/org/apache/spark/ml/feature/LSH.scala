@@ -33,10 +33,10 @@ import org.apache.spark.sql.types._
  */
 private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   /**
-   * Param for the dimension of LSH OR-amplification.
+   * Param for the number of hash tables used in LSH OR-amplification.
    *
-   * LSH OR-amplification can be used to reduce the false negative rate. The higher the dimension
-   * is, the lower the false negative rate.
+   * LSH OR-amplification can be used to reduce the false negative rate. Higher values for this
+   * param lead to a reduced false negative rate, at the expense of added computational complexity.
    * @group param
    */
   final val numHashTables: IntParam = new IntParam(this, "numHashTables", "number of hash " +
@@ -66,7 +66,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
   self: T =>
 
   /**
-   * The hash function of LSH, mapping an input feature to multiple vectors
+   * The hash function of LSH, mapping an input feature vector to multiple hash vectors.
    * @return The mapping of LSH function.
    */
   protected[ml] val hashFunction: Vector => Array[Vector]
@@ -99,26 +99,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
     validateAndTransformSchema(schema)
   }
 
-  /**
-   * Given a large dataset and an item, approximately find at most k items which have the closest
-   * distance to the item. If the [[outputCol]] is missing, the method will transform the data; if
-   * the [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the
-   * transformed data when necessary.
-   *
-   * This method implements two ways of fetching k nearest neighbors:
-   *  - Single-probe: Fast, return at most k elements (Probing only one buckets)
-   *  - Multi-probe: Slow, return exact k elements (Probing multiple buckets close to the key)
-   *
-   * Currently it is made private since more discussion is needed for Multi-probe
-   *
-   * @param dataset the dataset to search for nearest neighbors of the key
-   * @param key Feature vector representing the item to search for
-   * @param numNearestNeighbors The maximum number of nearest neighbors
-   * @param singleProbe True for using single-probe; false for multi-probe
-   * @param distCol Output column for storing the distance between each result row and the key
-   * @return A dataset containing at most k items closest to the key. A distCol is added to show
-   *         the distance between each row and the key.
-   */
+  // TODO: Fix the MultiProbe NN Search in SPARK-18454
   private[feature] def approxNearestNeighbors(
       dataset: Dataset[_],
       key: Vector,
@@ -179,7 +160,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    * @return A dataset containing at most k items closest to the key. A distCol is added to show
    *         the distance between each row and the key.
    */
-  private[feature] def approxNearestNeighbors(
+  def approxNearestNeighbors(
     dataset: Dataset[_],
     key: Vector,
     numNearestNeighbors: Int,

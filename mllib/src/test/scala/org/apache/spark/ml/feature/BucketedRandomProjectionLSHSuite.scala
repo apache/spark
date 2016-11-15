@@ -44,7 +44,7 @@ class BucketedRandomProjectionLSHSuite
 
   test("params") {
     ParamsSuite.checkParams(new BucketedRandomProjectionLSH)
-    val model = new BucketedRandomProjectionModel(
+    val model = new BucketedRandomProjectionLSHModel(
       "brp", randUnitVectors = Array(Vectors.dense(1.0, 0.0)))
     ParamsSuite.checkParams(model)
   }
@@ -56,8 +56,8 @@ class BucketedRandomProjectionLSHSuite
 
   test("read/write") {
     def checkModelData(
-      model: BucketedRandomProjectionModel,
-      model2: BucketedRandomProjectionModel
+      model: BucketedRandomProjectionLSHModel,
+      model2: BucketedRandomProjectionLSHModel
     ): Unit = {
       model.randUnitVectors.zip(model2.randUnitVectors)
         .foreach(pair => assert(pair._1 === pair._2))
@@ -69,7 +69,7 @@ class BucketedRandomProjectionLSHSuite
 
   test("hashFunction") {
     val randUnitVectors = Array(Vectors.dense(0.0, 1.0), Vectors.dense(1.0, 0.0))
-    val model = new BucketedRandomProjectionModel("brp", randUnitVectors)
+    val model = new BucketedRandomProjectionLSHModel("brp", randUnitVectors)
     model.set(model.bucketLength, 0.5)
     val res = model.hashFunction(Vectors.dense(1.23, 4.56))
     assert(res(0).equals(Vectors.dense(9.0)))
@@ -77,7 +77,7 @@ class BucketedRandomProjectionLSHSuite
   }
 
   test("keyDistance") {
-    val model = new BucketedRandomProjectionModel("brp", Array(Vectors.dense(0.0, 1.0)))
+    val model = new BucketedRandomProjectionLSHModel("brp", Array(Vectors.dense(0.0, 1.0)))
     val keyDist = model.keyDistance(Vectors.dense(1, 2), Vectors.dense(-2, -2))
     assert(keyDist === 5)
   }
@@ -159,6 +159,25 @@ class BucketedRandomProjectionLSHSuite
       singleProbe = false)
     assert(precision >= 0.7)
     assert(recall >= 0.7)
+  }
+
+  test("approxNearestNeighbors for numNeighbors <= 0") {
+    val key = Vectors.dense(1.2, 3.4)
+
+    val brp = new BucketedRandomProjectionLSH()
+      .setNumHashTables(20)
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setBucketLength(1.0)
+      .setSeed(12345)
+
+    val model = brp.fit(dataset)
+    intercept[IllegalArgumentException] {
+      model.approxNearestNeighbors(dataset, key, 0)
+    }
+    intercept[IllegalArgumentException] {
+      model.approxNearestNeighbors(dataset, key, -1)
+    }
   }
 
   test("approxSimilarityJoin for bucketed random projection on different dataset") {

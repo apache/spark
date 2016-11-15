@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.StructType
  *
  * Params for [[BucketedRandomProjectionLSH]].
  */
-private[ml] trait BucketedRandomProjectionParams extends Params {
+private[ml] trait BucketedRandomProjectionLSHParams extends Params {
 
   /**
    * The length of each hash bucket, a larger bucket lowers the false negative rate. The number of
@@ -68,10 +68,10 @@ private[ml] trait BucketedRandomProjectionParams extends Params {
  */
 @Experimental
 @Since("2.1.0")
-class BucketedRandomProjectionModel private[ml](
+class BucketedRandomProjectionLSHModel private[ml](
     override val uid: String,
-    @Since("2.1.0") private[ml] val randUnitVectors: Array[Vector])
-  extends LSHModel[BucketedRandomProjectionModel] with BucketedRandomProjectionParams {
+    private[ml] val randUnitVectors: Array[Vector])
+  extends LSHModel[BucketedRandomProjectionLSHModel] with BucketedRandomProjectionLSHParams {
 
   @Since("2.1.0")
   override protected[ml] val hashFunction: Vector => Array[Vector] = {
@@ -79,7 +79,7 @@ class BucketedRandomProjectionModel private[ml](
       val hashValues: Array[Double] = randUnitVectors.map({
         randUnitVector => Math.floor(BLAS.dot(key, randUnitVector) / $(bucketLength))
       })
-      // TODO: For AND-amplification, output vectors of dimension numHashFunctions
+      // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
       hashValues.grouped(1).map(Vectors.dense).toArray
     }
   }
@@ -100,7 +100,7 @@ class BucketedRandomProjectionModel private[ml](
 
   @Since("2.1.0")
   override def write: MLWriter = {
-    new BucketedRandomProjectionModel.BucketedRandomProjectionModelWriter(this)
+    new BucketedRandomProjectionLSHModel.BucketedRandomProjectionLSHModelWriter(this)
   }
 }
 
@@ -111,8 +111,8 @@ class BucketedRandomProjectionModel private[ml](
  * Euclidean distance metrics.
  *
  * The input is dense or sparse vectors, each of which represents a point in the Euclidean
- * distance space. The output will be vectors of configurable dimension. Hash value in the same
- * dimension is calculated by the same hash function.
+ * distance space. The output will be vectors of configurable dimension. Hash values in the
+ * same dimension are calculated by the same hash function.
  *
  * References:
  *
@@ -125,7 +125,8 @@ class BucketedRandomProjectionModel private[ml](
 @Experimental
 @Since("2.1.0")
 class BucketedRandomProjectionLSH(override val uid: String)
-  extends LSH[BucketedRandomProjectionModel] with BucketedRandomProjectionParams with HasSeed {
+  extends LSH[BucketedRandomProjectionLSHModel]
+    with BucketedRandomProjectionLSHParams with HasSeed {
 
   @Since("2.1.0")
   override def setInputCol(value: String): this.type = super.setInputCol(value)
@@ -138,7 +139,7 @@ class BucketedRandomProjectionLSH(override val uid: String)
 
   @Since("2.1.0")
   def this() = {
-    this(Identifiable.randomUID("random projection"))
+    this(Identifiable.randomUID("brp-lsh"))
   }
 
   /** @group setParam */
@@ -150,7 +151,9 @@ class BucketedRandomProjectionLSH(override val uid: String)
   def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("2.1.0")
-  override protected[this] def createRawLSHModel(inputDim: Int): BucketedRandomProjectionModel = {
+  override protected[this] def createRawLSHModel(
+    inputDim: Int
+  ): BucketedRandomProjectionLSHModel = {
     val rand = new Random($(seed))
     val randUnitVectors: Array[Vector] = {
       Array.fill($(numHashTables)) {
@@ -158,7 +161,7 @@ class BucketedRandomProjectionLSH(override val uid: String)
         Vectors.fromBreeze(normalize(breeze.linalg.Vector(randArray)))
       }
     }
-    new BucketedRandomProjectionModel(uid, randUnitVectors)
+    new BucketedRandomProjectionLSHModel(uid, randUnitVectors)
   }
 
   @Since("2.1.0")
@@ -179,18 +182,18 @@ object BucketedRandomProjectionLSH extends DefaultParamsReadable[BucketedRandomP
 }
 
 @Since("2.1.0")
-object BucketedRandomProjectionModel extends MLReadable[BucketedRandomProjectionModel] {
+object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProjectionLSHModel] {
 
   @Since("2.1.0")
-  override def read: MLReader[BucketedRandomProjectionModel] = {
-    new BucketedRandomProjectionModelReader
+  override def read: MLReader[BucketedRandomProjectionLSHModel] = {
+    new BucketedRandomProjectionLSHModelReader
   }
 
   @Since("2.1.0")
-  override def load(path: String): BucketedRandomProjectionModel = super.load(path)
+  override def load(path: String): BucketedRandomProjectionLSHModel = super.load(path)
 
-  private[BucketedRandomProjectionModel] class BucketedRandomProjectionModelWriter(
-    instance: BucketedRandomProjectionModel) extends MLWriter {
+  private[BucketedRandomProjectionLSHModel] class BucketedRandomProjectionLSHModelWriter(
+    instance: BucketedRandomProjectionLSHModel) extends MLWriter {
 
     // TODO: Save using the existing format of Array[Vector] once SPARK-12878 is resolved.
     private case class Data(randUnitVectors: Matrix)
@@ -208,13 +211,13 @@ object BucketedRandomProjectionModel extends MLReadable[BucketedRandomProjection
     }
   }
 
-  private class BucketedRandomProjectionModelReader
-    extends MLReader[BucketedRandomProjectionModel] {
+  private class BucketedRandomProjectionLSHModelReader
+    extends MLReader[BucketedRandomProjectionLSHModel] {
 
     /** Checked against metadata when loading model */
-    private val className = classOf[BucketedRandomProjectionModel].getName
+    private val className = classOf[BucketedRandomProjectionLSHModel].getName
 
-    override def load(path: String): BucketedRandomProjectionModel = {
+    override def load(path: String): BucketedRandomProjectionLSHModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
@@ -222,7 +225,8 @@ object BucketedRandomProjectionModel extends MLReadable[BucketedRandomProjection
       val Row(randUnitVectors: Matrix) = MLUtils.convertMatrixColumnsToML(data, "randUnitVectors")
         .select("randUnitVectors")
         .head()
-      val model = new BucketedRandomProjectionModel(metadata.uid, randUnitVectors.rowIter.toArray)
+      val model = new BucketedRandomProjectionLSHModel(metadata.uid,
+        randUnitVectors.rowIter.toArray)
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

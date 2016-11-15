@@ -39,7 +39,7 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
   test("params") {
     ParamsSuite.checkParams(new MinHashLSH)
-    val model = new MinHashModel("mh", numEntries = 2, randCoefficients = Array(1))
+    val model = new MinHashLSHModel("mh", numEntries = 2, randCoefficients = Array((1, 0)))
     ParamsSuite.checkParams(model)
   }
 
@@ -49,7 +49,7 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   }
 
   test("read/write") {
-    def checkModelData(model: MinHashModel, model2: MinHashModel): Unit = {
+    def checkModelData(model: MinHashLSHModel, model2: MinHashLSHModel): Unit = {
       assert(model.numEntries === model2.numEntries)
       assertResult(model.randCoefficients)(model2.randCoefficients)
     }
@@ -59,15 +59,24 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   }
 
   test("hashFunction") {
-    val model = new MinHashModel("mh", numEntries = 20, randCoefficients = Array(0, 1, 3))
+    val model = new MinHashLSHModel("mh", numEntries = 20,
+      randCoefficients = Array((0, 1), (1, 2), (3, 0)))
     val res = model.hashFunction(Vectors.sparse(10, Seq((2, 1.0), (3, 1.0), (5, 1.0), (7, 1.0))))
-    assert(res(0).equals(Vectors.dense(0.0)))
-    assert(res(1).equals(Vectors.dense(3.0)))
+    assert(res(0).equals(Vectors.dense(1.0)))
+    assert(res(1).equals(Vectors.dense(5.0)))
     assert(res(2).equals(Vectors.dense(4.0)))
   }
 
+  test("hashFunction: empty vector") {
+    val model = new MinHashLSHModel("mh", numEntries = 20,
+      randCoefficients = Array((0, 1), (1, 2), (3, 0)))
+    intercept[IllegalArgumentException] {
+      model.hashFunction(Vectors.sparse(10, Seq()))
+    }
+  }
+
   test("keyDistance") {
-    val model = new MinHashModel("mh", numEntries = 20, randCoefficients = Array(1))
+    val model = new MinHashLSHModel("mh", numEntries = 20, randCoefficients = Array((1, 0)))
     val v1 = Vectors.sparse(10, Seq((2, 1.0), (3, 1.0), (5, 1.0), (7, 1.0)))
     val v2 = Vectors.sparse(10, Seq((1, 1.0), (3, 1.0), (5, 1.0), (7, 1.0), (9, 1.0)))
     val keyDist = model.keyDistance(v1, v2)
@@ -85,6 +94,21 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     assert(falseNegative < 0.3)
   }
 
+  test("MinHashLSH: test of inputDim > prime") {
+    val mh = new MinHashLSH()
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setSeed(12344)
+
+    val data = {
+      for (i <- 0 to 95) yield Vectors.sparse(Int.MaxValue, (i until i + 5).map((_, 1.0)))
+    }
+    val badDataset = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
+    intercept[IllegalArgumentException] {
+      mh.fit(badDataset)
+    }
+  }
+
   test("approxNearestNeighbors for min hash") {
     val mh = new MinHashLSH()
       .setNumHashTables(20)
@@ -99,6 +123,25 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       singleProbe = true)
     assert(precision >= 0.7)
     assert(recall >= 0.7)
+  }
+
+  test("approxNearestNeighbors for numNeighbors <= 0") {
+    val mh = new MinHashLSH()
+      .setNumHashTables(20)
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setSeed(12345)
+
+    val key: Vector = Vectors.sparse(100,
+      (0 until 100).filter(_.toString.contains("1")).map((_, 1.0)))
+
+    val model = mh.fit(dataset)
+    intercept[IllegalArgumentException] {
+      model.approxNearestNeighbors(dataset, key, 0)
+    }
+    intercept[IllegalArgumentException] {
+      model.approxNearestNeighbors(dataset, key, -1)
+    }
   }
 
   test("approxSimilarityJoin for min hash on different dataset") {
