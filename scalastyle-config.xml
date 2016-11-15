@@ -93,15 +93,8 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex"><![CDATA[^[a-z][A-Za-z]*$]]></parameter></parameters>
   </check>
 
-  <check customId="toomanyparams" level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
+  <check level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
     <parameters><parameter name="maxParameters"><![CDATA[10]]></parameter></parameters>
-    <customMessage><![CDATA[
-      Are you sure that you want to have a method with more than 10 parameters? Consider refactoring your 
-      code to have a smaller set of parameters. If you must use so many parameters, wrap the code block with
-      // scalastyle:off toomanyparams
-      // method with many params
-      // scalastyle:on toomanyparams
-    ]]></customMessage>
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.NoFinalizeChecker" enabled="true"></check>

@@ -71,7 +71,7 @@ object FileFormatWriter extends Logging {
          |Non-partition columns: ${nonPartitionColumns.mkString(", ")}
        """.stripMargin)
   }
-  // scalastyle:off toomanyparams
+
   /**
    * Basic work flow of this command is:
    * 1. Driver side setup, including output committer initialization and data source specific
@@ -85,7 +85,6 @@ object FileFormatWriter extends Logging {
    */
   def write(
       sparkSession: SparkSession,
-      plan: LogicalPlan,
       queryExecution: QueryExecution,
       fileFormat: FileFormat,
       committer: FileCommitProtocol,
@@ -102,7 +101,7 @@ object FileFormatWriter extends Logging {
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
     val partitionSet = AttributeSet(partitionColumns)
-    val dataColumns = plan.output.filterNot(partitionSet.contains)
+    val dataColumns = queryExecution.logical.output.filterNot(partitionSet.contains)
 
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
@@ -112,7 +111,7 @@ object FileFormatWriter extends Logging {
       uuid = UUID.randomUUID().toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
-      allColumns = plan.output,
+      allColumns = queryExecution.logical.output,
       partitionColumns = partitionColumns,
       nonPartitionColumns = dataColumns,
       bucketSpec = bucketSpec,
@@ -149,7 +148,6 @@ object FileFormatWriter extends Logging {
       }
     }
   }
-  // scalastyle:on toomanyparams
 
   /** Writes data out in a single Spark task. */
   private def executeTask(

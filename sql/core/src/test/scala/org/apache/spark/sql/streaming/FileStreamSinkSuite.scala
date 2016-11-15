@@ -145,21 +145,14 @@ class FileStreamSinkSuite extends StreamTest {
     }
   }
 
-  test("parquet") {
-    testFormat(None) // should not throw error as default format parquet when not specified
-    testFormat(Some("parquet"))
-  }
+  // This tests whether FileStreamSink works with aggregations. Specifically, it tests
+  // whether the the correct streaming QueryExecution (i.e. IncrementalExecution) is used to
+  // to execute the trigger for writing data to file sink. See SPARK-18440 for more details.
+  test("writing with aggregation") {
 
-  test("text") {
-    testFormat(Some("text"))
-  }
-
-  test("json") {
-    testFormat(Some("json"))
-  }
-
-  test("aggregation + watermark + append mode") {
-
+    // Since FileStreamSink currently only supports append mode, we will test FileStreamSink
+    // with aggregations using event time windows and watermark, which allows
+    // aggregation + append mode.
     val inputData = MemoryStream[Long]
     val inputDF = inputData.toDF.toDF("time")
     val outputDf = inputDF
@@ -200,16 +193,16 @@ class FileStreamSinkSuite extends StreamTest {
           expectedResult.map(x => (x._1._1, x._1._2, x._2)): _*)
       }
 
-      addTimestamp(100)       // watermark = None before this, watermark = 100 - 10 = 90 after this
-      check()                 // nothing emitted yet
+      addTimestamp(100) // watermark = None before this, watermark = 100 - 10 = 90 after this
+      check() // nothing emitted yet
 
-      addTimestamp(104, 123)  // watermark = 90 before this, watermark = 123 - 10 = 113 after this
-      check()                 // nothing emitted yet
+      addTimestamp(104, 123) // watermark = 90 before this, watermark = 123 - 10 = 113 after this
+      check() // nothing emitted yet
 
-      addTimestamp(140)       // wm = 113 before this, emit results on 100-105, wm = 130 after this
+      addTimestamp(140) // wm = 113 before this, emit results on 100-105, wm = 130 after this
       check((100L, 105L) -> 2L)
 
-      addTimestamp(150)       // wm = 130s before this, emit results on 120-125, wm = 150 after this
+      addTimestamp(150) // wm = 130s before this, emit results on 120-125, wm = 150 after this
       check((100L, 105L) -> 2L, (120L, 125L) -> 1L)
 
     } finally {
@@ -217,6 +210,19 @@ class FileStreamSinkSuite extends StreamTest {
         query.stop()
       }
     }
+  }
+
+  test("parquet") {
+    testFormat(None) // should not throw error as default format parquet when not specified
+    testFormat(Some("parquet"))
+  }
+
+  test("text") {
+    testFormat(Some("text"))
+  }
+
+  test("json") {
+    testFormat(Some("json"))
   }
 
   def testFormat(format: Option[String]): Unit = {
