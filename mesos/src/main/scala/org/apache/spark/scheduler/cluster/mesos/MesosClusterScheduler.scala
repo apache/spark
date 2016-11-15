@@ -531,13 +531,7 @@ private[spark] class MesosClusterScheduler(
       .setCommand(buildDriverCommand(desc))
       .addAllResources(cpuResourcesToUse.asJava)
       .addAllResources(memResourcesToUse.asJava)
-
-    desc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
-      MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(image,
-        desc.conf,
-        taskInfo.getContainerBuilder)
-    }
-
+    taskInfo.setContainer(MesosSchedulerBackendUtil.containerInfo(desc.conf))
     taskInfo.build
   }
 
