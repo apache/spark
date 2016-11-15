@@ -447,7 +447,7 @@ class StreamingContext private[streaming] (
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * '''Note''' Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
    *
    * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
@@ -465,7 +465,7 @@ class StreamingContext private[streaming] (
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
+   * '''Note''' Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
    *
    * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
