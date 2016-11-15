@@ -942,7 +942,7 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 #' @return \code{summary} returns a list containing \code{numOfInputs}, \code{numOfOutputs},
 #'         \code{layers}, and \code{weights}. For \code{weights}, it is a numeric vector with
 #'         length equal to the expected given the architecture (i.e., for 8-10-2 network,
-#'         100 connection weights).
+#'         112 connection weights).
 #' @rdname spark.mlp
 #' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
