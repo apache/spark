@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 /**
@@ -25,5 +26,15 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
  * eagerly executed.
  */
 trait Command extends LeafNode {
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+/**
+ * A logical node that represents a non-query command with a table to be executed by the system.
+ * For example, ADD/DROP PARTITION commands supports expressions based on tables. Commands, unlike
+ * queries, are eagerly executed.
+ */
+trait CommandWithExpression extends LeafNode {
+  def getTableName: TableIdentifier
   override def output: Seq[Attribute] = Seq.empty
 }
