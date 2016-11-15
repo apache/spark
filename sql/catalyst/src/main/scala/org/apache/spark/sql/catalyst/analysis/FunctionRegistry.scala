@@ -261,6 +261,7 @@ object FunctionRegistry {
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
+    expression[CountMinSketchAgg]("count_min_sketch"),
 
     // string functions
     expression[Ascii]("ascii"),

@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
@@ -32,6 +31,8 @@ import org.apache.spark.util.sketch.CountMinSketch
  * This function returns a count-min sketch of a column with the given esp, confidence and seed.
  * A count-min sketch is a probabilistic data structure used for summarizing streams of data in
  * sub-linear space, which is useful for equality predicates and join size estimation.
+ * The result returned by the function is an array of bytes, which should be deserialized to a
+ * `CountMinSketch` before usage.
  *
  * @param child child expression that can produce column value with `child.eval(inputRow)`
  * @param epsExpression relative error, must be positive
@@ -61,6 +62,11 @@ case class CountMinSketchAgg(
     this(child, epsExpression, confidenceExpression, seedExpression, 0, 0)
   }
 
+  // Mark as lazy so that they are not evaluated during tree transformation.
+  private lazy val eps: Double = epsExpression.eval().asInstanceOf[Double]
+  private lazy val confidence: Double = confidenceExpression.eval().asInstanceOf[Double]
+  private lazy val seed: Int = seedExpression.eval().asInstanceOf[Int]
+
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
@@ -72,16 +78,16 @@ case class CountMinSketchAgg(
     } else if (epsExpression.eval() == null || confidenceExpression.eval() == null ||
       seedExpression.eval() == null) {
       TypeCheckFailure("The eps, confidence or seed provided should not be null")
+    } else if (eps <= 0D) {
+      TypeCheckFailure(s"Relative error must be positive (current value = $eps)")
+    } else if (confidence <= 0D || confidence >= 1D) {
+      TypeCheckFailure(s"Confidence must be within range (0.0, 1.0) (current value = $confidence)")
     } else {
-      // parameter validity will be checked in CountMinSketchImpl
       TypeCheckSuccess
     }
   }
 
   override def createAggregationBuffer(): CountMinSketch = {
-    val eps: Double = epsExpression.eval().asInstanceOf[Double]
-    val confidence: Double = confidenceExpression.eval().asInstanceOf[Double]
-    val seed: Int = seedExpression.eval().asInstanceOf[Int]
     CountMinSketch.create(eps, confidence, seed)
   }
 
@@ -89,8 +95,15 @@ case class CountMinSketchAgg(
     val value = child.eval(input)
     // ignore empty rows
     if (value != null) {
-      // UTF8String is a spark sql type, while CountMinSketch accepts String type
-      buffer.add(if (value.isInstanceOf[UTF8String]) value.toString else value)
+      child.dataType match {
+        // For string type, we can get bytes of our `UTF8String` directly, and call the `addBinary`
+        // instead of `addString` to avoid unnecessary conversion.
+        case StringType => buffer.addBinary(value.asInstanceOf[UTF8String].getBytes)
+        case ByteType => buffer.addLong(value.asInstanceOf[Byte])
+        case ShortType => buffer.addLong(value.asInstanceOf[Short])
+        case IntegerType => buffer.addLong(value.asInstanceOf[Int])
+        case LongType => buffer.addLong(value.asInstanceOf[Long])
+      }
     }
   }
 
@@ -98,7 +111,7 @@ case class CountMinSketchAgg(
     buffer.mergeInPlace(input)
   }
 
-  override def eval(buffer: CountMinSketch): Any = new GenericArrayData(serialize(buffer))
+  override def eval(buffer: CountMinSketch): Any = serialize(buffer)
 
   override def serialize(buffer: CountMinSketch): Array[Byte] = {
     val out = new ByteArrayOutputStream()
@@ -124,8 +137,10 @@ case class CountMinSketchAgg(
 
   override def nullable: Boolean = false
 
-  override def dataType: DataType = ArrayType(ByteType)
+  override def dataType: DataType = BinaryType
 
   override def children: Seq[Expression] =
     Seq(child, epsExpression, confidenceExpression, seedExpression)
+
+  override def prettyName: String = "count_min_sketch"
 }

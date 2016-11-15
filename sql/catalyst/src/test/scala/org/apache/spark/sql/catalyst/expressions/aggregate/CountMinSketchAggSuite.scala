@@ -26,7 +26,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, GenericInternalRow, Literal}
-import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
@@ -76,9 +75,20 @@ class CountMinSketchAggSuite extends SparkFunSuite {
         agg.update(group2Buffer, input)
       }
 
-      val mergeBuffer = agg.createAggregationBuffer()
+      var mergeBuffer = agg.createAggregationBuffer()
       agg.merge(mergeBuffer, group1Buffer)
       agg.merge(mergeBuffer, group2Buffer)
+      checkResult(agg.eval(mergeBuffer), allItems, exactFreq)
+
+      // Merge in a different order
+      mergeBuffer = agg.createAggregationBuffer()
+      agg.merge(mergeBuffer, group2Buffer)
+      agg.merge(mergeBuffer, group1Buffer)
+      checkResult(agg.eval(mergeBuffer), allItems, exactFreq)
+
+      // Merge with an empty partition
+      val emptyBuffer = agg.createAggregationBuffer()
+      agg.merge(mergeBuffer, emptyBuffer)
       checkResult(agg.eval(mergeBuffer), allItems, exactFreq)
     }
   }
@@ -124,8 +134,8 @@ class CountMinSketchAggSuite extends SparkFunSuite {
       data: Array[T],
       exactFreq: Map[T, Long]): Unit = {
     result match {
-      case arrayData: ArrayData =>
-        val in = new ByteArrayInputStream(arrayData.toByteArray())
+      case bytesData: Array[Byte] =>
+        val in = new ByteArrayInputStream(bytesData)
         val cms = CountMinSketch.readFrom(in)
         val probCorrect = {
           val numErrors = data.map { i =>
@@ -142,6 +152,7 @@ class CountMinSketchAggSuite extends SparkFunSuite {
           probCorrect > confidence,
           s"Confidence not reached: required $confidence, reached $probCorrect"
         )
+      case _ => fail("unexpected return type")
     }
   }
 
@@ -233,10 +244,10 @@ class CountMinSketchAggSuite extends SparkFunSuite {
         epsExpression = Literal(invalidEps),
         confidenceExpression = Literal(confidence),
         seedExpression = Literal(seed))
-      val err = intercept[IllegalArgumentException] {
-        invalidAgg.createAggregationBuffer()
-      }
-      assert(err.getMessage.contains("Relative error must be positive"))
+      assertEqual(
+        invalidAgg.checkInputDataTypes(),
+        TypeCheckFailure(s"Relative error must be positive (current value = $invalidEps)")
+      )
     }
 
     Seq(0.0, 1.0, -2.0, 2.0).foreach { invalidConfidence =>
@@ -245,10 +256,11 @@ class CountMinSketchAggSuite extends SparkFunSuite {
         epsExpression = Literal(epsOfTotalCount),
         confidenceExpression = Literal(invalidConfidence),
         seedExpression = Literal(seed))
-      val err = intercept[IllegalArgumentException] {
-        invalidAgg.createAggregationBuffer()
-      }
-      assert(err.getMessage.contains("Confidence must be within range (0.0, 1.0)"))
+      assertEqual(
+        invalidAgg.checkInputDataTypes(),
+        TypeCheckFailure(
+          s"Confidence must be within range (0.0, 1.0) (current value = $invalidConfidence)")
+      )
     }
   }
 
@@ -259,10 +271,11 @@ class CountMinSketchAggSuite extends SparkFunSuite {
   test("null handling") {
     def isEqual(result: Any, other: CountMinSketch): Boolean = {
       result match {
-        case arrayData: ArrayData =>
-          val in = new ByteArrayInputStream(arrayData.toByteArray())
+        case bytesData: Array[Byte] =>
+          val in = new ByteArrayInputStream(bytesData)
           val cms = CountMinSketch.readFrom(in)
           cms.equals(other)
+        case _ => fail("unexpected return type")
       }
     }
 

@@ -182,6 +182,36 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Aggregate function: returns a count-min sketch of a column.
+   *
+   * @param eps relative error, must be positive
+   * @param confidence confidence, must be positive and less than 1.0
+   * @param seed random seed
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  def count_min_sketch(e: Column, eps: Double, confidence: Double, seed: Int): Column = {
+    withAggregateFunction {
+      new CountMinSketchAgg(e.expr, Literal(eps), Literal(confidence), Literal(seed))
+    }
+  }
+
+  /**
+   * Aggregate function: returns a count-min sketch of a column.
+   *
+   * @param eps relative error, must be positive
+   * @param confidence confidence, must be positive and less than 1.0
+   * @param seed random seed
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
+  def count_min_sketch(columnName: String, eps: Double, confidence: Double, seed: Int): Column = {
+    count_min_sketch(Column(columnName), eps, confidence, seed)
+  }
+
+  /**
    * @group agg_funcs
    * @since 1.3.0
    */
