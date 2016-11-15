@@ -28,6 +28,7 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.CompletionIterator
 
 
 /** Offset range that one partition of the KafkaSourceRDD has to read */
@@ -61,7 +62,8 @@ private[kafka010] class KafkaSourceRDD(
     sc: SparkContext,
     executorKafkaParams: ju.Map[String, Object],
     offsetRanges: Seq[KafkaSourceRDDOffsetRange],
-    pollTimeoutMs: Long)
+    pollTimeoutMs: Long,
+    reuseCachedConsumers: Boolean = true)
   extends RDD[ConsumerRecord[Array[Byte], Array[Byte]]](sc, Nil) {
 
   override def persist(newLevel: StorageLevel): this.type = {
@@ -134,12 +136,12 @@ private[kafka010] class KafkaSourceRDD(
     } else {
 
       val consumer = CachedKafkaConsumer.getOrCreate(
-        range.topic, range.partition, executorKafkaParams)
+        range.topic, range.partition, executorKafkaParams, reuseCachedConsumers)
       var requestOffset = range.fromOffset
 
       logDebug(s"Creating iterator for $range")
 
-      new Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
+      val underlying = new Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
         override def hasNext(): Boolean = requestOffset < range.untilOffset
         override def next(): ConsumerRecord[Array[Byte], Array[Byte]] = {
           assert(hasNext(), "Can't call next() once untilOffset has been reached")
@@ -147,6 +149,11 @@ private[kafka010] class KafkaSourceRDD(
           requestOffset += 1
           r
         }
+      }
+      if (!reuseCachedConsumers) {
+        CompletionIterator(underlying, consumer.close _)
+      } else {
+        underlying
       }
     }
   }
