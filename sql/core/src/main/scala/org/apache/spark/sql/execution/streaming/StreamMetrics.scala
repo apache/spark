@@ -221,6 +221,7 @@ object StreamMetrics extends Logging {
   val IS_TRIGGER_ACTIVE = "isTriggerActive"
   val IS_DATA_PRESENT_IN_TRIGGER = "isDataPresentInTrigger"
   val STATUS_MESSAGE = "statusMessage"
+  val EVENT_TIME_WATERMARK = "eventTimeWatermark"
 
   val START_TIMESTAMP = "timestamp.triggerStart"
   val GET_OFFSET_TIMESTAMP = "timestamp.afterGetOffset"
