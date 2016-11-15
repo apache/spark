@@ -100,7 +100,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        plan = query,
+        queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
         fileFormat = fileFormat,
         committer = committer,
         outputSpec = FileFormatWriter.OutputSpec(
