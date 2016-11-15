@@ -463,13 +463,8 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         /*
-          The coefficients are laid out in column major order during training. e.g. for
-          `numClasses = 3` and `numFeatures = 2` and `fitIntercept = true` the layout is:
-
-           Array(beta_11, beta_21, beta_31, beta_12, beta_22, beta_32, intercept_1, intercept_2,
-             intercept_3)
-
-           where beta_jk corresponds to the coefficient for class `j` and feature `k`.
+          The coefficients are laid out in column major order during training. Here we initialize
+          a column major matrix of initial coefficients.
          */
         val initialCoefWithInterceptMatrix =
           Matrices.zeros(numCoefficientSets, numFeaturesPlusIntercept)
@@ -492,13 +487,14 @@ class LogisticRegression @Since("1.2.0") (
 
         if (initialModelIsValid) {
           val providedCoef = optInitialModel.get.coefficientMatrix
-          providedCoef.foreachActive { (row, col, value) =>
+          providedCoef.foreachActive { (classIndex, featureIndex, value) =>
             // We need to scale the coefficients since they will be trained in the scaled space
-            initialCoefWithInterceptMatrix.update(row, col, value * featuresStd(col))
+            initialCoefWithInterceptMatrix.update(classIndex, featureIndex,
+              value * featuresStd(featureIndex))
           }
           if ($(fitIntercept)) {
-            optInitialModel.get.interceptVector.foreachActive { (index, value) =>
-              initialCoefWithInterceptMatrix.update(index, numFeatures, value)
+            optInitialModel.get.interceptVector.foreachActive { (classIndex, value) =>
+              initialCoefWithInterceptMatrix.update(classIndex, numFeatures, value)
             }
           }
         } else if ($(fitIntercept) && isMultinomial) {
