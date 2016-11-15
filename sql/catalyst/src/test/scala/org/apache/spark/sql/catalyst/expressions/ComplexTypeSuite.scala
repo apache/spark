@@ -118,7 +118,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("CreateArray") {
-    // Array is required to pass Array(_, containsNull = false) as type information
+    // Array is required to pass Array[primitiveType] as type information for expected
     val intArray = Array(5, 10, 15, 20, 25)
     val longArray = intArray.map(_.toLong)
     val strArray = intArray.map(_.toString)
@@ -145,7 +145,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       scala.collection.immutable.ListMap(keys.zip(values): _*)
     }
 
-    // Array is required to pass Array(_, containsNull = false) as type information
+    // Array is required to pass Array[primitiveType] as type information
     val intArray = Array(5, 10, 15, 20, 25)
     val longArray = intArray.map(_.toLong)
     val strArray = intArray.map(_.toString)
