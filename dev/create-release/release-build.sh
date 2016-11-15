@@ -187,10 +187,10 @@ if [[ "$1" == "package" ]]; then
   # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
   # share the same Zinc server.
   FLAGS="-Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos"
-  make_binary_release "hadoop2.3" "-Phadoop2.3 $FLAGS" "3033" &
-  make_binary_release "hadoop2.4" "-Phadoop2.4 $FLAGS" "3034" &
-  make_binary_release "hadoop2.6" "-Phadoop2.6 $FLAGS" "3035" &
-  make_binary_release "hadoop2.7" "-Phadoop2.7 $FLAGS" "3036" &
+  make_binary_release "hadoop2.3" "-Phadoop-2.3 $FLAGS" "3033" &
+  make_binary_release "hadoop2.4" "-Phadoop-2.4 $FLAGS" "3034" &
+  make_binary_release "hadoop2.6" "-Phadoop-2.6 $FLAGS" "3035" &
+  make_binary_release "hadoop2.7" "-Phadoop-2.7 $FLAGS" "3036" &
   make_binary_release "hadoop2.4-without-hive" "-Psparkr -Phadoop-2.4 -Pyarn -Pmesos" "3037" &
   make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn -Pmesos" "3038" &
   wait

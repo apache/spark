@@ -185,6 +185,13 @@ object PageRank extends Logging {
   def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
     numIter: Int, resetProb: Double = 0.15,
     sources: Array[VertexId]): Graph[Vector, Double] = {
+    require(numIter > 0, s"Number of iterations must be greater than 0," +
+      s" but got ${numIter}")
+    require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
+      s" to [0, 1], but got ${resetProb}")
+    require(sources.nonEmpty, s"The list of sources must be non-empty," +
+      s" but got ${sources.mkString("[", ",", "]")}")
+
     // TODO if one sources vertex id is outside of the int range
     // we won't be able to store its activations in a sparse vector
     val zero = Vectors.sparse(sources.size, List()).asBreeze

@@ -119,13 +119,6 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
-            // Make sure we are using equi-joins.
-            conditions.foreach {
-              case _: EqualTo | _: EqualNullSafe => // ok
-              case e => failAnalysis(
-                s"The correlated scalar subquery can only contain equality predicates: $e")
-            }
-
             // Make sure correlated scalar subqueries contain one row for every outer row by
             // enforcing that they are aggregates which contain exactly one aggregate expressions.
             // The analyzer has already checked that subquery contained only one output column, and
@@ -155,6 +148,16 @@ trait CheckAnalysis extends PredicateHelper {
         }
 
         operator match {
+          case etw: EventTimeWatermark =>
+            etw.eventTime.dataType match {
+              case s: StructType
+                if s.find(_.name == "end").map(_.dataType) == Some(TimestampType) =>
+              case _: TimestampType =>
+              case _ =>
+                failAnalysis(
+                  s"Event time must be defined on a window or a timestamp, but " +
+                  s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.simpleString}")
+            }
           case f: Filter if f.condition.dataType != BooleanType =>
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
