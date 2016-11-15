@@ -206,7 +206,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
    *
-   * Note that this method performs a shuffle internally.
+   * '''Note:''' This method performs a shuffle internally.
    */
   def intersection(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.intersection(other.rdd))
@@ -223,7 +223,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
-   * "combined type" C. Note that V and C can be different -- for example, one might group an
+   * "combined type" C.
+   *
+   * '''Note:''' V and C can be different -- for example, one might group an
    * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
    * functions:
    *
@@ -255,7 +257,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
-   * "combined type" C. Note that V and C can be different -- for example, one might group an
+   * "combined type" C.
+   *
+   * '''Note:''' V and C can be different -- for example, one might group an
    * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
    * functions:
    *
@@ -409,7 +413,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with into `numPartitions` partitions.
    *
-   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * '''Note:''' If you are grouping in order to perform an aggregation (such as a sum or average) over
    * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
    * will provide much better performance.
    */
