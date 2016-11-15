@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.File
-
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
