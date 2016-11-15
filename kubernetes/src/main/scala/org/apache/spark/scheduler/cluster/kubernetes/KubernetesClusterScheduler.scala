@@ -80,13 +80,31 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
 
     // This is the URL of the client jar.
     val clientJarUri = args.userJar
-    conf.setExecutorEnv("spark.executor.jar", clientJarUri)
-    conf.setExecutorEnv("spark.kubernetes.namespace", nameSpace)
-    conf.setExecutorEnv("spark.kubernetes.driver.image", sparkDriverImage)
 
     // This is the kubernetes master we're launching on.
     val kubernetesHost = "k8s://" + client.getMasterUrl().getHost()
     logInfo("Using as kubernetes-master: " + kubernetesHost.toString())
+
+    val submitArgs = scala.collection.mutable.ArrayBuffer.empty[String]
+    submitArgs ++= Vector(
+      clientJarUri,
+      s"--class=${args.userClass}",
+      s"--master=$kubernetesHost",
+      s"--executor-memory=${driverDescription.mem}",
+      s"--conf=spark.executor.jar=$clientJarUri",
+      s"--conf=spark.executor.instances=$instances",
+      s"--conf=spark.kubernetes.namespace=$nameSpace",
+      s"--conf=spark.kubernetes.driver.image=$sparkDriverImage")
+
+    if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      submitArgs ++= Vector(
+        "--conf spark.dynamicAllocation.enabled=true",
+        "--conf spark.shuffle.service.enabled=true")
+    }
+
+    // these have to come at end of arg list
+    submitArgs ++= Vector("/opt/spark/kubernetes/client.jar",
+      args.userArgs.mkString(" "))
 
     val labelMap = Map("type" -> "spark-driver")
     val pod = new PodBuilder()
@@ -102,16 +120,7 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
       .withImage(sparkDriverImage)
       .withImagePullPolicy("Always")
       .withCommand(s"/opt/driver.sh")
-      .withArgs(s"$clientJarUri",
-                s"--class=${args.userClass}",
-                s"--master=$kubernetesHost",
-                s"--executor-memory=${driverDescription.mem}",
-                s"--conf=spark.executor.jar=$clientJarUri",
-                s"--conf=spark.executor.instances=$instances",
-                s"--conf=spark.kubernetes.namespace=$nameSpace",
-                s"--conf=spark.kubernetes.driver.image=$sparkDriverImage",
-                "/opt/spark/kubernetes/client.jar",
-                args.userArgs.mkString(" "))
+      .withArgs(submitArgs :_*)
       .endContainer()
       .endSpec()
       .build()
