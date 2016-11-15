@@ -403,6 +403,17 @@ test_that("spark.mlp", {
 
   unlink(modelPath)
 
+  # Test formula works well
+  df <- suppressWarnings(createDataFrame(iris))
+  model <- spark.mlp(df, Species ~ Sepal_Length + Sepal_Width + Petal_Length + Petal_Width, layers = c(4, 3))
+  summary <- summary(model)
+  expect_equal(summary$numOfInputs, 4)
+  expect_equal(summary$numOfOutputs, 3)
+  expect_equal(summary$layers, c(4, 3))
+  expect_equal(length(summary$weights), 15)
+  expect_equal(head(summary$weights, 5), list(-1.1957257, -5.2693685, 7.4489734, -6.3751413, -10.2376130),
+               tolerance = 1e-6)
+
   # Test default parameter
   model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3))
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
