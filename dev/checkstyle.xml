@@ -56,13 +56,13 @@
     If you wish to turn off checking for a section of code, you can put a comment in the source
     before and after the section, with the following syntax:
 
-      // checkstyle:off no.XXX (such as checkstyle:off NoFinalizer)
+      // checkstyle:off no.XXX (such as checkstyle.off: NoFinalizer)
       ...  // stuff that breaks the styles
       // checkstyle:on
     -->
     <module name="SuppressionCommentFilter">
-        <property name="offCommentFormat" value="checkstyle:off\: ([\w\|]+)"/>
-        <property name="onCommentFormat" value="checkstyle:on\: ([\w\|]+)"/>
+        <property name="offCommentFormat" value="checkstyle.off\: ([\w\|]+)"/>
+        <property name="onCommentFormat" value="checkstyle.on\: ([\w\|]+)"/>
         <property name="checkFormat" value="$1"/>
     </module>
 
