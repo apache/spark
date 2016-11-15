@@ -172,7 +172,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.6.0")
   def setSolver(value: String): this.type = {
-    require(Array("auto", "l-bfgs", "normal").contains(value), s"Solver $value was not supported.")
+    require(Set("auto", "l-bfgs", "normal").contains(value),
+      s"Solver $value was not supported. Supported options: auto, l-bfgs, normal")
     set(solver, value)
   }
   setDefault(solver -> "auto")
