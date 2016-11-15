@@ -472,12 +472,12 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.report.interval</code></td>
   <td>1s</td>
   <td>
-  Interval between reports of the current app status in Yarn cluster mode.
+  Interval between reports of the current app status in YARN cluster mode.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.services</code></td>
-  <td>Nil</td>
+  <td>(none)</td>
   <td>
   A comma-separated list of class names of services to add to the scheduler.
   </td>
