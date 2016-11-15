@@ -25,22 +25,22 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Options for the Parquet data source.
  */
-private[sql] class ParquetOptions(
-    @transient private val parameters: Map[String, String],
+private[parquet] class ParquetOptions(
+    @transient private val parameters: CaseInsensitiveMap,
     @transient private val sqlConf: SQLConf)
   extends Serializable {
 
   import ParquetOptions._
 
-  private val caseInsensitiveOptions = new CaseInsensitiveMap(parameters)
+  def this(parameters: Map[String, String], sqlConf: SQLConf) =
+    this(new CaseInsensitiveMap(parameters), sqlConf)
 
   /**
    * Compression codec to use. By default use the value specified in SQLConf.
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
    */
   val compressionCodecClassName: String = {
-    val codecName =
-      caseInsensitiveOptions.getOrElse("compression", sqlConf.parquetCompressionCodec).toLowerCase
+    val codecName = parameters.getOrElse("compression", sqlConf.parquetCompressionCodec).toLowerCase
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
       throw new IllegalArgumentException(s"Codec [$codecName] " +
@@ -53,7 +53,7 @@ private[sql] class ParquetOptions(
    * Whether it merges schemas or not. When the given Parquet files have different schemas,
    * the schemas can be merged.  By default use the value specified in SQLConf.
    */
-  val mergeSchema: Boolean = caseInsensitiveOptions
+  val mergeSchema: Boolean = parameters
     .get(MERGE_SCHEMA)
     .map(_.toBoolean)
     .getOrElse(sqlConf.isParquetSchemaMergingEnabled)

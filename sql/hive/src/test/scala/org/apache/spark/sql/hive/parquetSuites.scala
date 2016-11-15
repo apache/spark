@@ -810,13 +810,6 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     checkAnswer(df4, Row("1", 1) :: Row("2", 2) :: Row("3", 3) :: Nil)
     assert(df4.columns === Array("str", "max_int"))
   }
-
-  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
-      val option = new ParquetOptions(Map("Compression" -> "uncompressed"), spark.sessionState.conf)
-      assert(option.compressionCodecClassName == "UNCOMPRESSED")
-    }
-  }
 }
 
 /**

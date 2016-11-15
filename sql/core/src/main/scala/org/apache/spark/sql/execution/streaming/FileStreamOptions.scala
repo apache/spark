@@ -26,16 +26,15 @@ import org.apache.spark.util.Utils
 /**
  * User specified options for file streams.
  */
-class FileStreamOptions(parameters: Map[String, String]) extends Logging {
+class FileStreamOptions(parameters: CaseInsensitiveMap) extends Logging {
 
-  private val caseInsensitiveOptions = new CaseInsensitiveMap(parameters)
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
 
-  val maxFilesPerTrigger: Option[Int] = caseInsensitiveOptions.get("maxFilesPerTrigger").map {
-    str =>
-      Try(str.toInt).toOption.filter(_ > 0).getOrElse {
-        throw new IllegalArgumentException(
-          s"Invalid value '$str' for option 'maxFilesPerTrigger', must be a positive integer")
-      }
+  val maxFilesPerTrigger: Option[Int] = parameters.get("maxFilesPerTrigger").map { str =>
+    Try(str.toInt).toOption.filter(_ > 0).getOrElse {
+      throw new IllegalArgumentException(
+        s"Invalid value '$str' for option 'maxFilesPerTrigger', must be a positive integer")
+    }
   }
 
   /**
@@ -49,9 +48,9 @@ class FileStreamOptions(parameters: Map[String, String]) extends Logging {
    * Default to a week.
    */
   val maxFileAgeMs: Long =
-    Utils.timeStringAsMs(caseInsensitiveOptions.getOrElse("maxFileAge", "7d"))
+    Utils.timeStringAsMs(parameters.getOrElse("maxFileAge", "7d"))
 
   /** Options as specified by the user, in a case-insensitive map, without "path" set. */
   val optionMapWithoutPath: Map[String, String] =
-    new CaseInsensitiveMap(caseInsensitiveOptions).filterKeys(_ != "path")
+    parameters.filterKeys(_ != "path")
 }

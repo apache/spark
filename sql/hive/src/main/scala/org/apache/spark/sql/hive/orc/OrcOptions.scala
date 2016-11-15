@@ -22,12 +22,12 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 /**
  * Options for the ORC data source.
  */
-private[orc] class OrcOptions(@transient private val parameters: Map[String, String])
+private[orc] class OrcOptions(@transient private val parameters: CaseInsensitiveMap)
   extends Serializable {
 
   import OrcOptions._
 
-  private val caseInsensitiveOptions = new CaseInsensitiveMap(parameters)
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
 
   /**
    * Compression codec to use. By default snappy compression.
@@ -37,8 +37,8 @@ private[orc] class OrcOptions(@transient private val parameters: Map[String, Str
     // `orc.compress` is a ORC configuration. So, here we respect this as an option but
     // `compression` has higher precedence than `orc.compress`. It means if both are set,
     // we will use `compression`.
-    val orcCompressionConf = caseInsensitiveOptions.get(OrcRelation.ORC_COMPRESSION)
-    val codecName = caseInsensitiveOptions
+    val orcCompressionConf = parameters.get(OrcRelation.ORC_COMPRESSION)
+    val codecName = parameters
       .get("compression")
       .orElse(orcCompressionConf)
       .getOrElse("snappy").toLowerCase

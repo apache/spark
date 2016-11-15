@@ -25,13 +25,13 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
-private[csv] class CSVOptions(@transient private val parameters: Map[String, String])
+private[csv] class CSVOptions(@transient private val parameters: CaseInsensitiveMap)
   extends Logging with Serializable {
 
-  private val caseInsensitiveOptions = new CaseInsensitiveMap(parameters)
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
 
   private def getChar(paramName: String, default: Char): Char = {
-    val paramValue = caseInsensitiveOptions.get(paramName)
+    val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
       case Some(null) => default
@@ -42,7 +42,7 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
   }
 
   private def getInt(paramName: String, default: Int): Int = {
-    val paramValue = caseInsensitiveOptions.get(paramName)
+    val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
       case Some(null) => default
@@ -56,7 +56,7 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
   }
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
-    val param = caseInsensitiveOptions.getOrElse(paramName, default.toString)
+    val param = parameters.getOrElse(paramName, default.toString)
     if (param == null) {
       default
     } else if (param.toLowerCase == "true") {
@@ -69,10 +69,10 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
   }
 
   val delimiter = CSVTypeCast.toChar(
-    caseInsensitiveOptions.getOrElse("sep", caseInsensitiveOptions.getOrElse("delimiter", ",")))
-  private val parseMode = caseInsensitiveOptions.getOrElse("mode", "PERMISSIVE")
-  val charset = caseInsensitiveOptions.getOrElse("encoding",
-    caseInsensitiveOptions.getOrElse("charset", StandardCharsets.UTF_8.name()))
+    parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
+  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  val charset = parameters.getOrElse("encoding",
+    parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
@@ -92,28 +92,26 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
   val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
   val permissive = ParseModes.isPermissiveMode(parseMode)
 
-  val nullValue = caseInsensitiveOptions.getOrElse("nullValue", "")
+  val nullValue = parameters.getOrElse("nullValue", "")
 
-  val nanValue = caseInsensitiveOptions.getOrElse("nanValue", "NaN")
+  val nanValue = parameters.getOrElse("nanValue", "NaN")
 
-  val positiveInf = caseInsensitiveOptions.getOrElse("positiveInf", "Inf")
-  val negativeInf = caseInsensitiveOptions.getOrElse("negativeInf", "-Inf")
+  val positiveInf = parameters.getOrElse("positiveInf", "Inf")
+  val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
 
 
   val compressionCodec: Option[String] = {
-    val name = caseInsensitiveOptions.get("compression").orElse(caseInsensitiveOptions.get("codec"))
+    val name = parameters.get("compression").orElse(parameters.get("codec"))
     name.map(CompressionCodecs.getCodecClassName)
   }
 
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =
-    FastDateFormat.getInstance(
-      caseInsensitiveOptions.getOrElse("dateFormat", "yyyy-MM-dd"),
-      Locale.US)
+    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"), Locale.US)
 
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
-      caseInsensitiveOptions.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), Locale.US)
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), Locale.US)
 
   val maxColumns = getInt("maxColumns", 20480)
 
@@ -132,7 +130,7 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
 
 object CSVOptions {
 
-  def apply(): CSVOptions = new CSVOptions(Map.empty)
+  def apply(): CSVOptions = new CSVOptions(new CaseInsensitiveMap(Map.empty))
 
   def apply(paramName: String, paramValue: String): CSVOptions = {
     new CSVOptions(Map(paramName -> paramValue))
