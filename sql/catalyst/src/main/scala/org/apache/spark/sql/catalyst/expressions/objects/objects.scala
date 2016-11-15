@@ -43,9 +43,15 @@ trait InvokeLike extends Expression {
 
   def prepareArguments(ctx: CodegenContext, ev: ExprCode): (String, String, String) = {
 
-    val argIsNulls = ctx.freshName("argIsNulls")
-    ctx.addMutableState("boolean[]", argIsNulls,
-      s"$argIsNulls = new boolean[${arguments.size}];")
+    val argIsNulls =
+      if (propagateNull && arguments.exists(_.nullable)) {
+        val argIsNulls = ctx.freshName("argIsNulls")
+        ctx.addMutableState("boolean[]", argIsNulls,
+          s"$argIsNulls = new boolean[${arguments.size}];")
+        argIsNulls
+      } else {
+        ""
+      }
     val argValues = arguments.zipWithIndex.map { case (e, i) =>
       val argValue = ctx.freshName("argValue")
       ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
@@ -54,14 +60,19 @@ trait InvokeLike extends Expression {
 
     val argCodes = arguments.zipWithIndex.map { case (e, i) =>
       val expr = e.genCode(ctx)
-      expr.code + s"""
-        $argIsNulls[$i] = ${expr.isNull};
-        ${argValues(i)} = ${expr.value};
-      """
+        expr.code +
+          (if (propagateNull && e.nullable) {
+            s"""
+              $argIsNulls[$i] = ${expr.isNull};
+              ${argValues(i)} = ${expr.value};
+            """
+          } else {
+            s"${argValues(i)} = ${expr.value};"
+          })
     }
     val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
-    val setIsNull = if (propagateNull && arguments.nonEmpty) {
+    val setIsNull = if (propagateNull && arguments.exists(_.nullable)) {
       s"""
         for (int idx = 0; idx < ${arguments.length}; idx++) {
           if ($argIsNulls[idx]) { ${ev.isNull} = true; break; }
@@ -259,7 +270,7 @@ case class NewInstance(
     outerPointer: Option[() => AnyRef]) extends Expression with InvokeLike with NonSQLExpression {
   private val className = cls.getName
 
-  override def nullable: Boolean = propagateNull
+  override def nullable: Boolean = propagateNull && arguments.exists(_.nullable)
 
   override def children: Seq[Expression] = arguments
 
@@ -284,7 +295,7 @@ case class NewInstance(
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
-    val prepareIsNull = if (propagateNull && arguments.nonEmpty) {
+    val prepareIsNull = if (propagateNull && arguments.exists(_.nullable)) {
       s"boolean $isNull = false;"
     } else {
       isNull = "false"
@@ -302,8 +313,12 @@ case class NewInstance(
       ${outer.map(_.code).getOrElse("")}
       $prepareIsNull
       $setIsNull
-      final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
-     """
+    """ +
+      (if (propagateNull && arguments.exists(_.nullable)) {
+        s"final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;"
+      } else {
+        s"final $javaType ${ev.value} = $constructorCall;"
+      })
     ev.copy(code = code, isNull = isNull)
   }
 
