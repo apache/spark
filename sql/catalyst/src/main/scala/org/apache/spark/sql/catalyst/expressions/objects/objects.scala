@@ -43,12 +43,11 @@ trait InvokeLike extends Expression {
 
   def prepareArguments(ctx: CodegenContext, ev: ExprCode): (String, String, String) = {
 
-    val argIsNulls =
+    val argsHaveNull =
       if (propagateNull && arguments.exists(_.nullable)) {
-        val argIsNulls = ctx.freshName("argIsNulls")
-        ctx.addMutableState("boolean[]", argIsNulls,
-          s"$argIsNulls = new boolean[${arguments.size}];")
-        argIsNulls
+        val argsHaveNull = ctx.freshName("argsHaveNull")
+        ctx.addMutableState("boolean", argsHaveNull, "")
+        argsHaveNull
       } else {
         ""
       }
@@ -58,26 +57,40 @@ trait InvokeLike extends Expression {
       argValue
     }
 
-    val argCodes = arguments.zipWithIndex.map { case (e, i) =>
-      val expr = e.genCode(ctx)
-        expr.code +
-          (if (propagateNull && e.nullable) {
+    val argCodes =
+      if (propagateNull && arguments.exists(_.nullable)) {
+        s"$argsHaveNull = false;" +:
+          arguments.zipWithIndex.map { case (e, i) =>
+            val expr = e.genCode(ctx)
             s"""
-              $argIsNulls[$i] = ${expr.isNull};
-              ${argValues(i)} = ${expr.value};
+              if (!$argsHaveNull) {
+                ${expr.code}
+            """ +
+              (if (e.nullable) {
+                s"""
+                  $argsHaveNull = ${expr.isNull};
+                  ${argValues(i)} = ${expr.value};
+                """
+              } else {
+                s"${argValues(i)} = ${expr.value};"
+              }) +
             """
-          } else {
-            s"${argValues(i)} = ${expr.value};"
-          })
-    }
+              }
+            """
+          }
+      } else {
+        arguments.zipWithIndex.map { case (e, i) =>
+          val expr = e.genCode(ctx)
+          s"""
+            ${expr.code}
+            ${argValues(i)} = ${expr.value};
+          """
+        }
+      }
     val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
     val setIsNull = if (propagateNull && arguments.exists(_.nullable)) {
-      s"""
-        for (int idx = 0; idx < ${arguments.length}; idx++) {
-          if ($argIsNulls[idx]) { ${ev.isNull} = true; break; }
-        }
-      """
+      s"${ev.isNull} = ${ev.isNull} || $argsHaveNull;"
     } else {
       ""
     }
