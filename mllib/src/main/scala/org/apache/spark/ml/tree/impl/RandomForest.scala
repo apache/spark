@@ -82,7 +82,7 @@ private[spark] object RandomForest extends Logging {
   /**
    * Train a random forest.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param input Training data: RDD of [[org.apache.spark.ml.feature.LabeledPoint]]
    * @return an unweighted set of trees
    */
   def run(
@@ -854,10 +854,10 @@ private[spark] object RandomForest extends Logging {
    *       and for multiclass classification with a high-arity feature,
    *       there is one bin per category.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
+   * @param input Training data: RDD of [[org.apache.spark.ml.feature.LabeledPoint]]
    * @param metadata Learning and dataset metadata
    * @param seed random seed
-   * @return Splits, an Array of [[org.apache.spark.mllib.tree.model.Split]]
+   * @return Splits, an Array of [[org.apache.spark.ml.tree.Split]]
    *          of size (numFeatures, numSplits)
    */
   protected[tree] def findSplits(
