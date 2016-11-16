@@ -1089,8 +1089,9 @@ spark.streams().awaitAnyTermination()  # block until any one of them terminates
 
 
 ## Monitoring Streaming Queries
-There are two ways you can monitor queries. You can directly get the current instantaneous status
+There are two ways you can monitor queries. You can directly get the current status
 of an active query using `streamingQuery.status`, which will return a `StreamingQueryStatus` object
+([Scala](api/scala/index.html#org.apache.spark.sql.streaming.StreamingQueryStatus)/[Java](api/java/org/apache/spark/sql/streaming/StreamingQueryStatus.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.StreamingQueryStatus) docs)
 that has all the details like current ingestion rates, processing rates, average latency,
 details of the currently active trigger, etc.
 
