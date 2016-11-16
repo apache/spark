@@ -141,11 +141,15 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
     // If this is reattempt at running the task, then invalidate cache and start with
     // a new consumer
     if (!reuse || (TaskContext.get != null && TaskContext.get.attemptNumber > 1)) {
+      logDebug("Creating new CachedKafkaConsumer")
       cache.remove(key)
       new CachedKafkaConsumer(topicPartition, kafkaParams)
     } else {
       if (!cache.containsKey(key)) {
+        logDebug("Creating new CachedKafkaConsumer")
         cache.put(key, new CachedKafkaConsumer(topicPartition, kafkaParams))
+      } else {
+        logDebug(s"CachedKafkaConsumer exists for key: $key. Reusing.")
       }
       cache.get(key)
     }

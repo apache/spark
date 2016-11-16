@@ -134,7 +134,6 @@ private[kafka010] class KafkaSourceRDD(
       Iterator.empty
 
     } else {
-
       val consumer = CachedKafkaConsumer.getOrCreate(
         range.topic, range.partition, executorKafkaParams, reuseCachedConsumers)
       var requestOffset = range.fromOffset
@@ -151,6 +150,7 @@ private[kafka010] class KafkaSourceRDD(
         }
       }
       if (!reuseCachedConsumers) {
+        // Don't forget to close consumers! You may take down your Kafka cluster.
         CompletionIterator[ConsumerRecord[Array[Byte], Array[Byte]],
           Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]](underlying, consumer.close())
       } else {

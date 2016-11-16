@@ -258,8 +258,9 @@ private[kafka010] case class KafkaSource(
 
     val offsetRanges = getOffsetRanges(topicPartitions, fromPartitionOffsets, newPartitionOffsets,
       untilPartitionOffsets)
-    val reuseCachedConsumers =
-      math.max(numPartitions, topicPartitions.length) == topicPartitions.length
+    // We can't re-use CachedConsumers if we are using multiple partitions to read from a
+    // single Kafka TopicPartition
+    val reuseCachedConsumers = canReuseCachedConsumers(topicPartitions.length)
 
     // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
@@ -338,6 +339,23 @@ private[kafka010] case class KafkaSource(
     partitionOffsets
   }
 
+  /**
+   * If we divide topic partitions into multiple read tasks, we can't re-use CachedConsumers on
+   * the executors.
+   */
+  private def canReuseCachedConsumers(numTopicPartitions: Int): Boolean = {
+    math.max(numPartitions, numTopicPartitions) == numTopicPartitions
+  }
+
+  /**
+   * Calculate the offset ranges that we are going to process this batch. If `numPartitions`
+   * is not set or is set less than or equal the number of `topicPartitions` that we're going to
+   * consume, then we fall back to a 1-1 mapping of Spark tasks to Kafka partitions. If
+   * `numPartitions` is set higher than the number of our `topicPartitions`, then we will split up
+   * the read tasks of the skewed partitions to multiple Spark tasks.
+   * The number of Spark tasks will be *approximately* `numPartitions`. It can be less or more
+   * depending on rounding errors or Kafka partitions that didn't receive any new data.
+   */
   private def getOffsetRanges(
       topicPartitions: Seq[TopicPartition],
       fromPartitionOffsets: Map[TopicPartition, Long],
@@ -378,7 +396,7 @@ private[kafka010] case class KafkaSource(
         KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
       }.toList
     } else {
-      // one-to-many mapping
+      // one-to-many mapping. We can't re-use CachedConsumers in this instance.
       val totalOffsets = offsets.map(o => o._4).sum
       offsets.flatMap { case (tp, fromOffset, _, delta) =>
         // number of partitions to divvy up this topic partition to
@@ -386,6 +404,7 @@ private[kafka010] case class KafkaSource(
         var remaining = delta
         var startOffset = fromOffset
         (0 until parts).map { part =>
+          // Fine to do integer division. Last partition will consume all the round off errors
           val thisPartition = remaining / (parts - part)
           remaining -= thisPartition
           val endOffset = startOffset + thisPartition
