@@ -24,7 +24,7 @@ Essentially isotonic regression is a
 best fitting the original data points.
 
 `spark.mllib` supports a
-[pool adjacent violators algorithm](https://pdfs.semanticscholar.org/f585/1e25fe3505861accf024c9093c3e6dfb9f87.pdf)
+[pool adjacent violators algorithm](http://doi.org/10.1198/TECH.2010.10111)
 which uses an approach to
 [parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
 The training input is a RDD of tuples of three double values that represent
