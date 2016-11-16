@@ -207,14 +207,29 @@ This example covers the concepts of `Estimator`, `Transformer`, and `Param`.
 <div class="codetabs">
 
 <div data-lang="scala">
+
+Refer to the [`Estimator` Scala docs](api/scala/index.html#org.apache.spark.ml.Estimator),
+the [`Transformer` Scala docs](api/scala/index.html#org.apache.spark.ml.Transformer) and
+the [`Params` Scala docs](api/scala/index.html#org.apache.spark.ml.param.Params) for details on the API.
+
 {% include_example scala/org/apache/spark/examples/ml/EstimatorTransformerParamExample.scala %}
 </div>
 
 <div data-lang="java">
+
+Refer to the [`Estimator` Java docs](api/java/org/apache/spark/ml/Estimator.html),
+the [`Transformer` Java docs](api/java/org/apache/spark/ml/Transformer.html) and
+the [`Params` Java docs](api/java/org/apache/spark/ml/param/Params.html) for details on the API.
+
 {% include_example java/org/apache/spark/examples/ml/JavaEstimatorTransformerParamExample.java %}
 </div>
 
 <div data-lang="python">
+
+Refer to the [`Estimator` Python docs](api/python/pyspark.ml.html#pyspark.ml.Estimator),
+the [`Transformer` Python docs](api/python/pyspark.ml.html#pyspark.ml.Transformer) and
+the [`Params` Python docs](api/python/pyspark.ml.html#pyspark.ml.param.Params) for more details on the API.
+
 {% include_example python/ml/estimator_transformer_param_example.py %}
 </div>
 
@@ -227,14 +242,24 @@ This example follows the simple text document `Pipeline` illustrated in the figu
 <div class="codetabs">
 
 <div data-lang="scala">
+
+Refer to the [`Pipeline` Scala docs](api/scala/index.html#org.apache.spark.ml.Pipeline) for details on the API.
+
 {% include_example scala/org/apache/spark/examples/ml/PipelineExample.scala %}
 </div>
 
 <div data-lang="java">
+
+
+Refer to the [`Pipeline` Java docs](api/java/org/apache/spark/ml/Pipeline.html) for details on the API.
+
 {% include_example java/org/apache/spark/examples/ml/JavaPipelineExample.java %}
 </div>
 
 <div data-lang="python">
+
+Refer to the [`Pipeline` Python docs](api/python/pyspark.ml.html#pyspark.ml.Pipeline) for more details on the API.
+
 {% include_example python/ml/pipeline_example.py %}
 </div>
 
