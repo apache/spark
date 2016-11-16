@@ -130,8 +130,10 @@ public final class NioBufferedFileInputStream extends InputStream {
     StorageUtils.dispose(byteBuffer);
   }
 
+  //checkstyle.off: NoFinalizer
   @Override
   protected void finalize() throws IOException {
     close();
   }
+  //checkstyle.on: NoFinalizer
 }
