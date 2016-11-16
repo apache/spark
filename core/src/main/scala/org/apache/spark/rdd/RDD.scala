@@ -388,6 +388,14 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+    * Return a new RDD containing only the elements that satisfy a predicate.
+    * This is an alias for filter so that RDDs can be used in for comprehensions without causing the
+    * compiler to complain.
+    */
+  @inline
+  final def withFilter(f: T => Boolean): RDD[T] = filter(f)
+
+  /**
    * Return a new RDD containing the distinct elements in this RDD.
    */
   def distinct(numPartitions: Int)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
