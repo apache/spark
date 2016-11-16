@@ -242,7 +242,7 @@ public class RadixSort {
       boolean desc, boolean signed) {
     assert counts.length == 256;
     long[] offsets = transformCountsToOffsets(
-      counts, numRecords, array.getBaseOffset() + outIndex * 8, 16, desc, signed);
+      counts, numRecords, array.getBaseOffset() + outIndex * 8L, 16, desc, signed);
     Object baseObject = array.getBaseObject();
     long baseOffset = array.getBaseOffset() + inIndex * 8L;
     long maxOffset = baseOffset + numRecords * 16L;
