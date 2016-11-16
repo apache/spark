@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
@@ -341,6 +342,7 @@ class CatalogSuite
   }
 
   test("uncache table shouldn't throw an exception if table doesn't exist") {
+    intercept[NoSuchTableException](spark.table("random_table"))
     // doesn't throw TableNotFoundException
     spark.catalog.uncacheTable("random_table")
   }
