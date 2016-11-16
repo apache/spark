@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -15,18 +15,5 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
-#
-# Shell script for starting BeeLine
-
-# Enter posix mode for bash
-set -o posix
-
-# Figure out if SPARK_HOME is set
-if [ -z "${SPARK_HOME}" ]; then
-  source "$(dirname "$0")"/find-spark-home
-fi
-
-CLASS="org.apache.hive.beeline.BeeLine"
-exec "${SPARK_HOME}/bin/spark-class" $CLASS "$@"
+__version__ = "2.1.0.dev0"
