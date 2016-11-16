@@ -265,6 +265,14 @@ or
 Java 8 tests are automatically enabled when a Java 8 JDK is detected.
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
 
+## PySpark pip installable
+
+If you are building Spark for use in a Python environment and you wish to pip install it, you will first need to build the Spark JARs as described above. Then you can construct an sdist package suitable for setup.py and pip installable package.
+
+    cd python; python setup.py sdist
+
+**Note:** Due to packaging requirements you can not directly pip install from the Python directory, rather you must first build the sdist package as described above.
+
 ## PySpark Tests with Maven
 
 If you are building PySpark and wish to run the PySpark tests you will need to build Spark with Hive support.

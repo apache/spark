@@ -18,7 +18,7 @@
 #
 
 if [ -z "${SPARK_HOME}" ]; then
-  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+  source "$(dirname "$0")"/find-spark-home
 fi
 
 . "${SPARK_HOME}"/bin/load-spark-env.sh
@@ -27,7 +27,7 @@ fi
 if [ -n "${JAVA_HOME}" ]; then
   RUNNER="${JAVA_HOME}/bin/java"
 else
-  if [ `command -v java` ]; then
+  if [ "$(command -v java)" ]; then
     RUNNER="java"
   else
     echo "JAVA_HOME is not set" >&2
@@ -36,7 +36,7 @@ else
 fi
 
 # Find Spark jars.
-if [ -f "${SPARK_HOME}/RELEASE" ]; then
+if [ -d "${SPARK_HOME}/jars" ]; then
   SPARK_JARS_DIR="${SPARK_HOME}/jars"
 else
   SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"

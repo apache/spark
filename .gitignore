@@ -57,6 +57,8 @@ project/plugins/project/build.properties
 project/plugins/src_managed/
 project/plugins/target/
 python/lib/pyspark.zip
+python/deps
+python/pyspark/python
 reports/
 scalastyle-on-compile.generated.xml
 scalastyle-output.xml
