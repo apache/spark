@@ -421,7 +421,7 @@ class StreamingContext private[streaming] (
    * by "moving" them from another location within the same file system. File names
    * starting with . are ignored.
    *
-   * '''Note:''' We ensure that the byte array for each record in the
+   * @note We ensure that the byte array for each record in the
    * resulting RDDs of the DStream has the provided record length.
    *
    * @param directory HDFS directory to monitor for new file

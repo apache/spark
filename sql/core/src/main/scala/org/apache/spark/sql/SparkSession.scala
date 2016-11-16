@@ -155,7 +155,7 @@ class SparkSession private(
   /**
    * A collection of methods for registering user-defined functions (UDF).
    *
-   * '''Note:''' The user-defined functions must be deterministic. Due to optimization,
+   * @note The user-defined functions must be deterministic. Due to optimization,
    * duplicate invocations may be eliminated or the function may even be invoked more times than
    * it is present in the query.
    *
@@ -201,7 +201,7 @@ class SparkSession private(
    * Start a new session with isolated SQL configurations, temporary tables, registered
    * functions are isolated, but sharing the underlying [[SparkContext]] and cached data.
    *
-   * '''Note:''' Other than the [[SparkContext]], all shared state is initialized lazily.
+   * @note Other than the [[SparkContext]], all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.

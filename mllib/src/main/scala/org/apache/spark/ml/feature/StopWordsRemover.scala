@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 /**
  * A feature transformer that filters out stop words from input.
  *
- * '''Note:''' null values from input array are preserved unless adding null to stopWords
+ * @note null values from input array are preserved unless adding null to stopWords
  * explicitly.
  *
  * @see [[http://en.wikipedia.org/wiki/Stop_words]]

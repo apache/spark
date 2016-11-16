@@ -112,7 +112,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *
    * This is the parameter to a symmetric Dirichlet distribution.
    *
-   * '''Note:''' The topics' distributions over terms are called "beta" in the original LDA paper
+   * @note The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    *
    * If not set by the user, then topicConcentration is set automatically.
@@ -245,11 +245,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent,
    * in range (0, 1].
    *
-   * '''Note:''' This should be adjusted in synch with [[LDA.maxIter]]
+   * @note This should be adjusted in synch with [[LDA.maxIter]]
    * so the entire corpus is used.  Specifically, set both so that
    * maxIterations * miniBatchFraction >= 1.
    *
-   * '''Note:''' This is the same as the `miniBatchFraction` parameter in
+   * @note This is the same as the `miniBatchFraction` parameter in
    * [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].
    *
    * Default: 0.05, i.e., 5% of total documents.
@@ -292,7 +292,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can
    * cause failures if a data partition is lost, so set this bit with care.
    *
-   * '''Note:''' Checkpoints will be cleaned up via reference counting, regardless.
+   * @note Checkpoints will be cleaned up via reference counting, regardless.
    *
    * See [[DistributedLDAModel.getCheckpointFiles]] for getting remaining checkpoints and
    * [[DistributedLDAModel.deleteCheckpointFiles]] for removing remaining checkpoints.
@@ -723,7 +723,7 @@ class DistributedLDAModel private[ml] (
    * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
-   * '''Note:''' Removing the checkpoints can cause failures if a partition is lost and is needed
+   * @note Removing the checkpoints can cause failures if a partition is lost and is needed
    * by certain [[DistributedLDAModel]] methods.  Reference counting will clean up the checkpoints
    * when this model and derivative data go out of scope.
    *

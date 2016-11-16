@@ -57,7 +57,7 @@ private[spark] class NewHadoopPartition(
  * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
  * sources in HBase, or S3), using the new MapReduce API (`org.apache.hadoop.mapreduce`).
  *
- * '''Note:''' Instantiating this class directly is not recommended, please use
+ * @note Instantiating this class directly is not recommended, please use
  * [[org.apache.spark.SparkContext.newAPIHadoopRDD()]]
  *
  * @param sc The SparkContext to associate the RDD with.

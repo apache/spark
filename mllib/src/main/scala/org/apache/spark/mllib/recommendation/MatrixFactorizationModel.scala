@@ -43,7 +43,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Model representing the result of matrix factorization.
  *
- * '''Note:''' If you create the model directly using constructor, please be aware that fast prediction
+ * @note If you create the model directly using constructor, please be aware that fast prediction
  * requires cached user/product features and their associated partitioners.
  *
  * @param rank Rank for the features in this model.

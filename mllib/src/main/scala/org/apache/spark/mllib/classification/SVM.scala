@@ -126,7 +126,7 @@ object SVMModel extends Loader[SVMModel] {
  * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent. By default L2
  * regularization is used, which can be changed via [[SVMWithSGD.optimizer]].
  *
- * '''Note:''' Labels used in SVM should be {0, 1}.
+ * @note Labels used in SVM should be {0, 1}.
  */
 @Since("0.8.0")
 class SVMWithSGD private (
@@ -161,7 +161,7 @@ class SVMWithSGD private (
 /**
  * Top-level methods for calling SVM.
  *
- * '''Note:''' Labels used in SVM should be {0, 1}.
+ * @note Labels used in SVM should be {0, 1}.
  */
 @Since("0.8.0")
 object SVMWithSGD {
@@ -172,7 +172,7 @@ object SVMWithSGD {
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
    *
-   * '''Note:''' Labels used in SVM should be {0, 1}.
+   * @note Labels used in SVM should be {0, 1}.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -199,7 +199,7 @@ object SVMWithSGD {
    * of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
    *
-   * '''Note:''' Labels used in SVM should be {0, 1}
+   * @note Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -222,7 +222,7 @@ object SVMWithSGD {
    * of iterations of gradient descent using the specified step size. We use the entire data set to
    * update the gradient in each iteration.
    *
-   * '''Note:''' Labels used in SVM should be {0, 1}
+   * @note Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
@@ -244,7 +244,7 @@ object SVMWithSGD {
    * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
    * update the gradient in each iteration.
    *
-   * '''Note:''' Labels used in SVM should be {0, 1}
+   * @note Labels used in SVM should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.

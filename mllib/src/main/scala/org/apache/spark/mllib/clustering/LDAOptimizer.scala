@@ -95,7 +95,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Deleting the checkpoint can cause failures if a data partition is lost, so set this bit with
    * care.
    *
-   * '''Note:''' Checkpoints will be cleaned up via reference counting, regardless.
+   * @note Checkpoints will be cleaned up via reference counting, regardless.
    *
    * Default: true
    */
@@ -350,7 +350,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * Mini-batch fraction in (0, 1], which sets the fraction of document sampled and used in
    * each iteration.
    *
-   * '''Note:''' This should be adjusted in synch with [[LDA.setMaxIterations()]]
+   * @note This should be adjusted in synch with [[LDA.setMaxIterations()]]
    * so the entire corpus is used.  Specifically, set both so that
    * maxIterations * miniBatchFraction >= 1.
    *

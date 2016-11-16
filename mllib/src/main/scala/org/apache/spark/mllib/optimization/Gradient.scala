@@ -306,7 +306,7 @@ class LeastSquaresGradient extends Gradient {
  * Compute gradient and loss for a Hinge loss function, as used in SVM binary classification.
  * See also the documentation for the precise formulation.
  *
- * '''Note:''' This assumes that the labels are {0,1}
+ * @note This assumes that the labels are {0,1}
  */
 @DeveloperApi
 class HingeGradient extends Gradient {

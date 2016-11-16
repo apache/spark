@@ -58,7 +58,7 @@ class KMeans private (
   /**
    * Number of clusters to create (k).
    *
-   * '''Note:''' It is possible for fewer than k clusters to
+   * @note It is possible for fewer than k clusters to
    * be returned, for example, if there are fewer than k distinct points to cluster.
    */
   @Since("1.4.0")
@@ -67,7 +67,7 @@ class KMeans private (
   /**
    * Set the number of clusters to create (k).
    *
-   * '''Note:''' It is possible for fewer than k clusters to
+   * @note It is possible for fewer than k clusters to
    * be returned, for example, if there are fewer than k distinct points to cluster. Default: 2.
    */
   @Since("0.8.0")

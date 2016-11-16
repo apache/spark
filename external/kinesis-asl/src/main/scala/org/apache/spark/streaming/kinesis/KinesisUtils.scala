@@ -33,7 +33,7 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * '''Note:''' The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
    * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
    * gets the AWS credentials.
    *
@@ -81,7 +81,7 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * '''Note:''' The given AWS credentials will get saved in DStream checkpoints if checkpointing
+   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
    *  is enabled. Make sure that your checkpoint directory is secure.
    *
    * @param ssc StreamingContext object
@@ -133,7 +133,7 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * '''Note:''' The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
    * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
    * gets the AWS credentials.
    *
@@ -177,7 +177,7 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * '''Note:''' The given AWS credentials will get saved in DStream checkpoints if checkpointing
+   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
    *  is enabled. Make sure that your checkpoint directory is secure.
    *
    * @param ssc StreamingContext object
@@ -223,7 +223,7 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * '''Note:''' The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
    * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
    * gets the AWS credentials.
    *
@@ -270,7 +270,7 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * '''Note:''' The given AWS credentials will get saved in DStream checkpoints if checkpointing
+   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
    * is enabled. Make sure that your checkpoint directory is secure.
    *
    * @param jssc Java StreamingContext object
@@ -323,7 +323,7 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * '''Note:''' The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
    * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
    * gets the AWS credentials.
    *
@@ -364,7 +364,7 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * '''Note:''' The given AWS credentials will get saved in DStream checkpoints if checkpointing
+   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
    * is enabled. Make sure that your checkpoint directory is secure.
    *
    * @param jssc Java StreamingContext object

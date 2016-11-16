@@ -40,7 +40,7 @@ import org.apache.spark.sql.types._
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
- * '''Note:''' Users should not implement this interface.
+ * @note Users should not implement this interface.
  */
 @SQLUserDefinedType(udt = classOf[VectorUDT])
 @Since("1.0.0")
@@ -134,7 +134,7 @@ sealed trait Vector extends Serializable {
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
    * regardless of its value.
    *
-   * '''Note:''' Inactive entries have value 0.
+   * @note Inactive entries have value 0.
    */
   @Since("1.4.0")
   def numActives: Int

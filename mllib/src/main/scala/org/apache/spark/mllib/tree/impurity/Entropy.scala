@@ -80,7 +80,7 @@ object Entropy extends Impurity {
  * Class for updating views of a vector of sufficient statistics,
  * in order to compute impurity from a sample.
  *
- * '''Note:''' Instances of this class do not hold the data; they operate on views of the data.
+ * @note Instances of this class do not hold the data; they operate on views of the data.
  *
  * @param numClasses  Number of classes for label.
  */

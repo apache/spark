@@ -182,7 +182,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * A collection of methods for registering user-defined functions (UDF).
    *
-   * '''Note:''' The user-defined functions must be deterministic. Due to optimization,
+   * @note The user-defined functions must be deterministic. Due to optimization,
    * duplicate invocations may be eliminated or the function may even be invoked more times than
    * it is present in the query.
    *

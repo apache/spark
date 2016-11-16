@@ -218,7 +218,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * for new files and reads them as flat binary files with fixed record lengths,
    * yielding byte arrays
    *
-   * '''Note:''' We ensure that the byte array for each record in the
+   * @note We ensure that the byte array for each record in the
    * resulting RDDs of the DStream has the provided record length.
    *
    * @param directory HDFS directory to monitor for new files
@@ -352,7 +352,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * '''Note:'''
+   * @note
    * 1. Changes to the queue after the stream is created will not be recognized.
    * 2. Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
@@ -372,7 +372,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * '''Note:'''
+   * @note
    * 1. Changes to the queue after the stream is created will not be recognized.
    * 2. Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
@@ -396,7 +396,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
-   * '''Note:'''
+   * @note
    * 1. Changes to the queue after the stream is created will not be recognized.
    * 2. Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
@@ -456,7 +456,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * the DStreams. The order of the JavaRDDs in the transform function parameter will be the
    * same as the order of corresponding DStreams in the list.
    *
-   * '''Note:''' For adding a JavaPairDStream in the list of JavaDStreams, convert it to a
+   * @note For adding a JavaPairDStream in the list of JavaDStreams, convert it to a
    * JavaDStream using [[org.apache.spark.streaming.api.java.JavaPairDStream]].toJavaDStream().
    * In the transform function, convert the JavaRDD corresponding to that JavaDStream to
    * a JavaPairRDD using org.apache.spark.api.java.JavaPairRDD.fromJavaRDD().
@@ -479,7 +479,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * the DStreams. The order of the JavaRDDs in the transform function parameter will be the
    * same as the order of corresponding DStreams in the list.
    *
-   * '''Note:''' For adding a JavaPairDStream in the list of JavaDStreams, convert it to
+   * @note For adding a JavaPairDStream in the list of JavaDStreams, convert it to
    * a JavaDStream using [[org.apache.spark.streaming.api.java.JavaPairDStream]].toJavaDStream().
    * In the transform function, convert the JavaRDD corresponding to that JavaDStream to
    * a JavaPairRDD using org.apache.spark.api.java.JavaPairRDD.fromJavaRDD().

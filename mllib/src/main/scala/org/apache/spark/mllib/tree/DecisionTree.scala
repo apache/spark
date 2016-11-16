@@ -75,7 +75,7 @@ object DecisionTree extends Serializable with Logging {
    * Method to train a decision tree model.
    * The method supports binary and multiclass classification and regression.
    *
-   * '''Note:''' Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   * @note Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
    * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
    * is recommended to clearly separate classification and regression.
    *
@@ -96,7 +96,7 @@ object DecisionTree extends Serializable with Logging {
    * Method to train a decision tree model.
    * The method supports binary and multiclass classification and regression.
    *
-   * '''Note:''' Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   * @note Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
    * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
    * is recommended to clearly separate classification and regression.
    *
@@ -123,7 +123,7 @@ object DecisionTree extends Serializable with Logging {
    * Method to train a decision tree model.
    * The method supports binary and multiclass classification and regression.
    *
-   * '''Note:''' Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   * @note Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
    * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
    * is recommended to clearly separate classification and regression.
    *
@@ -152,7 +152,7 @@ object DecisionTree extends Serializable with Logging {
    * Method to train a decision tree model.
    * The method supports binary and multiclass classification and regression.
    *
-   * '''Note:''' Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
+   * @note Using [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
    * and [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
    * is recommended to clearly separate classification and regression.
    *

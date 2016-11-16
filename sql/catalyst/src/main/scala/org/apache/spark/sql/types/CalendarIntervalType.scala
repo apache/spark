@@ -23,7 +23,7 @@ import org.apache.spark.annotation.InterfaceStability
  * The data type representing calendar time intervals. The calendar time interval is stored
  * internally in two components: number of months the number of microseconds.
  *
- * '''Note:''' Calendar intervals are not comparable.
+ * @note Calendar intervals are not comparable.
  *
  * Please use the singleton [[DataTypes.CalendarIntervalType]].
  *

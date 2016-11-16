@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.DoubleType
  * learning algorithm for classification.
  * It supports binary labels, as well as both continuous and categorical features.
  *
- * '''Note:''' Multiclass labels are not currently supported.
+ * @note Multiclass labels are not currently supported.
  *
  * The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
  *
@@ -171,7 +171,7 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
  * model for classification.
  * It supports binary labels, as well as both continuous and categorical features.
  *
- * '''Note:''' Multiclass labels are not currently supported.
+ * @note Multiclass labels are not currently supported.
  *
  * @param _trees  Decision trees in the ensemble.
  * @param _treeWeights  Weights for the decision trees in the ensemble.

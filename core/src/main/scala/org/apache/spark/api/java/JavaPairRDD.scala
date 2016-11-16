@@ -206,7 +206,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
    *
-   * '''Note:''' This method performs a shuffle internally.
+   * @note This method performs a shuffle internally.
    */
   def intersection(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.intersection(other.rdd))
@@ -225,7 +225,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
    * "combined type" C.
    *
-   * '''Note:''' V and C can be different -- for example, one might group an
+   * @note V and C can be different -- for example, one might group an
    * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
    * functions:
    *
@@ -259,7 +259,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
    * "combined type" C.
    *
-   * '''Note:''' V and C can be different -- for example, one might group an
+   * @note V and C can be different -- for example, one might group an
    * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
    * functions:
    *
@@ -402,7 +402,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Allows controlling the
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    *
-   * '''Note:''' If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
    * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
    * will provide much better performance.
    */
@@ -413,7 +413,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with into `numPartitions` partitions.
    *
-   * '''Note:''' If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
    * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
    * will provide much better performance.
    */
@@ -543,7 +543,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with the existing partitioner/parallelism level.
    *
-   * '''Note:''' If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
    * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
    * will provide much better performance.
    */

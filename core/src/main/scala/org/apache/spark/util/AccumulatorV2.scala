@@ -61,7 +61,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   /**
    * Returns true if this accumulator has been registered.
    *
-   * '''Note:''' All accumulators must be
+   * @note All accumulators must be
    * registered before use, or it will throw exception.
    */
   final def isRegistered: Boolean =

@@ -343,7 +343,7 @@ class BlockMatrix @Since("1.3.0") (
    * For given matrices `this` and `other` of compatible dimensions and compatible block dimensions,
    * it applies a binary function on their corresponding blocks.
    *
-   * '''Note:''' `blockMap` ONLY works for `add` and `subtract` methods and it does not support
+   * @note `blockMap` ONLY works for `add` and `subtract` methods and it does not support
    * operators such as (a, b) => -a + b
    *
    * @param other The second BlockMatrix argument for the operator specified by `binMap`
@@ -452,7 +452,7 @@ class BlockMatrix @Since("1.3.0") (
    * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
    * some performance issues until support for multiplying two sparse matrices is added.
    *
-   * '''Note:''' The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
+   * @note The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
    * there were blocks with duplicate indices. Now, the blocks with duplicate indices will be added
    * with each other.
    */
