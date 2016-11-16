@@ -240,6 +240,7 @@ Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.
 [Kafka consumer config docs](http://kafka.apache.org/documentation.html#newconsumerconfigs).
 
 Note that the following Kafka params cannot be set and the Kafka source will throw an exception:
+
 - **group.id**: Kafka source will create a unique group id for each query automatically.
 - **auto.offset.reset**: Set the source option `startingOffsets` to specify
  where to start instead. Structured Streaming manages which offsets are consumed internally, rather 
