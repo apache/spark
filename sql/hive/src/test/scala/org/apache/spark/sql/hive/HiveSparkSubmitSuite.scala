@@ -397,11 +397,7 @@ object SetWarehouseLocationTest extends Logging {
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
-    val sparkConf = new SparkConf(loadDefaults = true)
-    val builder = SparkSession.builder()
-      .config(sparkConf)
-      .config("spark.ui.enabled", "false")
-      .enableHiveSupport()
+    val sparkConf = new SparkConf(loadDefaults = true).set("spark.ui.enabled", "false")
     val providedExpectedWarehouseLocation =
       sparkConf.getOption("spark.sql.test.expectedWarehouseDir")
 
@@ -410,7 +406,7 @@ object SetWarehouseLocationTest extends Logging {
         // If spark.sql.test.expectedWarehouseDir is set, the warehouse dir is set
         // through spark-summit. So, neither spark.sql.warehouse.dir nor
         // hive.metastore.warehouse.dir is set at here.
-        (builder.getOrCreate(), warehouseDir)
+        (new TestHiveContext(new SparkContext(sparkConf)).sparkSession, warehouseDir)
       case None =>
         val warehouseLocation = Utils.createTempDir()
         warehouseLocation.delete()
@@ -420,10 +416,10 @@ object SetWarehouseLocationTest extends Logging {
         // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
         // We are expecting that the value of spark.sql.warehouse.dir will override the
         // value of hive.metastore.warehouse.dir.
-        val session = builder
-          .config("spark.sql.warehouse.dir", warehouseLocation.toString)
-          .config("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
-          .getOrCreate()
+        val session = new TestHiveContext(new SparkContext(sparkConf
+          .set("spark.sql.warehouse.dir", warehouseLocation.toString)
+          .set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)))
+          .sparkSession
         (session, warehouseLocation.toString)
 
     }
