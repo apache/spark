@@ -2657,6 +2657,14 @@ object functions {
   def to_date(e: Column): Column = withExpr { ToDate(e.expr) }
 
   /**
+    * Converts the column into a DateType with a specified format.
+    *
+    * @group datetime_funcs
+    * @since 2.2.0
+    */
+  def to_date(date: Column, format: String): Column = withExpr {}
+
+  /**
    * Returns date truncated to the unit specified by the format.
    *
    * @param format: 'year', 'yyyy', 'yy' for truncate by year,
