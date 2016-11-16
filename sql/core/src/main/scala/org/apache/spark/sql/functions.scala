@@ -2654,15 +2654,18 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def to_date(e: Column): Column = withExpr { ToDate(e.expr) }
+  def to_date(e: Column): Column = withExpr { ToDate(e.expr, Literal("yyyy-MM-dd")) }
 
   /**
     * Converts the column into a DateType with a specified format.
+    * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
     *
     * @group datetime_funcs
     * @since 2.2.0
     */
-  def to_date(date: Column, format: String): Column = withExpr {}
+  def to_date(date: Column, format: String): Column = withExpr {
+    ToDate(date.expr, Literal(format))
+  }
 
   /**
    * Returns date truncated to the unit specified by the format.

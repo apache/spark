@@ -1000,13 +1000,27 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
       > SELECT _FUNC_('2009-07-30 04:17:52');
        2009-07-30
   """)
-case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class ToDate(dateExp: Expression, format: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
 
-  // Implicit casting of spark will accept string in both date and timestamp format, as
-  // well as TimestampType.
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringType, DateType), StringType)
+    // need to add timestamp potentially too
 
   override def dataType: DataType = DateType
+  override def nullable: Boolean = true
+  override def left: Expression = dateExp
+  override def right: Expression = format
+
+  private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
+  private lazy val formatter: SimpleDateFormat =
+    Try(new SimpleDateFormat(constFormat.toString, Locale.US)).getOrElse(null)
+
+
+  def this(time: Expression) = {
+    this(time, Literal("yyyy-MM-dd"))
+  }
 
   override def eval(input: InternalRow): Any = child.eval(input)
 
