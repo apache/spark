@@ -513,7 +513,7 @@ public class SparkSaslSuite {
     boolean foundEncryptionHandler;
     String encryptHandlerName;
 
-    public EncryptionCheckerBootstrap(String encryptHandlerName) {
+    EncryptionCheckerBootstrap(String encryptHandlerName) {
       this.encryptHandlerName = encryptHandlerName;
     }
 
