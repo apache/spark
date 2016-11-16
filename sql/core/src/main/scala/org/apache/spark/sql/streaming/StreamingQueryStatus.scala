@@ -102,7 +102,7 @@ class StreamingQueryStatus private(
     ("inputRate" -> JDouble(inputRate)) ~
     ("processingRate" -> JDouble(processingRate)) ~
     ("latency" -> latency.map(JDouble).getOrElse(JNothing)) ~
-    ("triggerDetails" -> JsonProtocol.mapToJson(triggerDetails.asScala))
+    ("triggerDetails" -> JsonProtocol.mapToJson(triggerDetails.asScala)) ~
     ("sourceStatuses" -> JArray(sourceStatuses.map(_.jsonValue).toList)) ~
     ("sinkStatus" -> sinkStatus.jsonValue)
   }
@@ -151,7 +151,7 @@ private[sql] object StreamingQueryStatus {
         desc = "MySink",
         offsetDesc = CompositeOffset(Some(LongOffset(1)) :: None :: Nil).toString),
       triggerDetails = Map(
-        TRIGGER_ID -> "5",
+        BATCH_ID -> "5",
         IS_TRIGGER_ACTIVE -> "true",
         IS_DATA_PRESENT_IN_TRIGGER -> "true",
         GET_OFFSET_LATENCY -> "10",

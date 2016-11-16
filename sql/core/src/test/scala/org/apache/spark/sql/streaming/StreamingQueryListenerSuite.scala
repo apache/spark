@@ -84,7 +84,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       AssertOnLastQueryStatus { status: StreamingQueryStatus =>
         // Check the correctness of the trigger info of the last completed batch reported by
         // onQueryProgress
-        assert(status.triggerDetails.containsKey("triggerId"))
+        assert(status.triggerDetails.containsKey("batchId"))
         assert(status.triggerDetails.get("isTriggerActive") === "false")
         assert(status.triggerDetails.get("isDataPresentInTrigger") === "true")
 
@@ -104,7 +104,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         assert(status.triggerDetails.get("numRows.state.aggregation1.updated") === "1")
 
         assert(status.sourceStatuses.length === 1)
-        assert(status.sourceStatuses(0).triggerDetails.containsKey("triggerId"))
+        assert(status.sourceStatuses(0).triggerDetails.containsKey("batchId"))
         assert(status.sourceStatuses(0).triggerDetails.get("latency.getOffset.source") === "100")
         assert(status.sourceStatuses(0).triggerDetails.get("latency.getBatch.source") === "200")
         assert(status.sourceStatuses(0).triggerDetails.get("numRows.input.source") === "2")
