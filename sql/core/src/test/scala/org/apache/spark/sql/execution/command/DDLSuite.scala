@@ -125,17 +125,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert("file" === pathInCatalog.getScheme)
       val expectedPath = new Path(path).toUri
       assert(expectedPath.getPath === pathInCatalog.getPath)
-
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        sql(s"CREATE DATABASE db2")
-        val pathInCatalog2 = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
-        assert("file" === pathInCatalog2.getScheme)
-        val expectedPath2 = new Path(spark.sessionState.conf.warehousePath + "/" + "db2.db").toUri
-        assert(expectedPath2.getPath === pathInCatalog2.getPath)
-      }
-
       sql("DROP DATABASE db1")
-      sql("DROP DATABASE db2")
     }
   }
 
@@ -146,55 +136,22 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     fs.makeQualified(hadoopPath).toString
   }
 
-  test("Create/Drop Database") {
-    withTempDir { tmpDir =>
-      val path = tmpDir.getCanonicalPath
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = spark.sessionState.catalog
-        val databaseNames = Seq("db1", "`database`")
-
-        databaseNames.foreach { dbName =>
-          try {
-            val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-
-            sql(s"CREATE DATABASE $dbName")
-            val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
-            assert(db1 == CatalogDatabase(
-              dbNameWithoutBackTicks,
-              "",
-              expectedLocation,
-              Map.empty))
-            sql(s"DROP DATABASE $dbName CASCADE")
-            assert(!catalog.databaseExists(dbNameWithoutBackTicks))
-          } finally {
-            catalog.reset()
-          }
-        }
-      }
-    }
-  }
-
   test("Create Database using Default Warehouse Path") {
-    withSQLConf(SQLConf.WAREHOUSE_PATH.key -> "") {
-      // Will use the default location if and only if we unset the conf
-      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      val catalog = spark.sessionState.catalog
-      val dbName = "db1"
-      try {
-        sql(s"CREATE DATABASE $dbName")
-        val db1 = catalog.getDatabaseMetadata(dbName)
-        val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbName.db")
-        assert(db1 == CatalogDatabase(
-          dbName,
-          "",
-          expectedLocation,
-          Map.empty))
-        sql(s"DROP DATABASE $dbName CASCADE")
-        assert(!catalog.databaseExists(dbName))
-      } finally {
-        catalog.reset()
-      }
+    val catalog = spark.sessionState.catalog
+    val dbName = "db1"
+    try {
+      sql(s"CREATE DATABASE $dbName")
+      val db1 = catalog.getDatabaseMetadata(dbName)
+      val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbName.db")
+      assert(db1 == CatalogDatabase(
+        dbName,
+        "",
+        expectedLocation,
+        Map.empty))
+      sql(s"DROP DATABASE $dbName CASCADE")
+      assert(!catalog.databaseExists(dbName))
+    } finally {
+      catalog.reset()
     }
   }
 
@@ -224,31 +181,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("Create Database - database already exists") {
-    withTempDir { tmpDir =>
-      val path = tmpDir.getCanonicalPath
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = spark.sessionState.catalog
-        val databaseNames = Seq("db1", "`database`")
+    val catalog = spark.sessionState.catalog
+    val databaseNames = Seq("db1", "`database`")
 
-        databaseNames.foreach { dbName =>
-          try {
-            val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-            sql(s"CREATE DATABASE $dbName")
-            val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
-            assert(db1 == CatalogDatabase(
-              dbNameWithoutBackTicks,
-              "",
-              expectedLocation,
-              Map.empty))
+    databaseNames.foreach { dbName =>
+      try {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+        sql(s"CREATE DATABASE $dbName")
+        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+        val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")
+        assert(db1 == CatalogDatabase(
+          dbNameWithoutBackTicks,
+          "",
+          expectedLocation,
+          Map.empty))
 
-            intercept[DatabaseAlreadyExistsException] {
-              sql(s"CREATE DATABASE $dbName")
-            }
-          } finally {
-            catalog.reset()
-          }
+        intercept[DatabaseAlreadyExistsException] {
+          sql(s"CREATE DATABASE $dbName")
         }
+      } finally {
+        catalog.reset()
       }
     }
   }
@@ -473,47 +425,42 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("Alter/Describe Database") {
-    withTempDir { tmpDir =>
-      val path = tmpDir.getCanonicalPath
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = spark.sessionState.catalog
-        val databaseNames = Seq("db1", "`database`")
+    val catalog = spark.sessionState.catalog
+    val databaseNames = Seq("db1", "`database`")
 
-        databaseNames.foreach { dbName =>
-          try {
-            val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-            val location = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
+    databaseNames.foreach { dbName =>
+      try {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+        val location = makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")
 
-            sql(s"CREATE DATABASE $dbName")
+        sql(s"CREATE DATABASE $dbName")
 
-            checkAnswer(
-              sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-              Row("Database Name", dbNameWithoutBackTicks) ::
-                Row("Description", "") ::
-                Row("Location", location) ::
-                Row("Properties", "") :: Nil)
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", location) ::
+            Row("Properties", "") :: Nil)
 
-            sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
-            checkAnswer(
-              sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-              Row("Database Name", dbNameWithoutBackTicks) ::
-                Row("Description", "") ::
-                Row("Location", location) ::
-                Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", location) ::
+            Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
 
-            sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
 
-            checkAnswer(
-              sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-              Row("Database Name", dbNameWithoutBackTicks) ::
-                Row("Description", "") ::
-                Row("Location", location) ::
-                Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
-          } finally {
-            catalog.reset()
-          }
-        }
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", location) ::
+            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
+      } finally {
+        catalog.reset()
       }
     }
   }

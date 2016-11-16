@@ -56,11 +56,6 @@ object SQLConf {
 
   }
 
-  val WAREHOUSE_PATH = SQLConfigBuilder("spark.sql.warehouse.dir")
-    .doc("The default location for managed databases and tables.")
-    .stringConf
-    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
-
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
     .doc("The max number of iterations the optimizer and analyzer runs.")
@@ -806,7 +801,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
-  def warehousePath: String = new Path(getConf(WAREHOUSE_PATH)).toString
+  def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
 
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
@@ -950,6 +945,11 @@ object StaticSQLConf {
       SQLConf.register(entry)
     }
   }
+
+  val WAREHOUSE_PATH = buildConf("spark.sql.warehouse.dir")
+    .doc("The default location for managed databases and tables.")
+    .stringConf
+    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
 
   val CATALOG_IMPLEMENTATION = buildConf("spark.sql.catalogImplementation")
     .internal()
