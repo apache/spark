@@ -156,13 +156,6 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
- <td><code>spark.executor.instances</code></td>
-  <td><code>2</code></td>
-  <td>
-    The number of executors for static allocation. With <code>spark.dynamicAllocation.enabled</code>, the initial set of executors will be at least this large.
-  </td>
-</tr>
-<tr>
   <td><code>spark.extraListeners</code></td>
   <td>(none)</td>
   <td>
