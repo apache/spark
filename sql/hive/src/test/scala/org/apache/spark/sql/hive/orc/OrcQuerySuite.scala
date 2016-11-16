@@ -593,9 +593,14 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         maybeOrcReader.get, conf, 0, maybeOrcReader.get.getContentLength)
 
       val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
-      assert(recordsIterator.next().toString == "{null, null}")
-
-      recordsIterator.close()
+      try {
+        assert(recordsIterator.next().toString == "{null, null}")
+      } catch {
+        case e: Exception => fail(e)
+      }
+      finally {
+        recordsIterator.close()
+      }
     }
   }
 }
