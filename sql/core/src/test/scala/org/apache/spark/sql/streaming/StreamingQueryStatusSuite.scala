@@ -53,7 +53,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
         |        latency.getBatch.total: 20
         |        latency.getOffset.total: 10
         |        numRows.input.total: 100
-        |        triggerId: 5
+        |        batchId: 5
         |    Source statuses [1 source]:
         |        Source 1 - MySource1
         |            Available offset: 0

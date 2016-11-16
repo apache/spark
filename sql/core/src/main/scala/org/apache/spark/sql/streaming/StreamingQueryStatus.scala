@@ -151,7 +151,7 @@ private[sql] object StreamingQueryStatus {
         desc = "MySink",
         offsetDesc = OffsetSeq(Some(LongOffset(1)) :: None :: Nil).toString),
       triggerDetails = Map(
-        TRIGGER_ID -> "5",
+        BATCH_ID -> "5",
         IS_TRIGGER_ACTIVE -> "true",
         IS_DATA_PRESENT_IN_TRIGGER -> "true",
         GET_OFFSET_LATENCY -> "10",

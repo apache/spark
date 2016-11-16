@@ -217,7 +217,7 @@ class StreamingQueryStatus(object):
                 latency.getBatch.total: 20
                 latency.getOffset.total: 10
                 numRows.input.total: 100
-                triggerId: 5
+                batchId: 5
             Source statuses [1 source]:
                 Source 1 - MySource1
                     Available offset: 0
@@ -341,7 +341,7 @@ class StreamingQueryStatus(object):
         If no trigger is currently active, then it will have details of the last completed trigger.
 
         >>> sqs.triggerDetails
-        {u'triggerId': u'5', u'latency.getBatch.total': u'20', u'numRows.input.total': u'100',
+        {u'batchId': u'5', u'latency.getBatch.total': u'20', u'numRows.input.total': u'100',
         u'isTriggerActive': u'true', u'latency.getOffset.total': u'10',
         u'isDataPresentInTrigger': u'true'}
         """
