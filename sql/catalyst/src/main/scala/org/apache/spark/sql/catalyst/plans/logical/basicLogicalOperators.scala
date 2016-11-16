@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * When planning take() or collect() operations, this special node that is inserted at the top of
@@ -404,6 +405,13 @@ case class InsertIntoTable(
  */
 case class With(child: LogicalPlan, cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  override def simpleString: String = {
+    val cteAliases = Utils.truncatedString(cteRelations.map(_._1), "[", ", ", "]")
+    s"CTE $cteAliases"
+  }
+
+  override def innerChildren: Seq[QueryPlan[_]] = cteRelations.map(_._2)
 }
 
 case class WithWindowDefinition(
