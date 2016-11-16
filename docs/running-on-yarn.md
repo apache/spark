@@ -559,6 +559,8 @@ pre-packaged distribution.
 1. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
 then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
 `org.apache.spark.network.yarn.YarnShuffleService`.
+1. Increase `NodeManager's` heap size by setting `YARN_HEAPSIZE` (1000 by default) in `etc/hadoop/yarn-env.sh` 
+to avoid garbage collection issues during shuffle. 
 1. Restart all `NodeManager`s in your cluster.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
