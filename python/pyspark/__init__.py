@@ -36,6 +36,53 @@ Public classes:
       Finer-grained cache persistence levels.
 
 """
+import os
+import re
+import sys
+
+from os.path import isfile, join
+
+import xml.etree.ElementTree as ET
+
+if os.environ.get("SPARK_HOME") is None:
+    raise ImportError("Environment variable SPARK_HOME is undefined.")
+
+spark_home = os.environ['SPARK_HOME']
+pom_xml_file_path = join(spark_home, 'pom.xml')
+snapshot_version = None
+
+if isfile(pom_xml_file_path):
+    try:
+        tree = ET.parse(pom_xml_file_path)
+        root = tree.getroot()
+        version_tag = root[4].text
+        snapshot_version = version_tag[:5]
+    except:
+        raise ImportError("Could not read the spark version, because pom.xml file" +
+                          " could not be read.")
+else:
+    try:
+        lib_file_path = join(spark_home, "lib")
+        jars = [f for f in os.listdir(lib_file_path) if isfile(join(lib_file_path, f))]
+
+        for jar in jars:
+            m = re.match(r"^spark-assembly-([0-9\.]+).*\.jar$", jar)
+            if m is not None and len(m.groups()) > 0:
+                snapshot_version = m.group(1)
+
+        if snapshot_version is None:
+            raise ImportError("Could not read the spark version, because pom.xml or spark" +
+                              " assembly jar could not be found.")
+    except OSError:
+        raise ImportError("Could not read the spark version, because pom.xml or lib directory" +
+                          " could not be found in SPARK_HOME")
+
+
+from pyspark.pyspark_version import __version__
+if (snapshot_version != __version__):
+    raise ImportError("Incompatible version of Spark(%s) and PySpark(%s)." %
+                      (snapshot_version, __version__))
+
 
 from functools import wraps
 import types
