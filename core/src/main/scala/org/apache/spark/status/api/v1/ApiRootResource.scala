@@ -181,13 +181,6 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
     }
   }
 
-  @Path("applications/{appId}/streaming/receivers")
-  def getReceivers(
-      @PathParam("appId") appId: String
-                  ): Unit = {
-
-  }
-
   @Path("applications/{appId}/logs")
   def getEventLogs(
       @PathParam("appId") appId: String): EventLogDownloadResource = {

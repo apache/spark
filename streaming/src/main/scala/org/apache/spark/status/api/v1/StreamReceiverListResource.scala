@@ -24,13 +24,22 @@ import org.apache.spark.streaming.ui.StreamingJobProgressListener
 import org.apache.spark.ui.SparkUI
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class ReceiverListResource(ui: SparkUI) {
+private[v1] class StreamReceiverListResource(ui: SparkUI) {
 
   @GET
-  def receiverList(): Seq[ReceiverSummary] = {
+  def streamReceiverList(): Seq[StreamReceiverSummary] = {
     val listener = ui.getStreamingListener
     if (listener.isDefined) {
-      listener.get.asInstanceOf[StreamingJobProgressListener]
+      val streamingJobProgressListener = listener.get.asInstanceOf[StreamingJobProgressListener]
+      val receiverInfos = streamingJobProgressListener.receiverInfos
+      receiverInfos.toArray.map(receiverInfo => {
+        new StreamReceiverSummary(
+          receiverInfo._2.streamId,
+          receiverInfo._2.name,
+          receiverInfo._2.location,
+          receiverInfo._2.executorId
+        )
+      })
     } else {
       Seq.empty
     }
