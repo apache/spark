@@ -961,12 +961,6 @@ class SparkContext(config: SparkConf) extends Logging {
    * necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable),
    * using the older MapReduce API (`org.apache.hadoop.mapred`).
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
-   * operation will create many references to the same object.
-   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
-   * copy them using a `map` function.
-   *
    * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.
    *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
    *             sure you won't modify the conf. A safe approach is always creating a new conf for
@@ -975,6 +969,12 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
    * @param minPartitions Minimum number of Hadoop Splits to generate.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def hadoopRDD[K, V](
       conf: JobConf,
@@ -1116,12 +1116,6 @@ class SparkContext(config: SparkConf) extends Logging {
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
-   * operation will create many references to the same object.
-   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
-   * copy them using a `map` function.
-   *
    * @param conf Configuration for setting up the dataset. Note: This will be put into a Broadcast.
    *             Therefore if you plan to reuse this conf to create multiple RDDs, you need to make
    *             sure you won't modify the conf. A safe approach is always creating a new conf for
@@ -1129,6 +1123,12 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param fClass Class of the InputFormat
    * @param kClass Class of the keys
    * @param vClass Class of the values
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
+   * operation will create many references to the same object.
+   * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
+   * copy them using a `map` function.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
       conf: Configuration = hadoopConfiguration,

@@ -60,7 +60,7 @@ object Statistics {
    * Compute the correlation matrix for the input RDD of Vectors using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
-   * Note that for Spearman, a rank correlation, we need to create an RDD[Double] for each column
+   * '''Note:''' For Spearman, a rank correlation, we need to create an RDD[Double] for each column
    * and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
    * which is fairly costly. Cache the input RDD before calling corr with `method = "spearman"` to
    * avoid recomputing the common lineage.

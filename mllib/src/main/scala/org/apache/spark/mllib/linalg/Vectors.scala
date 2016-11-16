@@ -132,7 +132,9 @@ sealed trait Vector extends Serializable {
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
-   * regardless of its value.  Note that inactive entries have value 0.
+   * regardless of its value.
+   *
+   * '''Note:''' Inactive entries have value 0.
    */
   @Since("1.4.0")
   def numActives: Int

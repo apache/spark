@@ -1400,10 +1400,10 @@ class BinaryLogisticRegressionSummary private[classification] (
  * </blockquote></p>
  *
  * @note In order to avoid unnecessary computation during calculation of the gradient updates
- *       we lay out the coefficients in column major order during training. This allows us to
- *       perform feature standardization once, while still retaining sequential memory access
- *       for speed. We convert back to row major order when we create the model,
- *       since this form is optimal for the matrix operations used for prediction.
+ * we lay out the coefficients in column major order during training. This allows us to
+ * perform feature standardization once, while still retaining sequential memory access
+ * for speed. We convert back to row major order when we create the model,
+ * since this form is optimal for the matrix operations used for prediction.
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
