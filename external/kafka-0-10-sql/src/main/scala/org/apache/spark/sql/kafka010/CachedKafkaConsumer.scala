@@ -26,6 +26,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.kafka010.KafkaSource._
 
 
 /**
@@ -203,6 +204,7 @@ private[kafka010] case class CachedKafkaConsumer private(
     } else {
       val record = fetchedData.next()
       if (record.offset >= untilOffset) {
+        // This may happen when records are aged out.
         val message =
           if (failOnDataLoss) {
             s"""
@@ -222,6 +224,7 @@ private[kafka010] case class CachedKafkaConsumer private(
         null
       } else {
         if (record.offset != offset) {
+          // This may happen when records are aged out.
           val message =
             if (failOnDataLoss) {
               s"""
@@ -297,21 +300,6 @@ private[kafka010] case class CachedKafkaConsumer private(
 }
 
 private[kafka010] object CachedKafkaConsumer extends Logging {
-
-  private val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
-    """
-      |There may have been some data loss because some data may have been aged out in Kafka or
-      | the topic has been deleted and is therefore unavailable for processing. If you want your
-      | streaming query to fail on such cases, set the source option "failOnDataLoss" to "true".
-    """.stripMargin
-
-  private val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
-    """
-      |There may have been some data loss because some data may have been aged out in Kafka or
-      | the topic has been deleted and is therefore unavailable for processing. If you don't want
-      | your streaming query to fail on such cases, set the source option "failOnDataLoss" to
-      | "false".
-    """.stripMargin
 
   private val UNKNOWN_OFFSET = -2L
 
