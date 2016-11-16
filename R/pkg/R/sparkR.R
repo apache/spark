@@ -564,7 +564,7 @@ sparkCheckInstall <- function(sparkHome, master) {
         message(msg)
         packageLocalDir <- install.spark()
         packageLocalDir
-      } else if (master == "yarn-client") {
+      } else if (endsWith(master, "client")) {
         msg <- paste0("Spark not found in SPARK_HOME: ",
                       sparkHome, "\n", installInstruction("remote"))
         stop(msg)
