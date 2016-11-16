@@ -231,7 +231,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               stop("'family' not recognized")
             }
 
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
             if (is.null(weightCol)) {
               weightCol <- ""
             }
@@ -525,7 +525,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' @note spark.isoreg since 2.1.0
 setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, isotonic = TRUE, featureIndex = 0, weightCol = NULL) {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
 
             if (is.null(weightCol)) {
               weightCol <- ""
@@ -609,7 +609,7 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
 #' @seealso \link{predict}, \link{read.ml}, \link{write.ml}
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, k = 2, maxIter = 20, initMode = c("k-means||", "random")) {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
             initMode <- match.arg(initMode)
             jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf, formula,
                                 as.integer(k), as.integer(maxIter), initMode)
@@ -775,7 +775,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                    tol = 1E-6, fitIntercept = TRUE, family = "auto", standardization = TRUE,
                    thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
                    probabilityCol = "probability") {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
 
             if (is.null(weightCol)) {
               weightCol <- ""
@@ -872,7 +872,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
-#' @aliases spark.mlp,SparkDataFrame-method,formula-method
+#' @aliases spark.mlp,SparkDataFrame,formula-method
 #' @name spark.mlp
 #' @seealso \link{read.ml}
 #' @export
@@ -901,7 +901,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
                    tol = 1E-6, stepSize = 0.03, seed = NULL, initialWeights = NULL) {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
             if (is.null(layers)) {
               stop ("layers must be a integer vector with length > 1.")
             }
@@ -999,7 +999,7 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
 #' @note spark.naiveBayes since 2.0.0
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, smoothing = 1.0) {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
             formula, data@sdf, smoothing)
             new("NaiveBayesModel", jobj = jobj)
@@ -1210,7 +1210,7 @@ read.ml <- function(path) {
 #' @note spark.survreg since 2.0.0
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula) {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
                                 "fit", formula, data@sdf)
             new("AFTSurvivalRegressionModel", jobj = jobj)
@@ -1370,7 +1370,7 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @seealso \link{predict}, \link{read.ml}, \link{write.ml}
 setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, k = 2, maxIter = 100, tol = 0.01) {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.GaussianMixtureWrapper", "fit", data@sdf,
                                 formula, as.integer(k), as.integer(maxIter), as.numeric(tol))
             new("GaussianMixtureModel", jobj = jobj)
@@ -1740,7 +1740,7 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
                    minInstancesPerNode = 1, minInfoGain = 0.0, checkpointInterval = 10,
                    maxMemoryInMB = 256, cacheNodeIds = FALSE, probabilityCol = "probability") {
             type <- match.arg(type)
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
             if (!is.null(seed)) {
               seed <- as.character(as.integer(seed))
             }
@@ -1985,7 +1985,7 @@ setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
                    seed = NULL, subsamplingRate = 1.0, minInstancesPerNode = 1, minInfoGain = 0.0,
                    checkpointInterval = 10, maxMemoryInMB = 256, cacheNodeIds = FALSE) {
             type <- match.arg(type)
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
             if (!is.null(seed)) {
               seed <- as.character(as.integer(seed))
             }
