@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,16 +15,22 @@
 # limitations under the License.
 #
 
-#
-# Shell script for starting BeeLine
+from __future__ import print_function
 
-# Enter posix mode for bash
-set -o posix
+from pyspark.sql import SparkSession
+import sys
 
-# Figure out if SPARK_HOME is set
-if [ -z "${SPARK_HOME}" ]; then
-  source "$(dirname "$0")"/find-spark-home
-fi
+if __name__ == "__main__":
+    spark = SparkSession\
+        .builder\
+        .appName("PipSanityCheck")\
+        .getOrCreate()
+    sc = spark.sparkContext
+    rdd = sc.parallelize(range(100), 10)
+    value = rdd.reduce(lambda x, y: x + y)
+    if (value != 4950):
+        print("Value {0} did not match expected value.".format(value), file=sys.stderr)
+        sys.exit(-1)
+    print("Successfully ran pip sanity check")
 
-CLASS="org.apache.hive.beeline.BeeLine"
-exec "${SPARK_HOME}/bin/spark-class" $CLASS "$@"
+    spark.stop()
