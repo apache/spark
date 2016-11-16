@@ -33,7 +33,9 @@ import org.apache.spark.sql.types.MetadataBuilder
  * ViewType is used to specify the expected view type when we want to create or replace a view in
  * [[CreateViewCommand]].
  */
-sealed trait ViewType
+sealed trait ViewType {
+  override def toString: String = getClass.getSimpleName.stripSuffix("$")
+}
 
 /**
  * LocalTempView means session-scoped local temporary views. Its lifetime is the lifetime of the
