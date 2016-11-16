@@ -1951,7 +1951,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td><code>spark.r.heartBeatInterval</code></td>
   <td>100</td>
   <td>
-    Interval for heartbeats sents from SparkR backend to R process to prevent connection timeout.
+    Interval for heartbeats sent from SparkR backend to R process to prevent connection timeout.
   </td>
 </tr>
 
