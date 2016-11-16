@@ -212,12 +212,12 @@ class StreamingQueryStatus(object):
             Processing rate 23.5 rows/sec
             Latency: 345.0 ms
             Trigger details:
+                batchId: 5
                 isDataPresentInTrigger: true
                 isTriggerActive: true
                 latency.getBatch.total: 20
                 latency.getOffset.total: 10
                 numRows.input.total: 100
-                batchId: 5
             Source statuses [1 source]:
                 Source 1 - MySource1
                     Available offset: 0
