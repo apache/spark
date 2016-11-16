@@ -581,12 +581,12 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("Empty schema does not read data from ORC file") {
-    val data = (1 to 2).zip(1 to 2)
+    val data = Seq((1, 1), (2, 2))
     withOrcFile(data) { path =>
-      val requrestedSchema = StructType(Nil)
+      val requestedSchema = StructType(Nil)
       val conf = new Configuration()
       val physicalSchema = OrcFileOperator.readSchema(Seq(path), Some(conf)).get
-      OrcRelation.setRequiredColumns(conf, physicalSchema, requrestedSchema)
+      OrcRelation.setRequiredColumns(conf, physicalSchema, requestedSchema)
       val maybeOrcReader = OrcFileOperator.getFileReader(path, Some(conf))
       assert(maybeOrcReader.isDefined)
       val orcRecordReader = new SparkOrcNewRecordReader(
