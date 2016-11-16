@@ -76,6 +76,12 @@ class ExecutorSummary private[spark](
     val maxMemory: Long,
     val executorLogs: Map[String, String])
 
+class ReceiverSummary private[spark] (
+    val id: String,
+    val name: String,
+    val host: String,
+    val isActive: Boolean)
+
 class JobData private[spark](
     val jobId: Int,
     val name: String,

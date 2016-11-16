@@ -184,7 +184,11 @@ class StreamingContext private[streaming] (
 
   private[streaming] val waiter = new ContextWaiter
 
-  private[streaming] val progressListener = new StreamingJobProgressListener(this)
+  private[streaming] val progressListener = {
+    val streamingListener = new StreamingJobProgressListener(this)
+    sc.ui.get.setStreamingListener(streamingListener)
+    streamingListener
+  }
 
   private[streaming] val uiTab: Option[StreamingTab] =
     if (conf.getBoolean("spark.ui.enabled", true)) {
