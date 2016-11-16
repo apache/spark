@@ -215,4 +215,24 @@ class BucketedRandomProjectionLSHSuite
     assert(precision == 1.0)
     assert(recall >= 0.7)
   }
+
+  test("memory leak test") {
+    val numDim = 50
+    val data = {
+      for (i <- 0 until numDim; j <- Seq(-2, -1, 1, 2))
+        yield Vectors.sparse(numDim, Seq((i, j.toDouble)))
+    }
+    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
+
+    // Project from 100 dimensional Euclidean Space to 10 dimensions
+    val brp = new BucketedRandomProjectionLSH()
+      .setNumHashTables(10)
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setBucketLength(2.5)
+      .setSeed(12345)
+    val model = brp.fit(df)
+    val joined = model.approxSimilarityJoin(df, df, Double.MaxValue, "distCol")
+    joined.show()
+  }
 }
