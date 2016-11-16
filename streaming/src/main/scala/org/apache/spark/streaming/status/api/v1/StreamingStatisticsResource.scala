@@ -28,8 +28,38 @@ import org.apache.spark.streaming.ui.StreamingJobProgressListener
 private[v1] class StreamingStatisticsResource(
     uiRoot: UIRoot, listener: StreamingJobProgressListener, startTimeMillis: Long) {
 
+  private val batches = listener.retainedBatches
+
+  private val avgInputRate = avgRate(batches.map(_.numRecords * 1000.0 / listener.batchDuration))
+  private val avgSchedulingDelay = avgTime(batches.flatMap(_.schedulingDelay))
+  private val avgProcessingTime = avgTime(batches.flatMap(_.processingDelay))
+  private val avgTotalDelay = avgTime(batches.flatMap(_.totalDelay))
+
+  private def avgRate(data: Seq[Double]): Option[Double] = {
+    if (data.isEmpty) None else Some(data.sum / data.size)
+  }
+
+  private def avgTime(data: Seq[Long]): Option[Long] = {
+    if (data.isEmpty) None else Some(data.sum / data.size)
+  }
+
   @GET
   def streamingStatistics(): StreamingStatistics = {
-    new StreamingStatistics("shi_testname", new Date(startTimeMillis))
+    new StreamingStatistics(
+      startTime = new Date(startTimeMillis),
+      batchDuration = listener.batchDuration,
+      numReceivers = listener.numReceivers,
+      numActiveReceivers = listener.numActiveReceivers,
+      numInactiveReceivers = listener.numInactiveReceivers,
+      numTotalCompletedBatches = listener.numTotalCompletedBatches,
+      numRetainedCompletedBatches = listener.retainedCompletedBatches.size,
+      numActiveBatches = listener.numUnprocessedBatches,
+      numProcessedRecords = listener.numTotalProcessedRecords,
+      numReceivedRecords = listener.numTotalReceivedRecords,
+      avgInputRate = avgInputRate,
+      avgSchedulingDelay = avgSchedulingDelay,
+      avgProcessingTime = avgProcessingTime,
+      avgTotalDelay = avgTotalDelay
+    )
   }
 }

@@ -20,9 +20,23 @@ package org.apache.spark.streaming.status.api.v1
 import java.util.Date
 
 class StreamingInfo private[streaming](
-    val name: String,
-    val completedBatchCount: Long)
+  val name: String,
+  val completedBatchCount: Long
+)
 
 class StreamingStatistics private[streaming](
-    val name: String,
-    val startTime: Date)
+  val startTime: Date,
+  val batchDuration: Long,
+  val numReceivers: Int,
+  val numActiveReceivers: Int,
+  val numInactiveReceivers: Int,
+  val numTotalCompletedBatches: Long,
+  val numRetainedCompletedBatches: Long,
+  val numActiveBatches: Long,
+  val numProcessedRecords: Long,
+  val numReceivedRecords: Long,
+  val avgInputRate: Option[Double],
+  val avgSchedulingDelay: Option[Long],
+  val avgProcessingTime: Option[Long],
+  val avgTotalDelay: Option[Long]
+)
