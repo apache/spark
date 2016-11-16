@@ -72,7 +72,11 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
   test("json") {
     assert(StreamingQueryStatus.testStatus.json ===
       """
-        |{"sourceStatuses":[{"description":"MySource1","offsetDesc":"0","inputRate":15.5,
+        |{"name":"query","id":1,"timestamp":123,"inputRate":15.5,"processingRate":23.5,
+        |"latency":345.0,"triggerDetails":{"latency.getBatch.total":"20",
+        |"numRows.input.total":"100","isTriggerActive":"true","batchId":"5",
+        |"latency.getOffset.total":"10","isDataPresentInTrigger":"true"},
+        |"sourceStatuses":[{"description":"MySource1","offsetDesc":"0","inputRate":15.5,
         |"processingRate":23.5,"triggerDetails":{"numRows.input.source":"100",
         |"latency.getOffset.source":"10","latency.getBatch.source":"20"}}],
         |"sinkStatus":{"description":"MySink","offsetDesc":"[1, -]"}}
@@ -84,6 +88,20 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
       StreamingQueryStatus.testStatus.prettyJson ===
         """
           |{
+          |  "name" : "query",
+          |  "id" : 1,
+          |  "timestamp" : 123,
+          |  "inputRate" : 15.5,
+          |  "processingRate" : 23.5,
+          |  "latency" : 345.0,
+          |  "triggerDetails" : {
+          |    "latency.getBatch.total" : "20",
+          |    "numRows.input.total" : "100",
+          |    "isTriggerActive" : "true",
+          |    "batchId" : "5",
+          |    "latency.getOffset.total" : "10",
+          |    "isDataPresentInTrigger" : "true"
+          |  },
           |  "sourceStatuses" : [ {
           |    "description" : "MySource1",
           |    "offsetDesc" : "0",

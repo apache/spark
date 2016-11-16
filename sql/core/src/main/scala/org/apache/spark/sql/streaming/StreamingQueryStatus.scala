@@ -102,7 +102,7 @@ class StreamingQueryStatus private(
     ("inputRate" -> JDouble(inputRate)) ~
     ("processingRate" -> JDouble(processingRate)) ~
     ("latency" -> latency.map(JDouble).getOrElse(JNothing)) ~
-    ("triggerDetails" -> JsonProtocol.mapToJson(triggerDetails.asScala))
+    ("triggerDetails" -> JsonProtocol.mapToJson(triggerDetails.asScala)) ~
     ("sourceStatuses" -> JArray(sourceStatuses.map(_.jsonValue).toList)) ~
     ("sinkStatus" -> sinkStatus.jsonValue)
   }
