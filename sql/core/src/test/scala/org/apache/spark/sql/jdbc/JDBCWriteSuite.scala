@@ -303,4 +303,13 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(e.contains("If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
       " and 'numPartitions' are required."))
   }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    df.write.format("jdbc")
+      .option("Url", url1)
+      .option("dbtable", "TEST.SAVETEST")
+      .options(properties.asScala)
+      .save()
+  }
 }

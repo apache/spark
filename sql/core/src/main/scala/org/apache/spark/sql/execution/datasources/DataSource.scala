@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -80,13 +81,13 @@ case class DataSource(
 
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
   lazy val sourceInfo = sourceSchema()
+  private val caseInsensitiveOptions = new CaseInsensitiveMap(options)
 
   /**
    * Infer the schema of the given FileFormat, returns a pair of schema and partition column names.
    */
   private def inferFileFormatSchema(format: FileFormat): (StructType, Seq[String]) = {
     userSpecifiedSchema.map(_ -> partitionColumns).orElse {
-      val caseInsensitiveOptions = new CaseInsensitiveMap(options)
       val allPaths = caseInsensitiveOptions.get("path")
       val globbedPaths = allPaths.toSeq.flatMap { path =>
         val hdfsPath = new Path(path)
@@ -114,11 +115,10 @@ case class DataSource(
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
         val (name, schema) = s.sourceSchema(
-          sparkSession.sqlContext, userSpecifiedSchema, className, options)
+          sparkSession.sqlContext, userSpecifiedSchema, className, caseInsensitiveOptions)
         SourceInfo(name, schema, Nil)
 
       case format: FileFormat =>
-        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
@@ -158,10 +158,14 @@ case class DataSource(
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
         s.createSource(
-          sparkSession.sqlContext, metadataPath, userSpecifiedSchema, className, options)
+          sparkSession.sqlContext,
+          metadataPath,
+          userSpecifiedSchema,
+          className,
+          caseInsensitiveOptions)
 
       case format: FileFormat =>
-        val path = new CaseInsensitiveMap(options).getOrElse("path", {
+        val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
         new FileStreamSource(
@@ -171,7 +175,7 @@ case class DataSource(
           schema = sourceInfo.schema,
           partitionColumns = sourceInfo.partitionColumns,
           metadataPath = metadataPath,
-          options = options)
+          options = caseInsensitiveOptions)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
@@ -182,10 +186,9 @@ case class DataSource(
   def createSink(outputMode: OutputMode): Sink = {
     providingClass.newInstance() match {
       case s: StreamSinkProvider =>
-        s.createSink(sparkSession.sqlContext, options, partitionColumns, outputMode)
+        s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
 
       case fileFormat: FileFormat =>
-        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
@@ -193,7 +196,7 @@ case class DataSource(
           throw new IllegalArgumentException(
             s"Data source $className does not support $outputMode output mode")
         }
-        new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, options)
+        new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -234,7 +237,6 @@ case class DataSource(
    *                        that files already exist, we don't need to check them again.
    */
   def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
-    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
@@ -274,7 +276,7 @@ case class DataSource(
           dataSchema = dataSchema,
           bucketSpec = None,
           format,
-          options)(sparkSession)
+          caseInsensitiveOptions)(sparkSession)
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
@@ -358,13 +360,13 @@ case class DataSource(
 
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        dataSource.createRelation(sparkSession.sqlContext, mode, options, data)
+        dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data)
       case format: FileFormat =>
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;
         //  2. Output path must be a legal HDFS style file system path;
         //  3. It's OK that the output path doesn't exist yet;
-        val allPaths = paths ++ new CaseInsensitiveMap(options).get("path")
+        val allPaths = paths ++ caseInsensitiveOptions.get("path")
         val outputPath = if (allPaths.length == 1) {
           val path = new Path(allPaths.head)
           val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
@@ -391,7 +393,7 @@ case class DataSource(
           // TODO: Case sensitivity.
           val sameColumns =
             existingPartitionColumns.map(_.toLowerCase()) == partitionColumns.map(_.toLowerCase())
-          if (existingPartitionColumns.size > 0 && !sameColumns) {
+          if (existingPartitionColumns.nonEmpty && !sameColumns) {
             throw new AnalysisException(
               s"""Requested partitioning does not match existing partitioning.
                  |Existing partitioning columns:

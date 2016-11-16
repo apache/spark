@@ -23,10 +23,12 @@ import java.util.Locale
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.{CompressionCodecs, ParseModes}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
-private[csv] class CSVOptions(@transient private val parameters: Map[String, String])
+private[csv] class CSVOptions(@transient private val parameters: CaseInsensitiveMap)
   extends Logging with Serializable {
+
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -128,7 +130,7 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
 
 object CSVOptions {
 
-  def apply(): CSVOptions = new CSVOptions(Map.empty)
+  def apply(): CSVOptions = new CSVOptions(new CaseInsensitiveMap(Map.empty))
 
   def apply(paramName: String, paramValue: String): CSVOptions = {
     new CSVOptions(Map(paramName -> paramValue))

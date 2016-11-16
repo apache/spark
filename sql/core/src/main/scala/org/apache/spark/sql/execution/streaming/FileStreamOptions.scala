@@ -20,13 +20,15 @@ package org.apache.spark.sql.execution.streaming
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.util.Utils
 
 /**
  * User specified options for file streams.
  */
-class FileStreamOptions(parameters: Map[String, String]) extends Logging {
+class FileStreamOptions(parameters: CaseInsensitiveMap) extends Logging {
+
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
 
   val maxFilesPerTrigger: Option[Int] = parameters.get("maxFilesPerTrigger").map { str =>
     Try(str.toInt).toOption.filter(_ > 0).getOrElse {
@@ -50,5 +52,5 @@ class FileStreamOptions(parameters: Map[String, String]) extends Logging {
 
   /** Options as specified by the user, in a case-insensitive map, without "path" set. */
   val optionMapWithoutPath: Map[String, String] =
-    new CaseInsensitiveMap(parameters).filterKeys(_ != "path")
+    parameters.filterKeys(_ != "path")
 }

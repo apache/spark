@@ -146,6 +146,10 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
     sql("DROP TABLE IF EXISTS orcNullValues")
   }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    assert(new OrcOptions(Map("Orc.Compress" -> "NONE")).compressionCodec == "NONE")
+  }
 }
 
 class OrcSourceSuite extends OrcSuite {

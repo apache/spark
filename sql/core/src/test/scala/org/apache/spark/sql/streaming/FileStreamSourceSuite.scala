@@ -1004,6 +1004,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       )
     }
   }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val options = new FileStreamOptions(Map("maxfilespertrigger" -> "1"))
+    assert(options.maxFilesPerTrigger == Some(1))
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
