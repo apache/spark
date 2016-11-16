@@ -52,7 +52,7 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("built-in Hive UDAF") {
-    val df = sql("SELECT hive_max(key) FROM t GROUP BY key % 2")
+    val df = sql("SELECT key % 2, hive_max(key) FROM t GROUP BY key % 2")
 
     val aggs = df.queryExecution.executedPlan.collect {
       case agg: ObjectHashAggregateExec => agg
@@ -63,13 +63,13 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     assert(aggs.length == 2)
 
     checkAnswer(df, Seq(
-      Row(2),
-      Row(3)
+      Row(0, 2),
+      Row(1, 3)
     ))
   }
 
   test("customized Hive UDAF") {
-    val df = sql("SELECT mock(value) FROM t GROUP BY key % 2")
+    val df = sql("SELECT key % 2, mock(value) FROM t GROUP BY key % 2")
 
     val aggs = df.queryExecution.executedPlan.collect {
       case agg: ObjectHashAggregateExec => agg
@@ -80,8 +80,8 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     assert(aggs.length == 2)
 
     checkAnswer(df, Seq(
-      Row(Row(1, 1)),
-      Row(Row(1, 1))
+      Row(0, Row(1, 1)),
+      Row(1, Row(1, 1))
     ))
   }
 }

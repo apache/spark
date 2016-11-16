@@ -268,10 +268,26 @@ private[hive] case class HiveGenericUDTF(
  * While being evaluated by Spark SQL, the aggregation state of a Hive UDAF may be in the following
  * three formats:
  *
- *  1. a Spark SQL value, or
- *  2. an instance of some concrete `GenericUDAFEvaluator.AggregationBuffer` class, or
- *  3. a Java object that can be inspected using the `ObjectInspector` returned by the
+ *  1. An instance of some concrete `GenericUDAFEvaluator.AggregationBuffer` class
+ *
+ *     This is the native Hive representation of an aggregation state. Hive `GenericUDAFEvaluator`
+ *     methods like `iterate()`, `merge()`, `terminatePartial()`, and `terminate()` use this format.
+ *     We call these methods to evaluate Hive UDAFs.
+ *
+ *  2. A Java object that can be inspected using the `ObjectInspector` returned by the
  *     `GenericUDAFEvaluator.init()` method.
+ *
+ *     Hive uses this format to produce a serializable aggregation state so that it can shuffle
+ *     partial aggregation results. Whenever we need to convert a Hive `AggregationBuffer` instance
+ *     into a Spark SQL value, we have to convert it to this format first and then do the conversion
+ *     with the help of `ObjectInspector`s.
+ *
+ *  3. A Spark SQL value
+ *
+ *     We use this format for serializing Hive UDAF aggregation states on Spark side. To be more
+ *     specific, we convert `AggregationBuffer`s into equivalent Spark SQL values, write them into
+ *     `UnsafeRow`s, and then retrieve the byte array behind those `UnsafeRow`s as serialization
+ *     results.
  *
  * We may use the following methods to convert the aggregation state back and forth:
  *
@@ -294,14 +310,6 @@ private[hive] case class HiveUDAFFunction(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  @transient
-  private lazy val resolver =
-    if (isUDAFBridgeRequired) {
-      new GenericUDAFBridge(funcWrapper.createFunction[UDAF]())
-    } else {
-      funcWrapper.createFunction[AbstractGenericUDAFResolver]()
-    }
-
   // Hive `ObjectInspector`s for all child expressions (input parameters of the function).
   @transient
   private lazy val inputInspectors = children.map(toInspector).toArray
@@ -311,6 +319,12 @@ private[hive] case class HiveUDAFFunction(
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
 
   private def newEvaluator(): GenericUDAFEvaluator = {
+    val resolver = if (isUDAFBridgeRequired) {
+      new GenericUDAFBridge(funcWrapper.createFunction[UDAF]())
+    } else {
+      funcWrapper.createFunction[AbstractGenericUDAFResolver]()
+    }
+
     val parameterInfo = new SimpleGenericUDAFParameterInfo(inputInspectors, false, false)
     resolver.getEvaluator(parameterInfo)
   }
@@ -385,7 +399,7 @@ private[hive] case class HiveUDAFFunction(
     partial1ModeEvaluator.getNewAggregationBuffer
 
   @transient
-  private lazy val inputProjection = new InterpretedProjection(children)
+  private lazy val inputProjection = UnsafeProjection.create(children)
 
   override def update(buffer: AggregationBuffer, input: InternalRow): Unit = {
     partial1ModeEvaluator.iterate(
@@ -393,6 +407,10 @@ private[hive] case class HiveUDAFFunction(
   }
 
   override def merge(buffer: AggregationBuffer, input: AggregationBuffer): Unit = {
+    // The 2nd argument of the Hive `GenericUDAFEvaluator.merge()` method is an input aggregation
+    // buffer in the 3rd format mentioned in the ScalaDoc of this class. Originally, Hive converts
+    // this `AggregationBuffer`s into this format before shuffling partial aggregation results, and
+    // calls `GenericUDAFEvaluator.terminatePartial()` to do the conversion.
     partial2ModeEvaluator.merge(buffer, partial1ModeEvaluator.terminatePartial(input))
   }
 
@@ -401,10 +419,14 @@ private[hive] case class HiveUDAFFunction(
   }
 
   override def serialize(buffer: AggregationBuffer): Array[Byte] = {
+    // Serializes an `AggregationBuffer` that holds partial aggregation results so that we can
+    // shuffle it for global aggregation later.
     aggBufferSerDe.serialize(buffer)
   }
 
   override def deserialize(bytes: Array[Byte]): AggregationBuffer = {
+    // Deserializes an `AggregationBuffer` from the shuffled partial aggregation phase to prepare
+    // for global aggregation by merging multiple partial aggregation results within a single group.
     aggBufferSerDe.deserialize(bytes)
   }
 
