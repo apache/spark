@@ -69,7 +69,7 @@ private[hive] object HiveShim {
   }
 
   /*
-   * Cannot use ColumnProjectionUtils.appendReadColumns directly, if ids is null or empty
+   * Cannot use ColumnProjectionUtils.appendReadColumns directly, if ids is null
    */
   def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]) {
     if (ids != null) {
