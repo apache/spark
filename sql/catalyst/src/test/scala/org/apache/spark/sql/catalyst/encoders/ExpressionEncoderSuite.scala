@@ -107,11 +107,17 @@ class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
   }
 }
 
+case class MyClass(a: String, b: Option[Set[Int]])
+case class MyClass2(c: MyClass)
+case class MyClass3(a: String, b: Set[Int])
 class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
 
+//  implicit val kryo = Encoders.kryo[MyClass2]
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
 
+
+  encodeDecodeTest(Seq(MyClass2(MyClass("a", None)), MyClass2(MyClass("b", None))), "testmyclass")
   // test flat encoders
   encodeDecodeTest(false, "primitive boolean")
   encodeDecodeTest(-3.toByte, "primitive byte")

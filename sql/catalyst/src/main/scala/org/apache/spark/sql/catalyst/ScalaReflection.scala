@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -403,6 +407,20 @@ object ScalaReflection extends ScalaReflection {
         } else {
           newInstance
         }
+
+      case other =>
+
+        val obj = NewInstance(
+          classOf[KryoSerializer],
+          new SparkConf :: Nil,
+          dataType = ObjectType(classOf[KryoSerializer])
+        )
+
+        
+        val kryoSerializer = Encoders.kryo(getPath.getClass)
+          .asInstanceOf[ExpressionEncoder[_]]
+        kryoSerializer.deserializer
+
     }
   }
 
@@ -582,9 +600,35 @@ object ScalaReflection extends ScalaReflection {
         val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
         expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
+
       case other =>
-        throw new UnsupportedOperationException(
-          s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
+          val kryoSerializer = Encoders.kryo(inputObject.getClass)
+            .asInstanceOf[ExpressionEncoder[_]]
+          kryoSerializer.serializer.head
+
+//        val obj = NewInstance(
+//          KryoSer
+//
+//        )
+//        val kryoEncoder = Encoders.kryo(inputObject.dataType.getClass)
+
+
+//        Invoke(kryoEncoder, "serialize", BinaryType)
+//
+//        val obj = new KryoSerializer(new SparkConf).newInstance()
+//
+//        val obj = NewInstance(
+//          classOf[KryoSerializer],
+//          new SparkConf :: Nil,
+//          classOf[KryoSerializer]
+//        )
+//
+//        Invoke(obj, "serialize", BinaryType, inputObject :: Nil)
+//
+//        implicit
+//        inputObjectect
+//        throw new UnsupportedOperationException(
+//          s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
     }
 
   }
@@ -701,7 +745,8 @@ object ScalaReflection extends ScalaReflection {
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
       case other =>
-        throw new UnsupportedOperationException(s"Schema for type $other is not supported")
+        Schema(BinaryType, nullable = false)
+//        throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
   }
 
