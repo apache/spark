@@ -18,7 +18,6 @@
 package org.apache.spark.network.util;
 
 import com.google.common.primitives.Ints;
-import org.apache.commons.crypto.cipher.CryptoCipherFactory;
 
 /**
  * A central location that tracks all the settings we expose to users.
