@@ -38,6 +38,12 @@ import org.apache.spark.util.Utils
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private val escapedIdentifier = "`(.+)`".r
 
+  lazy val field1 = StructField("col1", IntegerType)
+  lazy val field2 = StructField("col2", StringType)
+  lazy val field3 = StructField("a", IntegerType)
+  lazy val field4 = StructField("b", StringType)
+  lazy val schema = StructType(field1 :: field2 :: field3 :: field4 :: Nil)
+
   override def afterEach(): Unit = {
     try {
       // drop all databases, tables and functions after each test
@@ -88,11 +94,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
-      schema = new StructType()
-        .add("col1", "int")
-        .add("col2", "string")
-        .add("a", "int")
-        .add("b", "int"),
+      schema = schema,
       provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
@@ -815,6 +817,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("alter table: change column comments") {
+    testChangeColumnComments(isDatasourceTable = false)
+  }
+
+  test("alter table: change column comments (datasource table)") {
+    testChangeColumnComments(isDatasourceTable = true)
+  }
+
   private def testRecoverPartitions() {
     val catalog = spark.sessionState.catalog
     // table to alter does not exist
@@ -1366,6 +1376,38 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("ALTER TABLE tab1 PARTITION (A='10', B='p') RENAME TO PARTITION (A='1', B='p')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(Map("a" -> "1", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
+  }
+
+  private def testChangeColumnComments(isDatasourceTable: Boolean): Unit = {
+    val catalog = spark.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+
+    // alter column comments
+    val columnComments = Map(field1.name -> "insert comment", field2.name -> s"^*`%?",
+      field3.name -> "change comment")
+    catalog.alterColumnComments(tableIdent, columnComments)
+    val newColumns = field1.withComment("insert comment") :: field2.withComment(s"^*`%?") ::
+      field3.withComment("change comment") :: field4 :: Nil
+    assert(catalog.listColumns(tableIdent) == newColumns)
+
+    // database/table does not exist
+    intercept[AnalysisException] {
+      catalog.alterColumnComments(TableIdentifier("unknown_table", Some("unknown_db")),
+        columnComments)
+    }
+    intercept[AnalysisException] {
+      catalog.alterColumnComments(TableIdentifier("unknown_table", Some("dbx")), columnComments)
+    }
+
+    // column does not exist
+    val columnComments2 = Map("unknown_col" -> "insert comment")
+    catalog.alterColumnComments(tableIdent, columnComments2)
+    assert(catalog.listColumns(tableIdent) == newColumns)
   }
 
   test("drop build-in function") {
