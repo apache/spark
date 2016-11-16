@@ -34,7 +34,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -54,7 +54,7 @@ import org.apache.spark.util.{AccumulatorV2, SystemClock, ThreadUtils, Utils}
 private[spark] class TaskSchedulerImpl private[scheduler](
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    blacklistTracker: Option[BlacklistTracker],
+    blacklistTrackerOpt: Option[BlacklistTracker],
     isLocal: Boolean = false)
   extends TaskScheduler with Logging
 {
@@ -63,14 +63,14 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     this(
       sc,
       sc.conf.get(config.MAX_TASK_FAILURES),
-      TaskSchedulerImpl.createBlacklistTracker(sc.conf))
+      TaskSchedulerImpl.maybeCreateBlacklistTracker(sc.conf))
   }
 
   def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
     this(
       sc,
       maxTaskFailures,
-      TaskSchedulerImpl.createBlacklistTracker(sc.conf),
+      TaskSchedulerImpl.maybeCreateBlacklistTracker(sc.conf),
       isLocal = isLocal)
   }
 
@@ -222,7 +222,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTracker)
+    new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -326,13 +326,12 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     // Before making any offers, remove any nodes from the blacklist whose blacklist has expired. Do
     // this here to avoid a separate thread and added synchronization overhead, and also because
     // updating the blacklist is only relevant when task offers are being made.
-    blacklistTracker.foreach(_.applyBlacklistTimeout())
+    blacklistTrackerOpt.foreach(_.applyBlacklistTimeout())
 
-    val sortedTaskSets = rootPool.getSortedTaskSetQueue
-    val filteredOffers = blacklistTracker.map { bl =>
+    val filteredOffers = blacklistTrackerOpt.map { blacklistTracker =>
       offers.filter { offer =>
-        !bl.isNodeBlacklisted(offer.host) &&
-          !bl.isExecutorBlacklisted(offer.executorId)
+        !blacklistTracker.isNodeBlacklisted(offer.host) &&
+          !blacklistTracker.isExecutorBlacklisted(offer.executorId)
       }
     }.getOrElse(offers)
 
@@ -341,6 +340,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
+    val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
@@ -587,7 +587,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       executorIdToHost -= executorId
       rootPool.executorLost(executorId, host, reason)
     }
-    blacklistTracker.foreach(_.handleRemovedExecutor(executorId))
+    blacklistTrackerOpt.foreach(_.handleRemovedExecutor(executorId))
   }
 
   def executorAdded(execId: String, host: String) {
@@ -619,7 +619,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
    * thread-safe -- it can be called without a lock on the TaskScheduler.
    */
   def nodeBlacklist(): scala.collection.immutable.Set[String] = {
-    blacklistTracker.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
+    blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
   }
 
   // By default, rack is unknown
@@ -701,7 +701,7 @@ private[spark] object TaskSchedulerImpl {
     retval.toList
   }
 
-  private def createBlacklistTracker(conf: SparkConf): Option[BlacklistTracker] = {
+  private def maybeCreateBlacklistTracker(conf: SparkConf): Option[BlacklistTracker] = {
     if (BlacklistTracker.isBlacklistEnabled(conf)) {
       Some(new BlacklistTracker(conf))
     } else {

@@ -19,6 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import java.util.{Arrays, List => JList}
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic
 import org.apache.hadoop.net.DNSToSwitchMapping
 import org.apache.hadoop.yarn.api.records._
@@ -90,7 +92,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     override def equals(other: Any): Boolean = false
   }
 
-  def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
+  def createAllocator(
+      maxExecutors: Int = 5,
+      rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
     val args = Array(
       "--jar", "somejar.jar",
       "--class", "SomeClass")
@@ -284,6 +288,21 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getPendingAllocate.size should be (2)
     handler.getNumExecutorsFailed should be (2)
     handler.getNumUnexpectedContainerRelease should be (2)
+  }
+
+  test("blacklisted nodes reflected in amClient requests") {
+    // Internally we track the set of blacklisted nodes, but yarn wants us to send *changes*
+    // to the blacklist.  This makes sure we are sending the right updates.
+    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+    val handler = createAllocator(4, mockAmClient)
+    handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map(), Set("hostA"))
+    verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq().asJava)
+
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), Set("hostA", "hostB"))
+    verify(mockAmClient).updateBlacklist(Seq("hostB").asJava, Seq().asJava)
+
+    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
+    verify(mockAmClient).updateBlacklist(Seq().asJava, Seq("hostA", "hostB").asJava)
   }
 
   test("memory exceeded diagnostic regexes") {

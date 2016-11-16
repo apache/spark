@@ -663,7 +663,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1", "executor3")))
   }
 
-  test("check for executors that can be expired from blacklist") {
+  test("scheduler checks for executors that can be expired from blacklist") {
     val blacklist = mock[BlacklistTracker]
     taskScheduler = setupScheduler(blacklist)
 

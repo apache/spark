@@ -49,7 +49,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       assert(req.requestedTotal === numRequested)
       assert(req.nodeBlacklist === blacklist)
       assert(req.hostToLocalTaskCount.keySet.intersect(blacklist).isEmpty)
-      // just make sure its serializable
+      // Serialize to make sure serialization doesn't throw an error
       ser.serialize(req)
     }
   }
