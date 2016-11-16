@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.IOException
+import java.io.{InputStream, IOException, OutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 
+import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{Path, PathFilter}
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
 
@@ -36,13 +39,18 @@ import org.apache.spark.sql.SparkSession
  * compact log files every 10 batches by default into a big file. When
  * doing a compaction, it will read all old log files and merge them with the new batch.
  */
-abstract class CompactibleFileStreamLog[T: ClassTag](
+abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     metadataLogVersion: String,
     sparkSession: SparkSession,
     path: String)
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
 
   import CompactibleFileStreamLog._
+
+  private implicit val formats = Serialization.formats(NoTypeHints)
+
+  /** Needed to serialize type T into JSON when using Jackson */
+  private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
   /**
    * If we delete the old files after compaction at once, there is a race condition in S3: other
@@ -56,16 +64,6 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
   protected def isDeletingExpiredLog: Boolean
 
   protected def compactInterval: Int
-
-  /**
-   * Serialize the data into encoded string.
-   */
-  protected def serializeData(t: T): String
-
-  /**
-   * Deserialize the string into data object.
-   */
-  protected def deserializeData(encodedString: String): T
 
   /**
    * Filter out the obsolete logs.
@@ -93,20 +91,25 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
     }
   }
 
-  override def serialize(logData: Array[T]): Array[Byte] = {
-    (metadataLogVersion +: logData.map(serializeData)).mkString("\n").getBytes(UTF_8)
+  override def serialize(logData: Array[T], out: OutputStream): Unit = {
+    // called inside a try-finally where the underlying stream is closed in the caller
+    out.write(metadataLogVersion.getBytes(UTF_8))
+    logData.foreach { data =>
+      out.write('\n')
+      out.write(Serialization.write(data).getBytes(UTF_8))
+    }
   }
 
-  override def deserialize(bytes: Array[Byte]): Array[T] = {
-    val lines = new String(bytes, UTF_8).split("\n")
-    if (lines.length == 0) {
+  override def deserialize(in: InputStream): Array[T] = {
+    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
+    if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = lines(0)
+    val version = lines.next()
     if (version != metadataLogVersion) {
       throw new IllegalStateException(s"Unknown log version: ${version}")
     }
-    lines.slice(1, lines.length).map(deserializeData)
+    lines.map(Serialization.read[T]).toArray
   }
 
   override def add(batchId: Long, logs: Array[T]): Boolean = {
@@ -140,7 +143,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
    */
   def allFiles(): Array[T] = {
     var latestId = getLatest().map(_._1).getOrElse(-1L)
-    // There is a race condition when `FileStreamSink` is deleting old files and `StreamFileCatalog`
+    // There is a race condition when `FileStreamSink` is deleting old files and `StreamFileIndex`
     // is calling this method. This loop will retry the reading to deal with the
     // race condition.
     while (true) {
@@ -152,7 +155,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
         } catch {
           case e: IOException =>
             // Another process using `CompactibleFileStreamLog` may delete the batch files when
-            // `StreamFileCatalog` are reading. However, it only happens when a compaction is
+            // `StreamFileIndex` are reading. However, it only happens when a compaction is
             // deleting old files. If so, let's try the next compaction batch and we should find it.
             // Otherwise, this is a real IO issue and we should throw it.
             latestId = nextCompactionBatchId(latestId, compactInterval)

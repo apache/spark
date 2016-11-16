@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -59,6 +59,7 @@ private[sql] object Column {
  *
  * @since 1.6.0
  */
+@InterfaceStability.Stable
 class TypedColumn[-T, U](
     expr: Expression,
     private[sql] val encoder: ExpressionEncoder[U])
@@ -117,6 +118,9 @@ class TypedColumn[-T, U](
  *   $"a" === $"b"
  * }}}
  *
+ * Note that the internal Catalyst expression can be accessed via "expr", but this method is for
+ * debugging purposes only and can change in any future Spark releases.
+ *
  * @groupname java_expr_ops Java-specific expression operators
  * @groupname expr_ops Expression operators
  * @groupname df_ops DataFrame functions
@@ -124,7 +128,8 @@ class TypedColumn[-T, U](
  *
  * @since 1.3.0
  */
-class Column(protected[sql] val expr: Expression) extends Logging {
+@InterfaceStability.Stable
+class Column(val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
@@ -180,6 +185,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
+
+    // Wait until the struct is resolved. This will generate a nicer looking alias.
+    case struct: CreateNamedStructLike => UnresolvedAlias(struct)
 
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
@@ -1179,12 +1187,11 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
 
 /**
- * :: Experimental ::
  * A convenient class used for constructing schema.
  *
  * @since 1.3.0
  */
-@Experimental
+@InterfaceStability.Stable
 class ColumnName(name: String) extends Column(name) {
 
   /**

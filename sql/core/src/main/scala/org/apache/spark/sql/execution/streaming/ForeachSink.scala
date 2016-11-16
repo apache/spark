@@ -60,7 +60,8 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
             deserialized,
             data.queryExecution.asInstanceOf[IncrementalExecution].outputMode,
             data.queryExecution.asInstanceOf[IncrementalExecution].checkpointLocation,
-            data.queryExecution.asInstanceOf[IncrementalExecution].currentBatchId)
+            data.queryExecution.asInstanceOf[IncrementalExecution].currentBatchId,
+            data.queryExecution.asInstanceOf[IncrementalExecution].currentEventTimeWatermark)
           incrementalExecution.toRdd.mapPartitions { rows =>
             rows.map(_.get(0, objectType))
           }.asInstanceOf[RDD[T]]
@@ -68,19 +69,16 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
       }
     datasetWithIncrementalExecution.foreachPartition { iter =>
       if (writer.open(TaskContext.getPartitionId(), batchId)) {
-        var isFailed = false
         try {
           while (iter.hasNext) {
             writer.process(iter.next())
           }
         } catch {
           case e: Throwable =>
-            isFailed = true
             writer.close(e)
+            throw e
         }
-        if (!isFailed) {
-          writer.close(null)
-        }
+        writer.close(null)
       } else {
         writer.close(null)
       }

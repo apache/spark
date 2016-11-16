@@ -185,6 +185,20 @@ class CodegenContext {
   }
 
   /**
+   * Code statements to initialize states that depend on the partition index.
+   * An integer `partitionIndex` will be made available within the scope.
+   */
+  val partitionInitializationStatements: mutable.ArrayBuffer[String] = mutable.ArrayBuffer.empty
+
+  def addPartitionInitializationStatement(statement: String): Unit = {
+    partitionInitializationStatements += statement
+  }
+
+  def initPartition(): String = {
+    partitionInitializationStatements.mkString("\n")
+  }
+
+  /**
    * Holding all the functions those will be added into generated class.
    */
   val addedFunctions: mutable.Map[String, String] =
@@ -819,7 +833,7 @@ class CodeAndComment(val body: String, val comment: collection.Map[String, Strin
  */
 abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Logging {
 
-  protected val genericMutableRowType: String = classOf[GenericMutableRow].getName
+  protected val genericMutableRowType: String = classOf[GenericInternalRow].getName
 
   /**
    * Generates a class for a given input expression.  Called when there is not cached code
@@ -889,7 +903,6 @@ object CodeGenerator extends Logging {
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
       classOf[UnsafeMapData].getName,
-      classOf[MutableRow].getName,
       classOf[Expression].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])

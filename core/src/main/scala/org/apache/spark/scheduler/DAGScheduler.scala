@@ -1089,7 +1089,8 @@ class DAGScheduler(
         // To avoid UI cruft, ignore cases where value wasn't updated
         if (acc.name.isDefined && !updates.isZero) {
           stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.value))
-          event.taskInfo.accumulables += acc.toInfo(Some(updates.value), Some(acc.value))
+          event.taskInfo.setAccumulables(
+            acc.toInfo(Some(updates.value), Some(acc.value)) +: event.taskInfo.accumulables)
         }
       }
     } catch {

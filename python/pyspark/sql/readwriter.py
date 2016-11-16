@@ -160,8 +160,9 @@ class DataFrameReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None):
         """
-        Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
-        (one object per record) and returns the result as a :class`DataFrame`.
+        Loads a JSON file (`JSON Lines text format or newline-delimited JSON
+        <http://jsonlines.org/>`_) or an RDD of Strings storing JSON objects (one object per
+        record) and returns the result as a :class`DataFrame`.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -289,8 +290,8 @@ class DataFrameReader(OptionUtils):
         [Row(value=u'hello'), Row(value=u'this')]
         """
         if isinstance(paths, basestring):
-            path = [paths]
-        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+            paths = [paths]
+        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,

@@ -69,10 +69,10 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     val inputFiles = fs.listStatus(cpath)
       .map(_.getPath)
       .filter(_.getName.startsWith("part-"))
-      .sortBy(_.toString)
+      .sortBy(_.getName.stripPrefix("part-").toInt)
     // Fail fast if input files are invalid
     inputFiles.zipWithIndex.foreach { case (path, i) =>
-      if (!path.toString.endsWith(ReliableCheckpointRDD.checkpointFileName(i))) {
+      if (path.getName != ReliableCheckpointRDD.checkpointFileName(i)) {
         throw new SparkException(s"Invalid checkpoint file: $path")
       }
     }
@@ -239,12 +239,17 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
       val fileInputStream = fs.open(partitionerFilePath, bufferSize)
       val serializer = SparkEnv.get.serializer.newInstance()
-      val deserializeStream = serializer.deserializeStream(fileInputStream)
-      val partitioner = Utils.tryWithSafeFinally[Partitioner] {
-        deserializeStream.readObject[Partitioner]
+      val partitioner = Utils.tryWithSafeFinally {
+        val deserializeStream = serializer.deserializeStream(fileInputStream)
+        Utils.tryWithSafeFinally {
+          deserializeStream.readObject[Partitioner]
+        } {
+          deserializeStream.close()
+        }
       } {
-        deserializeStream.close()
+        fileInputStream.close()
       }
+
       logDebug(s"Read partitioner from $partitionerFilePath")
       Some(partitioner)
     } catch {

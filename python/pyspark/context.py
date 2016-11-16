@@ -22,6 +22,7 @@ import shutil
 import signal
 import sys
 import threading
+import warnings
 from threading import RLock
 from tempfile import NamedTemporaryFile
 
@@ -109,7 +110,7 @@ class SparkContext(object):
         ValueError:...
         """
         self._callsite = first_spark_call() or CallSite(None, None, None)
-        SparkContext._ensure_initialized(self, gateway=gateway)
+        SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
                           conf, jsc, profiler_cls)
@@ -121,7 +122,15 @@ class SparkContext(object):
     def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
                  conf, jsc, profiler_cls):
         self.environment = environment or {}
-        self._conf = conf or SparkConf(_jvm=self._jvm)
+        # java gateway must have been launched at this point.
+        if conf is not None and conf._jconf is not None:
+            # conf has been initialized in JVM properly, so use conf directly. This represent the
+            # scenario that JVM has been launched before SparkConf is created (e.g. SparkContext is
+            # created and then stopped, and we create a new SparkConf and new SparkContext again)
+            self._conf = conf
+        else:
+            self._conf = SparkConf(_jvm=SparkContext._jvm)
+
         self._batchSize = batchSize  # -1 represents an unlimited batch size
         self._unbatched_serializer = serializer
         if batchSize == 0:
@@ -179,6 +188,9 @@ class SparkContext(object):
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
+        if sys.version_info < (2, 7):
+            warnings.warn("Support for Python 2.6 is deprecated as of Spark 2.0.0")
+
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
@@ -232,14 +244,14 @@ class SparkContext(object):
         return self._jvm.JavaSparkContext(jconf)
 
     @classmethod
-    def _ensure_initialized(cls, instance=None, gateway=None):
+    def _ensure_initialized(cls, instance=None, gateway=None, conf=None):
         """
         Checks whether a SparkContext is initialized or not.
         Throws error if a SparkContext is already running.
         """
         with SparkContext._lock:
             if not SparkContext._gateway:
-                SparkContext._gateway = gateway or launch_gateway()
+                SparkContext._gateway = gateway or launch_gateway(conf)
                 SparkContext._jvm = SparkContext._gateway.jvm
 
             if instance:

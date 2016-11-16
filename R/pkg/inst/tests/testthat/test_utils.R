@@ -217,4 +217,15 @@ test_that("rbindRaws", {
 
 })
 
+test_that("varargsToStrEnv", {
+  strenv <- varargsToStrEnv(a = 1, b = 1.1, c = TRUE, d = "abcd")
+  env <- varargsToEnv(a = "1", b = "1.1", c = "true", d = "abcd")
+  expect_equal(strenv, env)
+  expect_error(varargsToStrEnv(a = list(1, "a")),
+               paste0("Unsupported type for a : list. Supported types are logical, ",
+                      "numeric, character and NULL."))
+  expect_warning(varargsToStrEnv(a = 1, 2, 3, 4), "Unnamed arguments ignored: 2, 3, 4.")
+  expect_warning(varargsToStrEnv(1, 2, 3, 4), "Unnamed arguments ignored: 1, 2, 3, 4.")
+})
+
 sparkR.session.stop()

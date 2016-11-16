@@ -65,7 +65,7 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
   test("writeMasterState") {
     val workers = Array(createWorkerInfo(), createWorkerInfo())
     val activeApps = Array(createAppInfo())
-    val completedApps = Array[ApplicationInfo]()
+    val completedApps = Array.empty[ApplicationInfo]
     val activeDrivers = Array(createDriverInfo())
     val completedDrivers = Array(createDriverInfo())
     val stateResponse = new MasterStateResponse(

@@ -102,12 +102,6 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
     }
   }
 
-  case class DeleteFile(file: File) extends ExternalAction {
-    def runAction(): Unit = {
-      Utils.deleteRecursively(file)
-    }
-  }
-
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   def createFileStream(
       format: String,
@@ -328,6 +322,24 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (src, tmp) =>
       val textStream = createFileStream("text", src.getCanonicalPath)
       val filtered = textStream.filter($"value" contains "keep")
+
+      testStream(filtered)(
+        AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
+        CheckAnswer("keep2", "keep3"),
+        StopStream,
+        AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
+        StartStream(),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+        AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
+        CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+      )
+    }
+  }
+
+  test("read from textfile") {
+    withTempDirs { case (src, tmp) =>
+      val textStream = spark.readStream.textFile(src.getCanonicalPath)
+      val filtered = textStream.filter(_.contains("keep"))
 
       testStream(filtered)(
         AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
@@ -646,7 +658,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     def createFile(content: String, src: File, tmp: File): Unit = {
       val tempFile = Utils.tempFileWith(new File(tmp, "text"))
       val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
+      require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
+      require(src.mkdirs(), s"Cannot create $src")
+      require(src.isDirectory(), s"$src is not a directory")
       require(stringToFile(tempFile, content).renameTo(finalFile))
     }
 
@@ -676,10 +690,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           // Append to same partition=bar sub dir
           AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar")),
-
-          // Delete the two partition dirs
-          DeleteFile(partitionFooSubDir),
-          DeleteFile(partitionBarSubDir),
 
           AddTextFileData("{'value': 'keep6'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"),
@@ -859,7 +869,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val numFiles = 10000
 
     // This is to avoid running a spark job to list of files in parallel
-    // by the ListingFileCatalog.
+    // by the InMemoryFileIndex.
     spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
 
     withTempDirs { case (root, tmp) =>
@@ -979,6 +989,25 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         )
       }
     }
+  }
+
+  test("input row metrics") {
+    withTempDirs { case (src, tmp) =>
+      val input = spark.readStream.format("text").load(src.getCanonicalPath)
+      testStream(input)(
+        AddTextFileData("100", src, tmp),
+        CheckAnswer("100"),
+        AssertOnLastQueryStatus { status =>
+          assert(status.triggerDetails.get("numRows.input.total") === "1")
+          assert(status.sourceStatuses(0).processingRate > 0.0)
+        }
+      )
+    }
+  }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val options = new FileStreamOptions(Map("maxfilespertrigger" -> "1"))
+    assert(options.maxFilesPerTrigger == Some(1))
   }
 }
 

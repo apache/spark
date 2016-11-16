@@ -152,7 +152,8 @@ class HiveSparkSubmitSuite
       case v if v.startsWith("2.10") || v.startsWith("2.11") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
-    val testJar = s"sql/hive/src/test/resources/regression-test-SPARK-8489/test-$version.jar"
+    val jarDir = getTestResourcePath("regression-test-SPARK-8489")
+    val testJar = s"$jarDir/test-$version.jar"
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
@@ -444,7 +445,7 @@ object SetWarehouseLocationTest extends Logging {
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
         "file:" + expectedWarehouseLocation.toString + "/testlocation"
-      val actualLocation = tableMetadata.storage.locationUri.get
+      val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
           s"Expected table location is $expectedLocation. But, it is actually $actualLocation")
@@ -460,7 +461,7 @@ object SetWarehouseLocationTest extends Logging {
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
       val expectedLocation =
         "file:" + expectedWarehouseLocation.toString + "/testlocationdb.db/testlocation"
-      val actualLocation = tableMetadata.storage.locationUri.get
+      val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
           s"Expected table location is $expectedLocation. But, it is actually $actualLocation")
