@@ -96,21 +96,21 @@ private[kafka010] case class CachedKafkaConsumer private(
       pollTimeoutMs: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
     // scalastyle:off
     // When `failOnDataLoss` is `false`, we need to handle the following cases (note: untilOffset and latestOffset are exclusive):
-    // 1. Some data are aged out, and `offset < beginningOffset <= untilOffset - 1 <= latestOffset - 1`
-    //      Seek to the beginningOffset and fetch the data.
-    // 2. Some data are aged out, and `offset <= untilOffset - 1 < beginningOffset`.
+    // 1. Some data are aged out, and `offset < earliestOffset <= untilOffset - 1 <= latestOffset - 1`
+    //      Seek to the earliestOffset and fetch the data.
+    // 2. Some data are aged out, and `offset <= untilOffset - 1 < earliestOffset`.
     //      There is nothing to fetch, return null.
     // 3. The topic is deleted.
     //      There is nothing to fetch, return null.
-    // 4. The topic is deleted and recreated, and `beginningOffset <= offset <= untilOffset - 1 <= latestOffset - 1`.
+    // 4. The topic is deleted and recreated, and `earliestOffset <= offset <= untilOffset - 1 <= latestOffset - 1`.
     //      We cannot detect this case. We can still fetch data like nothing happens.
-    // 5. The topic is deleted and recreated, and `beginningOffset <= offset < latestOffset - 1 < untilOffset - 1`.
+    // 5. The topic is deleted and recreated, and `earliestOffset <= offset < latestOffset - 1 < untilOffset - 1`.
     //      Same as 4.
-    // 6. The topic is deleted and recreated, and `beginningOffset <= latestOffset - 1 < offset <= untilOffset - 1`.
+    // 6. The topic is deleted and recreated, and `earliestOffset <= latestOffset - 1 < offset <= untilOffset - 1`.
     //      There is nothing to fetch, return null.
-    // 7. The topic is deleted and recreated, and `offset < beginningOffset <= untilOffset - 1`.
+    // 7. The topic is deleted and recreated, and `offset < earliestOffset <= untilOffset - 1`.
     //      Same as 1.
-    // 8. The topic is deleted and recreated, and `offset <= untilOffset - 1 < beginningOffset`.
+    // 8. The topic is deleted and recreated, and `offset <= untilOffset - 1 < earliestOffset`.
     //      There is nothing to fetch, return null.
     // scalastyle:on
     require(offset < untilOffset, s"offset: $offset, untilOffset: $untilOffset")
@@ -129,31 +129,31 @@ private[kafka010] case class CachedKafkaConsumer private(
       case e: OffsetOutOfRangeException =>
         logWarning(s"Cannot fetch offset $offset. Some data may be lost. Recovering from " +
           "the beginning offset", e)
-        advanceToBeginningOffsetAndFetch(offset, untilOffset, pollTimeoutMs)
+        advanceToEarliestOffsetAndFetch(offset, untilOffset, pollTimeoutMs)
     }
   }
 
   /**
-   * Try to advance to the beginning offset and fetch again. `beginningOffset` should be in
+   * Try to advance to the beginning offset and fetch again. `earliestOffset` should be in
    * `[offset, untilOffset]`. If not, it will try to fetch `offset` again if it's in
-   * `[beginningOffset, latestOffset)`. Otherwise, it will return null and reset the pre-fetched
+   * `[earliestOffset, latestOffset)`. Otherwise, it will return null and reset the pre-fetched
    * data.
    */
-  private def advanceToBeginningOffsetAndFetch(
+  private def advanceToEarliestOffsetAndFetch(
       offset: Long,
       untilOffset: Long,
       pollTimeoutMs: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
-    val beginningOffset = getBeginningOffset()
-    if (beginningOffset <= offset) {
+    val earliestOffset = getEarliestOffset()
+    if (earliestOffset <= offset) {
       val latestOffset = getLatestOffset()
       if (latestOffset <= offset) {
-        // beginningOffset <= latestOffset - 1 < offset <= untilOffset - 1
+        // earliestOffset <= latestOffset - 1 < offset <= untilOffset - 1
         logWarning(s"Offset ${offset} is later than the latest offset $latestOffset. " +
           s"Skipped [$offset, $untilOffset)")
         reset()
         null
       } else {
-        // beginningOffset <= offset <= min(latestOffset - 1, untilOffset - 1)
+        // earliestOffset <= offset <= min(latestOffset - 1, untilOffset - 1)
         //
         // This will happen when a topic is deleted and recreated, and new data are pushed very fast
         // , then we will see `offset` disappears first then appears again. Although the parameters
@@ -166,15 +166,15 @@ private[kafka010] case class CachedKafkaConsumer private(
         getAndIgnoreLostData(offset, untilOffset, pollTimeoutMs)
       }
     } else {
-      if (beginningOffset >= untilOffset) {
-        // offset <= untilOffset - 1 < beginningOffset
+      if (earliestOffset >= untilOffset) {
+        // offset <= untilOffset - 1 < earliestOffset
         logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $untilOffset)")
         reset()
         null
       } else {
-        // offset < beginningOffset <= untilOffset - 1
-        logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $beginningOffset)")
-        getAndIgnoreLostData(beginningOffset, untilOffset, pollTimeoutMs)
+        // offset < earliestOffset <= untilOffset - 1
+        logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $earliestOffset)")
+        getAndIgnoreLostData(earliestOffset, untilOffset, pollTimeoutMs)
       }
     }
   }
@@ -188,7 +188,7 @@ private[kafka010] case class CachedKafkaConsumer private(
       untilOffset: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
     if (!fetchedData.hasNext()) {
       // We cannot fetch anything after `poll`. Two possible cases:
-      // - `beginningOffset` is `offset` but there is nothing for `beginningOffset` right now.
+      // - `earliestOffset` is `offset` but there is nothing for `earliestOffset` right now.
       // - Cannot fetch any date before timeout.
       // Because there is no way to distinguish, just skip the rest offsets in the current
       // partition.
@@ -233,7 +233,7 @@ private[kafka010] case class CachedKafkaConsumer private(
     fetchedData = r.iterator
   }
 
-  private def getBeginningOffset(): Long = {
+  private def getEarliestOffset(): Long = {
     consumer.seekToBeginning(Set(topicPartition).asJava)
     consumer.position(topicPartition)
   }
