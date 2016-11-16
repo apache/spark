@@ -701,6 +701,45 @@ class SchedulerJobTest(unittest.TestCase):
         new_dr = scheduler.create_dag_run(dag)
         self.assertIsNotNone(new_dr)
 
+    def test_scheduler_max_active_runs_respected_after_clear(self):
+        """
+        Test if _process_task_instances only schedules ti's up to max_active_runs
+        (related to issue AIRFLOW-137)
+        """
+        dag = DAG(
+            dag_id='test_scheduler_max_active_runs_respected_after_clear',
+            start_date=DEFAULT_DATE)
+        dag.max_active_runs = 3
+
+        dag_task1 = DummyOperator(
+            task_id='dummy',
+            dag=dag,
+            owner='airflow')
+
+        session = settings.Session()
+        orm_dag = DagModel(dag_id=dag.dag_id)
+        session.merge(orm_dag)
+        session.commit()
+        session.close()
+
+        scheduler = SchedulerJob()
+        dag.clear()
+
+        # First create up to 3 dagruns in RUNNING state.
+        scheduler.create_dag_run(dag)
+
+        # Reduce max_active_runs to 1
+        dag.max_active_runs = 1
+
+        queue = mock.Mock()
+        # and schedule them in, so we can check how many
+        # tasks are put on the queue (should be one, not 3)
+        scheduler._process_task_instances(dag, queue=queue)
+
+        queue.append.assert_called_with(
+            (dag.dag_id, dag_task1.task_id, DEFAULT_DATE)
+        )
+
     def test_scheduler_auto_align(self):
         """
         Test if the schedule_interval will be auto aligned with the start_date
