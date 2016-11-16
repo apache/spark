@@ -341,12 +341,6 @@ class CatalogSuite
     }
   }
 
-  test("uncache table shouldn't throw an exception if table doesn't exist") {
-    intercept[NoSuchTableException](spark.table("random_table"))
-    // doesn't throw TableNotFoundException
-    spark.catalog.uncacheTable("random_table")
-  }
-
   test("get database") {
     intercept[AnalysisException](spark.catalog.getDatabase("db10"))
     withTempDatabase { db =>
