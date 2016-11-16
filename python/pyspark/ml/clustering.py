@@ -22,7 +22,6 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
-           'ClusteringSummary',
            'KMeans', 'KMeansModel',
            'GaussianMixture', 'GaussianMixtureModel', 'GaussianMixtureSummary',
            'LDA', 'LDAModel', 'LocalLDAModel', 'DistributedLDAModel']
@@ -469,7 +468,7 @@ class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         training set. An exception is thrown if no summary exists.
         """
         if self.hasSummary:
-            return GaussianMixtureSummary(self._call_java("summary"))
+            return BisectingKMeansSummary(self._call_java("summary"))
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
