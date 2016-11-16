@@ -53,7 +53,7 @@ private[spark] object StreamingApiRootResource {
   ): ServletContextHandler = {
 
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
-    jerseyContext.setContextPath("/streamingapi")
+    jerseyContext.setContextPath("/streaming/api")
     val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
     holder.setInitParameter("com.sun.jersey.config.property.resourceConfigClass",
       "com.sun.jersey.api.core.PackagesResourceConfig")
