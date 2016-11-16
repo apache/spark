@@ -82,10 +82,10 @@ public class RadixSort {
       boolean desc, boolean signed) {
     assert counts.length == 256;
     long[] offsets = transformCountsToOffsets(
-      counts, numRecords, array.getBaseOffset() + outIndex * 8, 8, desc, signed);
+      counts, numRecords, array.getBaseOffset() + outIndex * 8L, 8, desc, signed);
     Object baseObject = array.getBaseObject();
-    long baseOffset = array.getBaseOffset() + inIndex * 8;
-    long maxOffset = baseOffset + numRecords * 8;
+    long baseOffset = array.getBaseOffset() + inIndex * 8L;
+    long maxOffset = baseOffset + numRecords * 8L;
     for (long offset = baseOffset; offset < maxOffset; offset += 8) {
       long value = Platform.getLong(baseObject, offset);
       int bucket = (int)((value >>> (byteIdx * 8)) & 0xff);
@@ -112,7 +112,7 @@ public class RadixSort {
     // If all the byte values at a particular index are the same we don't need to count it.
     long bitwiseMax = 0;
     long bitwiseMin = -1L;
-    long maxOffset = array.getBaseOffset() + numRecords * 8;
+    long maxOffset = array.getBaseOffset() + numRecords * 8L;
     Object baseObject = array.getBaseObject();
     for (long offset = array.getBaseOffset(); offset < maxOffset; offset += 8) {
       long value = Platform.getLong(baseObject, offset);
@@ -151,13 +151,13 @@ public class RadixSort {
     assert counts.length == 256;
     int start = signed ? 128 : 0;  // output the negative records first (values 129-255).
     if (desc) {
-      int pos = numRecords;
+      long pos = numRecords;
       for (int i = start; i < start + 256; i++) {
         pos -= counts[i & 0xff];
         counts[i & 0xff] = outputOffset + pos * bytesPerRecord;
       }
     } else {
-      int pos = 0;
+      long pos = 0;
       for (int i = start; i < start + 256; i++) {
         long tmp = counts[i & 0xff];
         counts[i & 0xff] = outputOffset + pos * bytesPerRecord;
