@@ -93,7 +93,7 @@ case class CountMinSketchAgg(
 
   override def update(buffer: CountMinSketch, input: InternalRow): Unit = {
     val value = child.eval(input)
-    // ignore empty rows
+    // Ignore empty rows
     if (value != null) {
       child.dataType match {
         // For string type, we can get bytes of our `UTF8String` directly, and call the `addBinary`
@@ -103,6 +103,8 @@ case class CountMinSketchAgg(
         case ShortType => buffer.addLong(value.asInstanceOf[Short])
         case IntegerType => buffer.addLong(value.asInstanceOf[Int])
         case LongType => buffer.addLong(value.asInstanceOf[Long])
+        case DateType => buffer.addLong(value.asInstanceOf[Int])
+        case TimestampType => buffer.addLong(value.asInstanceOf[Long])
       }
     }
   }
@@ -131,8 +133,10 @@ case class CountMinSketchAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // currently `CountMinSketch` supports integral and string types
-    Seq(TypeCollection(IntegralType, StringType), DoubleType, DoubleType, IntegerType)
+    // Currently `CountMinSketch` supports integral (date/timestamp is represented as int/long
+    // internally) and string types.
+    Seq(TypeCollection(IntegralType, StringType, DateType, TimestampType),
+      DoubleType, DoubleType, IntegerType)
   }
 
   override def nullable: Boolean = false

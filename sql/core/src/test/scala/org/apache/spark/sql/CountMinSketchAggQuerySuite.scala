@@ -18,11 +18,13 @@
 package org.apache.spark.sql
 
 import java.io.ByteArrayInputStream
+import java.sql.{Date, Timestamp}
 
 import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, _}
 import org.apache.spark.util.sketch.CountMinSketch
@@ -40,25 +42,38 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
   private val confidence = 0.95
   private val seed = 11
 
+  val startDate = DateTimeUtils.fromJavaDate(Date.valueOf("1900-01-01"))
+  val endDate = DateTimeUtils.fromJavaDate(Date.valueOf("2016-01-01"))
+  val startTS = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("1900-01-01 00:00:00"))
+  val endTS = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-01-01 00:00:00"))
+
   Seq("cmsketch", "count_min_sketch").foreach { cmsAgg =>
     test(s"compute count-min sketch for multiple columns of different types - with name $cmsAgg") {
-      val (allBytes, sampledBytesIndices, exactBytesFreq) =
+      val (allBytes, sampledByteIndices, exactByteFreq) =
         generateTestData[Byte] { _.nextInt().toByte }
-      val (allShorts, sampledShortsIndices, exactShortsFreq) =
+      val (allShorts, sampledShortIndices, exactShortFreq) =
         generateTestData[Short] { _.nextInt().toShort }
-      val (allInts, sampledIntsIndices, exactIntsFreq) =
+      val (allInts, sampledIntIndices, exactIntFreq) =
         generateTestData[Int] { _.nextInt() }
-      val (allLongs, sampledLongsIndices, exactLongsFreq) =
+      val (allLongs, sampledLongIndices, exactLongFreq) =
         generateTestData[Long] { _.nextLong() }
-      val (allStrings, sampledStringsIndices, exactStringsFreq) =
+      val (allStrings, sampledStringIndices, exactStringFreq) =
         generateTestData[String] { r => r.nextString(r.nextInt(20)) }
+      val (allDates, sampledDateIndices, exactDateFreq) = generateTestData[Date] { r =>
+        DateTimeUtils.toJavaDate(r.nextInt(endDate - startDate) + startDate)
+      }
+      val (allTimestamps, sampledTSIndices, exactTSFreq) = generateTestData[Timestamp] { r =>
+        DateTimeUtils.toJavaTimestamp(r.nextLong() % (endTS - startTS) + startTS)
+      }
 
       val data = (0 until numSamples).map { i =>
-        Row(allBytes(sampledBytesIndices(i)),
-          allShorts(sampledShortsIndices(i)),
-          allInts(sampledIntsIndices(i)),
-          allLongs(sampledLongsIndices(i)),
-          allStrings(sampledStringsIndices(i)))
+        Row(allBytes(sampledByteIndices(i)),
+          allShorts(sampledShortIndices(i)),
+          allInts(sampledIntIndices(i)),
+          allLongs(sampledLongIndices(i)),
+          allStrings(sampledStringIndices(i)),
+          allDates(sampledDateIndices(i)),
+          allTimestamps(sampledTSIndices(i)))
       }
 
       val schema = StructType(Seq(
@@ -66,7 +81,9 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
         StructField("c2", ShortType),
         StructField("c3", IntegerType),
         StructField("c4", LongType),
-        StructField("c5", StringType)))
+        StructField("c5", StringType),
+        StructField("c6", DateType),
+        StructField("c7", TimestampType)))
 
       val query =
         s"""
@@ -75,7 +92,9 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
            |  $cmsAgg(c2, $eps, $confidence, $seed),
            |  $cmsAgg(c3, $eps, $confidence, $seed),
            |  $cmsAgg(c4, $eps, $confidence, $seed),
-           |  $cmsAgg(c5, $eps, $confidence, $seed)
+           |  $cmsAgg(c5, $eps, $confidence, $seed),
+           |  $cmsAgg(c6, $eps, $confidence, $seed),
+           |  $cmsAgg(c7, $eps, $confidence, $seed)
            |FROM $table
        """.stripMargin
 
@@ -88,11 +107,19 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
           val in = new ByteArrayInputStream(binaryData)
           val cms = CountMinSketch.readFrom(in)
           schema.fields(i).dataType match {
-            case ByteType => checkResult(cms, allBytes, exactBytesFreq)
-            case ShortType => checkResult(cms, allShorts, exactShortsFreq)
-            case IntegerType => checkResult(cms, allInts, exactIntsFreq)
-            case LongType => checkResult(cms, allLongs, exactLongsFreq)
-            case StringType => checkResult(cms, allStrings, exactStringsFreq)
+            case ByteType => checkResult(cms, allBytes, exactByteFreq)
+            case ShortType => checkResult(cms, allShorts, exactShortFreq)
+            case IntegerType => checkResult(cms, allInts, exactIntFreq)
+            case LongType => checkResult(cms, allLongs, exactLongFreq)
+            case StringType => checkResult(cms, allStrings, exactStringFreq)
+            case DateType =>
+              checkResult(cms,
+                allDates.map(DateTimeUtils.fromJavaDate),
+                exactDateFreq.map(e => (DateTimeUtils.fromJavaDate(e._1), e._2)))
+            case TimestampType =>
+              checkResult(cms,
+                allTimestamps.map(DateTimeUtils.fromJavaTimestamp),
+                exactTSFreq.map(e => (DateTimeUtils.fromJavaTimestamp(e._1), e._2)))
           }
         }
       }
