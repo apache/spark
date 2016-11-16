@@ -151,7 +151,8 @@ private[kafka010] class KafkaSourceRDD(
         }
       }
       if (!reuseCachedConsumers) {
-        CompletionIterator(underlying, consumer.close _)
+        CompletionIterator[ConsumerRecord[Array[Byte], Array[Byte]],
+          Iterator[ConsumerRecord[Array[Byte], Array[Byte]]]](underlying, consumer.close())
       } else {
         underlying
       }
