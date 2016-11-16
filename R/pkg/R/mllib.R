@@ -525,7 +525,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' @note spark.isoreg since 2.1.0
 setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, isotonic = TRUE, featureIndex = 0, weightCol = NULL) {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
 
             if (is.null(weightCol)) {
               weightCol <- ""
@@ -775,7 +775,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                    tol = 1E-6, fitIntercept = TRUE, family = "auto", standardization = TRUE,
                    thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
                    probabilityCol = "probability") {
-            formula <- paste0(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
 
             if (is.null(weightCol)) {
               weightCol <- ""
@@ -858,6 +858,8 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #'   Multilayer Perceptron}
 #'
 #' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
+#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param blockSize blockSize parameter.
 #' @param layers integer vector containing the number of nodes for each layer
 #' @param solver solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs".
@@ -870,7 +872,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
-#' @aliases spark.mlp,SparkDataFrame-method
+#' @aliases spark.mlp,SparkDataFrame,formula-method
 #' @name spark.mlp
 #' @seealso \link{read.ml}
 #' @export
@@ -879,7 +881,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 #'
 #' # fit a Multilayer Perceptron Classification Model
-#' model <- spark.mlp(df, blockSize = 128, layers = c(4, 3), solver = "l-bfgs",
+#' model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 3), solver = "l-bfgs",
 #'                    maxIter = 100, tol = 0.5, stepSize = 1, seed = 1,
 #'                    initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
 #'
@@ -896,9 +898,10 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
 #' summary(savedModel)
 #' }
 #' @note spark.mlp since 2.1.0
-setMethod("spark.mlp", signature(data = "SparkDataFrame"),
-          function(data, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
+setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
                    tol = 1E-6, stepSize = 0.03, seed = NULL, initialWeights = NULL) {
+            formula <- paste(deparse(formula), collapse = "")
             if (is.null(layers)) {
               stop ("layers must be a integer vector with length > 1.")
             }
@@ -913,7 +916,7 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
               initialWeights <- as.array(as.numeric(na.omit(initialWeights)))
             }
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
-                                "fit", data@sdf, as.integer(blockSize), as.array(layers),
+                                "fit", data@sdf, formula, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
                                 as.numeric(stepSize), seed, initialWeights)
             new("MultilayerPerceptronClassificationModel", jobj = jobj)
@@ -936,9 +939,10 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 # Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
 #' @param object a Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @return \code{summary} returns a list containing \code{labelCount}, \code{layers}, and
-#'         \code{weights}. For \code{weights}, it is a numeric vector with length equal to
-#'         the expected given the architecture (i.e., for 8-10-2 network, 100 connection weights).
+#' @return \code{summary} returns a list containing \code{numOfInputs}, \code{numOfOutputs},
+#'         \code{layers}, and \code{weights}. For \code{weights}, it is a numeric vector with
+#'         length equal to the expected given the architecture (i.e., for 8-10-2 network,
+#'         112 connection weights).
 #' @rdname spark.mlp
 #' @export
 #' @aliases summary,MultilayerPerceptronClassificationModel-method
@@ -946,10 +950,12 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object) {
             jobj <- object@jobj
-            labelCount <- callJMethod(jobj, "labelCount")
             layers <- unlist(callJMethod(jobj, "layers"))
+            numOfInputs <- head(layers, n = 1)
+            numOfOutputs <- tail(layers, n = 1)
             weights <- callJMethod(jobj, "weights")
-            list(labelCount = labelCount, layers = layers, weights = weights)
+            list(numOfInputs = numOfInputs, numOfOutputs = numOfOutputs,
+                 layers = layers, weights = weights)
           })
 
 #' Naive Bayes Models

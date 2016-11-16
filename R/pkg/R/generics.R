@@ -1373,7 +1373,7 @@ setGeneric("spark.logit", function(data, formula, ...) { standardGeneric("spark.
 
 #' @rdname spark.mlp
 #' @export
-setGeneric("spark.mlp", function(data, ...) { standardGeneric("spark.mlp") })
+setGeneric("spark.mlp", function(data, formula, ...) { standardGeneric("spark.mlp") })
 
 #' @rdname spark.naiveBayes
 #' @export
