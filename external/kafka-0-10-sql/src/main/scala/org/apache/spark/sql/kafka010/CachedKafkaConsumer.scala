@@ -55,81 +55,52 @@ private[kafka010] case class CachedKafkaConsumer private(
   /**
    * Get the record for the given offset, waiting up to timeout ms if IO is necessary.
    * Sequential forward access will use buffers, but random access will be horribly inefficient.
+   *
+   * If `failOnDataLoss` is `false`, it will try to get the earliest record in
+   * `[offset, untilOffset)` when some illegal state happens. Otherwise, an `IllegalStateException`
+   * will be thrown.
+   *
+   * It returns `null` only when `failOnDataLoss` is `false` and it cannot fetch any record between
+   * [offset, untilOffset).
    */
-  def get(offset: Long, pollTimeoutMs: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
+  def get(
+      offset: Long,
+      untilOffset: Long,
+      pollTimeoutMs: Long,
+      failOnDataLoss: Boolean): ConsumerRecord[Array[Byte], Array[Byte]] = {
+    require(offset < untilOffset, s"offset: $offset, untilOffset: $untilOffset")
     logDebug(s"Get $groupId $topicPartition nextOffset $nextOffsetInFetchedData requested $offset")
+    try {
+      fetchDataIfNeeded(offset, pollTimeoutMs)
+      getRecordFromFetchedData(offset, untilOffset, failOnDataLoss)
+    } catch {
+      case e: OffsetOutOfRangeException =>
+        val message =
+          if (failOnDataLoss) {
+            s"""Cannot fetch offset $offset. (GroupId: $groupId, TopicPartition: $topicPartition).
+               | $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE""".stripMargin
+          } else {
+            s"""Cannot fetch offset $offset. Some data may be lost. Recovering from the earliest
+               | offset (GroupId: $groupId, TopicPartition: $topicPartition).""".stripMargin
+          }
+        reportDataLoss(failOnDataLoss, message, e)
+        advanceToEarliestOffsetAndFetch(offset, untilOffset, pollTimeoutMs)
+    }
+  }
+
+  /**
+   * Check the pre-fetched data with `offset` and try to fetch from Kafka if they don't match.
+   */
+  private def fetchDataIfNeeded(offset: Long, pollTimeoutMs: Long): Unit = {
     if (offset != nextOffsetInFetchedData) {
       logInfo(s"Initial fetch for $topicPartition $offset")
       seek(offset)
       poll(pollTimeoutMs)
-    }
-
-    if (!fetchedData.hasNext()) { poll(pollTimeoutMs) }
-    assert(fetchedData.hasNext(),
-      s"Failed to get records for $groupId $topicPartition $offset " +
-        s"after polling for $pollTimeoutMs")
-    var record = fetchedData.next()
-
-    if (record.offset != offset) {
-      logInfo(s"Buffer miss for $groupId $topicPartition $offset")
+    } else if (!fetchedData.hasNext()) {
+      // The last pre-fetched data has been drained.
+      // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
       seek(offset)
       poll(pollTimeoutMs)
-      assert(fetchedData.hasNext(),
-        s"Failed to get records for $groupId $topicPartition $offset " +
-          s"after polling for $pollTimeoutMs")
-      record = fetchedData.next()
-      assert(record.offset == offset,
-        s"Got wrong record for $groupId $topicPartition even after seeking to offset $offset")
-    }
-
-    nextOffsetInFetchedData = offset + 1
-    record
-  }
-
-  /**
-   * Get the record at the `offset`. If it doesn't exist, try to get the earliest record in
-   * `[offset, untilOffset)`.
-   */
-  def getAndIgnoreLostData(
-      offset: Long,
-      untilOffset: Long,
-      pollTimeoutMs: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
-    // scalastyle:off
-    // When `failOnDataLoss` is `false`, we need to handle the following cases (note: untilOffset and latestOffset are exclusive):
-    // 1. Some data are aged out, and `offset < earliestOffset <= untilOffset - 1 <= latestOffset - 1`
-    //      Seek to the earliestOffset and fetch the data.
-    // 2. Some data are aged out, and `offset <= untilOffset - 1 < earliestOffset`.
-    //      There is nothing to fetch, return null.
-    // 3. The topic is deleted.
-    //      There is nothing to fetch, return null.
-    // 4. The topic is deleted and recreated, and `earliestOffset <= offset <= untilOffset - 1 <= latestOffset - 1`.
-    //      We cannot detect this case. We can still fetch data like nothing happens.
-    // 5. The topic is deleted and recreated, and `earliestOffset <= offset < latestOffset - 1 < untilOffset - 1`.
-    //      Same as 4.
-    // 6. The topic is deleted and recreated, and `earliestOffset <= latestOffset - 1 < offset <= untilOffset - 1`.
-    //      There is nothing to fetch, return null.
-    // 7. The topic is deleted and recreated, and `offset < earliestOffset <= untilOffset - 1`.
-    //      Same as 1.
-    // 8. The topic is deleted and recreated, and `offset <= untilOffset - 1 < earliestOffset`.
-    //      There is nothing to fetch, return null.
-    // scalastyle:on
-    require(offset < untilOffset, s"offset: $offset, untilOffset: $untilOffset")
-    logDebug(s"Get $groupId $topicPartition nextOffset $nextOffsetInFetchedData requested $offset")
-    try {
-      if (offset != nextOffsetInFetchedData) {
-        logInfo(s"Initial fetch for $topicPartition $offset")
-        seek(offset)
-        poll(pollTimeoutMs)
-      } else if (!fetchedData.hasNext()) {
-        // The last pre-fetched data has been drained.
-        poll(pollTimeoutMs)
-      }
-      getRecordFromFetchedData(offset, untilOffset)
-    } catch {
-      case e: OffsetOutOfRangeException =>
-        logWarning(s"Cannot fetch offset $offset. Some data may be lost. Recovering from " +
-          "the beginning offset", e)
-        advanceToEarliestOffsetAndFetch(offset, untilOffset, pollTimeoutMs)
     }
   }
 
@@ -143,39 +114,59 @@ private[kafka010] case class CachedKafkaConsumer private(
       offset: Long,
       untilOffset: Long,
       pollTimeoutMs: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
-    val earliestOffset = getEarliestOffset()
-    if (earliestOffset <= offset) {
-      val latestOffset = getLatestOffset()
-      if (latestOffset <= offset) {
-        // earliestOffset <= latestOffset - 1 < offset <= untilOffset - 1
-        logWarning(s"Offset ${offset} is later than the latest offset $latestOffset. " +
-          s"Skipped [$offset, $untilOffset)")
-        reset()
-        null
-      } else {
-        // earliestOffset <= offset <= min(latestOffset - 1, untilOffset - 1)
-        //
-        // This will happen when a topic is deleted and recreated, and new data are pushed very fast
-        // , then we will see `offset` disappears first then appears again. Although the parameters
-        // are same, the state in Kafka cluster is changed, so it's not an endless loop.
-        //
-        // In addition, the stack here won't be deep unless the user keeps deleting and creating the
-        // topic very fast.
-        //
-        // Therefore, this recursive call is safe.
-        getAndIgnoreLostData(offset, untilOffset, pollTimeoutMs)
-      }
+    val (earliestOffset, latestOffset) = getCurrentOffsetRange()
+    if (offset >= latestOffset || earliestOffset >= untilOffset) {
+      // [offset, untilOffset) and [earliestOffset, latestOffset) have no overlap,
+      // either
+      // --------------------------------------------------------
+      //         ^                 ^         ^         ^
+      //         |                 |         |         |
+      //   earliestOffset   latestOffset   offset   untilOffset
+      //
+      // or
+      // --------------------------------------------------------
+      //      ^          ^              ^                ^
+      //      |          |              |                |
+      //   offset   untilOffset   earliestOffset   latestOffset
+      val warningMessage =
+        s"""
+          |The current available offset range is [$earliestOffset, $latestOffset).
+          | Offset ${offset} is out of range, and records in [$offset, $untilOffset) will be
+          | skipped (GroupId: $groupId, TopicPartition: $topicPartition).
+          | $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE
+        """.stripMargin
+      logWarning(warningMessage)
+      reset()
+      null
+    } else if (offset >= earliestOffset) {
+      // -----------------------------------------------------------------------------
+      //         ^            ^                  ^                                 ^
+      //         |            |                  |                                 |
+      //   earliestOffset   offset   min(untilOffset,latestOffset)   max(untilOffset, latestOffset)
+      //
+      // This will happen when a topic is deleted and recreated, and new data are pushed very fast,
+      // then we will see `offset` disappears first then appears again. Although the parameters
+      // are same, the state in Kafka cluster is changed, so it's not an endless loop.
+      //
+      // In addition, the stack here won't be deep unless the user keeps deleting and creating the
+      // topic very fast.
+      //
+      // Therefore, this recursive call is safe.
+      get(offset, untilOffset, pollTimeoutMs, failOnDataLoss = false)
     } else {
-      if (earliestOffset >= untilOffset) {
-        // offset <= untilOffset - 1 < earliestOffset
-        logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $untilOffset)")
-        reset()
-        null
-      } else {
-        // offset < earliestOffset <= untilOffset - 1
-        logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $earliestOffset)")
-        getAndIgnoreLostData(earliestOffset, untilOffset, pollTimeoutMs)
-      }
+      // ------------------------------------------------------------------------------
+      //      ^           ^                       ^                                 ^
+      //      |           |                       |                                 |
+      //   offset   earliestOffset   min(untilOffset,latestOffset)   max(untilOffset, latestOffset)
+      val warningMessage =
+        s"""
+           |The current available offset range is [$earliestOffset, $latestOffset).
+           | Offset ${offset} is out of range, and records in [$offset, $earliestOffset) will be
+           | skipped (GroupId: $groupId, TopicPartition: $topicPartition).
+           | $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE
+        """.stripMargin
+      logWarning(warningMessage)
+      get(earliestOffset, untilOffset, pollTimeoutMs, failOnDataLoss = false)
     }
   }
 
@@ -185,25 +176,65 @@ private[kafka010] case class CachedKafkaConsumer private(
    */
   private def getRecordFromFetchedData(
       offset: Long,
-      untilOffset: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
+      untilOffset: Long,
+      failOnDataLoss: Boolean): ConsumerRecord[Array[Byte], Array[Byte]] = {
     if (!fetchedData.hasNext()) {
       // We cannot fetch anything after `poll`. Two possible cases:
       // - `earliestOffset` is `offset` but there is nothing for `earliestOffset` right now.
-      // - Cannot fetch any date before timeout.
+      // - Cannot fetch any data before timeout.
       // Because there is no way to distinguish, just skip the rest offsets in the current
       // partition.
-      logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $untilOffset)")
+      val message =
+        if (failOnDataLoss) {
+          s"""
+             |Cannot fetch record for offset ${offset}
+             | (GroupId: $groupId, TopicPartition: $topicPartition).
+             | $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE""".stripMargin
+        } else {
+          s"""
+             |Cannot fetch record for offset ${offset}. Records in [$offset, $untilOffset) will be
+             | skipped (GroupId: $groupId, TopicPartition: $topicPartition).
+             | $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE""".stripMargin
+        }
+      reportDataLoss(failOnDataLoss, message)
       reset()
       null
     } else {
       val record = fetchedData.next()
       if (record.offset >= untilOffset) {
-        logWarning(s"Buffer miss for $groupId $topicPartition [$offset, $untilOffset)")
+        val message =
+          if (failOnDataLoss) {
+            s"""
+               |The offset range is [$offset, $untilOffset), but the fetched record offset
+               | ${record.offset} is out of range
+               | (GroupId: $groupId, TopicPartition: $topicPartition).
+               | $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE""".stripMargin
+          } else {
+            s"""
+               |The fetched record offset in fetched data ${record.offset} is out of range. Records
+               | in [$offset, $untilOffset) will be skipped
+               | (GroupId: $groupId, TopicPartition: $topicPartition).
+               | $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE""".stripMargin
+          }
+        reportDataLoss(failOnDataLoss, message)
         reset()
         null
       } else {
         if (record.offset != offset) {
-          logWarning(s"Buffer miss for $groupId $topicPartition [$offset, ${record.offset})")
+          val message =
+            if (failOnDataLoss) {
+              s"""
+                 |The fetched record offset ${record.offset()} is not the requested offset $offset
+                 | (GroupId: $groupId, TopicPartition: $topicPartition).
+                 | $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE""".stripMargin
+            } else {
+              s"""
+                 |The fetched record offset ${record.offset()} is not the requested offset $offset.
+                 | Records in [$offset, ${record.offset()}) will be skipped
+                 | (GroupId: $groupId, TopicPartition: $topicPartition).
+                 | $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE""".stripMargin
+            }
+          reportDataLoss(failOnDataLoss, message)
         }
         nextOffsetInFetchedData = record.offset + 1
         record
@@ -217,6 +248,28 @@ private[kafka010] case class CachedKafkaConsumer private(
   private def reset(): Unit = {
     nextOffsetInFetchedData = UNKNOWN_OFFSET
     fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
+  }
+
+  /**
+   * Throw an exception or log a warning as per `failOnDataLoss`.
+   */
+  private def reportDataLoss(
+      failOnDataLoss: Boolean,
+      message: String,
+      cause: Throwable = null): Unit = {
+    if (failOnDataLoss) {
+      if (cause != null) {
+        throw new IllegalStateException(message)
+      } else {
+        throw new IllegalStateException(message, cause)
+      }
+    } else {
+      if (cause != null) {
+        logWarning(message)
+      } else {
+        logWarning(message, cause)
+      }
+    }
   }
 
   private def close(): Unit = consumer.close()
@@ -233,18 +286,31 @@ private[kafka010] case class CachedKafkaConsumer private(
     fetchedData = r.iterator
   }
 
-  private def getEarliestOffset(): Long = {
+  private def getCurrentOffsetRange(): (Long, Long) = {
     consumer.seekToBeginning(Set(topicPartition).asJava)
-    consumer.position(topicPartition)
-  }
-
-  private def getLatestOffset(): Long = {
+    val earliestOffset = consumer.position(topicPartition)
     consumer.seekToEnd(Set(topicPartition).asJava)
-    consumer.position(topicPartition)
+    val latestOffset = consumer.position(topicPartition)
+    (earliestOffset, latestOffset)
   }
 }
 
 private[kafka010] object CachedKafkaConsumer extends Logging {
+
+  private val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
+    """
+      |There may have been some data loss because some data may have been aged out in Kafka or
+      | the topic has been deleted and is therefore unavailable for processing. If you want your
+      | streaming query to fail on such cases, set the source option "failOnDataLoss" to "true".
+    """.stripMargin
+
+  private val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
+    """
+      |There may have been some data loss because some data may have been aged out in Kafka or
+      | the topic has been deleted and is therefore unavailable for processing. If you don't want
+      | your streaming query to fail on such cases, set the source option "failOnDataLoss" to
+      | "false".
+    """.stripMargin
 
   private val UNKNOWN_OFFSET = -2L
 

@@ -144,12 +144,7 @@ private[kafka010] class KafkaSourceRDD(
             finished = true
             null
           } else {
-            val r =
-              if (failOnDataLoss) {
-                consumer.get(requestOffset, pollTimeoutMs)
-              } else {
-                consumer.getAndIgnoreLostData(requestOffset, range.untilOffset, pollTimeoutMs)
-              }
+            val r = consumer.get(requestOffset, range.untilOffset, pollTimeoutMs, failOnDataLoss)
             if (r == null) {
               // Losing some data. Skip the rest offsets in this partition.
               finished = true
