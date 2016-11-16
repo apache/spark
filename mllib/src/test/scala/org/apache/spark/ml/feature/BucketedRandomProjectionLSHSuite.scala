@@ -217,7 +217,7 @@ class BucketedRandomProjectionLSHSuite
   }
 
   test("memory leak test") {
-    val numDim = 50
+    val numDim = 10
     val data = {
       for (i <- 0 until numDim; j <- Seq(-2, -1, 1, 2))
         yield Vectors.sparse(numDim, Seq((i, j.toDouble)))
