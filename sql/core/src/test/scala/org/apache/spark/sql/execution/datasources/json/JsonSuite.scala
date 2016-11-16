@@ -1693,6 +1693,42 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     df.collect()
   }
 
+  test("save API - empty path or illegal path") {
+    var e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.format("json").save()
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
+
+    e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.json("")
+    }.getMessage
+    assert(e.contains("Can not create a Path from an empty string"))
+  }
+
+  test("load API - empty path") {
+    val expectedErrorMsg = "'path' is not specified"
+    var e = intercept[IllegalArgumentException] {
+      spark.read.json()
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+
+    e = intercept[IllegalArgumentException] {
+      spark.read.format("json").load()
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+  }
+
+  test("illegal compression") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(0, 10)
+      val e = intercept[IllegalArgumentException] {
+        df.write.option("compression", "illegal").mode("overwrite").format("json").save(path)
+      }.getMessage
+      assert(e.contains("Codec [illegal] is not available. Known codecs are"))
+    }
+  }
+
   test("Write dates correctly with dateFormat option") {
     val customSchema = new StructType(Array(StructField("date", DateType, true)))
     withTempDir { dir =>

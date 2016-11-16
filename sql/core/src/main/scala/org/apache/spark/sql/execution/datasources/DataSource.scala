@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -322,6 +323,9 @@ case class DataSource(
           val equality = sparkSession.sessionState.conf.resolver
           StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         }.orElse {
+          if (allPaths.isEmpty && !format.isInstanceOf[TextFileFormat]) {
+            throw new IllegalArgumentException("'path' is not specified")
+          }
           format.inferSchema(
             sparkSession,
             caseInsensitiveOptions,
@@ -369,6 +373,8 @@ case class DataSource(
           val path = new Path(allPaths.head)
           val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        } else if (allPaths.length < 1) {
+          throw new IllegalArgumentException("'path' is not specified")
         } else {
           throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
             s"got: ${allPaths.mkString(", ")}")

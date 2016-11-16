@@ -272,15 +272,34 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
+  test("illegal format name") {
+    val e = intercept[ClassNotFoundException] {
+      spark.read.format("illegal").load("/test")
+    }
+    assert(e.getMessage.contains("Failed to find data source: illegal"))
+  }
+
+  test("empty partitionBy") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val input = spark.range(10).toDF()
+      input.write.format("parquet").mode("overwrite").partitionBy().save(path)
+      val output = spark.read.parquet(path)
+      checkAnswer(input, output)
+    }
+  }
+
   test("prevent all column partitioning") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
-      intercept[AnalysisException] {
+      var e = intercept[AnalysisException] {
         spark.range(10).write.format("parquet").mode("overwrite").partitionBy("id").save(path)
-      }
-      intercept[AnalysisException] {
+      }.getMessage
+      assert(e.contains("Cannot use all columns for partition columns"))
+      e = intercept[AnalysisException] {
         spark.range(10).write.format("csv").mode("overwrite").partitionBy("id").save(path)
-      }
+      }.getMessage
+      assert(e.contains("Cannot use all columns for partition columns"))
       spark.emptyDataFrame.write.format("parquet").mode("overwrite").save(path)
     }
   }
@@ -396,9 +415,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[AnalysisException] {
+    val e = intercept[IllegalArgumentException] {
       testRead(spark.read.json(), Seq.empty, schema)
-    }
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
     testRead(spark.read.json(dir), data, schema)
     testRead(spark.read.json(dir, dir), data ++ data, schema)
     testRead(spark.read.json(Seq(dir, dir): _*), data ++ data, schema)
@@ -422,9 +442,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[AnalysisException] {
+    val e = intercept[IllegalArgumentException] {
       testRead(spark.read.parquet(), Seq.empty, schema)
-    }
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
     testRead(spark.read.parquet(dir), data, schema)
     testRead(spark.read.parquet(dir, dir), data ++ data, schema)
     testRead(spark.read.parquet(Seq(dir, dir): _*), data ++ data, schema)

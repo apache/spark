@@ -21,16 +21,19 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.SparkException
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
-  import spark._
+abstract class OrcSuite extends QueryTest
+    with TestHiveSingleton with SQLTestUtils with BeforeAndAfterAll {
+  import spark.implicits._
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -145,6 +148,98 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
       Row.fromSeq(Seq.fill(11)(null)))
 
     sql("DROP TABLE IF EXISTS orcNullValues")
+  }
+
+  test("prevent all column partitioning") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val e = intercept[AnalysisException] {
+        spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
+      }.getMessage
+      assert(e.contains("Cannot use all columns for partition columns"))
+    }
+  }
+
+  test("save API - empty path or illegal path") {
+    var e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.format("orc").save()
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
+
+    e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.orc("")
+    }.getMessage
+    assert(e.contains("Can not create a Path from an empty string"))
+  }
+
+  test("load API - empty path") {
+    val expectedErrorMsg = "'path' is not specified"
+    var e = intercept[IllegalArgumentException] {
+      spark.read.orc()
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+
+    e = intercept[IllegalArgumentException] {
+      spark.read.format("orc").load().show()
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+  }
+
+  test("illegal compression") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(0, 10)
+      val e = intercept[IllegalArgumentException] {
+        df.write.option("compression", "illegal").mode("overwrite").format("orc").save(path)
+      }.getMessage
+      assert(e.contains("Codec [illegal] is not available. Known codecs are"))
+    }
+  }
+
+  test("orc - API") {
+    val userSchema = new StructType().add("s", StringType)
+    val data = Seq("1", "2", "3")
+    val dir = Utils.createTempDir(namePrefix = "input").getCanonicalPath
+
+    // Writer
+    spark.createDataset(data).toDF("str").write.mode(SaveMode.Overwrite).orc(dir)
+    val df = spark.read.orc(dir)
+    checkAnswer(df, spark.createDataset(data).toDF())
+    val schema = df.schema
+
+    // Reader, without user specified schema
+    intercept[IllegalArgumentException] {
+      testRead(spark.read.orc(), Seq.empty, schema)
+    }
+    testRead(spark.read.orc(dir), data, schema)
+    testRead(spark.read.orc(dir, dir), data ++ data, schema)
+    testRead(spark.read.orc(Seq(dir, dir): _*), data ++ data, schema)
+    // Test explicit calls to single arg method - SPARK-16009
+    testRead(Option(dir).map(spark.read.orc).get, data, schema)
+
+    // Reader, with user specified schema, report an exception as schema in file different
+    // from user schema.
+    testRead(spark.read.schema(userSchema).orc(), Seq.empty, userSchema)
+    var e = intercept[SparkException] {
+      testRead(spark.read.schema(userSchema).orc(dir), Seq.empty, userSchema)
+    }.getMessage
+    assert(e.contains("Field \"s\" does not exist"))
+    e = intercept[SparkException] {
+      testRead(spark.read.schema(userSchema).orc(dir, dir), Seq.empty, userSchema)
+    }.getMessage
+    assert(e.contains("Field \"s\" does not exist"))
+    e = intercept[SparkException] {
+      testRead(spark.read.schema(userSchema).orc(Seq(dir, dir): _*), Seq.empty, userSchema)
+    }.getMessage
+    assert(e.contains("Field \"s\" does not exist"))
+  }
+
+  private def testRead(
+      df: => DataFrame,
+      expectedResult: Seq[String],
+      expectedSchema: StructType): Unit = {
+    checkAnswer(df, spark.createDataset(expectedResult).toDF())
+    assert(df.schema === expectedSchema)
   }
 }
 

@@ -2659,7 +2659,7 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
   # It makes sure that we can omit path argument in write.df API and then it calls
   # DataFrameWriter.save() without path.
   expect_error(write.df(df, source = "csv"),
-              "Error in save : illegal argument - Expected exactly one path to be specified")
+              "Error in save : illegal argument - 'path' is not specified")
   expect_error(write.json(df, jsonPath),
               "Error in json : analysis error - path file:.*already exists")
   expect_error(write.text(df, jsonPath),
@@ -2684,8 +2684,7 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   # It makes sure that we can omit path argument in read.df API and then it calls
   # DataFrameWriter.load() without path.
   expect_error(read.df(source = "json"),
-               paste("Error in loadDF : analysis error - Unable to infer schema for JSON at .",
-                     "It must be specified manually"))
+               paste("Error in loadDF : illegal argument - 'path' is not specified"))
   expect_error(read.df("arbitrary_path"), "Error in loadDF : analysis error - Path does not exist")
   expect_error(read.json("arbitrary_path"), "Error in json : analysis error - Path does not exist")
   expect_error(read.text("arbitrary_path"), "Error in text : analysis error - Path does not exist")

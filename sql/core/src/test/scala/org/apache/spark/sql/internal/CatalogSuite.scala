@@ -307,10 +307,10 @@ class CatalogSuite
   }
 
   test("createExternalTable should fail if path is not given for file-based data source") {
-    val e = intercept[AnalysisException] {
+    val e = intercept[IllegalArgumentException] {
       spark.catalog.createExternalTable("tbl", "json", Map.empty[String, String])
     }
-    assert(e.message.contains("Unable to infer schema"))
+    assert(e.getMessage.contains("'path' is not specified"))
 
     val e2 = intercept[AnalysisException] {
       spark.catalog.createExternalTable(
