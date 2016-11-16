@@ -21,9 +21,9 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 
 import org.apache.spark.sql.TypedImperativeAggregateSuite.TypedMax
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericMutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
-import org.apache.spark.sql.execution.aggregate.SortAggregateExec
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -64,7 +64,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     assert(agg.eval(mergeBuffer) == data.map(_._1).max)
 
     // Tests low level eval(row: InternalRow) API.
-    val row = new GenericMutableRow(Array(mergeBuffer): Array[Any])
+    val row = new GenericInternalRow(Array(mergeBuffer): Array[Any])
 
     // Evaluates directly on row consist of aggregation buffer object.
     assert(agg.eval(row) == data.map(_._1).max)
@@ -73,7 +73,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
   test("supports SpecificMutableRow as mutable row") {
     val aggregationBufferSchema = Seq(IntegerType, LongType, BinaryType, IntegerType)
     val aggBufferOffset = 2
-    val buffer = new SpecificMutableRow(aggregationBufferSchema)
+    val buffer = new SpecificInternalRow(aggregationBufferSchema)
     val agg = new TypedMax(BoundReference(ordinal = 1, dataType = IntegerType, nullable = false))
       .withNewMutableAggBufferOffset(aggBufferOffset)
 
@@ -87,11 +87,11 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("dataframe aggregate with object aggregate buffer, should not use HashAggregate") {
     val df = data.toDF("a", "b")
-    val max = new TypedMax($"a".expr)
+    val max = TypedMax($"a".expr)
 
     // Always uses SortAggregateExec
     val sparkPlan = df.select(Column(max.toAggregateExpression())).queryExecution.sparkPlan
-    assert(sparkPlan.isInstanceOf[SortAggregateExec])
+    assert(!sparkPlan.isInstanceOf[HashAggregateExec])
   }
 
   test("dataframe aggregate with object aggregate buffer, no group by") {

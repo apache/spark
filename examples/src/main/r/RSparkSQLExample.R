@@ -204,7 +204,11 @@ results <- collect(sql("FROM src SELECT key, value"))
 
 
 # $example on:jdbc_dataset$
+# Loading data from a JDBC source
 df <- read.jdbc("jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
+
+# Saving data to a JDBC source
+write.jdbc(df, "jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
 # $example off:jdbc_dataset$
 
 # Stop the SparkSession now
