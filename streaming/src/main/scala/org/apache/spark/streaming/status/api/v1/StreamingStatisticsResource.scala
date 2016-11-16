@@ -18,11 +18,18 @@
 package org.apache.spark.streaming.status.api.v1
 
 import java.util.Date
+import javax.ws.rs.{GET, Produces}
+import javax.ws.rs.core.MediaType
 
-class StreamingInfo private[streaming](
-    val name: String,
-    val completedBatchCount: Long)
+import org.apache.spark.status.api.v1.UIRoot
+import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
-class StreamingStatistics private[streaming](
-    val name: String,
-    val startTime: Date)
+@Produces(Array(MediaType.APPLICATION_JSON))
+private[v1] class StreamingStatisticsResource(
+    uiRoot: UIRoot, listener: StreamingJobProgressListener, startTimeMillis: Long) {
+
+  @GET
+  def streamingStatistics(): StreamingStatistics = {
+    new StreamingStatistics("shi_testname", new Date(startTimeMillis))
+  }
+}

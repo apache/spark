@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.streaming.status.api.v1.StreamingApiRootResource
 import org.apache.spark.ui._
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
@@ -144,6 +145,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
   private val listener = parent.listener
   private val startTime = System.currentTimeMillis()
+
+  parent.parent.attachHandler(
+    StreamingApiRootResource.getServletHandler(parent.parent, listener, startTime)
+  )
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {

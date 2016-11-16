@@ -36,6 +36,11 @@ private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
   def getStreamingInfo(): StreamingInfoResource = {
     new StreamingInfoResource(uiRoot, listener)
   }
+
+  @Path("statistics")
+  def getStreamingStatistics(): StreamingStatisticsResource = {
+    new StreamingStatisticsResource(uiRoot, listener, startTimeMillis)
+  }
   
 }
 
@@ -43,7 +48,8 @@ private[spark] object StreamingApiRootResource {
 
   def getServletHandler(
     uiRoot: UIRoot,
-    listener: StreamingJobProgressListener
+    listener: StreamingJobProgressListener,
+    startTimeMillis: Long
   ): ServletContextHandler = {
 
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
@@ -57,6 +63,7 @@ private[spark] object StreamingApiRootResource {
     // classOf[SecurityFilter].getCanonicalName)
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     UIRootFromServletContext.setListener(jerseyContext, listener)
+    UIRootFromServletContext.setStartTimeMillis(jerseyContext, startTimeMillis)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext
   }
@@ -67,11 +74,19 @@ private[v1] object UIRootFromServletContext {
   private val attribute = getClass.getCanonicalName
 
   def setListener(contextHandler: ContextHandler, listener: StreamingJobProgressListener): Unit = {
-   contextHandler.setAttribute(attribute + "_listener", listener)
+    contextHandler.setAttribute(attribute + "_listener", listener)
   }
   
   def getListener(context: ServletContext): StreamingJobProgressListener = {
     context.getAttribute(attribute + "_listener").asInstanceOf[StreamingJobProgressListener]
+  }
+
+  def setStartTimeMillis(contextHandler: ContextHandler, time: Long): Unit = {
+    contextHandler.setAttribute(attribute + "_startTimeMillis", time)
+  }
+
+  def getStartTimeMillis(context: ServletContext): Long = {
+    context.getAttribute(attribute + "_startTimeMillis").asInstanceOf[Long]
   }
   
   def setUiRoot(contextHandler: ContextHandler, uiRoot: UIRoot): Unit = {
@@ -89,4 +104,5 @@ private[v1] trait UIRootFromServletContext {
 
   def uiRoot: UIRoot = UIRootFromServletContext.getUiRoot(servletContext)
   def listener: StreamingJobProgressListener = UIRootFromServletContext.getListener(servletContext)
+  def startTimeMillis: Long = UIRootFromServletContext.getStartTimeMillis(servletContext)
 }
