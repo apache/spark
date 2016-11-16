@@ -341,8 +341,8 @@ class StreamingQueryStatus(object):
         If no trigger is currently active, then it will have details of the last completed trigger.
 
         >>> sqs.triggerDetails
-        {u'batchId': u'5', u'latency.getBatch.total': u'20', u'numRows.input.total': u'100',
-        u'isTriggerActive': u'true', u'latency.getOffset.total': u'10',
+        {u'latency.getBatch.total': u'20', u'numRows.input.total': u'100',
+        u'isTriggerActive': u'true', u'batchId': u'5', u'latency.getOffset.total': u'10',
         u'isDataPresentInTrigger': u'true'}
         """
         return self._jsqs.triggerDetails()
