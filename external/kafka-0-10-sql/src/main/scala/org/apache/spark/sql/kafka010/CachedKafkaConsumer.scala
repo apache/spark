@@ -172,7 +172,8 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   /**
    * Get the earliest record in [offset, untilOffset) from the fetched data. If there is no such
-   * record, returns null. Must be called after `poll`.
+   * record, return null. Note that this must be called after some data has already been fetched
+   * using poll.
    */
   private def getRecordFromFetchedData(
       offset: Long,
