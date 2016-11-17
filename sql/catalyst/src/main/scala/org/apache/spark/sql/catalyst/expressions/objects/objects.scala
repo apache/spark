@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
 /**
  * Common base class for [[StaticInvoke]], [[Invoke]], and [[NewInstance]].
  */
-trait InvokeLike extends Expression {
+trait InvokeLike {
 
   def arguments: Seq[Expression]
 
