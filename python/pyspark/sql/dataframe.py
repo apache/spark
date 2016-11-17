@@ -322,6 +322,48 @@ class DataFrame(object):
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
+    @since(2.1)
+    def checkpoint(self, eager=True):
+        """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+        logical plan of this DataFrame, which is especially useful in iterative algorithms where the
+        plan may grow exponentially. It will be saved to a file inside the checkpoint
+        directory set with L{SparkContext.setCheckpointDir()}.
+
+        :param eager: Whether to checkpoint this DataFrame immediately
+
+        .. note:: Experimental
+        """
+        jdf = self._jdf.checkpoint(eager)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(2.1)
+    def withWatermark(self, eventTime, delayThreshold):
+        """Defines an event time watermark for this :class:`DataFrame`. A watermark tracks a point
+        in time before which we assume no more late data is going to arrive.
+
+        Spark will use this watermark for several purposes:
+          - To know when a given time window aggregation can be finalized and thus can be emitted
+           when using output modes that do not allow updates.
+          - To minimize the amount of state that we need to keep for on-going aggregations.
+
+        The current watermark is computed by looking at the `MAX(eventTime)` seen across
+        all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
+        of coordinating this value across partitions, the actual watermark used is only guaranteed
+        to be at least `delayThreshold` behind the actual event time.  In some cases we may still
+        process records that arrive more than `delayThreshold` late.
+
+        :param eventTime: the name of the column that contains the event time of the row.
+        :param delayThreshold: the minimum delay to wait to data to arrive late, relative to the
+            latest record that has been processed in the form of an interval
+            (e.g. "1 minute" or "5 hours").
+
+        .. note:: Experimental
+
+        >>> df.withWatermark(df('timestamp'), '10 minutes')
+        """
+        jdf = self._jdf.withWatermark(eventTime, delayThreshold)
+        return DataFrame(jdf, self.sql_ctx)
+
     @since(1.3)
     def count(self):
         """Returns the number of rows in this :class:`DataFrame`.
