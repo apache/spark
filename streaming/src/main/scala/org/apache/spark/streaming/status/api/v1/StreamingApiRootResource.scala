@@ -25,7 +25,7 @@ import com.sun.jersey.spi.container.servlet.ServletContainer
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.eclipse.jetty.servlet.ServletHolder
-import org.apache.spark.status.api.v1.{ErrorWrapper, UIRoot}
+import org.apache.spark.status.api.v1.UIRoot
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Path("/v1")
@@ -123,3 +123,9 @@ private[v1] class NotFoundException(msg: String) extends WebApplicationException
     .entity(ErrorWrapper(msg))
     .build()
 )
+
+/**
+  * Signal to JacksonMessageWriter to not convert the message into json (which would result in an
+  * extra set of quotes).
+  */
+private[v1] case class ErrorWrapper(s: String)
