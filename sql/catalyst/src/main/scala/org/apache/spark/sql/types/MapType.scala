@@ -94,10 +94,5 @@ object MapType extends AbstractDataType {
    * The `valueContainsNull` is true.
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
-    MapType(keyType: DataType, valueType: DataType, valueContainsNull =
-      valueType match {
-        case BooleanType | ByteType | ShortType | IntegerType | LongType |
-              FloatType | DoubleType => false
-        case _ => true
-      })
+    MapType(keyType: DataType, valueType: DataType, valueContainsNull = true)
 }
