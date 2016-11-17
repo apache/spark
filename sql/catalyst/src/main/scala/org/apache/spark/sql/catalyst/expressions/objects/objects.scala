@@ -205,9 +205,8 @@ case class Invoke(
 
     val evaluateArguments = if (arguments.nonEmpty) {
       s"""
-        if (!${ev.isNull}) {
+        if (!${obj.isNull}) {
           $argCode
-          ${ev.isNull} = $resultIsNull;
         }
       """
     } else {
@@ -254,8 +253,8 @@ case class Invoke(
 
     val code = s"""
       ${obj.code}
-      boolean ${ev.isNull} = ${obj.isNull};
       $evaluateArguments
+      boolean ${ev.isNull} = ${obj.isNull} || $resultIsNull;
       $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $evaluate
