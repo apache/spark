@@ -974,4 +974,18 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     assert(pValue > threshold)
   }
+
+  test("redact sensitive information") {
+    val sparkConf = new SparkConf
+    sparkConf.set("spark.executorEnv.HADOOP_CREDSTORE_PASSWORD", "secret_password")
+    sparkConf.set("spark.my.password", "secret_password")
+    sparkConf.set("spark.my.secret", "secret_password")
+    sparkConf.set("spark.regular.property", "not_a_secret")
+    val redactedConf = sparkConf.getAll.map(Utils.redact(sparkConf)).toMap
+    assert(redactedConf.get("spark.executorEnv.HADOOP_CREDSTORE_PASSWORD").get == Utils
+      .REDACTION_REPLACEMENT_TEXT)
+    assert(redactedConf.get("spark.my.password").get == Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(redactedConf.get("spark.my.secret").get == Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(redactedConf.get("spark.regular.property").get == "not_a_secret")
+  }
 }

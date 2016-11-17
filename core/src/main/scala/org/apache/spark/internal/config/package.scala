@@ -223,4 +223,13 @@ package object config {
       " bigger files.")
     .longConf
     .createWithDefault(4 * 1024 * 1024)
+
+  private[spark] val SECRET_REDACTION_PATTERN =
+    ConfigBuilder("spark.secret.redactionPattern")
+      .doc("Scala regex(case-sensitive) to decide which Spark configuration properties and " +
+        "environment variables in driver and executor environments contain sensitive information." +
+        " When this regex matches the property or environment variable name, its value is " +
+        "redacted from the environment UI and various logs like YARN and event logs")
+      .stringConf
+      .createWithDefault("secret|password|SECRET|PASSWORD")
 }
