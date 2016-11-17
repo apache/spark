@@ -40,3 +40,16 @@ class StreamingStatistics private[streaming](
   val avgProcessingTime: Option[Long],
   val avgTotalDelay: Option[Long]
 )
+
+class ReceiverInfo private[streaming](
+  val streamId: Int,
+  val streamName: String,
+  val isActive: Option[Boolean],
+  val executorId: Option[String],
+  val executorHost: Option[String],
+  val lastErrorTime: Option[Long],
+  val lastErrorMessage: Option[String],
+  val lastError: Option[String],
+  val avgEventRate: Option[Double],
+  val eventRates: Seq[(Long, Double)]
+)
