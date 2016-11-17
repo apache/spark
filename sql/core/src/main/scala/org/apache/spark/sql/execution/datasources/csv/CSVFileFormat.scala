@@ -53,6 +53,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    require(files.nonEmpty, "Cannot infer schema from an empty set of files")
     val csvOptions = new CSVOptions(options)
 
     // TODO: Move filtering.
