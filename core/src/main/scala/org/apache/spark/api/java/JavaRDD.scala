@@ -98,7 +98,9 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   def repartition(numPartitions: Int): JavaRDD[T] = rdd.repartition(numPartitions)
 
   /**
-   * Return a sampled subset of this RDD.
+   * Return a sampled subset of this RDD with a random seed.
+   * Note: this is NOT guaranteed to provide exactly the fraction of the count
+   * of the given [[RDD]].
    *
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
@@ -109,7 +111,9 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
     sample(withReplacement, fraction, Utils.random.nextLong)
 
   /**
-   * Return a sampled subset of this RDD.
+   * Return a sampled subset of this RDD, with a user-supplied seed.
+   * Note: this is NOT guaranteed to provide exactly the fraction of the count
+   * of the given [[RDD]].
    *
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size

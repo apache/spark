@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.io.Writer
-
 import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 

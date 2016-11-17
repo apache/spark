@@ -268,15 +268,16 @@ abstract class HashExpression[E] extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.isNull = "false"
-    val childrenHash = children.map { child =>
+    val childrenHash = ctx.splitExpressions(ctx.INPUT_ROW, children.map { child =>
       val childGen = child.genCode(ctx)
       childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, ev.value, ctx)
       }
-    }.mkString("\n")
+    })
 
+    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
     ev.copy(code = s"""
-      ${ctx.javaType(dataType)} ${ev.value} = $seed;
+      ${ev.value} = $seed;
       $childrenHash""")
   }
 
@@ -600,15 +601,18 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.isNull = "false"
     val childHash = ctx.freshName("childHash")
-    val childrenHash = children.map { child =>
+    val childrenHash = ctx.splitExpressions(ctx.INPUT_ROW, children.map { child =>
       val childGen = child.genCode(ctx)
       childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, childHash, ctx)
-      } + s"${ev.value} = (31 * ${ev.value}) + $childHash;"
-    }.mkString(s"int $childHash = 0;", s"\n$childHash = 0;\n", "")
+      } + s"${ev.value} = (31 * ${ev.value}) + $childHash;" +
+        s"\n$childHash = 0;"
+    })
 
+    ctx.addMutableState(ctx.javaType(dataType), ev.value, "")
+    ctx.addMutableState("int", childHash, s"$childHash = 0;")
     ev.copy(code = s"""
-      ${ctx.javaType(dataType)} ${ev.value} = $seed;
+      ${ev.value} = $seed;
       $childrenHash""")
   }
 
