@@ -41,6 +41,20 @@ trait InvokeLike extends Expression {
 
   def propagateNull: Boolean
 
+  /**
+   * Prepares codes for arguments.
+   *
+   * - generate codes for argument.
+   * - use ctx.splitExpressions() not to exceed 64kb JVM limit while preparing arguments.
+   * - avoid some of nullabilty checking which are not needed because the expression is not
+   *   nullable.
+   * - when progagateNull == true, short circuit if we found one of arguments is null because
+   *   preparing rest of arguments can be skipped in the case.
+   *
+   * @param ctx a [[CodegenContext]]
+   * @param ev an [[ExprCode]] with unique terms.
+   * @return (code to prepare arguments, argument string, code to set isNull)
+   */
   def prepareArguments(ctx: CodegenContext, ev: ExprCode): (String, String, String) = {
 
     val argsHaveNull =
