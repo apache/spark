@@ -47,7 +47,7 @@ class ReceiverInfo private[streaming](
   val isActive: Option[Boolean],
   val executorId: Option[String],
   val executorHost: Option[String],
-  val lastErrorTime: Option[Long],
+  val lastErrorTime: Option[Date],
   val lastErrorMessage: Option[String],
   val lastError: Option[String],
   val avgEventRate: Option[Double],
