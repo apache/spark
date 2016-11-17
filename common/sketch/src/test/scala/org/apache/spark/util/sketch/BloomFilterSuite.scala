@@ -162,4 +162,33 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     checkSerDe(filter)
   }
 
+  /**
+    * Separate test for Byte type,
+    * Since we can enumerate all possible values
+    */
+  test(s"mergeInPlace - Byte") {
+    val allBytes = (-128 to 127).map(_.toByte)
+    val fpp = 0.05
+
+    val isEven: Byte => Boolean = _ % 2 == 0
+    val even = allBytes.filter(isEven)
+    val odd = allBytes.filterNot(isEven)
+
+    val filter1 = BloomFilter.create(256)
+    even.foreach(filter1.put)
+
+    val filter2 = BloomFilter.create(256)
+    odd.foreach(filter2.put)
+
+    filter1.mergeInPlace(filter2)
+
+    // After merge, `filter1` has `numItems` items which doesn't exceed `expectedNumItems`, so the
+    // `expectedFpp` should not be significantly higher than the default one.
+    assert(filter1.expectedFpp() - BloomFilter.DEFAULT_FPP < EPSILON)
+
+    even.foreach(i => assert(filter1.mightContain(i)))
+    odd.foreach(i => assert(filter1.mightContain(i)))
+
+    checkSerDe(filter1)
+  }
 }

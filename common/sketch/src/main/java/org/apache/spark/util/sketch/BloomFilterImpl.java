@@ -253,5 +253,4 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
   private void readObject(ObjectInputStream in) throws IOException {
     readFrom0(in);
   }
-
 }

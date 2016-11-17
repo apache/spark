@@ -51,7 +51,7 @@ public abstract class BloomFilter {
      *   <li>The words/longs (numWords * 64 bit)</li>
      * </ul>
      */
-    V1(1);
+    V1(2);
 
     private final int versionNumber;
 
@@ -233,5 +233,4 @@ public abstract class BloomFilter {
 
     return new BloomFilterImpl(optimalNumOfHashFunctions(expectedNumItems, numBits), numBits);
   }
-
 }
