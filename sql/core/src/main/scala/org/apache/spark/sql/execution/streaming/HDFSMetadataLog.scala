@@ -129,17 +129,48 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
-  def writeTempBatch(metadata: T, writer: (T, OutputStream) => Unit = serialize): Option[Path] = {
+
+  /**
+   * Write a batch to a temp file then rename it to the batch file.
+   *
+   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
+   * valid behavior, we still need to prevent it from destroying the files.
+   */
+  private def writeBatch(batchId: Long, metadata: T, writer: (T, OutputStream) => Unit): Unit = {
+    // Use nextId to create a temp file
     var nextId = 0
-    while(true) {
+    while (true) {
       val tempPath = new Path(metadataPath, s".${UUID.randomUUID.toString}.tmp")
       try {
         val output = fileManager.create(tempPath)
         try {
           writer(metadata, output)
-          return Some(tempPath)
         } finally {
           IOUtils.closeQuietly(output)
+        }
+        try {
+          // Try to commit the batch
+          // It will fail if there is an existing file (someone has committed the batch)
+          logDebug(s"Attempting to write log #${batchIdToPath(batchId)}")
+          fileManager.rename(tempPath, batchIdToPath(batchId))
+
+          // SPARK-17475: HDFSMetadataLog should not leak CRC files
+          // If the underlying filesystem didn't rename the CRC file, delete it.
+          val crcPath = new Path(tempPath.getParent(), s".${tempPath.getName()}.crc")
+          if (fileManager.exists(crcPath)) fileManager.delete(crcPath)
+          return
+        } catch {
+          case e: IOException if isFileAlreadyExistsException(e) =>
+            // If "rename" fails, it means some other "HDFSMetadataLog" has committed the batch.
+            // So throw an exception to tell the user this is not a valid behavior.
+            throw new ConcurrentModificationException(
+              s"Multiple HDFSMetadataLog are using $path", e)
+          case e: FileNotFoundException =>
+            // Sometimes, "create" will succeed when multiple writers are calling it at the same
+            // time. However, only one writer can call "rename" successfully, others will get
+            // FileNotFoundException because the first writer has removed it.
+            throw new ConcurrentModificationException(
+              s"Multiple HDFSMetadataLog are using $path", e)
         }
       } catch {
         case e: IOException if isFileAlreadyExistsException(e) =>
@@ -156,44 +187,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           // metadata path. In addition, the old Streaming also have this issue, people can create
           // malicious checkpoint files to crash a Streaming application too.
           nextId += 1
+      } finally {
+        fileManager.delete(tempPath)
       }
-    }
-    None
-  }
-
-  /**
-   * Write a batch to a temp file then rename it to the batch file.
-   *
-   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
-   * valid behavior, we still need to prevent it from destroying the files.
-   */
-  private def writeBatch(batchId: Long, metadata: T, writer: (T, OutputStream) => Unit): Unit = {
-    val tempPath = writeTempBatch(metadata, writer).getOrElse(
-      throw new IllegalStateException(s"Unable to create temp batch file $batchId"))
-    try {
-      // Try to commit the batch
-      // It will fail if there is an existing file (someone has committed the batch)
-      logDebug(s"Attempting to write log #${batchIdToPath(batchId)}")
-      fileManager.rename(tempPath, batchIdToPath(batchId))
-
-      // SPARK-17475: HDFSMetadataLog should not leak CRC files
-      // If the underlying filesystem didn't rename the CRC file, delete it.
-      val crcPath = new Path(tempPath.getParent(), s".${tempPath.getName()}.crc")
-      if (fileManager.exists(crcPath)) fileManager.delete(crcPath)
-    } catch {
-      case e: IOException if isFileAlreadyExistsException(e) =>
-        // If "rename" fails, it means some other "HDFSMetadataLog" has committed the batch.
-        // So throw an exception to tell the user this is not a valid behavior.
-        throw new ConcurrentModificationException(
-          s"Multiple HDFSMetadataLog are using $path", e)
-      case e: FileNotFoundException =>
-        // Sometimes, "create" will succeed when multiple writers are calling it at the same
-        // time. However, only one writer can call "rename" successfully, others will get
-        // FileNotFoundException because the first writer has removed it.
-        throw new ConcurrentModificationException(
-          s"Multiple HDFSMetadataLog are using $path", e)
-    } finally {
-      fileManager.delete(tempPath)
     }
   }
 
