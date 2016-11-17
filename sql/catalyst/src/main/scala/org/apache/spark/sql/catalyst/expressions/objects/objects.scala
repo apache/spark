@@ -180,6 +180,8 @@ case class StaticInvoke(
  * @param functionName The name of the method to call.
  * @param dataType The expected return type of the function.
  * @param arguments An optional list of expressions, whos evaluation will be passed to the function.
+ * @param propagateNull When true, and any of the arguments is null, null will be returned instead
+ *                      of calling the function.
  */
 case class Invoke(
     targetObject: Expression,
