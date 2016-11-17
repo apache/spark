@@ -94,8 +94,8 @@ class MinHashLSHModel private[ml](
  *
  * The input can be dense or sparse vectors, but it is more efficient if it is sparse. For example,
  *    `Vectors.sparse(10, Array((2, 1.0), (3, 1.0), (5, 1.0)))`
- * means there are 10 elements in the space. This set contains non-zero values at indices 2, 3, and
- * 5. Also, any input vector must have at least 1 non-zero index, and all non-zero values are
+ * means there are 10 elements in the space. This set contains elements 2, 3, and 5. Also, any
+ * input vector must have at least 1 non-zero index, and all non-zero values are
  * treated as binary "1" values.
  *
  * References:
