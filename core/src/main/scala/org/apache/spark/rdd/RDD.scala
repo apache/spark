@@ -466,6 +466,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    *
+   * Note: this is NOT guaranteed to provide exactly the fraction of the count
+   * of the given [[RDD]].
+   *
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]

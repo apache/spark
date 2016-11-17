@@ -429,7 +429,7 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    val port = sparkConf.getInt("spark.yarn.am.port", 0)
+    val port = sparkConf.get(AM_PORT)
     rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr,
       clientMode = true)
     val driverRef = waitForSparkDriver()

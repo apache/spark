@@ -222,9 +222,9 @@ The `sql` function enables applications to run SQL queries programmatically and 
 
 ## Global Temporary View
 
-Temporay views in Spark SQL are session-scoped and will disappear if the session that creates it
+Temporary views in Spark SQL are session-scoped and will disappear if the session that creates it
 terminates. If you want to have a temporary view that is shared among all sessions and keep alive
-until the Spark application terminiates, you can create a global temporary view. Global temporary
+until the Spark application terminates, you can create a global temporary view. Global temporary
 view is tied to a system preserved database `global_temp`, and we must use the qualified name to
 refer it, e.g. `SELECT * FROM global_temp.view1`.
 
@@ -1029,7 +1029,7 @@ following command:
 bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
 {% endhighlight %}
 
-Tables from the remote database can be loaded as a DataFrame or Spark SQL Temporary table using
+Tables from the remote database can be loaded as a DataFrame or Spark SQL temporary view using
 the Data Sources API. Users can specify the JDBC connection properties in the data source options.
 <code>user</code> and <code>password</code> are normally provided as connection properties for
 logging into the data sources. In addition to the connection properties, Spark also supports

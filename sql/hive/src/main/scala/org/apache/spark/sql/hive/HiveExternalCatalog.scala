@@ -35,8 +35,8 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.{ColumnStatStruct, DDLUtils}
-import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -1023,6 +1023,11 @@ object HiveExternalCatalog {
       // After SPARK-6024, we removed this flag.
       // Although we are not using `spark.sql.sources.schema` any more, we need to still support.
       DataType.fromJson(schema.get).asInstanceOf[StructType]
+    } else if (props.filterKeys(_.startsWith(DATASOURCE_SCHEMA_PREFIX)).isEmpty) {
+      // If there is no schema information in table properties, it means the schema of this table
+      // was empty when saving into metastore, which is possible in older version(prior to 2.1) of
+      // Spark. We should respect it.
+      new StructType()
     } else {
       val numSchemaParts = props.get(DATASOURCE_SCHEMA_NUMPARTS)
       if (numSchemaParts.isDefined) {

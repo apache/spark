@@ -936,7 +936,9 @@ setMethod("unique",
 
 #' Sample
 #'
-#' Return a sampled subset of this SparkDataFrame using a random seed.
+#' Return a sampled subset of this SparkDataFrame using a random seed. 
+#' Note: this is not guaranteed to provide exactly the fraction specified
+#' of the total count of of the given SparkDataFrame.
 #'
 #' @param x A SparkDataFrame
 #' @param withReplacement Sampling with replacement or not
