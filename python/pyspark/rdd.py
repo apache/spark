@@ -181,7 +181,6 @@ class RDD(object):
         self._jrdd = jrdd
         self.is_cached = False
         self.is_checkpointed = False
-        self.is_locally_checkpointed = False
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
         self._id = jrdd.id()
@@ -287,7 +286,6 @@ class RDD(object):
 
         The checkpoint directory set through L{SparkContext.setCheckpointDir()} is not used.
         """
-        self.is_locally_checkpointed = True
         self._jrdd.rdd().localCheckpoint()
 
     def isLocallyCheckpointed(self):
@@ -2407,7 +2405,6 @@ class PipelinedRDD(RDD):
             self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
         self.is_cached = False
         self.is_checkpointed = False
-        self.is_locally_checkpointed = False
         self.ctx = prev.ctx
         self.prev = prev
         self._jrdd_val = None
