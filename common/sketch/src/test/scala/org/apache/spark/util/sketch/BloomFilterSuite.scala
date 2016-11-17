@@ -130,11 +130,7 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  /**
-    * Instead of random generator we can check
-    * BloomFilter for every Byte value
-    * since it has only 256 values
-    */
+  // Separate test for Byte type, since we can enumerate all possible values
   test(s"accuracy - Byte") {
     // Byte is from -128 to 127 inclusive
     val allBytes = (-128 to 127).map(_.toByte)
@@ -162,10 +158,7 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     checkSerDe(filter)
   }
 
-  /**
-    * Separate test for Byte type,
-    * Since we can enumerate all possible values
-    */
+  // Separate test for Byte type, since we can enumerate all possible values
   test(s"mergeInPlace - Byte") {
     val allBytes = (-128 to 127).map(_.toByte)
     val fpp = 0.05
