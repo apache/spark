@@ -162,7 +162,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   case class StartStream(
       trigger: Trigger = ProcessingTime(0),
       triggerClock: Clock = new SystemClock,
-      pairs: mutable.Map[String, String] = mutable.Map.empty)
+      additionalConfs: Map[String, String] = Map.empty)
     extends StreamAction
 
   /** Advance the trigger clock's time manually. */
@@ -331,7 +331,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       startedTest.foreach { action =>
         logInfo(s"Processing test stream action: $action")
         action match {
-          case StartStream(trigger, triggerClock, pairs) =>
+          case StartStream(trigger, triggerClock, additionalConfs) =>
             verify(currentStream == null, "stream already running")
             verify(triggerClock.isInstanceOf[SystemClock]
               || triggerClock.isInstanceOf[StreamManualClock],
@@ -340,27 +340,40 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
               manualClockExpectedTime = triggerClock.asInstanceOf[StreamManualClock].getTimeMillis()
             }
 
-            pairs.foreach(pair => spark.conf.set(pair._1, pair._2))
-
-            lastStream = currentStream
-            currentStream =
-              spark
-                .streams
-                .startQuery(
-                  None,
-                  Some(metadataRoot),
-                  stream,
-                  sink,
-                  outputMode,
-                  trigger = trigger,
-                  triggerClock = triggerClock)
-                .asInstanceOf[StreamExecution]
-            currentStream.microBatchThread.setUncaughtExceptionHandler(
-              new UncaughtExceptionHandler {
-                override def uncaughtException(t: Thread, e: Throwable): Unit = {
-                  streamDeathCause = e
-                }
+            val resetConfValues = mutable.Map[String, Option[String]]()
+            try {
+              additionalConfs.foreach(pair => {
+                val value = if (spark.conf.contains(pair._1)) Some(spark.conf.get(pair._1)) else None
+                resetConfValues(pair._1) = value
+                spark.conf.set(pair._1, pair._2)
               })
+
+              lastStream = currentStream
+              currentStream =
+                spark
+                  .streams
+                  .startQuery(
+                    None,
+                    Some(metadataRoot),
+                    stream,
+                    sink,
+                    outputMode,
+                    trigger = trigger,
+                    triggerClock = triggerClock)
+                  .asInstanceOf[StreamExecution]
+              currentStream.microBatchThread.setUncaughtExceptionHandler(
+                new UncaughtExceptionHandler {
+                  override def uncaughtException(t: Thread, e: Throwable): Unit = {
+                    streamDeathCause = e
+                  }
+                })
+            } finally {
+              // Rollback previous configuration values
+              resetConfValues.foreach {
+                case (key, Some(value)) => spark.conf.set(key, value)
+                case (key, None) => spark.conf.unset(key)
+              }
+            }
 
           case AdvanceManualClock(timeToAdd) =>
             verify(currentStream != null,

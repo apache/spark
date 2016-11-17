@@ -90,8 +90,9 @@ class FileStreamSinkLog(
 
   protected override val defaultCompactInterval =
     sparkSession.sessionState.conf.fileSinkLogCompactInterval
-  require(compactInterval > 0,
-    s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $compactInterval) " +
+
+  require(defaultCompactInterval > 0,
+    s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $defaultCompactInterval) " +
       "to a positive value.")
 
   override def compactLogs(logs: Seq[SinkFileStatus]): Seq[SinkFileStatus] = {

@@ -902,8 +902,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val _sources = PrivateMethod[Seq[Source]]('sources)
     val _metadataLog = PrivateMethod[FileStreamSourceLog]('metadataLog)
 
-    def verify(execution: StreamExecution, batchId: Long,
-               expectedBatches: Int, expectedCompactInterval: Int): Boolean = {
+    def verify(
+        execution: StreamExecution,
+        batchId: Long,
+        expectedBatches: Int,
+        expectedCompactInterval: Int): Boolean = {
       import CompactibleFileStreamLog._
 
       val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
