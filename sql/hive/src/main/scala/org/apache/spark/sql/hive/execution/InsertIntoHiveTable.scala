@@ -292,6 +292,10 @@ case class InsertIntoHiveTable(
         holdDDLTime)
     }
 
+    // delete temporary folder after insert
+    val fileSystem = outputPath.getFileSystem(jobConf)
+    fileSystem.delete(outputPath.getParent, true)
+
     // Invalidate the cache.
     sqlContext.sharedState.cacheManager.invalidateCache(table)
     sqlContext.sessionState.catalog.refreshTable(table.catalogTable.identifier)
