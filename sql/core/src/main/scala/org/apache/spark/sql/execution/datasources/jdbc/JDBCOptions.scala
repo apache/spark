@@ -126,7 +126,7 @@ class JDBCOptions(
   val maxConnections = parameters.getOrElse(JDBC_MAX_CONNECTIONS, null)
   require(maxConnections == null || maxConnections.toInt > 0,
     s"Invalid value `$maxConnections` for parameter `$JDBC_MAX_CONNECTIONS`. " +
-      s"The minimum value is 1.")
+      "The minimum value is 1.")
 }
 
 object JDBCOptions {
