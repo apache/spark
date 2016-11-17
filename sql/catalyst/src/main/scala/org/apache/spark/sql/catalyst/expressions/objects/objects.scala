@@ -203,17 +203,6 @@ case class Invoke(
 
     val (argCode, argString, resultIsNull) = prepareArguments(ctx, ev)
 
-    val evaluateArguments = if (arguments.nonEmpty) {
-      s"""
-        if (!${obj.isNull}) {
-          $argCode
-          ${ev.isNull} = $resultIsNull;
-        }
-      """
-    } else {
-      ""
-    }
-
     val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
     val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
 
@@ -254,8 +243,10 @@ case class Invoke(
 
     val code = s"""
       ${obj.code}
-      boolean ${ev.isNull} = ${obj.isNull};
-      $evaluateArguments
+      if (!${obj.isNull}) {
+        $argCode
+      }
+      boolean ${ev.isNull} = ${obj.isNull} || $resultIsNull;
       $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $evaluate
