@@ -940,8 +940,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       ) {
         val fileStream = createFileStream("text", src.getCanonicalPath)
         val filtered = fileStream.filter($"value" contains "keep")
-        val updateConf = new mutable.HashMap[String, String]()
-        updateConf.put(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key, "5")
+        val updateConf = Map(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "5")
 
         testStream(filtered)(
           AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
@@ -954,7 +953,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9"),
           AssertOnQuery(verify(_, 2L, 3, 2)),
           StopStream,
-          StartStream(pairs = updateConf),
+          StartStream(additionalConfs = updateConf),
           AssertOnQuery(verify(_, 2L, 3, 2)),
           AddTextFileData("drop10\nkeep11", src, tmp),
           CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11"),

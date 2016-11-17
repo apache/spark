@@ -24,11 +24,11 @@ class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext 
 
   import CompactibleFileStreamLog._
 
-  test("getBatchIdFromFileName") {
+  test("deriveCompactInterval") {
     // latestCompactBatchId(4) + 1 <= default(5)
     // then use latestestCompactBatchId + 1 === 5
     assert(5 === deriveCompactInterval(5, 4))
     // First divisor of 10 greater than 4 === 5
-    assert(5 === deriveCompactInterval(4, 10))
+    assert(5 === deriveCompactInterval(4, 9))
   }
 }

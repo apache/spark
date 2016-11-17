@@ -343,7 +343,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             val resetConfValues = mutable.Map[String, Option[String]]()
             try {
               additionalConfs.foreach(pair => {
-                val value = if (spark.conf.contains(pair._1)) Some(spark.conf.get(pair._1)) else None
+                val value =
+                  if (spark.conf.contains(pair._1)) Some(spark.conf.get(pair._1)) else None
                 resetConfValues(pair._1) = value
                 spark.conf.set(pair._1, pair._2)
               })
