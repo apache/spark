@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.status.api.v1
 
+import java.util.Date
 import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.MediaType
 
@@ -44,15 +45,31 @@ private[v1] object AllReceiversResource {
         if (eventRates.isEmpty) None
         else Some(eventRates.map(_._2).sum / eventRates.size)
 
+      val lastErrorInfo = receiverInfo match {
+        case None => (None, None, None)
+        case Some(info) =>
+          val someTime =
+            if (info.lastErrorTime >= 0) Some(new Date(info.lastErrorTime))
+            else None
+          val someMessage =
+            if (info.lastErrorMessage.length > 0) Some(info.lastErrorMessage)
+            else None
+          val someError =
+            if (info.lastError.length > 0) Some(info.lastError)
+            else None
+
+          (someTime, someMessage, someError)
+      }
+
       new ReceiverInfo(
         streamId = streamId,
         streamName = streamName,
         isActive = receiverInfo.map(_.active),
         executorId = receiverInfo.map(_.executorId),
         executorHost = receiverInfo.map(_.location),
-        lastErrorTime = receiverInfo.map(_.lastErrorTime),
-        lastErrorMessage = receiverInfo.map(_.lastErrorMessage),
-        lastError = receiverInfo.map(_.lastError),
+        lastErrorTime = lastErrorInfo._1,
+        lastErrorMessage = lastErrorInfo._2,
+        lastError = lastErrorInfo._3,
         avgEventRate = avgEventRate,
         eventRates = eventRates
       )
