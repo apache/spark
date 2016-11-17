@@ -205,7 +205,7 @@ case class Invoke(
 
     val evaluateArguments = if (arguments.nonEmpty) {
       s"""
-        if (!${ev.isNull}) {
+        if (!${obj.isNull}) {
           $argCode
           ${ev.isNull} = $resultIsNull;
         }
