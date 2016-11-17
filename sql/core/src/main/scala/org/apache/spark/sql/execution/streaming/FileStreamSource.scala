@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.execution.datasources.{DataSource, ListingFileCatalog, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -131,8 +131,8 @@ class FileStreamSource(
    * Returns the data that is between the offsets (`start`, `end`].
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
-    val endId = end.asInstanceOf[LongOffset].offset
+    val startId = start.flatMap(LongOffset.convert(_)).getOrElse(LongOffset(-1L)).offset
+    val endId = LongOffset.convert(end).getOrElse(LongOffset(0)).offset
 
     assert(startId <= endId)
     val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
@@ -156,7 +156,7 @@ class FileStreamSource(
   private def fetchAllFiles(): Seq[(String, Long)] = {
     val startTime = System.nanoTime
     val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
-    val catalog = new ListingFileCatalog(sparkSession, globbedPaths, options, Some(new StructType))
+    val catalog = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
     val files = catalog.allFiles().sortBy(_.getModificationTime).map { status =>
       (status.getPath.toUri.toString, status.getModificationTime)
     }

@@ -85,15 +85,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase",
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase",
       "Extended Usage:",
+      "Examples:",
       "> SELECT upper('SparkSql');",
-      "'SPARKSQL'")
+      "SPARKSQL")
 
     checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase")
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase")
 
     checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
@@ -460,20 +461,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
       Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
-    )
-  }
-
-  test("agg") {
-    checkAnswer(
-      sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
-      Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
-  }
-
-  test("aggregates with nulls") {
-    checkAnswer(
-      sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
-        "AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(0, -1.5, 1, 3, 2, 1.0, 1, 6, 3)
     )
   }
 
@@ -1176,27 +1163,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT CASE WHEN key = 1 THEN 1 ELSE 2 END FROM testData WHERE key = 1 group by key"),
       Row(1))
-  }
-
-  test("throw errors for non-aggregate attributes with aggregation") {
-    def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
-      if (isInvalidQuery) {
-        val e = intercept[AnalysisException](sql(query).queryExecution.analyzed)
-        assert(e.getMessage contains "group by")
-      } else {
-        // Should not throw
-        sql(query).queryExecution.analyzed
-      }
-    }
-
-    checkAggregation("SELECT key, COUNT(*) FROM testData")
-    checkAggregation("SELECT COUNT(key), COUNT(*) FROM testData", isInvalidQuery = false)
-
-    checkAggregation("SELECT value, COUNT(*) FROM testData GROUP BY key")
-    checkAggregation("SELECT COUNT(value), SUM(key) FROM testData GROUP BY key", false)
-
-    checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
-    checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
   }
 
   testQuietly(

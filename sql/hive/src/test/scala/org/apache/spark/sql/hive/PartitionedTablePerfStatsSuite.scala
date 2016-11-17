@@ -105,12 +105,9 @@ class PartitionedTablePerfStatsSuite
         assert(df4.count() == 0)
         assert(df4.inputFiles.length == 0)
 
-        // TODO(ekl) enable for hive tables as well once SPARK-17983 is fixed
-        if (spec.isDatasourceTable) {
-          val df5 = spark.sql("select * from test where fieldOne = 4")
-          assert(df5.count() == 1)
-          assert(df5.inputFiles.length == 5)
-        }
+        val df5 = spark.sql("select * from test where fieldOne = 4")
+        assert(df5.count() == 1)
+        assert(df5.inputFiles.length == 5)
       }
     }
   }
@@ -256,7 +253,7 @@ class PartitionedTablePerfStatsSuite
           // of doing plan cache validation based on the entire partition set.
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test where partCol1 = 999").count() == 0)
-          // 5 from table resolution, another 5 from ListingFileCatalog
+          // 5 from table resolution, another 5 from InMemoryFileIndex
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 10)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
 

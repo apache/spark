@@ -112,6 +112,8 @@ can then be used as features for prediction, document similarity calculations, e
 Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#word2vec) for more
 details.
 
+**Examples**
+
 In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
 
 <div class="codetabs">
@@ -220,6 +222,8 @@ for more details on the API.
  Alternatively, users can set parameter "gaps" to false indicating the regex "pattern" denotes
  "tokens" rather than splitting gaps, and find all matching occurrences as the tokenization result.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -321,6 +325,8 @@ An [n-gram](https://en.wikipedia.org/wiki/N-gram) is a sequence of $n$ tokens (t
 
 `NGram` takes as input a sequence of strings (e.g. the output of a [Tokenizer](ml-features.html#tokenizer)).  The parameter `n` is used to determine the number of terms in each $n$-gram. The output will consist of a sequence of $n$-grams where each $n$-gram is represented by a space-delimited string of $n$ consecutive words.  If the input sequence contains fewer than `n` strings, no output is produced.
 
+**Examples**
+
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
@@ -358,6 +364,8 @@ for binarization. Feature values greater than the threshold are binarized to 1.0
 to or less than the threshold are binarized to 0.0. Both Vector and Double types are supported
 for `inputCol`.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -388,6 +396,8 @@ for more details on the API.
 
 [PCA](http://en.wikipedia.org/wiki/Principal_component_analysis) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components. A [PCA](api/scala/index.html#org.apache.spark.ml.feature.PCA) class trains a model to project vectors to a low-dimensional space using PCA. The example below shows how to project 5-dimensional feature vectors into 3-dimensional principal components.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -417,6 +427,8 @@ for more details on the API.
 ## PolynomialExpansion
 
 [Polynomial expansion](http://en.wikipedia.org/wiki/Polynomial_expansion) is the process of expanding your features into a polynomial space, which is formulated by an n-degree combination of original dimensions. A [PolynomialExpansion](api/scala/index.html#org.apache.spark.ml.feature.PolynomialExpansion) class provides this functionality.  The example below shows how to expand your features into a 3-degree polynomial space.
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -457,6 +469,8 @@ and scaling the result by $1/\sqrt{2}$ such that the representing matrix
 for the transform is unitary. No shift is applied to the transformed
 sequence (e.g. the $0$th element of the transformed sequence is the
 $0$th DCT coefficient and _not_ the $N/2$th).
+
+**Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -663,6 +677,8 @@ for more details on the API.
 
 [One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features.
 
+**Examples**
+
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
@@ -701,6 +717,8 @@ It can both automatically decide which features are categorical and convert orig
 
 Indexing categorical features allows algorithms such as Decision Trees and Tree Ensembles to treat categorical features appropriately, improving performance.
 
+**Examples**
+
 In the example below, we read in a dataset of labeled points and then use `VectorIndexer` to decide which features should be treated as categorical.  We transform the categorical feature values to their indices.  This transformed data could then be passed to algorithms such as `DecisionTreeRegressor` that handle categorical features.
 
 <div class="codetabs">
@@ -729,10 +747,64 @@ for more details on the API.
 </div>
 </div>
 
+## Interaction
+
+`Interaction` is a `Transformer` which takes vector or double-valued columns, and generates a single vector column that contains the product of all combinations of one value from each input column.
+
+For example, if you have 2 vector type columns each of which has 3 dimensions as input columns, then then you'll get a 9-dimensional vector as the output column.
+
+**Examples**
+
+Assume that we have the following DataFrame with the columns "id1", "vec1", and "vec2":
+
+~~~~
+  id1|vec1          |vec2          
+  ---|--------------|--------------
+  1  |[1.0,2.0,3.0] |[8.0,4.0,5.0] 
+  2  |[4.0,3.0,8.0] |[7.0,9.0,8.0] 
+  3  |[6.0,1.0,9.0] |[2.0,3.0,6.0] 
+  4  |[10.0,8.0,6.0]|[9.0,4.0,5.0] 
+  5  |[9.0,2.0,7.0] |[10.0,7.0,3.0]
+  6  |[1.0,1.0,4.0] |[2.0,8.0,4.0]     
+~~~~
+
+Applying `Interaction` with those input columns,
+then `interactedCol` as the output column contains:
+
+~~~~
+  id1|vec1          |vec2          |interactedCol                                         
+  ---|--------------|--------------|------------------------------------------------------
+  1  |[1.0,2.0,3.0] |[8.0,4.0,5.0] |[8.0,4.0,5.0,16.0,8.0,10.0,24.0,12.0,15.0]            
+  2  |[4.0,3.0,8.0] |[7.0,9.0,8.0] |[56.0,72.0,64.0,42.0,54.0,48.0,112.0,144.0,128.0]     
+  3  |[6.0,1.0,9.0] |[2.0,3.0,6.0] |[36.0,54.0,108.0,6.0,9.0,18.0,54.0,81.0,162.0]        
+  4  |[10.0,8.0,6.0]|[9.0,4.0,5.0] |[360.0,160.0,200.0,288.0,128.0,160.0,216.0,96.0,120.0]
+  5  |[9.0,2.0,7.0] |[10.0,7.0,3.0]|[450.0,315.0,135.0,100.0,70.0,30.0,350.0,245.0,105.0] 
+  6  |[1.0,1.0,4.0] |[2.0,8.0,4.0] |[12.0,48.0,24.0,12.0,48.0,24.0,48.0,192.0,96.0]       
+~~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Interaction Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Interaction)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/InteractionExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Interaction Java docs](api/java/org/apache/spark/ml/feature/Interaction.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaInteractionExample.java %}
+</div>
+</div>
 
 ## Normalizer
 
 `Normalizer` is a `Transformer` which transforms a dataset of `Vector` rows, normalizing each `Vector` to have unit norm.  It takes parameter `p`, which specifies the [p-norm](http://en.wikipedia.org/wiki/Norm_%28mathematics%29#p-norm) used for normalization.  ($p = 2$ by default.)  This normalization can help standardize your input data and improve the behavior of learning algorithms.
+
+**Examples**
 
 The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^1$ norm and unit $L^\infty$ norm.
 
@@ -773,6 +845,8 @@ for more details on the API.
 `StandardScaler` is an `Estimator` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
 
 Note that if the standard deviation of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
+
+**Examples**
 
 The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
 
@@ -819,6 +893,8 @@ For the case `$E_{max} == E_{min}$`, `$Rescaled(e_i) = 0.5 * (max + min)$`
 
 Note that since zero values will probably be transformed to non-zero values, output of the transformer will be `DenseVector` even for sparse input.
 
+**Examples**
+
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
 
 <div class="codetabs">
@@ -859,6 +935,8 @@ data, and thus does not destroy any sparsity.
 
 `MaxAbsScaler` computes summary statistics on a data set and produces a `MaxAbsScalerModel`. The 
 model can then transform each feature individually to range [-1, 1].
+
+**Examples**
 
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [-1, 1].
 
@@ -902,6 +980,8 @@ Note that if you have no idea of the upper and lower bounds of the targeted colu
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
 More details can be found in the API docs for [Bucketizer](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer).
+
+**Examples**
 
 The following example demonstrates how to bucketize a column of `Double`s into another index-wised column.
 
@@ -950,6 +1030,8 @@ v_N
   v_N w_N
   \end{pmatrix}
 \]`
+
+**Examples**
 
 This example below demonstrates how to transform vectors using a transforming vector value.
 
@@ -1338,14 +1420,14 @@ for more details on the API.
 `ChiSqSelector` stands for Chi-Squared feature selection. It operates on labeled data with
 categorical features. ChiSqSelector uses the
 [Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
-features to choose. It supports three selection methods: `KBest`, `Percentile` and `FPR`:
+features to choose. It supports three selection methods: `numTopFeatures`, `percentile`, `fpr`:
 
-* `KBest` chooses the `k` top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
-* `Percentile` is similar to `KBest` but chooses a fraction of all features instead of a fixed number.
-* `FPR` chooses all features whose false positive rate meets some threshold.
+* `numTopFeatures` chooses a fixed number of top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
+* `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
+* `fpr` chooses all features whose p-value is below a threshold, thus controlling the false positive rate of selection.
 
-By default, the selection method is `KBest`, the default number of top features is 50. User can use
-`setNumTopFeatures`, `setPercentile` and `setAlpha` to set different selection methods.
+By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
+The user can choose a selection method using `setSelectorType`.
 
 **Examples**
 

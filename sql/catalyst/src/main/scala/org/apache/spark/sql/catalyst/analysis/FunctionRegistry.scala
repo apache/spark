@@ -357,7 +357,7 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
-    expression[CreateStruct]("struct"),
+    CreateStruct.registryEntry,
 
     // misc functions
     expression[AssertTrue]("assert_true"),
@@ -446,7 +446,10 @@ object FunctionRegistry {
         // If there is an apply method that accepts Seq[Expression], use that one.
         Try(varargCtor.get.newInstance(expressions).asInstanceOf[Expression]) match {
           case Success(e) => e
-          case Failure(e) => throw new AnalysisException(e.getMessage)
+          case Failure(e) =>
+            // the exception is an invocation exception. To get a meaningful message, we need the
+            // cause.
+            throw new AnalysisException(e.getCause.getMessage)
         }
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
@@ -495,7 +498,7 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(clazz.getCanonicalName, name, df.usage(), df.extended())
+      new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }

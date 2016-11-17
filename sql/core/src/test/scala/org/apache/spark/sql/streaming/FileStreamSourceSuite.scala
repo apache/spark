@@ -102,12 +102,6 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext with Private
     }
   }
 
-  case class DeleteFile(file: File) extends ExternalAction {
-    def runAction(): Unit = {
-      Utils.deleteRecursively(file)
-    }
-  }
-
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   def createFileStream(
       format: String,
@@ -697,10 +691,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar")),
 
-          // Delete the two partition dirs
-          DeleteFile(partitionFooSubDir),
-          DeleteFile(partitionBarSubDir),
-
           AddTextFileData("{'value': 'keep6'}", partitionBarSubDir, tmp),
           CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar"), ("keep5", "bar"),
             ("keep6", "bar"))
@@ -879,7 +869,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val numFiles = 10000
 
     // This is to avoid running a spark job to list of files in parallel
-    // by the ListingFileCatalog.
+    // by the InMemoryFileIndex.
     spark.sessionState.conf.setConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
 
     withTempDirs { case (root, tmp) =>
@@ -1013,6 +1003,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         }
       )
     }
+  }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val options = new FileStreamOptions(Map("maxfilespertrigger" -> "1"))
+    assert(options.maxFilesPerTrigger == Some(1))
   }
 }
 

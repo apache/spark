@@ -64,12 +64,6 @@ class InMemoryCatalog(
     catalog(db).tables(table).partitions.contains(spec)
   }
 
-  private def requireTableExists(db: String, table: String): Unit = {
-    if (!tableExists(db, table)) {
-      throw new NoSuchTableException(db = db, table = table)
-    }
-  }
-
   private def requireTableNotExists(db: String, table: String): Unit = {
     if (tableExists(db, table)) {
       throw new TableAlreadyExistsException(db = db, table = table)
@@ -196,18 +190,32 @@ class InMemoryCatalog(
         throw new TableAlreadyExistsException(db = db, table = table)
       }
     } else {
-      if (tableDefinition.tableType == CatalogTableType.MANAGED) {
-        val dir = new Path(catalog(db).db.locationUri, table)
+      // Set the default table location if this is a managed table and its location is not
+      // specified.
+      // Ideally we should not create a managed table with location, but Hive serde table can
+      // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
+      // to create the table directory and write out data before we create this table, to avoid
+      // exposing a partial written table.
+      val needDefaultTableLocation =
+        tableDefinition.tableType == CatalogTableType.MANAGED &&
+          tableDefinition.storage.locationUri.isEmpty
+
+      val tableWithLocation = if (needDefaultTableLocation) {
+        val defaultTableLocation = new Path(catalog(db).db.locationUri, table)
         try {
-          val fs = dir.getFileSystem(hadoopConfig)
-          fs.mkdirs(dir)
+          val fs = defaultTableLocation.getFileSystem(hadoopConfig)
+          fs.mkdirs(defaultTableLocation)
         } catch {
           case e: IOException =>
             throw new SparkException(s"Unable to create table $table as failed " +
-              s"to create its directory $dir", e)
+              s"to create its directory $defaultTableLocation", e)
         }
+        tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri.toString))
+      } else {
+        tableDefinition
       }
-      catalog(db).tables.put(table, new TableDesc(tableDefinition))
+
+      catalog(db).tables.put(table, new TableDesc(tableWithLocation))
     }
   }
 
@@ -218,8 +226,12 @@ class InMemoryCatalog(
       purge: Boolean): Unit = synchronized {
     requireDbExists(db)
     if (tableExists(db, table)) {
-      if (getTable(db, table).tableType == CatalogTableType.MANAGED) {
-        val dir = new Path(catalog(db).db.locationUri, table)
+      val tableMeta = getTable(db, table)
+      if (tableMeta.tableType == CatalogTableType.MANAGED) {
+        assert(tableMeta.storage.locationUri.isDefined,
+          "Managed table should always have table location, as we will assign a default location " +
+            "to it if it doesn't have one.")
+        val dir = new Path(tableMeta.location)
         try {
           val fs = dir.getFileSystem(hadoopConfig)
           fs.delete(dir, true)
@@ -244,7 +256,10 @@ class InMemoryCatalog(
     oldDesc.table = oldDesc.table.copy(identifier = TableIdentifier(newName, Some(db)))
 
     if (oldDesc.table.tableType == CatalogTableType.MANAGED) {
-      val oldDir = new Path(catalog(db).db.locationUri, oldName)
+      assert(oldDesc.table.storage.locationUri.isDefined,
+        "Managed table should always have table location, as we will assign a default location " +
+          "to it if it doesn't have one.")
+      val oldDir = new Path(oldDesc.table.location)
       val newDir = new Path(catalog(db).db.locationUri, newName)
       try {
         val fs = oldDir.getFileSystem(hadoopConfig)
@@ -254,6 +269,7 @@ class InMemoryCatalog(
           throw new SparkException(s"Unable to rename table $oldName to $newName as failed " +
             s"to rename its directory $oldDir", e)
       }
+      oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri.toString))
     }
 
     catalog(db).tables.put(newName, oldDesc)
@@ -339,25 +355,28 @@ class InMemoryCatalog(
       }
     }
 
-    val tableDir = new Path(catalog(db).db.locationUri, table)
-    val partitionColumnNames = getTable(db, table).partitionColumnNames
+    val tableMeta = getTable(db, table)
+    val partitionColumnNames = tableMeta.partitionColumnNames
+    val tablePath = new Path(tableMeta.location)
     // TODO: we should follow hive to roll back if one partition path failed to create.
     parts.foreach { p =>
-      // If location is set, the partition is using an external partition location and we don't
-      // need to handle its directory.
-      if (p.storage.locationUri.isEmpty) {
-        val partitionPath = partitionColumnNames.flatMap { col =>
-          p.spec.get(col).map(col + "=" + _)
-        }.mkString("/")
-        try {
-          val fs = tableDir.getFileSystem(hadoopConfig)
-          fs.mkdirs(new Path(tableDir, partitionPath))
-        } catch {
-          case e: IOException =>
-            throw new SparkException(s"Unable to create partition path $partitionPath", e)
-        }
+      val partitionPath = p.storage.locationUri.map(new Path(_)).getOrElse {
+        ExternalCatalogUtils.generatePartitionPath(p.spec, partitionColumnNames, tablePath)
       }
-      existingParts.put(p.spec, p)
+
+      try {
+        val fs = tablePath.getFileSystem(hadoopConfig)
+        if (!fs.exists(partitionPath)) {
+          fs.mkdirs(partitionPath)
+        }
+      } catch {
+        case e: IOException =>
+          throw new SparkException(s"Unable to create partition path $partitionPath", e)
+      }
+
+      existingParts.put(
+        p.spec,
+        p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toString))))
     }
   }
 
@@ -376,19 +395,15 @@ class InMemoryCatalog(
       }
     }
 
-    val tableDir = new Path(catalog(db).db.locationUri, table)
-    val partitionColumnNames = getTable(db, table).partitionColumnNames
-    // TODO: we should follow hive to roll back if one partition path failed to delete.
+    val shouldRemovePartitionLocation = getTable(db, table).tableType == CatalogTableType.MANAGED
+    // TODO: we should follow hive to roll back if one partition path failed to delete, and support
+    // partial partition spec.
     partSpecs.foreach { p =>
-      // If location is set, the partition is using an external partition location and we don't
-      // need to handle its directory.
-      if (existingParts.contains(p) && existingParts(p).storage.locationUri.isEmpty) {
-        val partitionPath = partitionColumnNames.flatMap { col =>
-          p.get(col).map(col + "=" + _)
-        }.mkString("/")
+      if (existingParts.contains(p) && shouldRemovePartitionLocation) {
+        val partitionPath = new Path(existingParts(p).location)
         try {
-          val fs = tableDir.getFileSystem(hadoopConfig)
-          fs.delete(new Path(tableDir, partitionPath), true)
+          val fs = partitionPath.getFileSystem(hadoopConfig)
+          fs.delete(partitionPath, true)
         } catch {
           case e: IOException =>
             throw new SparkException(s"Unable to delete partition path $partitionPath", e)
@@ -407,33 +422,34 @@ class InMemoryCatalog(
     requirePartitionsExist(db, table, specs)
     requirePartitionsNotExist(db, table, newSpecs)
 
-    val tableDir = new Path(catalog(db).db.locationUri, table)
-    val partitionColumnNames = getTable(db, table).partitionColumnNames
+    val tableMeta = getTable(db, table)
+    val partitionColumnNames = tableMeta.partitionColumnNames
+    val tablePath = new Path(tableMeta.location)
+    val shouldUpdatePartitionLocation = getTable(db, table).tableType == CatalogTableType.MANAGED
+    val existingParts = catalog(db).tables(table).partitions
     // TODO: we should follow hive to roll back if one partition path failed to rename.
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
-      val newPart = getPartition(db, table, oldSpec).copy(spec = newSpec)
-      val existingParts = catalog(db).tables(table).partitions
-
-      // If location is set, the partition is using an external partition location and we don't
-      // need to handle its directory.
-      if (newPart.storage.locationUri.isEmpty) {
-        val oldPath = partitionColumnNames.flatMap { col =>
-          oldSpec.get(col).map(col + "=" + _)
-        }.mkString("/")
-        val newPath = partitionColumnNames.flatMap { col =>
-          newSpec.get(col).map(col + "=" + _)
-        }.mkString("/")
+      val oldPartition = getPartition(db, table, oldSpec)
+      val newPartition = if (shouldUpdatePartitionLocation) {
+        val oldPartPath = new Path(oldPartition.location)
+        val newPartPath = ExternalCatalogUtils.generatePartitionPath(
+          newSpec, partitionColumnNames, tablePath)
         try {
-          val fs = tableDir.getFileSystem(hadoopConfig)
-          fs.rename(new Path(tableDir, oldPath), new Path(tableDir, newPath))
+          val fs = tablePath.getFileSystem(hadoopConfig)
+          fs.rename(oldPartPath, newPartPath)
         } catch {
           case e: IOException =>
-            throw new SparkException(s"Unable to rename partition path $oldPath", e)
+            throw new SparkException(s"Unable to rename partition path $oldPartPath", e)
         }
+        oldPartition.copy(
+          spec = newSpec,
+          storage = oldPartition.storage.copy(locationUri = Some(newPartPath.toString)))
+      } else {
+        oldPartition.copy(spec = newSpec)
       }
 
       existingParts.remove(oldSpec)
-      existingParts.put(newSpec, newPart)
+      existingParts.put(newSpec, newPartition)
     }
   }
 
@@ -471,11 +487,26 @@ class InMemoryCatalog(
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
-    if (partialSpec.nonEmpty) {
-      throw new UnsupportedOperationException(
-        "listPartition with partial partition spec is not implemented")
+
+    partialSpec match {
+      case None => catalog(db).tables(table).partitions.values.toSeq
+      case Some(partial) =>
+        catalog(db).tables(table).partitions.toSeq.collect {
+          case (spec, partition) if isPartialPartitionSpec(partial, spec) => partition
+        }
     }
-    catalog(db).tables(table).partitions.values.toSeq
+  }
+
+  /**
+   * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
+   * partial partition spec w.r.t. PARTITION (a=1,b=2).
+   */
+  private def isPartialPartitionSpec(
+      spec1: TablePartitionSpec,
+      spec2: TablePartitionSpec): Boolean = {
+    spec1.forall {
+      case (partitionColumn, value) => spec2(partitionColumn) == value
+    }
   }
 
   override def listPartitionsByFilter(

@@ -41,7 +41,9 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   with HasSeed with HasPredictionCol with HasTol {
 
   /**
-   * The number of clusters to create (k). Must be > 1. Default: 2.
+   * The number of clusters to create (k). Must be > 1. Note that it is possible for fewer than
+   * k clusters to be returned, for example, if there are fewer than k distinct points to cluster.
+   * Default: 2.
    * @group param
    */
   @Since("1.5.0")
@@ -106,8 +108,9 @@ class KMeansModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
-    val copied = new KMeansModel(uid, parentModel)
-    copyValues(copied, extra)
+    val copied = copyValues(new KMeansModel(uid, parentModel), extra)
+    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
+    copied.setParent(this.parent)
   }
 
   /** @group setParam */

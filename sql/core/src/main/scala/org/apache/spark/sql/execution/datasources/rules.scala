@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrd
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -127,7 +128,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
     checkDuplication(normalizedPartitionCols, "partition")
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
-      if (tableDesc.provider.get == "hive") {
+      if (tableDesc.provider.get == DDLUtils.HIVE_PROVIDER) {
         // When we hit this branch, it means users didn't specify schema for the table to be
         // created, as we always include partition columns in table schema for hive serde tables.
         // The real schema will be inferred at hive metastore by hive serde, plus the given
@@ -292,7 +293,7 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case CreateTable(tableDesc, _, Some(_))
-          if tableDesc.provider.get == "hive" =>
+          if tableDesc.provider.get == DDLUtils.HIVE_PROVIDER =>
         throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
 
       case _ => // OK

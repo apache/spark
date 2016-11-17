@@ -99,6 +99,12 @@ case class CatalogTablePartition(
     output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
   }
 
+  /** Return the partition location, assuming it is specified. */
+  def location: String = storage.locationUri.getOrElse {
+    val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
+    throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
+  }
+
   /**
    * Given the partition schema, returns a row with that schema holding the partition values.
    */
@@ -138,8 +144,9 @@ case class BucketSpec(
  *                 Can be None if this table is a View, should be "hive" for hive serde tables.
  * @param unsupportedFeatures is a list of string descriptions of features that are used by the
  *        underlying table but not supported by Spark SQL yet.
- * @param partitionProviderIsHive whether this table's partition metadata is stored in the Hive
- *                                metastore.
+ * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
+ *                                  catalog. If false, it is inferred automatically based on file
+ *                                  structure.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -158,7 +165,7 @@ case class CatalogTable(
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
-    partitionProviderIsHive: Boolean = false) {
+    tracksPartitionsInCatalog: Boolean = false) {
 
   /** schema of this table's partition columns */
   def partitionSchema: StructType = StructType(schema.filter {
@@ -168,6 +175,11 @@ case class CatalogTable(
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
     throw new AnalysisException(s"table $identifier did not specify database")
+  }
+
+  /** Return the table location, assuming it is specified. */
+  def location: String = storage.locationUri.getOrElse {
+    throw new AnalysisException(s"table $identifier did not specify locationUri")
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
@@ -217,7 +229,7 @@ case class CatalogTable(
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
         if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
         s"$storage",
-        if (partitionProviderIsHive) "Partition Provider: Hive" else "")
+        if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "")
 
     output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
   }

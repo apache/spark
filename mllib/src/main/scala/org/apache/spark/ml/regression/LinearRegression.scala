@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
-import org.apache.spark.ml.optim.{NormalEquationSolver, WeightedLeastSquares}
+import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -160,16 +160,22 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set the solver algorithm used for optimization.
    * In case of linear regression, this can be "l-bfgs", "normal" and "auto".
-   * "l-bfgs" denotes Limited-memory BFGS which is a limited-memory quasi-Newton
-   * optimization method. "normal" denotes using Normal Equation as an analytical
-   * solution to the linear regression problem.
-   * The default value is "auto" which means that the solver algorithm is
-   * selected automatically.
+   *  - "l-bfgs" denotes Limited-memory BFGS which is a limited-memory quasi-Newton
+   *    optimization method.
+   *  - "normal" denotes using Normal Equation as an analytical solution to the linear regression
+   *    problem.  This solver is limited to [[LinearRegression.MAX_FEATURES_FOR_NORMAL_SOLVER]].
+   *  - "auto" (default) means that the solver algorithm is selected automatically.
+   *    The Normal Equations solver will be used when possible, but this will automatically fall
+   *    back to iterative optimization methods when needed.
    *
    * @group setParam
    */
   @Since("1.6.0")
-  def setSolver(value: String): this.type = set(solver, value)
+  def setSolver(value: String): this.type = {
+    require(Set("auto", "l-bfgs", "normal").contains(value),
+      s"Solver $value was not supported. Supported options: auto, l-bfgs, normal")
+    set(solver, value)
+  }
   setDefault(solver -> "auto")
 
   /**
@@ -190,7 +196,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     val instances: RDD[Instance] = dataset.select(
-      col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+      col($(labelCol)), w, col($(featuresCol))).rdd.map {
       case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
     }
@@ -404,6 +410,14 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
 
   @Since("1.6.0")
   override def load(path: String): LinearRegression = super.load(path)
+
+  /**
+   * When using [[LinearRegression.solver]] == "normal", the solver must limit the number of
+   * features to at most this number.  The entire covariance matrix X^T^X will be collected
+   * to the driver. This limit helps prevent memory overflow errors.
+   */
+  @Since("2.1.0")
+  val MAX_FEATURES_FOR_NORMAL_SOLVER: Int = WeightedLeastSquares.MAX_NUM_FEATURES
 }
 
 /**

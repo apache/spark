@@ -37,18 +37,20 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.json.JacksonGenerator
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand, GlobalTempView, LocalTempView}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
+import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -475,12 +477,97 @@ class Dataset[T] private[sql](
    * `collect()`, will throw an [[AnalysisException]] when there is a streaming
    * source present.
    *
-   * @group basic
+   * @group streaming
    * @since 2.0.0
    */
   @Experimental
   @InterfaceStability.Evolving
   def isStreaming: Boolean = logicalPlan.isStreaming
+
+  /**
+   * Returns a checkpointed version of this Dataset.
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def checkpoint(): Dataset[T] = checkpoint(eager = true)
+
+  /**
+   * Returns a checkpointed version of this Dataset.
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def checkpoint(eager: Boolean): Dataset[T] = {
+    val internalRdd = queryExecution.toRdd.map(_.copy())
+    internalRdd.checkpoint()
+
+    if (eager) {
+      internalRdd.count()
+    }
+
+    val physicalPlan = queryExecution.executedPlan
+
+    // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
+    // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
+    // joins.
+    def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
+      partitioning match {
+        case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
+        case p => p
+      }
+    }
+
+    val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
+
+    Dataset.ofRows(
+      sparkSession,
+      LogicalRDD(
+        logicalPlan.output,
+        internalRdd,
+        outputPartitioning,
+        physicalPlan.outputOrdering
+      )(sparkSession)).as[T]
+  }
+
+  /**
+   * :: Experimental ::
+   * Defines an event time watermark for this [[Dataset]]. A watermark tracks a point in time
+   * before which we assume no more late data is going to arrive.
+   *
+   * Spark will use this watermark for several purposes:
+   *  - To know when a given time window aggregation can be finalized and thus can be emitted when
+   *    using output modes that do not allow updates.
+   *  - To minimize the amount of state that we need to keep for on-going aggregations.
+   *
+   *  The current watermark is computed by looking at the `MAX(eventTime)` seen across
+   *  all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
+   *  of coordinating this value across partitions, the actual watermark used is only guaranteed
+   *  to be at least `delayThreshold` behind the actual event time.  In some cases we may still
+   *  process records that arrive more than `delayThreshold` late.
+   *
+   * @param eventTime the name of the column that contains the event time of the row.
+   * @param delayThreshold the minimum delay to wait to data to arrive late, relative to the latest
+   *                       record that has been processed in the form of an interval
+   *                       (e.g. "1 minute" or "5 hours").
+   *
+   * @group streaming
+   * @since 2.1.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  // We only accept an existing column name, not a derived column here as a watermark that is
+  // defined on a derived column cannot referenced elsewhere in the plan.
+  def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
+    val parsedDelay =
+      Option(CalendarInterval.fromString("interval " + delayThreshold))
+        .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
+    EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
+  }
 
   /**
    * Displays the Dataset in a tabular form. Strings more than 20 characters will be truncated,

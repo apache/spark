@@ -25,11 +25,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.util.Shell
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
@@ -55,14 +55,15 @@ object PartitionSpec {
 }
 
 object PartitioningUtils {
-  // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since sql/core doesn't
-  // depend on Hive.
-  val DEFAULT_PARTITION_NAME = "__HIVE_DEFAULT_PARTITION__"
 
   private[datasources] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal])
   {
     require(columnNames.size == literals.size)
   }
+
+  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
+  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
+  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.unescapePathName
 
   /**
    * Given a group of qualified paths, tries to parse them and returns a partition specification.
@@ -89,12 +90,11 @@ object PartitioningUtils {
    */
   private[datasources] def parsePartitions(
       paths: Seq[Path],
-      defaultPartitionName: String,
       typeInference: Boolean,
       basePaths: Set[Path]): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
-      parsePartition(path, defaultPartitionName, typeInference, basePaths)
+      parsePartition(path, typeInference, basePaths)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -172,7 +172,6 @@ object PartitioningUtils {
    */
   private[datasources] def parsePartition(
       path: Path,
-      defaultPartitionName: String,
       typeInference: Boolean,
       basePaths: Set[Path]): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
@@ -195,7 +194,7 @@ object PartitioningUtils {
         // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
         // Once we get the string, we try to parse it and find the partition column and value.
         val maybeColumn =
-          parsePartitionColumn(currentPath.getName, defaultPartitionName, typeInference)
+          parsePartitionColumn(currentPath.getName, typeInference)
         maybeColumn.foreach(columns += _)
 
         // Now, we determine if we should stop.
@@ -227,7 +226,6 @@ object PartitioningUtils {
 
   private def parsePartitionColumn(
       columnSpec: String,
-      defaultPartitionName: String,
       typeInference: Boolean): Option[(String, Literal)] = {
     val equalSignIndex = columnSpec.indexOf('=')
     if (equalSignIndex == -1) {
@@ -239,9 +237,29 @@ object PartitioningUtils {
       val rawColumnValue = columnSpec.drop(equalSignIndex + 1)
       assert(rawColumnValue.nonEmpty, s"Empty partition column value in '$columnSpec'")
 
-      val literal = inferPartitionColumnValue(rawColumnValue, defaultPartitionName, typeInference)
+      val literal = inferPartitionColumnValue(rawColumnValue, typeInference)
       Some(columnName -> literal)
     }
+  }
+
+  /**
+   * Given a partition path fragment, e.g. `fieldOne=1/fieldTwo=2`, returns a parsed spec
+   * for that fragment, e.g. `Map(("fieldOne", "1"), ("fieldTwo", "2"))`.
+   */
+  def parsePathFragment(pathFragment: String): TablePartitionSpec = {
+    pathFragment.split("/").map { kv =>
+      val pair = kv.split("=", 2)
+      (unescapePathName(pair(0)), unescapePathName(pair(1)))
+    }.toMap
+  }
+
+  /**
+   * This is the inverse of parsePathFragment().
+   */
+  def getPathFragment(spec: TablePartitionSpec, partitionSchema: StructType): String = {
+    partitionSchema.map { field =>
+      escapePathName(field.name) + "=" + escapePathName(spec(field.name))
+    }.mkString("/")
   }
 
   /**
@@ -343,7 +361,6 @@ object PartitioningUtils {
    */
   private[datasources] def inferPartitionColumnValue(
       raw: String,
-      defaultPartitionName: String,
       typeInference: Boolean): Literal = {
     val decimalTry = Try {
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
@@ -368,14 +385,14 @@ object PartitioningUtils {
         .orElse(Try(Literal(JTimestamp.valueOf(unescapePathName(raw)))))
         // Then falls back to string
         .getOrElse {
-          if (raw == defaultPartitionName) {
+          if (raw == DEFAULT_PARTITION_NAME) {
             Literal.create(null, NullType)
           } else {
             Literal.create(unescapePathName(raw), StringType)
           }
         }
     } else {
-      if (raw == defaultPartitionName) {
+      if (raw == DEFAULT_PARTITION_NAME) {
         Literal.create(null, NullType)
       } else {
         Literal.create(unescapePathName(raw), StringType)
@@ -437,78 +454,5 @@ object PartitioningUtils {
     literals.map { case l @ Literal(_, dataType) =>
       Literal.create(Cast(l, desiredType).eval(), desiredType)
     }
-  }
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  // The following string escaping code is mainly copied from Hive (o.a.h.h.common.FileUtils).
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-
-  val charToEscape = {
-    val bitSet = new java.util.BitSet(128)
-
-    /**
-     * ASCII 01-1F are HTTP control characters that need to be escaped.
-     * \u000A and \u000D are \n and \r, respectively.
-     */
-    val clist = Array(
-      '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\u0007', '\u0008', '\u0009',
-      '\n', '\u000B', '\u000C', '\r', '\u000E', '\u000F', '\u0010', '\u0011', '\u0012', '\u0013',
-      '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001A', '\u001B', '\u001C',
-      '\u001D', '\u001E', '\u001F', '"', '#', '%', '\'', '*', '/', ':', '=', '?', '\\', '\u007F',
-      '{', '[', ']', '^')
-
-    clist.foreach(bitSet.set(_))
-
-    if (Shell.WINDOWS) {
-      Array(' ', '<', '>', '|').foreach(bitSet.set(_))
-    }
-
-    bitSet
-  }
-
-  def needsEscaping(c: Char): Boolean = {
-    c >= 0 && c < charToEscape.size() && charToEscape.get(c)
-  }
-
-  def escapePathName(path: String): String = {
-    val builder = new StringBuilder()
-    path.foreach { c =>
-      if (needsEscaping(c)) {
-        builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02X")
-      } else {
-        builder.append(c)
-      }
-    }
-
-    builder.toString()
-  }
-
-  def unescapePathName(path: String): String = {
-    val sb = new StringBuilder
-    var i = 0
-
-    while (i < path.length) {
-      val c = path.charAt(i)
-      if (c == '%' && i + 2 < path.length) {
-        val code: Int = try {
-          Integer.parseInt(path.substring(i + 1, i + 3), 16)
-        } catch {
-          case _: Exception => -1
-        }
-        if (code >= 0) {
-          sb.append(code.asInstanceOf[Char])
-          i += 3
-        } else {
-          sb.append(c)
-          i += 1
-        }
-      } else {
-        sb.append(c)
-        i += 1
-      }
-    }
-
-    sb.toString()
   }
 }
