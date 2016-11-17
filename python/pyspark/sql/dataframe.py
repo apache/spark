@@ -549,6 +549,11 @@ class DataFrame(object):
     def sample(self, withReplacement, fraction, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
 
+        .. note::
+
+            This is not guaranteed to provide exactly the fraction specified of the total count
+            of the given :class:`DataFrame`.
+
         >>> df.sample(False, 0.5, 42).count()
         2
         """
