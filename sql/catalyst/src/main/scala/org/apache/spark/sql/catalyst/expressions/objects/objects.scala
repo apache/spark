@@ -76,19 +76,16 @@ trait InvokeLike {
       val reset = s"$containsNullInArguments = false;"
       val argCodes = arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
+        val updateContainsNull = if (e.nullable) {
+          s"$containsNullInArguments = ${expr.isNull};"
+        } else {
+          ""
+        }
         s"""
           if (!$containsNullInArguments) {
             ${expr.code}
-        """ +
-          (if (e.nullable) {
-            s"""
-              $containsNullInArguments = ${expr.isNull};
-              ${argValues(i)} = ${expr.value};
-            """
-          } else {
-            s"${argValues(i)} = ${expr.value};"
-          }) +
-        """
+            $updateContainsNull
+            ${argValues(i)} = ${expr.value};
           }
         """
       }
