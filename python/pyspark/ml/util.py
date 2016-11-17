@@ -81,6 +81,10 @@ class MLWriter(object):
         """Sets the SQL context to use for saving."""
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for saving."""
+        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+
 
 @inherit_doc
 class JavaMLWriter(MLWriter):
@@ -105,8 +109,17 @@ class JavaMLWriter(MLWriter):
         return self
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for saving."""
+        """
+        Sets the SQL context to use for saving.
+        .. note:: Deprecated in 2.1, use session instead.
+        """
+        warnings.warn("Deprecated in 2.1, use session instead.")
         self._jwrite.context(sqlContext._ssql_ctx)
+        return self
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for saving."""
+        self._jwrite.session(sparkSession._jsparkSession)
         return self
 
 
@@ -158,6 +171,10 @@ class MLReader(object):
         """Sets the SQL context to use for loading."""
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
 
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for loading."""
+        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
+
 
 @inherit_doc
 class JavaMLReader(MLReader):
@@ -180,8 +197,17 @@ class JavaMLReader(MLReader):
         return self._clazz._from_java(java_obj)
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for loading."""
+        """
+        Sets the SQL context to use for loading.
+        .. note:: Deprecated in 2.1, use session instead.
+        """
+        warnings.warn("Deprecated in 2.1, use session instead.")
         self._jread.context(sqlContext._ssql_ctx)
+        return self
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for loading."""
+        self._jread.session(sparkSession._jsparkSession)
         return self
 
     @classmethod

@@ -221,15 +221,6 @@ class RandomForestClassificationModel private[ml] (
     }
   }
 
-  /**
-   * Number of trees in ensemble
-   *
-   * @deprecated  Use [[getNumTrees]] instead.  This method will be removed in 2.1.0
-   */
-  // TODO: Once this is removed, then this class can inherit from RandomForestClassifierParams
-  @deprecated("Use getNumTrees instead.  This method will be removed in 2.1.0.", "2.0.0")
-  val numTrees: Int = trees.length
-
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestClassificationModel = {
     copyValues(new RandomForestClassificationModel(uid, _trees, numFeatures, numClasses), extra)

@@ -181,14 +181,6 @@ class RandomForestRegressionModel private[ml] (
     _trees.map(_.rootNode.predictImpl(features).prediction).sum / getNumTrees
   }
 
-  /**
-   * Number of trees in ensemble
-   * @deprecated  Use [[getNumTrees]] instead.  This method will be removed in 2.1.0
-   */
-  // TODO: Once this is removed, then this class can inherit from RandomForestRegressorParams
-  @deprecated("Use getNumTrees instead.  This method will be removed in 2.1.0.", "2.0.0")
-  val numTrees: Int = trees.length
-
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
     copyValues(new RandomForestRegressionModel(uid, _trees, numFeatures), extra).setParent(parent)
