@@ -59,10 +59,10 @@ trait InvokeLike extends Expression {
    */
   def prepareArguments(ctx: CodegenContext, ev: ExprCode): (String, String, String) = {
 
-    val argsHaveNull = if (propagatingNull) {
-      val argsHaveNull = ctx.freshName("argsHaveNull")
-      ctx.addMutableState("boolean", argsHaveNull, "")
-      argsHaveNull
+    val containsNullInArguments = if (propagatingNull) {
+      val containsNullInArguments = ctx.freshName("containsNullInArguments")
+      ctx.addMutableState("boolean", containsNullInArguments, "")
+      containsNullInArguments
     } else {
       ""
     }
@@ -73,16 +73,16 @@ trait InvokeLike extends Expression {
     }
 
     val argCodes = if (propagatingNull) {
-      val reset = s"$argsHaveNull = false;"
+      val reset = s"$containsNullInArguments = false;"
       val argCodes = arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
         s"""
-          if (!$argsHaveNull) {
+          if (!$containsNullInArguments) {
             ${expr.code}
         """ +
           (if (e.nullable) {
             s"""
-              $argsHaveNull = ${expr.isNull};
+              $containsNullInArguments = ${expr.isNull};
               ${argValues(i)} = ${expr.value};
             """
           } else {
@@ -105,7 +105,7 @@ trait InvokeLike extends Expression {
     val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
     val setIsNull = if (propagatingNull) {
-      s"${ev.isNull} = ${ev.isNull} || $argsHaveNull;"
+      s"${ev.isNull} = ${ev.isNull} || $containsNullInArguments;"
     } else {
       ""
     }
