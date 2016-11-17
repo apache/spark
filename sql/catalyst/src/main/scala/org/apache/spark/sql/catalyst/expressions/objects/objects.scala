@@ -322,7 +322,7 @@ case class NewInstance(
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
-    val prepareIsNull = if (propagateNull && arguments.exists(_.nullable)) {
+    val prepareIsNull = if (propagatingNull) {
       s"boolean $isNull = false;"
     } else {
       isNull = "false"
