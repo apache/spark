@@ -1023,6 +1023,11 @@ object HiveExternalCatalog {
       // After SPARK-6024, we removed this flag.
       // Although we are not using `spark.sql.sources.schema` any more, we need to still support.
       DataType.fromJson(schema.get).asInstanceOf[StructType]
+    } else if (props.filterKeys(_.startsWith(DATASOURCE_SCHEMA_PREFIX)).isEmpty) {
+      // If there is no schema information in table properties, it means the schema of this table
+      // was empty when saving into metastore, which is possible in older version(prior to 2.1) of
+      // Spark. We should respect it.
+      new StructType()
     } else {
       val numSchemaParts = props.get(DATASOURCE_SCHEMA_NUMPARTS)
       if (numSchemaParts.isDefined) {
