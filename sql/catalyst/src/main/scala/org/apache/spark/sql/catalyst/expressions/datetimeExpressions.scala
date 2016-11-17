@@ -1026,6 +1026,23 @@ case class ToDate(dateExp: Expression, format: Expression)
     if (d == null) {
       null
     } else {
+      left.dataType match {
+        case DateType =>
+          d// shouldn't it basically just return itself if date?
+        case TimestampType =>
+          DateTimeUtils.millisToDays(d.asInstanceOf[Long])
+        case StringType =>
+          if (constFormat == null || formatter == null) {
+            null
+          } else {
+            Try(formatter.parse(
+              d.asInstanceOf[UTF8String].toString).getDate).getOrElse(null)
+            // this is invalid code b/c this method is deprecated
+            // but I will change once all this stabilizes
+            // this is also just the wrong answer but I want some feedback on
+            // how to parse this with the whole Calendar Thing.
+          }
+      }
     }
   }
 
