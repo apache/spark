@@ -36,7 +36,6 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 [Graph.fromEdgeTuples]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexId,VertexId)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]
 [Graph.fromEdges]: api/scala/index.html#org.apache.spark.graphx.Graph$@fromEdges[VD,ED](RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
 [PartitionStrategy]: api/scala/index.html#org.apache.spark.graphx.PartitionStrategy
-[Graph.partitionBy]: api/scala/index.html#org.apache.spark.graphx.Graph$@partitionBy(partitionStrategy:org.apache.spark.graphx.PartitionStrategy):org.apache.spark.graphx.Graph[VD,ED]
 [PageRank]: api/scala/index.html#org.apache.spark.graphx.lib.PageRank$
 [ConnectedComponents]: api/scala/index.html#org.apache.spark.graphx.lib.ConnectedComponents$
 [TriangleCount]: api/scala/index.html#org.apache.spark.graphx.lib.TriangleCount$
