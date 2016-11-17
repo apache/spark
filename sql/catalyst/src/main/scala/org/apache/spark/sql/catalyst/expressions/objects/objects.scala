@@ -47,10 +47,10 @@ trait InvokeLike {
    * Prepares codes for arguments.
    *
    * - generate codes for argument.
-   * - use ctx.splitExpressions() not to exceed 64kb JVM limit while preparing arguments.
+   * - use ctx.splitExpressions() to not exceed 64kb JVM limit while preparing arguments.
    * - avoid some of nullabilty checking which are not needed because the expression is not
    *   nullable.
-   * - when progagateNull == true, short circuit if we found one of arguments is null because
+   * - when progagatingNull == true, short circuit if we found one of arguments is null because
    *   preparing rest of arguments can be skipped in the case.
    *
    * @param ctx a [[CodegenContext]]
