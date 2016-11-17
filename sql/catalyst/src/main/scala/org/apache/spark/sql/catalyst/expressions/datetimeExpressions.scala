@@ -1005,7 +1005,7 @@ case class ToDate(dateExp: Expression, format: Expression)
 
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, DateType), StringType)
+    Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
     // need to add timestamp potentially too
 
   override def dataType: DataType = DateType
@@ -1017,15 +1017,27 @@ case class ToDate(dateExp: Expression, format: Expression)
   private lazy val formatter: SimpleDateFormat =
     Try(new SimpleDateFormat(constFormat.toString, Locale.US)).getOrElse(null)
 
-
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd"))
   }
 
-  override def eval(input: InternalRow): Any = child.eval(input)
+  override def eval(input: InternalRow): Any = {
+    val d = left.eval(input)
+    if (d == null) {
+      null
+    } else {
+    }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, d => d)
+    left.dataType match {
+      case DateType =>
+        null
+      case TimestampType =>
+        null
+      case StringType =>
+        null
+    }
   }
 
   override def prettyName: String = "to_date"
