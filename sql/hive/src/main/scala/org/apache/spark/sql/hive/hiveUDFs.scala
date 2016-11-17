@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 
+import org.apache.spark.api.java.function.Function0
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -100,9 +101,9 @@ private[hive] case class HiveSimpleUDF(
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val hiveUDF = ctx.addReferenceObj("hiveUDF", this)
-    val converterClassName = classOf[Any => Any].getName
 
     // Generate codes used to convert the returned value of `HiveSimpleUDF` to Catalyst type
+    val converterClassName = classOf[Any => Any].getName
     val catalystConverterTerm = ctx.freshName("catalystConverter")
     ctx.addMutableState(converterClassName, catalystConverterTerm,
       s"this.$catalystConverterTerm = ($converterClassName)$hiveUDF.getUnwrapper();")
@@ -121,6 +122,7 @@ private[hive] case class HiveSimpleUDF(
     // such as IntegerType, its javaType is `int` and the returned type of the function  is Object.
     // Trying to convert an Object to `int` will cause casting exception.
     val evalCode = evals.map(_.code).mkString
+
     val (converters, funcArguments) = converterTerms.zipWithIndex.map { case (converter, i) =>
       val eval = evals(i)
       val argTerm = ctx.freshName("arg")
@@ -191,20 +193,19 @@ private[hive] case class HiveSimpleUDF(
 }
 
 // Adapter from Catalyst ExpressionResult to Hive DeferredObject
-private[hive] class DeferredObjectAdapter(oi: ObjectInspector, dataType: DataType)
-  extends DeferredObject with HiveInspectors {
+private[hive] class DeferredObjectAdapter extends DeferredObject {
 
-  private var func: () => Any = _
-  def set(func: () => Any): Unit = {
+  private var func: Function0[AnyRef] = _
+  def set(func: Function0[AnyRef]): Unit = {
     this.func = func
   }
   override def prepare(i: Int): Unit = {}
-  override def get(): AnyRef = wrap(func(), oi, dataType)
+  override def get(): AnyRef = func.call()
 }
 
 private[hive] case class HiveGenericUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends Expression with HiveInspectors with CodegenFallback with Logging {
+  extends Expression with HiveInspectors with Logging {
 
   override def nullable: Boolean = true
 
@@ -220,9 +221,14 @@ private[hive] case class HiveGenericUDF(
   private lazy val argumentInspectors = children.map(toInspector)
 
   @transient
-  private lazy val returnInspector = {
+  lazy val returnInspector = {
     function.initializeAndFoldConstants(argumentInspectors.toArray)
   }
+
+  @transient
+  private lazy val wrappers = argumentInspectors.zip(children).map { case (inspect, child) =>
+    wrapperFor(inspect, child.dataType)
+  }.toArray
 
   @transient
   private lazy val unwrapper = unwrapperFor(returnInspector)
@@ -234,11 +240,121 @@ private[hive] case class HiveGenericUDF(
   }
 
   @transient
-  private lazy val deferredObjects = argumentInspectors.zip(children).map { case (inspect, child) =>
-    new DeferredObjectAdapter(inspect, child.dataType)
+  private lazy val deferredObjects = Seq.tabulate(children.size) { i =>
+    new DeferredObjectAdapter()
   }.toArray[DeferredObject]
 
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)
+
+  // Generate codes used to convert the arguments to Hive types for `HiveGenericUDF`
+  private[this] def genCodeForConverter(ctx: CodegenContext, index: Int): String = {
+    val converterClassName = classOf[Any => Any].getName
+    val hiveUDFClassName = classOf[HiveGenericUDF].getName
+
+    val converterTerm = ctx.freshName("converter")
+    val expressionIdx = ctx.references.size - 1
+    ctx.addMutableState(converterClassName, converterTerm,
+      s"this.$converterTerm = ($converterClassName)" +
+        s"(($hiveUDFClassName) references[$expressionIdx]).getWrapper($index);")
+    converterTerm
+  }
+
+  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val hiveUDF = ctx.addReferenceObj("hiveUDF", this)
+
+    // Generate codes used to convert the returned value of `HiveSimpleUDF` to Catalyst type
+    val converterClassName = classOf[Any => Any].getName
+    val catalystConverterTerm = ctx.freshName("catalystConverter")
+    ctx.addMutableState(converterClassName, catalystConverterTerm,
+      s"this.$catalystConverterTerm = ($converterClassName)$hiveUDF.getUnwrapper();")
+
+    val resultTerm = ctx.freshName("result")
+
+    // This must be called before children expressions' codegen
+    // because ctx.references is used in genCodeForConverter
+    val converterTerms = children.indices.map(genCodeForConverter(ctx, _))
+
+    // Generate codes used to convert input values into `DeferredObject`s
+    val deferredObjectsClassName = classOf[DeferredObject].getName + "[]"
+    val deferredObjectsTerm = ctx.freshName("deferredObjects")
+    ctx.addMutableState(deferredObjectsClassName, deferredObjectsTerm,
+      s"this.$deferredObjectsTerm = ($deferredObjectsClassName)$hiveUDF.getDeferredObjects();")
+
+    // Make sure initialized
+    val objectInspectorClassName = classOf[ObjectInspector].getName
+    val objectInspectorTerm = ctx.freshName("objectInspector")
+    ctx.addMutableState(objectInspectorClassName, objectInspectorTerm,
+      s"this.$objectInspectorTerm = ($objectInspectorClassName)$hiveUDF.returnInspector();")
+
+    // codegen for children expressions
+    val evals = children.map(_.genCode(ctx))
+
+    val (converters, funcArguments) = converterTerms.zipWithIndex.map { case (converter, i) =>
+      val eval = evals(i)
+      val argTerm = ctx.freshName("arg")
+      val convert = s"final Object $argTerm = ${eval.isNull} ? " +
+        s"null : $converter.apply(${eval.value});"
+      (convert, argTerm)
+    }.unzip
+
+    // Generate the codes for expressions and calling `HiveGenericUDF`.
+    val evalCode = evals.map(_.code).mkString
+
+    val funcClassName = classOf[Function0[AnyRef]].getName
+    val deferredObjectAdapterClassName = classOf[DeferredObjectAdapter].getName
+    val argsTerm = evals.zipWithIndex.map { case (eval, i) =>
+      s"""
+         (($deferredObjectAdapterClassName) this.$deferredObjectsTerm[$i])
+           .set(new ${funcClassName}<Object>() {
+             @Override
+             public Object call() {
+               return ${funcArguments(i)};
+             }
+           });
+       """.stripMargin
+    }
+
+    val getFuncResult = s"$hiveUDF.callUdf($deferredObjectsTerm)"
+    val callFunc =
+      s"""
+         ${ctx.boxedType(dataType)} $resultTerm = null;
+         try {
+           $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($getFuncResult);
+         } catch (Exception e) {
+           throw new org.apache.spark.SparkException($hiveUDF.udfErrorMessage(), e);
+         }
+       """
+
+    ev.copy(code = s"""
+      $evalCode
+      ${converters.mkString("\n")}
+      ${argsTerm.mkString("\n")}
+      $callFunc
+
+      boolean ${ev.isNull} = $resultTerm == null;
+      ${ctx.boxedType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = $resultTerm;
+      }""")
+  }
+
+  def getChildren(): Seq[Expression] = children
+
+  def getWrapper(index: Int): (Any) => Any = wrappers(index)
+
+  def getUnwrapper(): (Any) => Any = unwrapper
+
+  def getDeferredObjects(): Array[DeferredObject] = deferredObjects
+
+  def callUdf(args: Array[DeferredObject]): AnyRef = {
+    function.evaluate(deferredObjects)
+  }
+
+  lazy val udfErrorMessage = {
+    val funcCls = funcWrapper.functionClassName
+    val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
+    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+  }
 
   override def eval(input: InternalRow): Any = {
     returnInspector // Make sure initialized.
@@ -247,8 +363,11 @@ private[hive] case class HiveGenericUDF(
     val length = children.length
     while (i < length) {
       val idx = i
-      deferredObjects(i).asInstanceOf[DeferredObjectAdapter]
-        .set(() => children(idx).eval(input))
+      deferredObjects(i).asInstanceOf[DeferredObjectAdapter].set(new Function0[AnyRef]() {
+        override def call(): AnyRef = {
+          wrappers(idx)(children(idx).eval(input)).asInstanceOf[AnyRef]
+        }
+      })
       i += 1
     }
     unwrapper(function.evaluate(deferredObjects))
