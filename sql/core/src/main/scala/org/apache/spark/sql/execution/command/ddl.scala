@@ -767,16 +767,4 @@ object DDLUtils {
     }
   }
 
-  /**
-   * Masking credentials in the option lists. For example, in the sql plan explain output
-   * for JDBC data sources.
-   */
-  def maskCredentials(options: Map[String, String]): Map[String, String] = {
-    options.map {
-      case (password, _) if password.toLowerCase == "password" => (password, "###")
-      case (url, value) if url.toLowerCase == "url" && value.toLowerCase.contains("password") =>
-        (url, "###")
-      case o => o
-    }
-  }
 }

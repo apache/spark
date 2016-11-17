@@ -497,7 +497,7 @@ case class DescribeTableCommand(
     describeBucketingInfo(metadata, buffer)
 
     append(buffer, "Storage Desc Parameters:", "", "")
-    val maskedProperties = DDLUtils.maskCredentials(metadata.storage.properties)
+    val maskedProperties = CatalogUtils.maskCredentials(metadata.storage.properties)
     maskedProperties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
