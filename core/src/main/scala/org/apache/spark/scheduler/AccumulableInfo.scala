@@ -32,7 +32,7 @@ import org.apache.spark.annotation.DeveloperApi
  * @param countFailedValues whether to count this accumulator's partial value if the task failed
  * @param metadata internal metadata associated with this accumulator, if any
  *
- * @note once this is JSON serialized the types of `update` and `value` will be lost and be
+ * @note Once this is JSON serialized the types of `update` and `value` will be lost and be
  * cast to strings. This is because the user can define an accumulator of any type and it will
  * be difficult to preserve the type in consumers of the event log. This does not apply to
  * internal accumulators that represent task level metrics.

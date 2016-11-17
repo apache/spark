@@ -180,7 +180,7 @@ class RowMatrix @Since("1.0.0") (
    * @return SingularValueDecomposition(U, s, V). U = null if computeU = false.
    *
    * @note The conditions that decide which method to use internally and the default parameters are
-   *       subject to change.
+   * subject to change.
    */
   @Since("1.0.0")
   def computeSVD(

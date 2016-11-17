@@ -70,7 +70,7 @@ trait RelationProvider {
   /**
    * Returns a new base relation with the given parameters.
    *
-   * @note the parameters' keywords are case insensitive and this insensitivity is enforced
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
    * by the Map that is passed to the function.
    */
   def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation
@@ -101,7 +101,7 @@ trait SchemaRelationProvider {
   /**
    * Returns a new base relation with the given parameters and user defined schema.
    *
-   * @note the parameters' keywords are case insensitive and this insensitivity is enforced
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
    * by the Map that is passed to the function.
    */
   def createRelation(

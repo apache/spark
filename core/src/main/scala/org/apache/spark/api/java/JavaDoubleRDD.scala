@@ -256,7 +256,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
    *  e.g 1&lt;=x&lt;10 , 10&lt;=x&lt;20, 20&lt;=x&lt;50
    *  And on the input of 1 and 50 we would have a histogram of 1,0,0
    *
-   * @note if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
+   * @note If your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
    * from an O(log n) insertion to O(1) per element. (where n = # buckets) if you set evenBuckets
    * to true.
    * buckets must be sorted and not contain any duplicates.

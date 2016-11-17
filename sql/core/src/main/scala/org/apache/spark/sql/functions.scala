@@ -476,7 +476,7 @@ object functions {
    *
    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
    *
-   * @note the list of columns should match with grouping columns exactly, or empty (means all the
+   * @note The list of columns should match with grouping columns exactly, or empty (means all the
    * grouping columns).
    *
    * @group agg_funcs
@@ -489,7 +489,7 @@ object functions {
    *
    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
    *
-   * @note the list of columns should match with grouping columns exactly.
+   * @note The list of columns should match with grouping columns exactly.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -2371,7 +2371,7 @@ object functions {
   /**
    * Splits str around pattern (pattern is a regular expression).
    *
-   * @note pattern is a string representation of the regular expression.
+   * @note Pattern is a string representation of the regular expression.
    *
    * @group string_funcs
    * @since 1.5.0

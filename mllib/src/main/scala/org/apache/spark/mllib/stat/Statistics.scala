@@ -81,7 +81,7 @@ object Statistics {
    * @param y RDD[Double] of the same cardinality as x.
    * @return A Double containing the Pearson correlation between the two input RDD[Double]s
    *
-   * @note the two input RDDs need to have the same number of partitions and the same number of
+   * @note The two input RDDs need to have the same number of partitions and the same number of
    * elements in each partition.
    */
   @Since("1.1.0")
@@ -105,7 +105,7 @@ object Statistics {
    * @return A Double containing the correlation between the two input RDD[Double]s using the
    *         specified method.
    *
-   * @note the two input RDDs need to have the same number of partitions and the same number of
+   * @note The two input RDDs need to have the same number of partitions and the same number of
    * elements in each partition.
    */
   @Since("1.1.0")
@@ -128,7 +128,7 @@ object Statistics {
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
    *
-   * @note the two input Vectors need to have the same size.
+   * @note The two input Vectors need to have the same size.
    * `observed` cannot contain negative values.
    * `expected` cannot contain nonpositive values.
    */
