@@ -552,7 +552,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.41.Final</version>
+        <version>4.0.42.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -1428,6 +1428,11 @@
           <exclusion>
             <groupId>jline</groupId>
             <artifactId>jline</artifactId>
+          </exclusion>
+          <!-- Cat X license now; see SPARK-18262 -->
+          <exclusion>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

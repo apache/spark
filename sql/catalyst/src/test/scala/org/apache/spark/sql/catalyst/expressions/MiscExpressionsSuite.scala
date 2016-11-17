@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
-class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("assert_true") {
     intercept[RuntimeException] {

@@ -161,7 +161,8 @@ private[spark] class Client(
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString)
 
-      new CallerContext("CLIENT", Option(appId.toString)).setCurrentContext()
+      new CallerContext("CLIENT", sparkConf.get(APP_CALLER_CONTEXT),
+        Option(appId.toString)).setCurrentContext()
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
@@ -604,7 +605,7 @@ private[spark] class Client(
             cachedSecondaryJarLinks += localizedPath
           }
         } else {
-          if (localizedPath != null) {
+          if (localizedPath == null) {
             throw new IllegalArgumentException(s"Attempt to add ($file) multiple times" +
               " to the distributed cache.")
           }

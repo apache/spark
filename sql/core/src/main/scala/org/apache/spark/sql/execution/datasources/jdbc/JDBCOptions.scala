@@ -22,19 +22,23 @@ import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+
 /**
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient private val parameters: Map[String, String])
+    @transient private val parameters: CaseInsensitiveMap)
   extends Serializable {
 
   import JDBCOptions._
 
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(parameters ++ Map(
+    this(new CaseInsensitiveMap(parameters ++ Map(
       JDBCOptions.JDBC_URL -> url,
-      JDBCOptions.JDBC_TABLE_NAME -> table))
+      JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
   val asConnectionProperties: Properties = {

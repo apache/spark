@@ -109,7 +109,8 @@ public final class UnsafeArrayData extends ArrayData {
     // Read the number of elements from the first 8 bytes.
     final long numElements = Platform.getLong(baseObject, baseOffset);
     assert numElements >= 0 : "numElements (" + numElements + ") should >= 0";
-    assert numElements <= Integer.MAX_VALUE : "numElements (" + numElements + ") should <= Integer.MAX_VALUE";
+    assert numElements <= Integer.MAX_VALUE :
+      "numElements (" + numElements + ") should <= Integer.MAX_VALUE";
 
     this.numElements = (int)numElements;
     this.baseObject = baseObject;

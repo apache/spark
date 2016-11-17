@@ -44,7 +44,8 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
    * The number of principal components.
    * @group param
    */
-  final val k: IntParam = new IntParam(this, "k", "the number of principal components")
+  final val k: IntParam = new IntParam(this, "k", "the number of principal components (> 0)",
+    ParamValidators.gt(0))
 
   /** @group getParam */
   def getK: Int = $(k)
