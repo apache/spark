@@ -140,7 +140,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 ## Untyped Dataset Operations (aka DataFrame Operations)
 
-DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.Dataset), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/DataFrame.html).
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.Dataset), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/SparkDataFrame.html).
 
 As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala and Java API. These operations are also referred as "untyped transformations" in contrast to "typed transformations" come with strongly typed Scala/Java Datasets.
 
@@ -387,8 +387,8 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 You can also manually specify the data source that will be used along with any extra options
 that you would like to pass to the data source. Data sources are specified by their fully qualified
 name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can also use their short
-names (`json`, `parquet`, `jdbc`). DataFrames loaded from any data source type can be converted into other types
-using this syntax.
+names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames loaded from any data
+source type can be converted into other types using this syntax.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -857,50 +857,27 @@ access data stored in Hive.
 Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (for security configuration),
 and `hdfs-site.xml` (for HDFS configuration) file in `conf/`.
 
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
-
 When working with Hive, one must instantiate `SparkSession` with Hive support, including
 connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
 Users who do not have an existing Hive deployment can still enable Hive support. When not configured
 by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
 creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
-`spark-warehouse` in the current directory that the spark application is started. Note that
+`spark-warehouse` in the current directory that the Spark application is started. Note that
 the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
 Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
-You may need to grant write privilege to the user who starts the spark application.
+You may need to grant write privilege to the user who starts the Spark application.
 
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
 {% include_example spark_hive scala/org/apache/spark/examples/sql/hive/SparkHiveExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-
-When working with Hive, one must instantiate `SparkSession` with Hive support, including
-connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
-Users who do not have an existing Hive deployment can still enable Hive support. When not configured
-by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
-creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
-`spark-warehouse` in the current directory that the spark application is started. Note that
-the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
-Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
-You may need to grant write privilege to the user who starts the spark application.
-
 {% include_example spark_hive java/org/apache/spark/examples/sql/hive/JavaSparkHiveExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
-
-When working with Hive, one must instantiate `SparkSession` with Hive support, including
-connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
-Users who do not have an existing Hive deployment can still enable Hive support. When not configured
-by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
-creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
-`spark-warehouse` in the current directory that the spark application is started. Note that
-the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
-Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
-You may need to grant write privilege to the user who starts the spark application.
-
 {% include_example spark_hive python/sql/hive.py %}
 </div>
 

@@ -159,7 +159,7 @@ private[state] class HDFSBackedStateStoreProvider(
       } catch {
         case NonFatal(e) =>
           throw new IllegalStateException(
-            s"Error committing version $newVersion into ${HDFSBackedStateStoreProvider.this}", e)
+            s"Error committing version $newVersion into $this", e)
       }
     }
 
@@ -197,11 +197,17 @@ private[state] class HDFSBackedStateStoreProvider(
       allUpdates.values().asScala.toIterator
     }
 
+    override def numKeys(): Long = mapToUpdate.size()
+
     /**
      * Whether all updates have been committed
      */
     override private[state] def hasCommitted: Boolean = {
       state == COMMITTED
+    }
+
+    override def toString(): String = {
+      s"HDFSStateStore[id = (op=${id.operatorId}, part=${id.partitionId}), dir = $baseDir]"
     }
   }
 
@@ -213,7 +219,7 @@ private[state] class HDFSBackedStateStoreProvider(
       newMap.putAll(loadMap(version))
     }
     val store = new HDFSBackedStateStore(version, newMap)
-    logInfo(s"Retrieved version $version of $this for update")
+    logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for update")
     store
   }
 
@@ -229,7 +235,7 @@ private[state] class HDFSBackedStateStoreProvider(
   }
 
   override def toString(): String = {
-    s"StateStore[id = (op=${id.operatorId}, part=${id.partitionId}), dir = $baseDir]"
+    s"HDFSStateStoreProvider[id = (op=${id.operatorId}, part=${id.partitionId}), dir = $baseDir]"
   }
 
   /* Internal classes and methods */
@@ -489,10 +495,12 @@ private[state] class HDFSBackedStateStoreProvider(
             val mapsToRemove = loadedMaps.keys.filter(_ < earliestVersionToRetain).toSeq
             mapsToRemove.foreach(loadedMaps.remove)
           }
-          files.filter(_.version < earliestFileToRetain.version).foreach { f =>
+          val filesToDelete = files.filter(_.version < earliestFileToRetain.version)
+          filesToDelete.foreach { f =>
             fs.delete(f.path, true)
           }
-          logInfo(s"Deleted files older than ${earliestFileToRetain.version} for $this")
+          logInfo(s"Deleted files older than ${earliestFileToRetain.version} for $this: " +
+            filesToDelete.mkString(", "))
         }
       }
     } catch {
@@ -556,7 +564,7 @@ private[state] class HDFSBackedStateStoreProvider(
       }
     }
     val storeFiles = versionToFiles.values.toSeq.sortBy(_.version)
-    logDebug(s"Current set of files for $this: $storeFiles")
+    logDebug(s"Current set of files for $this: ${storeFiles.mkString(", ")}")
     storeFiles
   }
 

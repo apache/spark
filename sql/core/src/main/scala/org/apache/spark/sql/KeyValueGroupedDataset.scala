@@ -39,7 +39,7 @@ import org.apache.spark.sql.expressions.ReduceAggregator
 class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],
-    val queryExecution: QueryExecution,
+    @transient val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
 

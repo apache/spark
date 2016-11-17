@@ -115,7 +115,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val catalog = spark.sessionState.catalog
 
     withTempDir { tmpDir =>
-      val path = tmpDir.toString
+      val path = tmpDir.getCanonicalPath
       // The generated temp path is not qualified.
       assert(!path.startsWith("file:/"))
       val uri = tmpDir.toURI
@@ -147,7 +147,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("Create/Drop Database") {
     withTempDir { tmpDir =>
-      val path = tmpDir.toString
+      val path = tmpDir.getCanonicalPath
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
         val catalog = spark.sessionState.catalog
         val databaseNames = Seq("db1", "`database`")
@@ -158,7 +158,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
             sql(s"CREATE DATABASE $dbName")
             val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(path + "/" + s"$dbNameWithoutBackTicks.db")
+            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
             assert(db1 == CatalogDatabase(
               dbNameWithoutBackTicks,
               "",
@@ -183,9 +183,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       try {
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbName)
-        val expectedLocation =
-          makeQualifiedPath(s"${System.getProperty("user.dir")}/spark-warehouse" +
-            "/" + s"$dbName.db")
+        val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbName.db")
         assert(db1 == CatalogDatabase(
           dbName,
           "",
@@ -203,7 +201,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val catalog = spark.sessionState.catalog
     val databaseNames = Seq("db1", "`database`")
     withTempDir { tmpDir =>
-      val path = new Path(tmpDir.toString).toUri.toString
+      val path = new Path(tmpDir.getCanonicalPath).toUri
       databaseNames.foreach { dbName =>
         try {
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
@@ -226,7 +224,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("Create Database - database already exists") {
     withTempDir { tmpDir =>
-      val path = tmpDir.toString
+      val path = tmpDir.getCanonicalPath
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
         val catalog = spark.sessionState.catalog
         val databaseNames = Seq("db1", "`database`")
@@ -236,7 +234,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             val dbNameWithoutBackTicks = cleanIdentifier(dbName)
             sql(s"CREATE DATABASE $dbName")
             val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(path + "/" + s"$dbNameWithoutBackTicks.db")
+            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
             assert(db1 == CatalogDatabase(
               dbNameWithoutBackTicks,
               "",
@@ -269,7 +267,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("Alter/Describe Database") {
     withTempDir { tmpDir =>
-      val path = tmpDir.toString
+      val path = tmpDir.getCanonicalPath
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
         val catalog = spark.sessionState.catalog
         val databaseNames = Seq("db1", "`database`")
@@ -277,7 +275,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         databaseNames.foreach { dbName =>
           try {
             val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-            val location = makeQualifiedPath(path + "/" + s"$dbNameWithoutBackTicks.db")
+            val location = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
 
             sql(s"CREATE DATABASE $dbName")
 
@@ -1490,5 +1488,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(sql("show all functions").count() === numFunctions + 1L)
       assert(sql("show user functions").count() === 1L)
     }
+  }
+
+  test("SPARK-18009 calling toLocalIterator on commands") {
+    import scala.collection.JavaConverters._
+    val df = sql("show databases")
+    val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
+    assert(rows.length > 0)
   }
 }

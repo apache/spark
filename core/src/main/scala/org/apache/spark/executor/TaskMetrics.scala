@@ -17,8 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.util.{ArrayList, Collections}
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 
@@ -27,7 +25,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
+import org.apache.spark.util._
 
 
 /**
@@ -54,7 +52,7 @@ class TaskMetrics private[spark] () extends Serializable {
   private val _memoryBytesSpilled = new LongAccumulator
   private val _diskBytesSpilled = new LongAccumulator
   private val _peakExecutionMemory = new LongAccumulator
-  private val _updatedBlockStatuses = new BlockStatusesAccumulator
+  private val _updatedBlockStatuses = new CollectionAccumulator[(BlockId, BlockStatus)]
 
   /**
    * Time taken on the executor to deserialize this task.
@@ -306,10 +304,9 @@ private[spark] object TaskMetrics extends Logging {
   }
 }
 
-
 private[spark] class BlockStatusesAccumulator
-  extends AccumulatorV2[(BlockId, BlockStatus), java.util.List[(BlockId, BlockStatus)]] {
-  private val _seq = Collections.synchronizedList(new ArrayList[(BlockId, BlockStatus)]())
+  extends AccumulatorV2[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]] {
+  private var _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
 
   override def isZero(): Boolean = _seq.isEmpty
 
@@ -317,27 +314,25 @@ private[spark] class BlockStatusesAccumulator
 
   override def copy(): BlockStatusesAccumulator = {
     val newAcc = new BlockStatusesAccumulator
-    newAcc._seq.addAll(_seq)
+    newAcc._seq = _seq.clone()
     newAcc
   }
 
   override def reset(): Unit = _seq.clear()
 
-  override def add(v: (BlockId, BlockStatus)): Unit = _seq.add(v)
+  override def add(v: (BlockId, BlockStatus)): Unit = _seq += v
 
-  override def merge(
-    other: AccumulatorV2[(BlockId, BlockStatus), java.util.List[(BlockId, BlockStatus)]]): Unit = {
-    other match {
-      case o: BlockStatusesAccumulator => _seq.addAll(o.value)
-      case _ => throw new UnsupportedOperationException(
-        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-    }
+  override def merge(other: AccumulatorV2[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]])
+  : Unit = other match {
+    case o: BlockStatusesAccumulator => _seq ++= o.value
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def value: java.util.List[(BlockId, BlockStatus)] = _seq
+  override def value: Seq[(BlockId, BlockStatus)] = _seq
 
-  def setValue(newValue: java.util.List[(BlockId, BlockStatus)]): Unit = {
+  def setValue(newValue: Seq[(BlockId, BlockStatus)]): Unit = {
     _seq.clear()
-    _seq.addAll(newValue)
+    _seq ++= newValue
   }
 }

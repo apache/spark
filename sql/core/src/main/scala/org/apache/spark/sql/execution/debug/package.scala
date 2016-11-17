@@ -70,15 +70,6 @@ package object debug {
   }
 
   /**
-   * Augments [[SparkSession]] with debug methods.
-   */
-  implicit class DebugSQLContext(sparkSession: SparkSession) {
-    def debug(): Unit = {
-      sparkSession.conf.set(SQLConf.DATAFRAME_EAGER_ANALYSIS.key, false)
-    }
-  }
-
-  /**
    * Augments [[Dataset]]s with debug methods.
    */
   implicit class DebugQuery(query: Dataset[_]) extends Logging {

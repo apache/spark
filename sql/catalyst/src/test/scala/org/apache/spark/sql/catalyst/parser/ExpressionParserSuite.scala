@@ -292,6 +292,10 @@ class ExpressionParserSuite extends PlanTest {
   test("case when") {
     assertEqual("case a when 1 then b when 2 then c else d end",
       CaseKeyWhen('a, Seq(1, 'b, 2, 'c, 'd)))
+    assertEqual("case (a or b) when true then c when false then d else e end",
+      CaseKeyWhen('a || 'b, Seq(true, 'c, false, 'd, 'e)))
+    assertEqual("case 'a'='a' when true then 1 end",
+      CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
       CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
   }
@@ -529,5 +533,14 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a.123D_column", UnresolvedAttribute("a.123D_column"))
     // ".123BD" should not be treated as token of type BIGDECIMAL_LITERAL
     assertEqual("a.123BD_column", UnresolvedAttribute("a.123BD_column"))
+  }
+
+  test("SPARK-17832 function identifier contains backtick") {
+    val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
+    assertEqual(complexName.quotedString, UnresolvedAttribute("`fo`o.`ba`r"))
+    intercept(complexName.unquotedString, "mismatched input")
+    // Function identifier contains countious backticks should be treated correctly.
+    val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
+    assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
   }
 }

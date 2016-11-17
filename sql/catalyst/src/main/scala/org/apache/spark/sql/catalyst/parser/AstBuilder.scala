@@ -1128,7 +1128,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * }}}
    */
   override def visitSimpleCase(ctx: SimpleCaseContext): Expression = withOrigin(ctx) {
-    val e = expression(ctx.valueExpression)
+    val e = expression(ctx.value)
     val branches = ctx.whenClause.asScala.map { wCtx =>
       (EqualTo(e, expression(wCtx.condition)), expression(wCtx.result))
     }

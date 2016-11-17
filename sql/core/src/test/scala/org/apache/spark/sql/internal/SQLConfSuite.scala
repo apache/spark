@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.util.Utils
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
   private val testKey = "test.key.0"
@@ -211,12 +212,15 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("default value of WAREHOUSE_PATH") {
+
     val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
     try {
       // to get the default value, always unset it
       spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      assert(spark.sessionState.conf.warehousePath
-        === new Path(s"${System.getProperty("user.dir")}/spark-warehouse").toString)
+      // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
+      // In our comparison, strip trailing slash off of both sides, to account for such cases
+      assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
+        .sessionState.conf.warehousePath.stripSuffix("/"))
     } finally {
       sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
     }
