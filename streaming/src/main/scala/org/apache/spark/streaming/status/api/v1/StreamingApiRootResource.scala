@@ -18,15 +18,14 @@
 package org.apache.spark.streaming.status.api.v1
 
 import javax.servlet.ServletContext
-import javax.ws.rs.Path
-import javax.ws.rs.core.Context
+import javax.ws.rs.{Path, WebApplicationException}
+import javax.ws.rs.core.{Context, Response}
 
 import com.sun.jersey.spi.container.servlet.ServletContainer
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.eclipse.jetty.servlet.ServletHolder
-
-import org.apache.spark.status.api.v1.UIRoot
+import org.apache.spark.status.api.v1.{ErrorWrapper, UIRoot}
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Path("/v1")
@@ -45,6 +44,11 @@ private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
   @Path("receivers")
   def getReceivers(): AllReceiversResource = {
     new AllReceiversResource(listener)
+  }
+
+  @Path("receivers/{streamId}")
+  def getReceiver(): OneReceiverResource = {
+    new OneReceiverResource(listener)
   }
 
 }
@@ -111,3 +115,11 @@ private[v1] trait UIRootFromServletContext {
   def listener: StreamingJobProgressListener = UIRootFromServletContext.getListener(servletContext)
   def startTimeMillis: Long = UIRootFromServletContext.getStartTimeMillis(servletContext)
 }
+
+private[v1] class NotFoundException(msg: String) extends WebApplicationException(
+  new NoSuchElementException(msg),
+  Response
+    .status(Response.Status.NOT_FOUND)
+    .entity(ErrorWrapper(msg))
+    .build()
+)
