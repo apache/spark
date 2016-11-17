@@ -90,8 +90,7 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
     val copied = copyValues(new GaussianMixtureModel(uid, weights, gaussians), extra)
-    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
-    copied.setParent(this.parent)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   @Since("2.0.0")

@@ -95,8 +95,7 @@ class BisectingKMeansModel private[ml] (
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
     val copied = copyValues(new BisectingKMeansModel(uid, parentModel), extra)
-    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
-    copied.setParent(this.parent)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   @Since("2.0.0")
