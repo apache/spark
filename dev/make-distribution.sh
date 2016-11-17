@@ -137,7 +137,7 @@ fi
 echo "Spark version is $VERSION"
 VERSION_SET=$("$MVN" versions:set -DnewVersion=$VERSION | tail -n 1)
 if [ "$MAKE_TGZ" == "true" ]; then
-  echo "Making spark-$VERSION-bin-$NAME.tgz"
+  echo "Making spark-dist-$VERSION-$NAME.tgz"
 else
   echo "Making distribution for Spark $VERSION in $DISTDIR..."
 fi
@@ -216,10 +216,10 @@ if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
 fi
 
 if [ "$MAKE_TGZ" == "true" ]; then
-  TARDIR_NAME=spark-$VERSION-bin-$NAME
+  TARDIR_NAME=spark-dist-$VERSION-$NAME
   TARDIR="$SPARK_HOME/$TARDIR_NAME"
   rm -rf "$TARDIR"
   cp -r "$DISTDIR" "$TARDIR"
-  tar czf "spark-$VERSION-bin-$NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
+  tar czf "$TARDIR_NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
   rm -rf "$TARDIR"
 fi
