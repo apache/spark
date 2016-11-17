@@ -192,7 +192,11 @@ case class GenerateExec(
     // array/map contains no input. We do this by setting the looping index to -1 if there is no
     // input, evaluation of the array is prevented by a check in the accessor code.
     val numElements = ctx.freshName("numElements")
-    val init = if (outer) s"$numElements == 0 ? -1 : 0" else "0"
+    val init = if (outer) {
+      s"$numElements == 0 ? -1 : 0"
+    } else {
+      "0"
+    }
     val numOutput = metricTerm(ctx, "numOutputRows")
     s"""
        |${data.code}
@@ -242,7 +246,11 @@ case class GenerateExec(
     val init = concatIfOuter(s"boolean $hasNextCode", s", $outerVal = true")
     val check = concatIfOuter(hasNext, s"|| $outerVal")
     val update = concatIfOuter(hasNextCode, s", $outerVal = false")
-    val next = if (outer) s"$hasNext ? $iterator.next() : null" else s"$iterator.next()"
+    val next = if (outer) {
+      s"$hasNext ? $iterator.next() : null"
+    } else {
+      s"$iterator.next()"
+    }
     val numOutput = metricTerm(ctx, "numOutputRows")
     s"""
        |${data.code}
