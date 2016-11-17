@@ -41,7 +41,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
   def propagateNull: Boolean
 
-  protected lazy val propagatingNull: Boolean = propagateNull && arguments.exists(_.nullable)
+  protected lazy val needNullCheck: Boolean = propagateNull && arguments.exists(_.nullable)
 
   /**
    * Prepares codes for arguments.
@@ -50,7 +50,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
    * - use ctx.splitExpressions() to not exceed 64kb JVM limit while preparing arguments.
    * - avoid some of nullabilty checking which are not needed because the expression is not
    *   nullable.
-   * - when progagatingNull == true, short circuit if we found one of arguments is null because
+   * - when needNullCheck == true, short circuit if we found one of arguments is null because
    *   preparing rest of arguments can be skipped in the case.
    *
    * @param ctx a [[CodegenContext]]
@@ -59,7 +59,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
    */
   def prepareArguments(ctx: CodegenContext, ev: ExprCode): (String, String, String) = {
 
-    val containsNullInArguments = if (propagatingNull) {
+    val containsNullInArguments = if (needNullCheck) {
       val containsNullInArguments = ctx.freshName("containsNullInArguments")
       ctx.addMutableState("boolean", containsNullInArguments, "")
       containsNullInArguments
@@ -72,7 +72,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
       argValue
     }
 
-    val argCodes = if (propagatingNull) {
+    val argCodes = if (needNullCheck) {
       val reset = s"$containsNullInArguments = false;"
       val argCodes = arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
@@ -101,7 +101,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
     }
     val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
-    val setIsNull = if (propagatingNull) {
+    val setIsNull = if (needNullCheck) {
       s"${ev.isNull} = ${ev.isNull} || $containsNullInArguments;"
     } else {
       ""
@@ -297,7 +297,7 @@ case class NewInstance(
     outerPointer: Option[() => AnyRef]) extends InvokeLike {
   private val className = cls.getName
 
-  override def nullable: Boolean = propagatingNull
+  override def nullable: Boolean = needNullCheck
 
   override def children: Seq[Expression] = arguments
 
@@ -322,7 +322,7 @@ case class NewInstance(
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
-    val prepareIsNull = if (propagatingNull) {
+    val prepareIsNull = if (needNullCheck) {
       s"boolean $isNull = false;"
     } else {
       isNull = "false"
@@ -341,7 +341,7 @@ case class NewInstance(
       $prepareIsNull
       $setIsNull
     """ +
-      (if (propagatingNull) {
+      (if (needNullCheck) {
         s"final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;"
       } else {
         s"final $javaType ${ev.value} = $constructorCall;"
