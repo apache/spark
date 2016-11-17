@@ -55,16 +55,16 @@ trait InvokeLike extends Expression with NonSQLExpression {
    *
    * @param ctx a [[CodegenContext]]
    * @param ev an [[ExprCode]] with unique terms.
-   * @return (code to prepare arguments, argument string, code to set isNull)
+   * @return (code to prepare arguments, argument string, result of argument null check)
    */
   def prepareArguments(ctx: CodegenContext, ev: ExprCode): (String, String, String) = {
 
-    val containsNullInArguments = if (needNullCheck) {
-      val containsNullInArguments = ctx.freshName("containsNullInArguments")
-      ctx.addMutableState("boolean", containsNullInArguments, "")
-      containsNullInArguments
+    val resultIsNull = if (needNullCheck) {
+      val resultIsNull = ctx.freshName("resultIsNull")
+      ctx.addMutableState("boolean", resultIsNull, "")
+      resultIsNull
     } else {
-      ""
+      "false"
     }
     val argValues = arguments.zipWithIndex.map { case (e, i) =>
       val argValue = ctx.freshName("argValue")
@@ -73,18 +73,18 @@ trait InvokeLike extends Expression with NonSQLExpression {
     }
 
     val argCodes = if (needNullCheck) {
-      val reset = s"$containsNullInArguments = false;"
+      val reset = s"$resultIsNull = false;"
       val argCodes = arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
-        val updateContainsNull = if (e.nullable) {
-          s"$containsNullInArguments = ${expr.isNull};"
+        val updateResultIsNull = if (e.nullable) {
+          s"$resultIsNull = ${expr.isNull};"
         } else {
           ""
         }
         s"""
-          if (!$containsNullInArguments) {
+          if (!$resultIsNull) {
             ${expr.code}
-            $updateContainsNull
+            $updateResultIsNull
             ${argValues(i)} = ${expr.value};
           }
         """
@@ -101,13 +101,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
     }
     val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
-    val setIsNull = if (needNullCheck) {
-      s"${ev.isNull} = ${ev.isNull} || $containsNullInArguments;"
-    } else {
-      ""
-    }
-
-    (argCode, argValues.mkString(", "), setIsNull)
+    (argCode, argValues.mkString(", "), resultIsNull)
   }
 }
 
@@ -142,7 +136,7 @@ case class StaticInvoke(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
 
-    val (argCode, argString, setIsNull) = prepareArguments(ctx, ev)
+    val (argCode, argString, resultIsNull) = prepareArguments(ctx, ev)
 
     val callFunc = s"$objectName.$functionName($argString)"
 
@@ -156,8 +150,7 @@ case class StaticInvoke(
 
     val code = s"""
       $argCode
-      boolean ${ev.isNull} = false;
-      $setIsNull
+      boolean ${ev.isNull} = $resultIsNull;
       final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : $callFunc;
       $postNullCheck
      """
@@ -208,7 +201,7 @@ case class Invoke(
     val javaType = ctx.javaType(dataType)
     val obj = targetObject.genCode(ctx)
 
-    val (argCode, argString, setIsNull) = prepareArguments(ctx, ev)
+    val (argCode, argString, resultIsNull) = prepareArguments(ctx, ev)
 
     val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
     val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
@@ -250,8 +243,7 @@ case class Invoke(
     val code = s"""
       ${obj.code}
       $argCode
-      boolean ${ev.isNull} = ${obj.isNull};
-      $setIsNull
+      boolean ${ev.isNull} = ${obj.isNull} || $resultIsNull;
       $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $evaluate
@@ -317,13 +309,13 @@ case class NewInstance(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
 
-    val (argCode, argString, setIsNull) = prepareArguments(ctx, ev)
+    val (argCode, argString, resultIsNull) = prepareArguments(ctx, ev)
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
     val prepareIsNull = if (needNullCheck) {
-      s"boolean $isNull = false;"
+      s"boolean $isNull = $resultIsNull;"
     } else {
       isNull = "false"
       ""
@@ -339,7 +331,6 @@ case class NewInstance(
       $argCode
       ${outer.map(_.code).getOrElse("")}
       $prepareIsNull
-      $setIsNull
     """ +
       (if (needNullCheck) {
         s"final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;"
