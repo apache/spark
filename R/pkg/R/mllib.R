@@ -747,7 +747,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' \dontrun{
 #' sparkR.session()
 #' # binary logistic regression
-#' label <- c(1.0, 1.0, 1.0, 0.0, 0.0)
+#' label <- c(0.0, 0.0, 0.0, 1.0, 1.0)
 #' feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
 #' binary_data <- as.data.frame(cbind(label, feature))
 #' binary_df <- createDataFrame(binary_data)

@@ -23,9 +23,9 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
+import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
@@ -62,6 +62,8 @@ private[r] class LogisticRegressionWrapper private (
     pipeline.transform(dataset)
       .drop(PREDICTED_LABEL_INDEX_COL)
       .drop(logisticRegressionModel.getFeaturesCol)
+      .drop(logisticRegressionModel.getLabelCol)
+    
   }
 
   override def write: MLWriter = new LogisticRegressionWrapper.LogisticRegressionWrapperWriter(this)
@@ -92,19 +94,11 @@ private[r] object LogisticRegressionWrapper
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
-    RWrapperUtils.checkDataColumns(rFormula, data)
+    checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
-    // get feature names from output schema
-    val schema = rFormulaModel.transform(data).schema
-    val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
-      .attributes.get
-    val features = featureAttrs.map(_.name.get)
-
-    // get label names from output schema
-    val labelAttr = Attribute.fromStructField(schema(rFormulaModel.getLabelCol))
-      .asInstanceOf[NominalAttribute]
-    val labels = labelAttr.values.get
+    // get labels and feature names from output schema
+    val (features, labels) = getFeaturesAndLabels(rFormulaModel, data)
 
     // assemble and fit the pipeline
     val logisticRegression = new LogisticRegression()
@@ -118,6 +112,7 @@ private[r] object LogisticRegressionWrapper
       .setWeightCol(weightCol)
       .setAggregationDepth(aggregationDepth)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setLabelCol(rFormula.getLabelCol)
       .setProbabilityCol(probability)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
 
