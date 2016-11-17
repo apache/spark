@@ -40,7 +40,7 @@ public class RadixSort {
    *         of always copying the data back to position zero for efficiency.
    */
   public static int sort(
-      LongArray array, long numRecords, long startByteIndex, long endByteIndex,
+      LongArray array, long numRecords, int startByteIndex, int endByteIndex,
       boolean desc, boolean signed) {
     assert startByteIndex >= 0 : "startByteIndex (" + startByteIndex + ") should >= 0";
     assert endByteIndex <= 7 : "endByteIndex (" + endByteIndex + ") should <= 7";
@@ -50,10 +50,10 @@ public class RadixSort {
     long outIndex = numRecords;
     if (numRecords > 0) {
       long[][] counts = getCounts(array, numRecords, startByteIndex, endByteIndex);
-      for (long i = startByteIndex; i <= endByteIndex; i++) {
-        if (counts[(int)i] != null) {
+      for (int i = startByteIndex; i <= endByteIndex; i++) {
+        if (counts[i] != null) {
           sortAtByte(
-            array, numRecords, counts[(int)i], i, inIndex, outIndex,
+            array, numRecords, counts[i], i, inIndex, outIndex,
             desc, signed && i == endByteIndex);
           long tmp = inIndex;
           inIndex = outIndex;
@@ -78,7 +78,7 @@ public class RadixSort {
    * @param signed whether this is a signed (two's complement) sort (only applies to last byte).
    */
   private static void sortAtByte(
-      LongArray array, long numRecords, long[] counts, long byteIdx, long inIndex, long outIndex,
+      LongArray array, long numRecords, long[] counts, int byteIdx, long inIndex, long outIndex,
       boolean desc, boolean signed) {
     assert counts.length == 256;
     long[] offsets = transformCountsToOffsets(
@@ -106,7 +106,7 @@ public class RadixSort {
    *         significant byte. If the byte does not need sorting the array will be null.
    */
   private static long[][] getCounts(
-      LongArray array, long numRecords, long startByteIndex, long endByteIndex) {
+      LongArray array, long numRecords, int startByteIndex, int endByteIndex) {
     long[][] counts = new long[8][];
     // Optimization: do a fast pre-pass to determine which byte indices we can skip for sorting.
     // If all the byte values at a particular index are the same we don't need to count it.
@@ -121,12 +121,12 @@ public class RadixSort {
     }
     long bitsChanged = bitwiseMin ^ bitwiseMax;
     // Compute counts for each byte index.
-    for (long i = startByteIndex; i <= endByteIndex; i++) {
+    for (int i = startByteIndex; i <= endByteIndex; i++) {
       if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
-        counts[(int)i] = new long[256];
+        counts[i] = new long[256];
         // TODO(ekl) consider computing all the counts in one pass.
         for (long offset = array.getBaseOffset(); offset < maxOffset; offset += 8) {
-          counts[(int)i][(int)((Platform.getLong(baseObject, offset) >>> (i * 8)) & 0xff)]++;
+          counts[i][(int)((Platform.getLong(baseObject, offset) >>> (i * 8)) & 0xff)]++;
         }
       }
     }
@@ -178,8 +178,8 @@ public class RadixSort {
       LongArray array,
       long startIndex,
       long numRecords,
-      long startByteIndex,
-      long endByteIndex,
+      int startByteIndex,
+      int endByteIndex,
       boolean desc,
       boolean signed) {
     assert startByteIndex >= 0 : "startByteIndex (" + startByteIndex + ") should >= 0";
@@ -191,10 +191,10 @@ public class RadixSort {
     if (numRecords > 0) {
       long[][] counts = getKeyPrefixArrayCounts(
         array, startIndex, numRecords, startByteIndex, endByteIndex);
-      for (long i = startByteIndex; i <= endByteIndex; i++) {
-        if (counts[(int)i] != null) {
+      for (int i = startByteIndex; i <= endByteIndex; i++) {
+        if (counts[i] != null) {
           sortKeyPrefixArrayAtByte(
-            array, numRecords, counts[(int)i], i, inIndex, outIndex,
+            array, numRecords, counts[i], i, inIndex, outIndex,
             desc, signed && i == endByteIndex);
           long tmp = inIndex;
           inIndex = outIndex;
@@ -210,7 +210,7 @@ public class RadixSort {
    * getCounts with some added parameters but that seems to hurt in benchmarks.
    */
   private static long[][] getKeyPrefixArrayCounts(
-      LongArray array, long startIndex, long numRecords, long startByteIndex, long endByteIndex) {
+      LongArray array, long startIndex, long numRecords, int startByteIndex, int endByteIndex) {
     long[][] counts = new long[8][];
     long bitwiseMax = 0;
     long bitwiseMin = -1L;
@@ -223,11 +223,11 @@ public class RadixSort {
       bitwiseMin &= value;
     }
     long bitsChanged = bitwiseMin ^ bitwiseMax;
-    for (long i = startByteIndex; i <= endByteIndex; i++) {
+    for (int i = startByteIndex; i <= endByteIndex; i++) {
       if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
-        counts[(int)i] = new long[256];
+        counts[i] = new long[256];
         for (long offset = baseOffset; offset < limit; offset += 16) {
-          counts[(int)i][(int)((Platform.getLong(baseObject, offset + 8) >>> (i * 8)) & 0xff)]++;
+          counts[i][(int)((Platform.getLong(baseObject, offset + 8) >>> (i * 8)) & 0xff)]++;
         }
       }
     }
@@ -238,7 +238,7 @@ public class RadixSort {
    * Specialization of sortAtByte() for key-prefix arrays.
    */
   private static void sortKeyPrefixArrayAtByte(
-      LongArray array, long numRecords, long[] counts, long byteIdx, long inIndex, long outIndex,
+      LongArray array, long numRecords, long[] counts, int byteIdx, long inIndex, long outIndex,
       boolean desc, boolean signed) {
     assert counts.length == 256;
     long[] offsets = transformCountsToOffsets(
