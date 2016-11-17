@@ -112,7 +112,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
 
-    model.setSummary(null)
+    model.setSummary(None)
     assert(!model.hasSummary)
   }
 

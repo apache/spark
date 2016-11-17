@@ -150,8 +150,8 @@ class GaussianMixtureModel private[ml] (
 
   private var trainingSummary: Option[GaussianMixtureSummary] = None
 
-  private[clustering] def setSummary(summary: GaussianMixtureSummary): this.type = {
-    this.trainingSummary = Option(summary)
+  private[clustering] def setSummary(summary: Option[GaussianMixtureSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -340,7 +340,7 @@ class GaussianMixture @Since("2.0.0") (
       .setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
-    model.setSummary(summary)
+    model.setSummary(Some(summary))
     instr.logNumFeatures(model.gaussians.head.mean.size)
     instr.logSuccess(model)
     model
