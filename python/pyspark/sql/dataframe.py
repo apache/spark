@@ -361,6 +361,10 @@ class DataFrame(object):
 
         >>> df.withWatermark(df('timestamp'), '10 minutes')
         """
+        if not eventTime or type(eventTime) is not str:
+            raise TypeError("eventTime should be provided as a string")
+        if not delayThreshold or type(delayThreshold) is not str:
+            raise TypeError("delayThreshold should be provided as a string interval")
         jdf = self._jdf.withWatermark(eventTime, delayThreshold)
         return DataFrame(jdf, self.sql_ctx)
 
