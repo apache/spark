@@ -41,7 +41,12 @@ private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
   def getStreamingStatistics(): StreamingStatisticsResource = {
     new StreamingStatisticsResource(uiRoot, listener, startTimeMillis)
   }
-  
+
+  @Path("receivers")
+  def getReceivers(): AllReceiversResource = {
+    new AllReceiversResource(listener)
+  }
+
 }
 
 private[spark] object StreamingApiRootResource {
