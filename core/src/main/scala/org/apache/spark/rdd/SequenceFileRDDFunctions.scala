@@ -31,7 +31,6 @@ import org.apache.spark.internal.Logging
  *
  * @note This can't be part of PairRDDFunctions because
  * we need more implicit parameters to convert our keys and values to Writable.
- *
  */
 class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag](
     self: RDD[(K, V)],

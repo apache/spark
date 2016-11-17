@@ -218,11 +218,11 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * for new files and reads them as flat binary files with fixed record lengths,
    * yielding byte arrays
    *
-   * @note We ensure that the byte array for each record in the
-   * resulting RDDs of the DStream has the provided record length.
-   *
    * @param directory HDFS directory to monitor for new files
    * @param recordLength The length at which to split the records
+   *
+   * @note We ensure that the byte array for each record in the
+   * resulting RDDs of the DStream has the provided record length.
    */
   def binaryRecordsStream(directory: String, recordLength: Int): JavaDStream[Array[Byte]] = {
     ssc.binaryRecordsStream(directory, recordLength)
@@ -352,13 +352,13 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
+   * @param queue      Queue of RDDs
+   * @tparam T         Type of objects in the RDD
+   *
    * @note
    * 1. Changes to the queue after the stream is created will not be recognized.
    * 2. Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
-   *
-   * @param queue      Queue of RDDs
-   * @tparam T         Type of objects in the RDD
    */
   def queueStream[T](queue: java.util.Queue[JavaRDD[T]]): JavaDStream[T] = {
     implicit val cm: ClassTag[T] =
@@ -372,14 +372,14 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
+   * @param queue      Queue of RDDs
+   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
+   * @tparam T         Type of objects in the RDD
+   *
    * @note
    * 1. Changes to the queue after the stream is created will not be recognized.
    * 2. Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
-   *
-   * @param queue      Queue of RDDs
-   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
-   * @tparam T         Type of objects in the RDD
    */
   def queueStream[T](
       queue: java.util.Queue[JavaRDD[T]],

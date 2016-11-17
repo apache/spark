@@ -537,13 +537,13 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a fixed-size sampled subset of this RDD in an array
    *
-   * @note this method should only be used if the resulting array is expected to be small, as
-   * all the data is loaded into the driver's memory.
-   *
    * @param withReplacement whether sampling is done with replacement
    * @param num size of the returned sample
    * @param seed seed for the random number generator
    * @return sample of specified size in an array
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def takeSample(
       withReplacement: Boolean,

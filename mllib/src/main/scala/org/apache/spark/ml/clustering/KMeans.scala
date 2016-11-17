@@ -41,9 +41,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   with HasSeed with HasPredictionCol with HasTol {
 
   /**
-   * The number of clusters to create (k). Must be > 1.
-   *
-   * @note It is possible for fewer than
+   * The number of clusters to create (k). Must be > 1. Note that it is possible for fewer than
    * k clusters to be returned, for example, if there are fewer than k distinct points to cluster.
    * Default: 2.
    * @group param

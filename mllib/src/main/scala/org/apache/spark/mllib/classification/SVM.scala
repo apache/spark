@@ -172,8 +172,6 @@ object SVMWithSGD {
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
    *
-   * @note Labels used in SVM should be {0, 1}.
-   *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
@@ -181,6 +179,8 @@ object SVMWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
+   *
+   * @note Labels used in SVM should be {0, 1}.
    */
   @Since("0.8.0")
   def train(
@@ -222,13 +222,13 @@ object SVMWithSGD {
    * of iterations of gradient descent using the specified step size. We use the entire data set to
    * update the gradient in each iteration.
    *
-   * @note Labels used in SVM should be {0, 1}
-   *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
    * @param regParam Regularization parameter.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
+   *
+   * @note Labels used in SVM should be {0, 1}
    */
   @Since("0.8.0")
   def train(
@@ -244,11 +244,11 @@ object SVMWithSGD {
    * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
    * update the gradient in each iteration.
    *
-   * @note Labels used in SVM should be {0, 1}
-   *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a SVMModel which has the weights and offset from training.
+   *
+   * @note Labels used in SVM should be {0, 1}
    */
   @Since("0.8.0")
   def train(input: RDD[LabeledPoint], numIterations: Int): SVMModel = {

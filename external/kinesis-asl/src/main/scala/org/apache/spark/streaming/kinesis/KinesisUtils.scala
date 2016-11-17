@@ -33,10 +33,6 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
-   * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
-   * gets the AWS credentials.
-   *
    * @param ssc StreamingContext object
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
    *                        (KCL) to update DynamoDB
@@ -57,6 +53,10 @@ object KinesisUtils {
    *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
    * @param messageHandler A custom message handler that can generate a generic output from a
    *                       Kinesis `Record`, which contains both message data, and metadata.
+   *
+   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
+   * gets the AWS credentials.
    */
   def createStream[T: ClassTag](
       ssc: StreamingContext,
@@ -81,9 +81,6 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
-   *  is enabled. Make sure that your checkpoint directory is secure.
-   *
    * @param ssc StreamingContext object
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
    *                        (KCL) to update DynamoDB
@@ -106,6 +103,9 @@ object KinesisUtils {
    *                       Kinesis `Record`, which contains both message data, and metadata.
    * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
+   *
+   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
+   *  is enabled. Make sure that your checkpoint directory is secure.
    */
   // scalastyle:off
   def createStream[T: ClassTag](
@@ -133,10 +133,6 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
-   * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
-   * gets the AWS credentials.
-   *
    * @param ssc StreamingContext object
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
    *                        (KCL) to update DynamoDB
@@ -155,6 +151,10 @@ object KinesisUtils {
    *                            details on the different types of checkpoints.
    * @param storageLevel Storage level to use for storing the received objects.
    *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
+   *
+   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
+   * gets the AWS credentials.
    */
   def createStream(
       ssc: StreamingContext,
@@ -177,9 +177,6 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
-   *  is enabled. Make sure that your checkpoint directory is secure.
-   *
    * @param ssc StreamingContext object
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
    *                        (KCL) to update DynamoDB
@@ -200,6 +197,9 @@ object KinesisUtils {
    *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
    * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
+   *
+   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
+   *  is enabled. Make sure that your checkpoint directory is secure.
    */
   def createStream(
       ssc: StreamingContext,
@@ -223,10 +223,6 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
-   * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
-   * gets the AWS credentials.
-   *
    * @param jssc Java StreamingContext object
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
    *                        (KCL) to update DynamoDB
@@ -248,6 +244,10 @@ object KinesisUtils {
    * @param messageHandler A custom message handler that can generate a generic output from a
    *                       Kinesis `Record`, which contains both message data, and metadata.
    * @param recordClass Class of the records in DStream
+   *
+   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
+   * gets the AWS credentials.
    */
   def createStream[T](
       jssc: JavaStreamingContext,
@@ -269,9 +269,6 @@ object KinesisUtils {
   /**
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
-   *
-   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
-   * is enabled. Make sure that your checkpoint directory is secure.
    *
    * @param jssc Java StreamingContext object
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
@@ -296,6 +293,9 @@ object KinesisUtils {
    * @param recordClass Class of the records in DStream
    * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
+   *
+   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
+   * is enabled. Make sure that your checkpoint directory is secure.
    */
   // scalastyle:off
   def createStream[T](
@@ -323,10 +323,6 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
-   * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
-   * gets the AWS credentials.
-   *
    * @param jssc Java StreamingContext object
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
    *                        (KCL) to update DynamoDB
@@ -345,6 +341,10 @@ object KinesisUtils {
    *                            details on the different types of checkpoints.
    * @param storageLevel Storage level to use for storing the received objects.
    *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
+   *
+   * @note The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
+   * gets the AWS credentials.
    */
   def createStream(
       jssc: JavaStreamingContext,
@@ -363,9 +363,6 @@ object KinesisUtils {
   /**
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
-   *
-   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
-   * is enabled. Make sure that your checkpoint directory is secure.
    *
    * @param jssc Java StreamingContext object
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
@@ -387,6 +384,9 @@ object KinesisUtils {
    *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
    * @param awsAccessKeyId  AWS AccessKeyId (if null, will use DefaultAWSCredentialsProviderChain)
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
+   *
+   * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
+   * is enabled. Make sure that your checkpoint directory is secure.
    */
   def createStream(
       jssc: JavaStreamingContext,

@@ -95,9 +95,9 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Deleting the checkpoint can cause failures if a data partition is lost, so set this bit with
    * care.
    *
-   * @note Checkpoints will be cleaned up via reference counting, regardless.
-   *
    * Default: true
+   *
+   * @note Checkpoints will be cleaned up via reference counting, regardless.
    */
   @Since("2.0.0")
   def setKeepLastCheckpoint(keepLastCheckpoint: Boolean): this.type = {

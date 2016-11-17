@@ -40,12 +40,12 @@ trait QueryExecutionListener {
   /**
    * A callback function that will be called when a query executed successfully.
    *
-   * @note This can be invoked by multiple different threads.
-   *
    * @param funcName name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
    * @param durationNs the execution time for this query in nanoseconds.
+   *
+   * @note This can be invoked by multiple different threads.
    */
   @DeveloperApi
   def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit
@@ -53,12 +53,12 @@ trait QueryExecutionListener {
   /**
    * A callback function that will be called when a query execution failed.
    *
-   * @note This can be invoked by multiple different threads.
-   *
    * @param funcName the name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
    * @param exception the exception that failed this query.
+   *
+   * @note This can be invoked by multiple different threads.
    */
   @DeveloperApi
   def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit

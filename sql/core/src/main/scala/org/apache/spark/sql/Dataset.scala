@@ -703,12 +703,12 @@ class Dataset[T] private[sql](
    *   df1.join(df2, "user_id")
    * }}}
    *
+   * @param right Right side of the join operation.
+   * @param usingColumn Name of the column to join on. This column must exist on both sides.
+   *
    * @note If you perform a self-join using this function without aliasing the input
    * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
-   *
-   * @param right Right side of the join operation.
-   * @param usingColumn Name of the column to join on. This column must exist on both sides.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -728,12 +728,12 @@ class Dataset[T] private[sql](
    *   df1.join(df2, Seq("user_id", "user_name"))
    * }}}
    *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   *
    * @note If you perform a self-join using this function without aliasing the input
    * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
    * there is no way to disambiguate which side of the join you would like to reference.
-   *
-   * @param right Right side of the join operation.
-   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -748,13 +748,13 @@ class Dataset[T] private[sql](
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
    *
-   * @note If you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   *
+   * @note If you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -856,9 +856,9 @@ class Dataset[T] private[sql](
   /**
    * Explicit cartesian join with another [[DataFrame]].
    *
-   * @note Cartesian joins are very expensive without an extra filter that can be pushed down.
-   *
    * @param right Right side of the join operation.
+   *
+   * @note Cartesian joins are very expensive without an extra filter that can be pushed down.
    *
    * @group untypedrel
    * @since 2.1.0
@@ -1054,6 +1054,7 @@ class Dataset[T] private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
+   *
    * @note The column name can also reference to a nested column like `a.b`.
    *
    * @group untypedrel

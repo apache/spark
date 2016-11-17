@@ -60,9 +60,10 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * A high threshold encourages the model to predict 0 more often;
    * a low threshold encourages the model to predict 1 more often.
    *
-   * @note Calling this with threshold p is equivalent to calling `setThresholds(Array(1-p, p))`.
-   * When [[setThreshold()]] is called, any user-set value for [[thresholds]] will be cleared.
-   * If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be equivalent.
+   * Note: Calling this with threshold p is equivalent to calling `setThresholds(Array(1-p, p))`.
+   *       When [[setThreshold()]] is called, any user-set value for [[thresholds]] will be cleared.
+   *       If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be
+   *       equivalent.
    *
    * Default is 0.5.
    *
@@ -126,8 +127,9 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * The class with largest value p/t is predicted, where p is the original probability of that
    * class and t is the class's threshold.
    *
-   * @note When [[setThresholds()]] is called, any user-set value for [[threshold]] will be cleared.
-   * If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be equivalent.
+   * Note: When [[setThresholds()]] is called, any user-set value for [[threshold]] will be cleared.
+   *       If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be
+   *       equivalent.
    *
    * @group setParam
    */
@@ -1399,18 +1401,18 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    $$
  * </blockquote></p>
  *
- * @note In order to avoid unnecessary computation during calculation of the gradient updates
- * we lay out the coefficients in column major order during training. This allows us to
- * perform feature standardization once, while still retaining sequential memory access
- * for speed. We convert back to row major order when we create the model,
- * since this form is optimal for the matrix operations used for prediction.
- *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
  * @param multinomial Whether to use multinomial (softmax) or binary loss
+ *
+ * @note In order to avoid unnecessary computation during calculation of the gradient updates
+ * we lay out the coefficients in column major order during training. This allows us to
+ * perform feature standardization once, while still retaining sequential memory access
+ * for speed. We convert back to row major order when we create the model,
+ * since this form is optimal for the matrix operations used for prediction.
  */
 private class LogisticAggregator(
     bcCoefficients: Broadcast[Vector],
