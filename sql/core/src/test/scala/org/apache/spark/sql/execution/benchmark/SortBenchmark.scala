@@ -80,7 +80,7 @@ class SortBenchmark extends BenchmarkBase {
       }
       val buf = new LongArray(MemoryBlock.fromLongArray(array))
       timer.startTiming()
-      RadixSort.sort(buf, size, 0, 7, false, false)
+      RadixSort.sort(buf, size.toLong, 0.toLong, 7.toLong, false, false)
       timer.stopTiming()
     }
     benchmark.addTimerCase("radix sort two bytes") { timer =>
@@ -92,7 +92,7 @@ class SortBenchmark extends BenchmarkBase {
       }
       val buf = new LongArray(MemoryBlock.fromLongArray(array))
       timer.startTiming()
-      RadixSort.sort(buf, size, 0, 7, false, false)
+      RadixSort.sort(buf, size.toLong, 0.toLong, 7.toLong, false, false)
       timer.stopTiming()
     }
     benchmark.addTimerCase("radix sort eight bytes") { timer =>
@@ -104,13 +104,13 @@ class SortBenchmark extends BenchmarkBase {
       }
       val buf = new LongArray(MemoryBlock.fromLongArray(array))
       timer.startTiming()
-      RadixSort.sort(buf, size, 0, 7, false, false)
+      RadixSort.sort(buf, size.toLong, 0.toLong, 7.toLong, false, false)
       timer.stopTiming()
     }
     benchmark.addTimerCase("radix sort key prefix array") { timer =>
       val (_, buf2) = generateKeyPrefixTestData(size, rand.nextLong)
       timer.startTiming()
-      RadixSort.sortKeyPrefixArray(buf2, 0, size, 0, 7, false, false)
+      RadixSort.sortKeyPrefixArray(buf2, 0.toLong, size.toLong, 0.toLong, 7.toLong, false, false)
       timer.stopTiming()
     }
     benchmark.run()

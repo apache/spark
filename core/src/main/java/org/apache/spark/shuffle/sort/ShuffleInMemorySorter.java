@@ -176,9 +176,9 @@ final class ShuffleInMemorySorter {
     int offset = 0;
     if (useRadixSort) {
       offset = RadixSort.sort(
-        array, pos,
-        PackedRecordPointer.PARTITION_ID_START_BYTE_INDEX,
-        PackedRecordPointer.PARTITION_ID_END_BYTE_INDEX, false, false);
+        array, (long)pos,
+        (long)PackedRecordPointer.PARTITION_ID_START_BYTE_INDEX,
+        (long)PackedRecordPointer.PARTITION_ID_END_BYTE_INDEX, false, false);
     } else {
       MemoryBlock unused = new MemoryBlock(
         array.getBaseObject(),

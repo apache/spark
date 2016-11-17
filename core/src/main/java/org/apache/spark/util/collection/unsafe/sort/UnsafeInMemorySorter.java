@@ -322,7 +322,7 @@ public final class UnsafeInMemorySorter {
     if (sortComparator != null) {
       if (this.radixSortSupport != null) {
         offset = RadixSort.sortKeyPrefixArray(
-          array, nullBoundaryPos, (pos - nullBoundaryPos) / 2, 0, 7,
+          array, (long)nullBoundaryPos, (pos - nullBoundaryPos) / 2L, 0L, 7L,
           radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
         MemoryBlock unused = new MemoryBlock(
