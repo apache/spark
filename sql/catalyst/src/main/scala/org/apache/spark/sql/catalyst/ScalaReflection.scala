@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -403,6 +405,9 @@ object ScalaReflection extends ScalaReflection {
         } else {
           newInstance
         }
+
+      case _ =>
+        DecodeUsingSerializer(getPath, ClassTag(getClassFromType(tpe)), true)
     }
   }
 
@@ -583,8 +588,7 @@ object ScalaReflection extends ScalaReflection {
         expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
       case other =>
-        throw new UnsupportedOperationException(
-          s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
+        EncodeUsingSerializer(inputObject, true)
     }
 
   }
@@ -701,7 +705,7 @@ object ScalaReflection extends ScalaReflection {
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
       case other =>
-        throw new UnsupportedOperationException(s"Schema for type $other is not supported")
+        Schema(BinaryType, nullable = false)
     }
   }
 

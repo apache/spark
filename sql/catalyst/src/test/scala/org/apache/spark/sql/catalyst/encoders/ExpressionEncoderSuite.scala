@@ -50,6 +50,11 @@ case class NestedArray(a: Array[Array[Int]]) {
   }
 }
 
+case class KryoUnsupportedEncoderForSubFiled(
+    a: String,
+    b: Seq[Int],
+    c: Option[Set[Int]])
+
 case class BoxedData(
     intField: java.lang.Integer,
     longField: java.lang.Long,
@@ -178,6 +183,10 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   encodeDecodeTest("hello", "kryo string")(encoderFor(Encoders.kryo[String]))
   encodeDecodeTest(new KryoSerializable(15), "kryo object")(
     encoderFor(Encoders.kryo[KryoSerializable]))
+
+  // use kryo to ser/deser the type which has a unsupported Encoder
+  encodeDecodeTest(Seq(KryoUnsupportedEncoderForSubFiled("a", Seq(1), Some(Set(2))),
+    KryoUnsupportedEncoderForSubFiled("b", Seq(3), None)), "type with unsupported encoder,use kryo")
 
   // Java encoders
   encodeDecodeTest("hello", "java string")(encoderFor(Encoders.javaSerialization[String]))
