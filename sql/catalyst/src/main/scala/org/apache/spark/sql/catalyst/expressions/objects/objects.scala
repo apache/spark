@@ -341,7 +341,7 @@ case class WrapOption(child: Expression, optType: DataType)
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
   override def inputTypes: Seq[AbstractDataType] = optType :: Nil
 
