@@ -64,14 +64,14 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       case _ => CatalystTypeConverters.convertToCatalyst(expected)
     }
     // Codegen version expects UnsafeArrayData for array expect Array(Binarytype)
-    val catalystValueUnsafe = expected match {
+    val catalystValueForCodegen = expected match {
        case arr: Array[Byte] if expression.dataType == BinaryType => arr
        case _ => convertToCatalystUnsafe(expected)
     }
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
-    checkEvaluationWithGeneratedMutableProjection(expr, catalystValueUnsafe, inputRow)
+    checkEvaluationWithGeneratedMutableProjection(expr, catalystValueForCodegen, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkEvalutionWithUnsafeProjection(expr, catalystValueUnsafe, inputRow)
+      checkEvalutionWithUnsafeProjection(expr, catalystValueForCodegen, inputRow)
     }
     checkEvaluationWithOptimization(expr, catalystValue, inputRow)
   }
@@ -83,14 +83,14 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     // No codegen version expects GenericArrayData for map
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expectedMap)
     // Codegen version expects UnsafeArrayData for map
-    val catalystValueUnsafe = new ArrayBasedMapData(
+    val catalystValueForCodegen = new ArrayBasedMapData(
       convertToCatalystUnsafe(expectedKey).asInstanceOf[ArrayData],
       convertToCatalystUnsafe(expectedValue).asInstanceOf[ArrayData])
 
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
-    checkEvaluationWithGeneratedMutableProjection(expr, catalystValueUnsafe, inputRow)
+    checkEvaluationWithGeneratedMutableProjection(expr, catalystValueForCodegen, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkEvalutionWithUnsafeProjection(expr, catalystValueUnsafe, inputRow)
+      checkEvalutionWithUnsafeProjection(expr, catalystValueForCodegen, inputRow)
     }
     checkEvaluationWithOptimization(expr, catalystValue, inputRow)
   }

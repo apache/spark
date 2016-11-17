@@ -63,7 +63,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
     val ArrayType(dt, _) = dataType
     val evals = children.map(e => e.genCode(ctx))
-    val isPrimitiveArray = ctx.isPrimitiveType(dt) && evals.forall(_.isNull == "false")
+    val isPrimitiveArray = ctx.isPrimitiveType(dt) && children.forall(!_.nullable)
     if (!isPrimitiveArray) {
       ev.copy(code = s"""
        final boolean ${ev.isNull} = false;
@@ -177,10 +177,10 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val MapType(keyDt, valueDt, _) = dataType
     val evalKeys = keys.map(e => e.genCode(ctx))
     val isPrimitiveArrayKey = ctx.isPrimitiveType(keyDt)
-    val isNonNullKey = evalKeys.forall(_.isNull == "false")
+    val isNonNullKey = keys.forall(!_.nullable)
     val evalValues = values.map(e => e.genCode(ctx))
     val isPrimitiveArrayValue =
-      ctx.isPrimitiveType(valueDt) && evalValues.forall(_.isNull == "false")
+      ctx.isPrimitiveType(valueDt) && values.forall(!_.nullable)
     val (keyData, keyArrayAllocate, keyArrayNullify) =
       getAccessors(ctx, keyDt, keyArray, isPrimitiveArrayKey, keys.size)
     val (valueData, valueArrayAllocate, valueArrayNullify) =
