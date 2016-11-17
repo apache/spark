@@ -41,6 +41,8 @@ trait InvokeLike extends Expression {
 
   def propagateNull: Boolean
 
+  protected lazy val propagatingNull: Boolean = propagateNull && arguments.exists(_.nullable)
+
   /**
    * Prepares codes for arguments.
    *
@@ -57,53 +59,52 @@ trait InvokeLike extends Expression {
    */
   def prepareArguments(ctx: CodegenContext, ev: ExprCode): (String, String, String) = {
 
-    val argsHaveNull =
-      if (propagateNull && arguments.exists(_.nullable)) {
-        val argsHaveNull = ctx.freshName("argsHaveNull")
-        ctx.addMutableState("boolean", argsHaveNull, "")
-        argsHaveNull
-      } else {
-        ""
-      }
+    val argsHaveNull = if (propagatingNull) {
+      val argsHaveNull = ctx.freshName("argsHaveNull")
+      ctx.addMutableState("boolean", argsHaveNull, "")
+      argsHaveNull
+    } else {
+      ""
+    }
     val argValues = arguments.zipWithIndex.map { case (e, i) =>
       val argValue = ctx.freshName("argValue")
       ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
       argValue
     }
 
-    val argCodes =
-      if (propagateNull && arguments.exists(_.nullable)) {
-        s"$argsHaveNull = false;" +:
-          arguments.zipWithIndex.map { case (e, i) =>
-            val expr = e.genCode(ctx)
-            s"""
-              if (!$argsHaveNull) {
-                ${expr.code}
-            """ +
-              (if (e.nullable) {
-                s"""
-                  $argsHaveNull = ${expr.isNull};
-                  ${argValues(i)} = ${expr.value};
-                """
-              } else {
-                s"${argValues(i)} = ${expr.value};"
-              }) +
-            """
-              }
-            """
-          }
-      } else {
-        arguments.zipWithIndex.map { case (e, i) =>
-          val expr = e.genCode(ctx)
-          s"""
+    val argCodes = if (propagatingNull) {
+      val reset = s"$argsHaveNull = false;"
+      val argCodes = arguments.zipWithIndex.map { case (e, i) =>
+        val expr = e.genCode(ctx)
+        s"""
+          if (!$argsHaveNull) {
             ${expr.code}
-            ${argValues(i)} = ${expr.value};
-          """
-        }
+        """ +
+          (if (e.nullable) {
+            s"""
+              $argsHaveNull = ${expr.isNull};
+              ${argValues(i)} = ${expr.value};
+            """
+          } else {
+            s"${argValues(i)} = ${expr.value};"
+          }) +
+        """
+          }
+        """
       }
+      reset +: argCodes
+    } else {
+      arguments.zipWithIndex.map { case (e, i) =>
+        val expr = e.genCode(ctx)
+        s"""
+          ${expr.code}
+          ${argValues(i)} = ${expr.value};
+        """
+      }
+    }
     val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
-    val setIsNull = if (propagateNull && arguments.exists(_.nullable)) {
+    val setIsNull = if (propagatingNull) {
       s"${ev.isNull} = ${ev.isNull} || $argsHaveNull;"
     } else {
       ""
@@ -297,7 +298,7 @@ case class NewInstance(
     outerPointer: Option[() => AnyRef]) extends Expression with InvokeLike with NonSQLExpression {
   private val className = cls.getName
 
-  override def nullable: Boolean = propagateNull && arguments.exists(_.nullable)
+  override def nullable: Boolean = propagatingNull
 
   override def children: Seq[Expression] = arguments
 
@@ -341,7 +342,7 @@ case class NewInstance(
       $prepareIsNull
       $setIsNull
     """ +
-      (if (propagateNull && arguments.exists(_.nullable)) {
+      (if (propagatingNull) {
         s"final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;"
       } else {
         s"final $javaType ${ev.value} = $constructorCall;"
