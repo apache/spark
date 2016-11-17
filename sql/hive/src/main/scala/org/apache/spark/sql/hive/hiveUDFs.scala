@@ -35,14 +35,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
 
 
 private[hive] case class HiveSimpleUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends Expression with HiveInspectors with CodegenFallback with Logging {
+  extends Expression with HiveInspectors with Logging {
 
   override def deterministic: Boolean = isUDFDeterministic
 
@@ -84,6 +84,92 @@ private[hive] case class HiveSimpleUDF(
 
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
+
+  // Generate codes used to convert the arguments to Hive types for `HiveSimpleUDF`
+  private[this] def genCodeForConverter(ctx: CodegenContext, index: Int): String = {
+    val converterClassName = classOf[Any => Any].getName
+    val hiveUDFClassName = classOf[HiveSimpleUDF].getName
+
+    val converterTerm = ctx.freshName("converter")
+    val expressionIdx = ctx.references.size - 1
+    ctx.addMutableState(converterClassName, converterTerm,
+      s"this.$converterTerm = ($converterClassName)" +
+        s"(($hiveUDFClassName) references[$expressionIdx]).getWrapper($index);")
+    converterTerm
+  }
+
+  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val hiveUDF = ctx.addReferenceObj("hiveUDF", this)
+    val converterClassName = classOf[Any => Any].getName
+
+    // Generate codes used to convert the returned value of `HiveSimpleUDF` to Catalyst type
+    val catalystConverterTerm = ctx.freshName("catalystConverter")
+    ctx.addMutableState(converterClassName, catalystConverterTerm,
+      s"this.$catalystConverterTerm = ($converterClassName)$hiveUDF.getUnwrapper();")
+
+    val resultTerm = ctx.freshName("result")
+
+    // This must be called before children expressions' codegen
+    // because ctx.references is used in genCodeForConverter
+    val converterTerms = children.indices.map(genCodeForConverter(ctx, _))
+
+    // codegen for children expressions
+    val evals = children.map(_.genCode(ctx))
+
+    // Generate the codes for expressions and calling `HiveSimpleUDF`.
+    // We need to get the boxedType of dataType's javaType here. Because for the dataType
+    // such as IntegerType, its javaType is `int` and the returned type of the function  is Object.
+    // Trying to convert an Object to `int` will cause casting exception.
+    val evalCode = evals.map(_.code).mkString
+    val (converters, funcArguments) = converterTerms.zipWithIndex.map { case (converter, i) =>
+      val eval = evals(i)
+      val argTerm = ctx.freshName("arg")
+      val convert = s"Object $argTerm = ${eval.isNull} ? null : $converter.apply(${eval.value});"
+      (convert, argTerm)
+    }.unzip
+
+    val getFuncResult = s"$hiveUDF.callUdf(${funcArguments.mkString(", ")})"
+    val callFunc =
+      s"""
+         ${ctx.boxedType(dataType)} $resultTerm = null;
+         try {
+           $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($getFuncResult);
+         } catch (Exception e) {
+           throw new org.apache.spark.SparkException($hiveUDF.udfErrorMessage(), e);
+         }
+       """
+
+    ev.copy(code = s"""
+      $evalCode
+      ${converters.mkString("\n")}
+      $callFunc
+
+      boolean ${ev.isNull} = $resultTerm == null;
+      ${ctx.boxedType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = $resultTerm;
+      }""")
+  }
+
+  def getChildren(): Seq[Expression] = children
+
+  def getWrapper(index: Int): (Any) => Any = wrappers(index)
+
+  def getUnwrapper(): (Any) => Any = unwrapper
+
+  @scala.annotation.varargs
+  def callUdf(args: AnyRef*): AnyRef = {
+    FunctionRegistry.invoke(
+      method,
+      function,
+      conversionHelper.convertIfNecessary(args: _*): _*)
+  }
+
+  lazy val udfErrorMessage = {
+    val funcCls = funcWrapper.functionClassName
+    val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
+    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+  }
 
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
