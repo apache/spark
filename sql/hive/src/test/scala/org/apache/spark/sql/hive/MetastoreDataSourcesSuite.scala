@@ -23,10 +23,10 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -1368,46 +1368,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
               new StructType().add("i", "int").add("j", "string").json))
         hiveClient.createTable(tableDesc, ignoreIfExists = false)
         checkAnswer(spark.table("old"), Row(1, "a"))
-      }
-    }
-  }
-
-  test("SPARK-18360: default table path of tables in default database should depend on the " +
-    "location of default database") {
-    withTempDir { dir =>
-      val originalWarehouse = hiveClient.getConf("hive.metastore.warehouse.dir", "")
-      try {
-        hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=${dir.toURI.getPath}")
-
-        val tableMeta = CatalogTable(
-          identifier = TableIdentifier("test_tbl", Some("default")),
-          tableType = CatalogTableType.MANAGED,
-          storage = CatalogStorageFormat.empty,
-          schema = new StructType().add("i", "int"),
-          provider = Some(DDLUtils.HIVE_PROVIDER))
-
-        withTable("test_tbl") {
-          hiveClient.createTable(tableMeta, ignoreIfExists = false)
-          val rawTable = hiveClient.getTable("default", "test_tbl")
-          // Hive will use the value of `hive.metastore.warehouse.dir` to generate default table
-          // location for tables in default database.
-          assert(rawTable.storage.locationUri.get.contains(dir.getAbsolutePath))
-        }
-
-        withTable("test_tbl") {
-          sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
-          val readBack = sharedState.externalCatalog.getTable("default", "test_tbl")
-          val defaultDatabasePath = sharedState.externalCatalog.getDatabase("default").locationUri
-          // Spark SQL will use the location of default database to generate default table
-          // location for tables in default database.
-          assert(readBack.storage.locationUri.get.contains(defaultDatabasePath))
-        }
-      } finally {
-        if (originalWarehouse.isEmpty) {
-          hiveClient.runSqlHive("UNSET hive.metastore.warehouse.dir")
-        } else {
-          hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$originalWarehouse")
-        }
       }
     }
   }

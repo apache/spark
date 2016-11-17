@@ -24,6 +24,7 @@ import java.util.Date
 import scala.collection.mutable.ArrayBuffer
 import scala.tools.nsc.Properties
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
@@ -33,11 +34,12 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, JarResource}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.{DecimalType, StructType}
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
@@ -290,6 +292,20 @@ class HiveSparkSubmitSuite
       "--conf", "spark.master.rest.enabled=false",
       "--conf", s"spark.sql.test.expectedMetastoreURL=$metastoreURL",
       "--conf", s"spark.driver.extraClassPath=${hiveSiteDir.getCanonicalPath}",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
+  test("SPARK-18360: default table path of tables in default database should depend on the " +
+    "location of default database") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SPARK_18360.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-18360",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)
@@ -794,6 +810,46 @@ object SPARK_14244 extends QueryTest {
       checkAnswer(df, Seq(Row(0.5D), Row(1.0D)))
     } finally {
       sparkContext.stop()
+    }
+  }
+}
+
+object SPARK_18360 {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+      .config("spark.ui.enabled", "false")
+      .enableHiveSupport().getOrCreate()
+
+    val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
+    assert(new Path(defaultDbLocation) == new Path(spark.sharedState.warehousePath))
+
+    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+
+    try {
+      val tableMeta = CatalogTable(
+        identifier = TableIdentifier("test_tbl", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("i", "int"),
+        provider = Some(DDLUtils.HIVE_PROVIDER))
+
+      val newWarehousePath = Utils.createTempDir().getAbsolutePath
+      hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$newWarehousePath")
+      hiveClient.createTable(tableMeta, ignoreIfExists = false)
+      val rawTable = hiveClient.getTable("default", "test_tbl")
+      // Hive will use the value of `hive.metastore.warehouse.dir` to generate default table
+      // location for tables in default database.
+      assert(rawTable.storage.locationUri.get.contains(newWarehousePath))
+      hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
+
+      spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
+      val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")
+      // Spark SQL will use the location of default database to generate default table
+      // location for tables in default database.
+      assert(readBack.storage.locationUri.get.contains(defaultDbLocation))
+    } finally {
+      hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = true, purge = false)
+      hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$defaultDbLocation")
     }
   }
 }
