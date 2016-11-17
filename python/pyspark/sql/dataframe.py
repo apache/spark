@@ -343,7 +343,8 @@ class DataFrame(object):
 
         Spark will use this watermark for several purposes:
           - To know when a given time window aggregation can be finalized and thus can be emitted
-           when using output modes that do not allow updates.
+            when using output modes that do not allow updates.
+
           - To minimize the amount of state that we need to keep for on-going aggregations.
 
         The current watermark is computed by looking at the `MAX(eventTime)` seen across
