@@ -119,6 +119,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
     with ImplicitCastInputTypes {
 
   require(list != null, "list should not be null")
+  require(list.nonEmpty, "list should not be empty")
 
   override def inputTypes: Seq[AbstractDataType] = value.dataType +: list.map(_.dataType)
 
