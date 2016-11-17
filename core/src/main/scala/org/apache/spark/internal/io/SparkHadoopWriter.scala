@@ -57,7 +57,7 @@ object SparkHadoopWriter extends Logging {
    */
   def write[K, V: ClassTag](
       rdd: RDD[(K, V)],
-      config: SparkHadoopWriterConfig[K, V]): Unit = {
+      config: HadoopWriteConfigUtil[K, V]): Unit = {
     // Extract context and configuration from RDD.
     val sparkContext = rdd.context
     val stageId = rdd.id
@@ -119,7 +119,7 @@ object SparkHadoopWriter extends Logging {
   /** Write a RDD partition out in a single Spark task. */
   private def executeTask[K, V: ClassTag](
       context: TaskContext,
-      config: SparkHadoopWriterConfig[K, V],
+      config: HadoopWriteConfigUtil[K, V],
       jobTrackerId: String,
       sparkStageId: Int,
       sparkPartitionId: Int,
@@ -175,8 +175,8 @@ object SparkHadoopWriter extends Logging {
  * A helper class that reads JobConf from older mapred API, creates output Format/Committer/Writer.
  */
 private[spark]
-class SparkHadoopMapRedWriterConfig[K, V: ClassTag](conf: SerializableJobConf)
-  extends SparkHadoopWriterConfig[K, V] with Logging {
+class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
+  extends HadoopWriteConfigUtil[K, V] with Logging {
 
   private var outputFormat: Class[_ <: OutputFormat[K, V]] = null
   private var writer: RecordWriter[K, V] = null
@@ -308,8 +308,8 @@ class SparkHadoopMapRedWriterConfig[K, V: ClassTag](conf: SerializableJobConf)
  * Format/Committer/Writer.
  */
 private[spark]
-class SparkHadoopMapReduceWriterConfig[K, V: ClassTag](conf: SerializableConfiguration)
-  extends SparkHadoopWriterConfig[K, V] with Logging {
+class HadoopMapReduceWriteConfigUtil[K, V: ClassTag](conf: SerializableConfiguration)
+  extends HadoopWriteConfigUtil[K, V] with Logging {
 
   private var outputFormat: Class[_ <: NewOutputFormat[K, V]] = null
   private var writer: NewRecordWriter[K, V] = null

@@ -1051,7 +1051,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * configured for a Hadoop MapReduce job.
    */
   def saveAsNewAPIHadoopDataset(conf: Configuration): Unit = self.withScope {
-    val config = new SparkHadoopMapReduceWriterConfig[K, V](new SerializableConfiguration(conf))
+    val config = new HadoopMapReduceWriteConfigUtil[K, V](new SerializableConfiguration(conf))
     SparkHadoopWriter.write(
       rdd = self,
       config = config)
@@ -1064,7 +1064,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * MapReduce job.
    */
   def saveAsHadoopDataset(conf: JobConf): Unit = self.withScope {
-    val config = new SparkHadoopMapRedWriterConfig[K, V](new SerializableJobConf(conf))
+    val config = new HadoopMapRedWriteConfigUtil[K, V](new SerializableJobConf(conf))
     SparkHadoopWriter.write(
       rdd = self,
       config = config)

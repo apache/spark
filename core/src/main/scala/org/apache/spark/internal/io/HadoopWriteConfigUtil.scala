@@ -37,7 +37,7 @@ import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Ut
  * 3. Implementations should have a constructor with exactly one argument:
  *    (conf: SerializableConfiguration) or (conf: SerializableJobConf).
  */
-abstract class SparkHadoopWriterConfig[K, V: ClassTag] extends Serializable {
+abstract class HadoopWriteConfigUtil[K, V: ClassTag] extends Serializable {
 
   // --------------------------------------------------------------------------
   // Create JobContext/TaskAttemptContext
