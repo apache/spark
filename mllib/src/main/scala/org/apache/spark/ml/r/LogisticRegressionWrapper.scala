@@ -63,7 +63,7 @@ private[r] class LogisticRegressionWrapper private (
       .drop(PREDICTED_LABEL_INDEX_COL)
       .drop(logisticRegressionModel.getFeaturesCol)
       .drop(logisticRegressionModel.getLabelCol)
-    
+
   }
 
   override def write: MLWriter = new LogisticRegressionWrapper.LogisticRegressionWrapperWriter(this)
