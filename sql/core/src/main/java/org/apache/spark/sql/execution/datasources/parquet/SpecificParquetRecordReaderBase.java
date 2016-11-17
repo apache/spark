@@ -106,13 +106,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       // then we need to apply the predicate push down filter
       footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
       FilterCompat.Filter filter = getFilter(configuration);
-      ParquetFileReader reader = ParquetFileReader.open(taskAttemptContext.getConfiguration(), file, footer);
+      this.reader = ParquetFileReader.open(configuration, file, footer);
       blocks = filterRowGroups(
               ImmutableList.of(RowGroupFilter.FilterLevel.STATISTICS, RowGroupFilter.FilterLevel.DICTIONARY),
               filter,
               footer.getBlocks(),
               reader);
-      reader.close();
     } else {
       // otherwise we find the row groups that were selected on the client
       footer = readFooter(configuration, file, NO_FILTER);
@@ -141,6 +140,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
                 + " out of: " + Arrays.toString(foundRowGroupOffsets)
                 + " in range " + split.getStart() + ", " + split.getEnd());
       }
+      this.reader = new ParquetFileReader(configuration, file, footer);
     }
     this.fileSchema = footer.getFileMetaData().getSchema();
     Map<String, String> fileMetadata = footer.getFileMetaData().getKeyValueMetaData();
@@ -148,10 +148,10 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
+    reader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
-    this.reader = new ParquetFileReader(configuration, file, footer);
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
     }
