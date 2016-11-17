@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
 /**
  * Common base class for [[StaticInvoke]], [[Invoke]], and [[NewInstance]].
  */
-trait InvokeLike {
+trait InvokeLike extends Expression with NonSQLExpression {
 
   def arguments: Seq[Expression]
 
@@ -129,7 +129,7 @@ case class StaticInvoke(
     dataType: DataType,
     functionName: String,
     arguments: Seq[Expression] = Nil,
-    propagateNull: Boolean = true) extends Expression with InvokeLike with NonSQLExpression {
+    propagateNull: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
 
@@ -185,7 +185,7 @@ case class Invoke(
     functionName: String,
     dataType: DataType,
     arguments: Seq[Expression] = Nil,
-    propagateNull: Boolean = true) extends Expression with InvokeLike with NonSQLExpression {
+    propagateNull: Boolean = true) extends InvokeLike {
 
   override def nullable: Boolean = true
   override def children: Seq[Expression] = targetObject +: arguments
@@ -294,7 +294,7 @@ case class NewInstance(
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[() => AnyRef]) extends Expression with InvokeLike with NonSQLExpression {
+    outerPointer: Option[() => AnyRef]) extends InvokeLike {
   private val className = cls.getName
 
   override def nullable: Boolean = propagatingNull
