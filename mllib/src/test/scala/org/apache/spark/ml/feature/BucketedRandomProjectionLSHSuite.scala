@@ -72,6 +72,7 @@ class BucketedRandomProjectionLSHSuite
     val model = new BucketedRandomProjectionLSHModel("brp", randUnitVectors)
     model.set(model.bucketLength, 0.5)
     val res = model.hashFunction(Vectors.dense(1.23, 4.56))
+    assert(res.length == 2)
     assert(res(0).equals(Vectors.dense(9.0)))
     assert(res(1).equals(Vectors.dense(2.0)))
   }
@@ -165,7 +166,6 @@ class BucketedRandomProjectionLSHSuite
     val key = Vectors.dense(1.2, 3.4)
 
     val brp = new BucketedRandomProjectionLSH()
-      .setNumHashTables(20)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
@@ -214,25 +214,5 @@ class BucketedRandomProjectionLSHSuite
     val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(brp, df, df, 3.0)
     assert(precision == 1.0)
     assert(recall >= 0.7)
-  }
-
-  test("memory leak test") {
-    val numDim = 10
-    val data = {
-      for (i <- 0 until numDim; j <- Seq(-2, -1, 1, 2))
-        yield Vectors.sparse(numDim, Seq((i, j.toDouble)))
-    }
-    val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
-
-    // Project from 100 dimensional Euclidean Space to 10 dimensions
-    val brp = new BucketedRandomProjectionLSH()
-      .setNumHashTables(10)
-      .setInputCol("keys")
-      .setOutputCol("values")
-      .setBucketLength(2.5)
-      .setSeed(12345)
-    val model = brp.fit(df)
-    val joined = model.approxSimilarityJoin(df, df, Double.MaxValue, "distCol")
-    joined.show()
   }
 }

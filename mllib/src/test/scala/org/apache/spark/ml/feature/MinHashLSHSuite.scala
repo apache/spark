@@ -62,6 +62,7 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val model = new MinHashLSHModel("mh", numEntries = 20,
       randCoefficients = Array((0, 1), (1, 2), (3, 0)))
     val res = model.hashFunction(Vectors.sparse(10, Seq((2, 1.0), (3, 1.0), (5, 1.0), (7, 1.0))))
+    assert(res.length == 3)
     assert(res(0).equals(Vectors.dense(1.0)))
     assert(res(1).equals(Vectors.dense(5.0)))
     assert(res(2).equals(Vectors.dense(4.0)))
@@ -101,7 +102,7 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setSeed(12344)
 
     val data = {
-      for (i <- 0 to 95) yield Vectors.sparse(Int.MaxValue, (i until i + 5).map((_, 1.0)))
+      for (i <- 0 to 2) yield Vectors.sparse(Int.MaxValue, (i until i + 5).map((_, 1.0)))
     }
     val badDataset = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
     intercept[IllegalArgumentException] {

@@ -152,8 +152,7 @@ class BucketedRandomProjectionLSH(override val uid: String)
 
   @Since("2.1.0")
   override protected[this] def createRawLSHModel(
-    inputDim: Int
-  ): BucketedRandomProjectionLSHModel = {
+    inputDim: Int): BucketedRandomProjectionLSHModel = {
     val rand = new Random($(seed))
     val randUnitVectors: Array[Vector] = {
       Array.fill($(numHashTables)) {

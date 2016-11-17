@@ -153,6 +153,8 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    * the [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the
    * transformed data when necessary.
    *
+   * NOTE: This method is experimental and will likely change behavior in the next release.
+   *
    * @param dataset the dataset to search for nearest neighbors of the key
    * @param key Feature vector representing the item to search for
    * @param numNearestNeighbors The maximum number of nearest neighbors
