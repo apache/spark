@@ -26,7 +26,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import com.google.common.io.ByteStreams
-import com.google.common.primitives.Ints
 
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
@@ -332,8 +331,12 @@ private[spark] class MemoryStore(
     var unrollMemoryUsedByThisBlock = 0L
     // Underlying buffer for unrolling the block
     val redirectableStream = new RedirectableOutputStream
-    val bbos =
-      new ChunkedByteBufferOutputStream(Ints.checkedCast(initialMemoryThreshold), allocator)
+    val chunkSize = if (initialMemoryThreshold >= Integer.MAX_VALUE) {
+      Integer.MAX_VALUE
+    } else {
+      initialMemoryThreshold.toInt
+    }
+    val bbos = new ChunkedByteBufferOutputStream(chunkSize, allocator)
     redirectableStream.setOutputStream(bbos)
     val serializationStream: SerializationStream = {
       val ser = serializerManager.getSerializer(classTag).newInstance()
