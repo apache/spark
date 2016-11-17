@@ -2208,7 +2208,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** Post the environment update event once the task scheduler is ready */
-  private def postEnvironmentUpdate() {
+  private[spark] def postEnvironmentUpdate() {
     if (taskScheduler != null) {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
