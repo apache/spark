@@ -984,7 +984,7 @@ Random forests combine many decision trees in order to reduce the risk of overfi
 The `spark.ml` implementation supports random forests for binary and multiclass classification and for regression,
 using both continuous and categorical features.
 
-For more information on the algorithm itself, please see the [`spark.mllib` documentation on random forests](mllib-ensembles.html).
+For more information on the algorithm itself, please see the [`spark.mllib` documentation on random forests](mllib-ensembles.html#random-forests).
 
 ### Inputs and Outputs
 
@@ -1065,7 +1065,7 @@ GBTs iteratively train decision trees in order to minimize a loss function.
 The `spark.ml` implementation supports GBTs for binary classification and for regression,
 using both continuous and categorical features.
 
-For more information on the algorithm itself, please see the [`spark.mllib` documentation on GBTs](mllib-ensembles.html).
+For more information on the algorithm itself, please see the [`spark.mllib` documentation on GBTs](mllib-ensembles.html#gradient-boosted-trees-gbts).
 
 ### Inputs and Outputs
 

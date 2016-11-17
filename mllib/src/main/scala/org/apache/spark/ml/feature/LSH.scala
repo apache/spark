@@ -40,7 +40,7 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
    * @group param
    */
   final val outputDim: IntParam = new IntParam(this, "outputDim", "output dimension, where" +
-    "increasing dimensionality lowers the false negative rate, and decreasing dimensionality" +
+    " increasing dimensionality lowers the false negative rate, and decreasing dimensionality" +
     " improves the running performance", ParamValidators.gt(0))
 
   /** @group getParam */

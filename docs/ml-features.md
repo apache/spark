@@ -710,7 +710,7 @@ for more details on the API.
 `VectorIndexer` helps index categorical features in datasets of `Vector`s.
 It can both automatically decide which features are categorical and convert original values to category indices.  Specifically, it does the following:
 
-1. Take an input column of type [Vector](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) and a parameter `maxCategories`.
+1. Take an input column of type [Vector](api/scala/index.html#org.apache.spark.ml.linalg.Vector) and a parameter `maxCategories`.
 2. Decide which features should be categorical based on the number of distinct values, where features with at most `maxCategories` are declared categorical.
 3. Compute 0-based category indices for each categorical feature.
 4. Index categorical features and transform original feature values to indices.
