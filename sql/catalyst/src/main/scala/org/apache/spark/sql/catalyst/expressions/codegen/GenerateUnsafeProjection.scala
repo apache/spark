@@ -111,10 +111,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case t: StructType =>
             val isHomogenousStruct = {
               var i = 1
-              val ref =  ctx.javaType(t.fields(0).dataType)
+              val ref = ctx.javaType(t.fields(0).dataType)
               var broken = false || !ctx.isPrimitiveType(ref) || t.length <=1
               while( !broken && i < t.length) {
-                if(ctx.javaType(t.fields(i).dataType) != ref) {
+                if (ctx.javaType(t.fields(i).dataType) != ref){
                   broken = true
                 }
                 i +=1
@@ -134,14 +134,15 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
                  if (${input.value} instanceof UnsafeRow) {
                    ${writeUnsafeData(ctx, s"((UnsafeRow) ${input.value})", bufferHolder)};
                  } else {
-                      $rowWriterClass $rowWriterChild = new $rowWriterClass($bufferHolder, ${t.length});
+                      $rowWriterClass $rowWriterChild = new $rowWriterClass($bufferHolder,
+                      ${t.length});
                       $rowWriterChild.reset();
                       for(int $counter = 0; $counter < ${t.length}; ++$counter) {
                            if (${input.value}.isNullAt($index)) {
                              $rowWriterChild.setNullAt($index);
                            }else {
-                             $rowWriterChild.write($counter, ${ctx.getValue(input.value, t.fields(0).dataType,
-                               counter)});
+                             $rowWriterChild.write($counter, ${ctx.getValue(input.value,
+                             t.fields(0).dataType, counter)});
                            }
                        }
                  }
@@ -149,7 +150,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             """
 
 
-            }else {
+            } else {
               s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.

@@ -179,6 +179,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
           action = FileStreamSinkLog.ADD_ACTION))
 
       assert(expected === sinkLog.deserialize(new ByteArrayInputStream(logs.getBytes(UTF_8))))
+
       assert(Nil === sinkLog.deserialize(new ByteArrayInputStream(VERSION.getBytes(UTF_8))))
     }
   }

@@ -288,6 +288,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
   }
 }
+
 object StreamingQueryListenerSuite {
   // Singleton reference to clock that does not get serialized in task closures
   @volatile var clock: ManualClock = null
