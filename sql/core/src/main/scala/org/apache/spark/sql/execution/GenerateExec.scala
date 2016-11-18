@@ -110,6 +110,8 @@ case class GenerateExec(
     }
   }
 
+  override def supportCodegen: Boolean = generator.supportCodegen
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
@@ -240,29 +242,32 @@ case class GenerateExec(
     // iterator contains no input. We do this by adding an 'outer' variable which guarantees
     // execution of the first iteration even if there is no input. Evaluation of the iterator is
     // prevented by checks in the next() and accessor code.
-    val hasNextCode = s"$hasNext = $iterator.hasNext()"
     val outerVal = ctx.freshName("outer")
-    val (init, check, update, next) = if (outer) {
-      (s"boolean $hasNextCode, $outerVal = true",
-       s"$hasNext || $outerVal",
-       s"$hasNextCode, $outerVal = false",
-       s"$hasNext ? $iterator.next() : null")
-    } else {
-      (s"boolean $hasNextCode",
-       s"$hasNext",
-       s"$hasNextCode",
-       s"$iterator.next()")
-    }
     val numOutput = metricTerm(ctx, "numOutputRows")
-    s"""
-       |${data.code}
-       |scala.collection.Iterator<InternalRow> $iterator = ${data.value}.toIterator();
-       |for ($init; $check; $update) {
-       |  $numOutput.add(1);
-       |  InternalRow $current = (InternalRow)($next);
-       |  ${consume(ctx, input ++ values)}
-       |}
-     """.stripMargin
+    if (outer) {
+      s"""
+         |${data.code}
+         |scala.collection.Iterator<InternalRow> $iterator = ${data.value}.toIterator();
+         |boolean $outerVal = true;
+         |while ($iterator.hasNext() || $outerVal) {
+         |  $numOutput.add(1);
+         |  boolean $hasNext = $iterator.hasNext();
+         |  InternalRow $current = (InternalRow)($hasNext? $iterator.next() : null);
+         |  $outerVal = false;
+         |  ${consume(ctx, input ++ values)}
+         |}
+      """.stripMargin
+    } else {
+      s"""
+         |${data.code}
+         |scala.collection.Iterator<InternalRow> $iterator = ${data.value}.toIterator();
+         |while ($iterator.hasNext()) {
+         |  $numOutput.add(1);
+         |  InternalRow $current = (InternalRow)($iterator.next());
+         |  ${consume(ctx, input ++ values)}
+         |}
+      """.stripMargin
+    }
   }
 
   /**

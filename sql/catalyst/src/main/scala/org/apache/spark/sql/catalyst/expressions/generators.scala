@@ -62,6 +62,11 @@ trait Generator extends Expression {
    * rows can be made here.
    */
   def terminate(): TraversableOnce[InternalRow] = Nil
+
+  /**
+   * Check if this generator supports code generation.
+   */
+  def supportCodegen: Boolean = !isInstanceOf[CodegenFallback]
 }
 
 /**
@@ -167,6 +172,12 @@ case class Stack(children: Seq[Expression]) extends Generator {
       InternalRow(fields: _*)
     }
   }
+
+
+  /**
+   * Only support code generation when stack produces 50 rows or less.
+   */
+  override def supportCodegen: Boolean = numRows <= 50
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Rows - we write these into an array.
