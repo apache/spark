@@ -54,10 +54,9 @@ trait InvokeLike extends Expression with NonSQLExpression {
    *   preparing rest of arguments can be skipped in the case.
    *
    * @param ctx a [[CodegenContext]]
-   * @param ev an [[ExprCode]] with unique terms.
    * @return (code to prepare arguments, argument string, result of argument null check)
    */
-  def prepareArguments(ctx: CodegenContext, ev: ExprCode): (String, String, String) = {
+  def prepareArguments(ctx: CodegenContext): (String, String, String) = {
 
     val resultIsNull = if (needNullCheck) {
       val resultIsNull = ctx.freshName("resultIsNull")
@@ -136,7 +135,7 @@ case class StaticInvoke(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
 
-    val (argCode, argString, resultIsNull) = prepareArguments(ctx, ev)
+    val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
     val callFunc = s"$objectName.$functionName($argString)"
 
@@ -201,7 +200,7 @@ case class Invoke(
     val javaType = ctx.javaType(dataType)
     val obj = targetObject.genCode(ctx)
 
-    val (argCode, argString, resultIsNull) = prepareArguments(ctx, ev)
+    val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
     val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
     val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
@@ -312,7 +311,7 @@ case class NewInstance(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
 
-    val (argCode, argString, resultIsNull) = prepareArguments(ctx, ev)
+    val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
