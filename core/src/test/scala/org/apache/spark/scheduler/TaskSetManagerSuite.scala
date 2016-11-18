@@ -1017,6 +1017,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       // offer each executor twice (simulating 2 cores per executor)
       (0 until 2).flatMap{ _ => tsmSpy.resourceOffer(exec, host, TaskLocality.ANY)}
     }
+    assert(taskDescs.size === 4)
 
     // now fail those tasks
     tsmSpy.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,

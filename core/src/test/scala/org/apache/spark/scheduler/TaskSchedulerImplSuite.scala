@@ -414,105 +414,112 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
    * Creates 1 offer on executor[1-3].  Executor1 & 2 are on host1, executor3 is on host2.  Passed
    * in nodes and executors should be on that list.
    */
-  private def blacklistPerformanceCheck(
+  private def testBlacklistPerformance(
+      testName: String,
       nodeBlacklist: Seq[String],
       execBlacklist: Seq[String]): Unit = {
-    // When an executor or node is blacklisted, we want to make sure that we don't try scheduling
-    // each pending task, one by one, to discover they are all blacklisted.  This is important for
-    // performance -- if we did check each task one-by-one, then responding to a resource offer
-    // (which is usually O(1)-ish) would become O(numPendingTasks), which would slow down
-    // scheduler throughput and slow down scheduling even on healthy executors.
-    // Here, we check a proxy for the runtime -- we make sure the scheduling is short-circuited
-    // at the node or executor blacklist, so we never check the per-task blacklist.  We also make
-    // sure we don't check the node & executor blacklist for the entire taskset O(numPendingTasks)
-    // times.
+    // Because scheduling involves shuffling the order of offers around, we run this test a few
+    // times to cover more possibilities.  There are only 3 offers, which means 6 permutations,
+    // so 10 iterations is pretty good.
+    (0 until 10).foreach { testItr =>
+      test(s"$testName: iteration $testItr") {
+        // When an executor or node is blacklisted, we want to make sure that we don't try
+        // scheduling each pending task, one by one, to discover they are all blacklisted.  This is
+        // important for performance -- if we did check each task one-by-one, then responding to a
+        // resource offer (which is usually O(1)-ish) would become O(numPendingTasks), which would
+        // slow down scheduler throughput and slow down scheduling even on healthy executors.
+        // Here, we check a proxy for the runtime -- we make sure the scheduling is short-circuited
+        // at the node or executor blacklist, so we never check the per-task blacklist.  We also
+        // make sure we don't check the node & executor blacklist for the entire taskset
+        // O(numPendingTasks) times.
 
-    taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
-    // we schedule 500 tasks so we can clearly distinguish anything that is O(numPendingTasks)
-    val taskSet = FakeTask.createTaskSet(numTasks = 500, stageId = 0, stageAttemptId = 0)
-    taskScheduler.submitTasks(taskSet)
+        taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
+        // we schedule 500 tasks so we can clearly distinguish anything that is O(numPendingTasks)
+        val taskSet = FakeTask.createTaskSet(numTasks = 500, stageId = 0, stageAttemptId = 0)
+        taskScheduler.submitTasks(taskSet)
 
-    val offers = IndexedSeq(
-      new WorkerOffer("executor1", "host1", 1),
-      new WorkerOffer("executor2", "host1", 1),
-      new WorkerOffer("executor3", "host2", 1)
-    )
-    // We should check the node & exec blacklists, but only O(numOffers), not O(numPendingTasks)
-    // times.  In the worst case, after shuffling, we offer our blacklisted resource first, and then
-    // offer other resources which do get used.  The taskset blacklist is consulted repeatedly as
-    // we offer resources to the taskset -- each iteration either schedules something, or it
-    // terminates that locality level, so the maximum number of checks is
-    // numCores + numLocalityLevels
-    val numCoresOnAllOffers = offers.map(_.cores).sum
-    val numLocalityLevels = TaskLocality.values.size
-    val maxBlacklistChecks = numCoresOnAllOffers + numLocalityLevels
+        val offers = IndexedSeq(
+          new WorkerOffer("executor1", "host1", 1),
+          new WorkerOffer("executor2", "host1", 1),
+          new WorkerOffer("executor3", "host2", 1)
+        )
+        // We should check the node & exec blacklists, but only O(numOffers), not O(numPendingTasks)
+        // times.  In the worst case, after shuffling, we offer our blacklisted resource first, and
+        // then offer other resources which do get used.  The taskset blacklist is consulted
+        // repeatedly as we offer resources to the taskset -- each iteration either schedules
+        // something, or it terminates that locality level, so the maximum number of checks is
+        // numCores + numLocalityLevels
+        val numCoresOnAllOffers = offers.map(_.cores).sum
+        val numLocalityLevels = TaskLocality.values.size
+        val maxBlacklistChecks = numCoresOnAllOffers + numLocalityLevels
 
-    // Setup the blacklist
-    nodeBlacklist.foreach { node =>
-      when(stageToMockTaskSetBlacklist(0).isNodeBlacklistedForTaskSet(node)).thenReturn(true)
-    }
-    execBlacklist.foreach { exec =>
-      when(stageToMockTaskSetBlacklist(0).isExecutorBlacklistedForTaskSet(exec)).thenReturn(true)
-    }
+        // Setup the blacklist
+        nodeBlacklist.foreach { node =>
+          when(stageToMockTaskSetBlacklist(0).isNodeBlacklistedForTaskSet(node)).thenReturn(true)
+        }
+        execBlacklist.foreach { exec =>
+          when(stageToMockTaskSetBlacklist(0).isExecutorBlacklistedForTaskSet(exec))
+            .thenReturn(true)
+        }
 
-    // Figure out which nodes have any effective blacklisting on them.  This means all nodes that
-    // are explicitly blacklisted, plus those that have *any* executors blacklisted.
-    val nodesForBlacklistedExecutors = offers.filter { offer =>
-      execBlacklist.contains(offer.executorId)
-    }.map(_.host).toSet.toSeq
-    val nodesWithAnyBlacklisting = nodeBlacklist ++ nodesForBlacklistedExecutors
-    // Similarly, figure out which executors have any blacklisting.  This means all executors that
-    // are explicitly blacklisted, plus all executors on nodes that are blacklisted.
-    val execsForBlacklistedNodes = offers.filter { offer =>
-      nodeBlacklist.contains(offer.host)
-    }.map(_.executorId).toSeq
-    val executorsWithAnyBlacklisting = execBlacklist ++ execsForBlacklistedNodes
+        // Figure out which nodes have any effective blacklisting on them.  This means all nodes
+        // that are explicitly blacklisted, plus those that have *any* executors blacklisted.
+        val nodesForBlacklistedExecutors = offers.filter { offer =>
+          execBlacklist.contains(offer.executorId)
+        }.map(_.host).toSet.toSeq
+        val nodesWithAnyBlacklisting = nodeBlacklist ++ nodesForBlacklistedExecutors
+        // Similarly, figure out which executors have any blacklisting.  This means all executors
+        // that are explicitly blacklisted, plus all executors on nodes that are blacklisted.
+        val execsForBlacklistedNodes = offers.filter { offer =>
+          nodeBlacklist.contains(offer.host)
+        }.map(_.executorId).toSeq
+        val executorsWithAnyBlacklisting = execBlacklist ++ execsForBlacklistedNodes
 
-    // Schedule a taskset, and make sure our test setup is correct -- we are able to schedule
-    // a task on all executors that aren't blacklisted (even the ones implicitly blacklisted by the
-    // node blacklist).
-    val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
-    assert(firstTaskAttempts.size === 3 - executorsWithAnyBlacklisting.size)
+        // Schedule a taskset, and make sure our test setup is correct -- we are able to schedule
+        // a task on all executors that aren't blacklisted (whether that executors is a explicitly
+        // blacklisted, or implicitly blacklisted via the node blacklist).
+        val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
+        assert(firstTaskAttempts.size === offers.size - executorsWithAnyBlacklisting.size)
 
-    // Now check that we haven't made too many calls to any of the blacklist methods.
-    // We should be checking our node blacklist, but it should be within the bound we defined above.
-    verify(stageToMockTaskSetBlacklist(0), atMost(maxBlacklistChecks))
-      .isNodeBlacklistedForTaskSet(anyString())
-    // We shouldn't ever consult the per-task blacklist for the nodes that have been blacklisted
-    // for the entire taskset, since the taskset level blacklisting should prevent scheduling
-    // from ever looking at specific tasks.
-    nodesWithAnyBlacklisting.foreach { node =>
-      verify(stageToMockTaskSetBlacklist(0), never)
-        .isNodeBlacklistedForTask(meq(node), anyInt())
-    }
-    executorsWithAnyBlacklisting.foreach { exec =>
-      // We should be checking our executor blacklist, but it should be within the bound defined
-      // above.  Its possible that this will be significantly fewer calls, maybe even 0, if there
-      // is also a node-blacklist which takes effect first.  But this assert is all we need to
-      // avoid an O(numPendingTask) slowdown.
-      verify(stageToMockTaskSetBlacklist(0), atMost(maxBlacklistChecks))
-        .isExecutorBlacklistedForTaskSet(exec)
-      // We shouldn't ever consult the per-task blacklist for executors that have been blacklisted
-      // for the entire taskset, since the taskset level blacklisting should prevent scheduling
-      // from ever looking at specific tasks.
-      verify(stageToMockTaskSetBlacklist(0), never)
-        .isExecutorBlacklistedForTask(meq(exec), anyInt())
+        // Now check that we haven't made too many calls to any of the blacklist methods.
+        // We should be checking our node blacklist, but it should be within the bound we defined
+        // above.
+        verify(stageToMockTaskSetBlacklist(0), atMost(maxBlacklistChecks))
+          .isNodeBlacklistedForTaskSet(anyString())
+        // We shouldn't ever consult the per-task blacklist for the nodes that have been blacklisted
+        // for the entire taskset, since the taskset level blacklisting should prevent scheduling
+        // from ever looking at specific tasks.
+        nodesWithAnyBlacklisting.foreach { node =>
+          verify(stageToMockTaskSetBlacklist(0), never)
+            .isNodeBlacklistedForTask(meq(node), anyInt())
+        }
+        executorsWithAnyBlacklisting.foreach { exec =>
+          // We should be checking our executor blacklist, but it should be within the bound defined
+          // above.  Its possible that this will be significantly fewer calls, maybe even 0, if
+          // there is also a node-blacklist which takes effect first.  But this assert is all we
+          // need to avoid an O(numPendingTask) slowdown.
+          verify(stageToMockTaskSetBlacklist(0), atMost(maxBlacklistChecks))
+            .isExecutorBlacklistedForTaskSet(exec)
+          // We shouldn't ever consult the per-task blacklist for executors that have been
+          // blacklisted for the entire taskset, since the taskset level blacklisting should prevent
+          // scheduling from ever looking at specific tasks.
+          verify(stageToMockTaskSetBlacklist(0), never)
+            .isExecutorBlacklistedForTask(meq(exec), anyInt())
+        }
+      }
     }
   }
 
-  test("Blacklisted node for entire task set prevents per-task blacklist checks") {
-    blacklistPerformanceCheck(
-      nodeBlacklist = Seq("host1"),
-      execBlacklist = Seq()
-    )
-  }
+  testBlacklistPerformance(
+    testName = "Blacklisted node for entire task set prevents per-task blacklist checks",
+    nodeBlacklist = Seq("host1"),
+    execBlacklist = Seq())
 
-  test("Blacklisted executor for entire task set prevents per-task blacklist checks") {
-    blacklistPerformanceCheck(
-      nodeBlacklist = Seq(),
-      execBlacklist = Seq("executor3")
-    )
-  }
+  testBlacklistPerformance(
+    testName = "Blacklisted executor for entire task set prevents per-task blacklist checks",
+    nodeBlacklist = Seq(),
+    execBlacklist = Seq("executor3")
+  )
 
   test("abort stage if executor loss results in unschedulability from previously failed tasks") {
     // Make sure we can detect when a taskset becomes unschedulable from a blacklisting.  This
