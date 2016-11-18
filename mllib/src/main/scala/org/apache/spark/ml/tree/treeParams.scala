@@ -435,12 +435,8 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
   setDefault(maxIter -> 20, stepSize -> 0.1)
 
   /** @group setParam */
-  def setMaxIter(value: Int): this.type = {
-    require(ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true)(
-      value), "GBT parameter stepSize should be in interval (0, 1], " +
-      s"but it given invalid value $value.")
-    set(maxIter, value)
-  }
+  def setMaxIter(value: Int): this.type = set(maxIter, value)
+
 
   /**
    * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
@@ -448,7 +444,12 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
    * (default = 0.1)
    * @group setParam
    */
-  def setStepSize(value: Double): this.type = set(stepSize, value)
+  def setStepSize(value: Double): this.type = {
+    require(ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true)(
+      value), "GBT parameter stepSize should be in interval (0, 1], " +
+      s"but it given invalid value $value.")
+    set(stepSize, value)
+  }
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(
