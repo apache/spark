@@ -35,11 +35,11 @@ import org.apache.spark.sql.types.StructType
  * picked from a hash family for a specific set `S` with cardinality equal to `numEntries`:
  *    `h_i(x) = ((x \cdot a_i + b_i) \mod prime) \mod numEntries`
  *
- * This hash family is a 2-universal hash family which is approximately min-wise independent.
+ * This hash family is approximately min-wise independent according to the reference.
  *
  * Reference:
- * [[http://people.csail.mit.edu/mip/papers/kwise-lb/kwise-lb.pdf On the k-Independence Required by
- * Linear Probing and Minwise Independence]]
+ * [[http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.121.8215&rep=rep1&type=pdf Min-wise
+ * independent permutations]]
  *
  * @param numEntries The number of entries of the hash functions.
  * @param randCoefficients Pairs of random coefficients. Each pair is used by one hash function.
