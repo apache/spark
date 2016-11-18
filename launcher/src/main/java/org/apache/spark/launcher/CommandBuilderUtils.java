@@ -357,7 +357,7 @@ class CommandBuilderUtils {
   static String findJarsDir(String sparkHome, String scalaVersion, boolean failIfNotFound) {
     // TODO: change to the correct directory once the assembly build is changed.
     File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
+    if (new File(sparkHome, "jars").isDirectory()) {
       libdir = new File(sparkHome, "jars");
       checkState(!failIfNotFound || libdir.isDirectory(),
         "Library directory '%s' does not exist.",

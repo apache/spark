@@ -33,6 +33,7 @@ SPARK_HOME="$(cd "`dirname "$0"`/.."; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 MAKE_TGZ=false
+MAKE_PIP=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
@@ -40,7 +41,7 @@ function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
-  cl_options="[--name] [--tgz] [--mvn <mvn-command>]"
+  cl_options="[--name] [--tgz] [--pip] [--mvn <mvn-command>]"
   echo "make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
@@ -66,6 +67,9 @@ while (( "$#" )); do
       ;;
     --tgz)
       MAKE_TGZ=true
+      ;;
+    --pip)
+      MAKE_PIP=true
       ;;
     --mvn)
       MVN="$2"
@@ -200,6 +204,16 @@ fi
 
 # Copy data files
 cp -r "$SPARK_HOME/data" "$DISTDIR"
+
+# Make pip package
+if [ "$MAKE_PIP" == "true" ]; then
+  echo "Building python distribution package"
+  cd $SPARK_HOME/python
+  python setup.py sdist
+  cd ..
+else
+  echo "Skipping creating pip installable PySpark"
+fi
 
 # Copy other things
 mkdir "$DISTDIR"/conf

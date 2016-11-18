@@ -289,8 +289,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val startTime = listener.startTime
       val endTime = listener.endTime
       val activeJobs = listener.activeJobs.values.toSeq
-      val completedJobs = listener.completedJobs.reverse.toSeq
-      val failedJobs = listener.failedJobs.reverse.toSeq
+      val completedJobs = listener.completedJobs.reverse
+      val failedJobs = listener.failedJobs.reverse
 
       val activeJobsTable =
         jobsTable(request, "active", "activeJob", activeJobs, killEnabled = parent.killEnabled)

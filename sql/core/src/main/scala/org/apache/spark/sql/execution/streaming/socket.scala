@@ -21,7 +21,7 @@ import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.util.{Calendar, Locale}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
@@ -37,7 +37,7 @@ object TextSocketSource {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
   val SCHEMA_TIMESTAMP = StructType(StructField("value", StringType) ::
     StructField("timestamp", TimestampType) :: Nil)
-  val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+  val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 }
 
 /**
@@ -116,8 +116,8 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   /** Returns the data that is between the offsets (`start`, `end`]. */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = synchronized {
     val startOrdinal =
-      start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
-    val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
+      start.flatMap(LongOffset.convert).getOrElse(LongOffset(-1)).offset.toInt + 1
+    val endOrdinal = LongOffset.convert(end).getOrElse(LongOffset(-1)).offset.toInt + 1
 
     // Internal buffer only holds the batches after lastOffsetCommitted
     val rawList = synchronized {
@@ -140,20 +140,19 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   }
 
   override def commit(end: Offset): Unit = synchronized {
-    if (end.isInstanceOf[LongOffset]) {
-      val newOffset = end.asInstanceOf[LongOffset]
-      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
-
-      if (offsetDiff < 0) {
-        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
-      }
-
-      batches.trimStart(offsetDiff)
-      lastOffsetCommitted = newOffset
-    } else {
+    val newOffset = LongOffset.convert(end).getOrElse(
       sys.error(s"TextSocketStream.commit() received an offset ($end) that did not " +
         s"originate with an instance of this class")
+    )
+
+    val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
+
+    if (offsetDiff < 0) {
+      sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
+
+    batches.trimStart(offsetDiff)
+    lastOffsetCommitted = newOffset
   }
 
   /** Stop this source. */

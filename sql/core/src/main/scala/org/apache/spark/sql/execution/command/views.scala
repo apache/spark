@@ -19,21 +19,23 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
-import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+import org.apache.spark.sql.types.MetadataBuilder
 
 
 /**
  * ViewType is used to specify the expected view type when we want to create or replace a view in
  * [[CreateViewCommand]].
  */
-sealed trait ViewType
+sealed trait ViewType {
+  override def toString: String = getClass.getSimpleName.stripSuffix("$")
+}
 
 /**
  * LocalTempView means session-scoped local temporary views. Its lifetime is the lifetime of the
@@ -131,6 +133,10 @@ case class CreateViewCommand(
         s"specified by CREATE VIEW (num: `${userSpecifiedColumns.length}`).")
     }
 
+    // When creating a permanent view, not allowed to reference temporary objects.
+    // This should be called after `qe.assertAnalyzed()` (i.e., `child` can be resolved)
+    verifyTemporaryObjectsNotExists(sparkSession)
+
     val aliasedPlan = if (userSpecifiedColumns.isEmpty) {
       analyzedPlan
     } else {
@@ -170,6 +176,34 @@ case class CreateViewCommand(
       catalog.createTable(prepareTable(sparkSession, aliasedPlan), ignoreIfExists = false)
     }
     Seq.empty[Row]
+  }
+
+  /**
+   * Permanent views are not allowed to reference temp objects, including temp function and views
+   */
+  private def verifyTemporaryObjectsNotExists(sparkSession: SparkSession): Unit = {
+    if (!isTemporary) {
+      // This func traverses the unresolved plan `child`. Below are the reasons:
+      // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
+      // logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
+      // added/generated from a temporary view.
+      // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
+      // package (e.g., HiveGenericUDF).
+      child.collect {
+        // Disallow creating permanent views based on temporary views.
+        case s: UnresolvedRelation
+          if sparkSession.sessionState.catalog.isTemporaryTable(s.tableIdentifier) =>
+          throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+            s"referencing a temporary view ${s.tableIdentifier}")
+        case other if !other.resolved => other.expressions.flatMap(_.collect {
+          // Disallow creating permanent views based on temporary UDFs.
+          case e: UnresolvedFunction
+            if sparkSession.sessionState.catalog.isTemporaryFunction(e.name) =>
+            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+              s"referencing a temporary function `${e.name}`")
+        })
+      }
+    }
   }
 
   /**
