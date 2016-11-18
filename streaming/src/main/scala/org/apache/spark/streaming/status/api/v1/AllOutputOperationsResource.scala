@@ -43,17 +43,23 @@ private[v1] object AllOutputOperationsResource {
       for {
         batch <- listener.retainedBatches if batch.batchTime.milliseconds == batchId
         (opId, op) <- batch.outputOperations
-        (key, pairs) <- batch.outputOpIdSparkJobIdPairs.groupBy(_.outputOpId) if key == opId
-      } yield new OutputOperationInfo(
-        outputOpId = opId,
-        name = op.name,
-        description = op.description,
-        startTime = op.startTime.map(new Date(_)),
-        endTime = op.endTime.map(new Date(_)),
-        duration = op.duration,
-        failureReason = op.failureReason,
-        jobIds = pairs.map(_.sparkJobId).sorted
-      )
+      } yield {
+        val outputOpIdToSparkJobIds = batch.outputOpIdSparkJobIdPairs.groupBy(_.outputOpId).
+          map { case (outputOpId, outputOpIdAndSparkJobIds) =>
+            (outputOpId, outputOpIdAndSparkJobIds.map(_.sparkJobId).sorted)
+          }
+
+        new OutputOperationInfo(
+          outputOpId = opId,
+          name = op.name,
+          description = op.description,
+          startTime = op.startTime.map(new Date(_)),
+          endTime = op.endTime.map(new Date(_)),
+          duration = op.duration,
+          failureReason = op.failureReason,
+          jobIds = outputOpIdToSparkJobIds.getOrElse(opId, Seq())
+        )
+      }
     }
   }
 }
