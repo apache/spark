@@ -21,7 +21,7 @@ import java.{util => ju}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
@@ -134,6 +134,12 @@ private[kafka010] class KafkaSourceRDD(
       Iterator.empty
 
     } else {
+      if (!reuseCachedConsumers) {
+        // if we can't reuse CachedKafkaConsumers, let's reset the groupId, because we will have
+        // multiple tasks reading from the same topic partitions
+        val old = executorKafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
+        executorKafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, old + "-" + thePart.index.toString)
+      }
       val consumer = CachedKafkaConsumer.getOrCreate(
         range.topic, range.partition, executorKafkaParams, reuseCachedConsumers)
       var requestOffset = range.fromOffset
