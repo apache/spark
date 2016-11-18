@@ -242,14 +242,16 @@ case class GenerateExec(
     // prevented by checks in the next() and accessor code.
     val hasNextCode = s"$hasNext = $iterator.hasNext()"
     val outerVal = ctx.freshName("outer")
-    def concatIfOuter(s1: String, s2: String): String = s1 + (if (outer) s2 else "")
-    val init = concatIfOuter(s"boolean $hasNextCode", s", $outerVal = true")
-    val check = concatIfOuter(hasNext, s"|| $outerVal")
-    val update = concatIfOuter(hasNextCode, s", $outerVal = false")
-    val next = if (outer) {
-      s"$hasNext ? $iterator.next() : null"
+    val (init, check, update, next) = if (outer) {
+      (s"boolean $hasNextCode, $outerVal = true",
+       s"$hasNext || $outerVal",
+       s"$hasNextCode, $outerVal = false",
+       s"$hasNext ? $iterator.next() : null")
     } else {
-      s"$iterator.next()"
+      (s"boolean $hasNextCode",
+       s"$hasNext",
+       s"$hasNextCode",
+       s"$iterator.next()")
     }
     val numOutput = metricTerm(ctx, "numOutputRows")
     s"""

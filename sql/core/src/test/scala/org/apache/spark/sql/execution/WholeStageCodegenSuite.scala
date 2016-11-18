@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import org.codehaus.janino.JaninoRuntimeException
-
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Add, Literal, Stack}
