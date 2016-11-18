@@ -351,7 +351,8 @@ class StreamExecution(
       }
     }
     if (hasNewData) {
-      currentBatchTimestamp = triggerClock.getTimeMillis() * 1000L
+      // Current batch timestamp in seconds
+      currentBatchTimestamp = triggerClock.getTimeMillis() / 1000L
       reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
         assert(offsetLog.add(currentBatchId,
           availableOffsets.toOffsetSeq(sources, Some(currentBatchTimestamp.toString))),
