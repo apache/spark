@@ -161,7 +161,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   /** Starts the stream, resuming if data has already been processed. It must not be running. */
   case class StartStream(
       trigger: Trigger = ProcessingTime(0),
-      triggerClock: Clock = new SystemClock)
+      triggerClock: Clock = new SystemClock,
+      pairs: mutable.Map[String, String] = mutable.Map.empty)
     extends StreamAction
 
   /** Advance the trigger clock's time manually. */
@@ -330,7 +331,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       startedTest.foreach { action =>
         logInfo(s"Processing test stream action: $action")
         action match {
-          case StartStream(trigger, triggerClock) =>
+          case StartStream(trigger, triggerClock, pairs) =>
             verify(currentStream == null, "stream already running")
             verify(triggerClock.isInstanceOf[SystemClock]
               || triggerClock.isInstanceOf[StreamManualClock],
@@ -338,6 +339,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             if (triggerClock.isInstanceOf[StreamManualClock]) {
               manualClockExpectedTime = triggerClock.asInstanceOf[StreamManualClock].getTimeMillis()
             }
+
+            pairs.foreach(pair => spark.conf.set(pair._1, pair._2))
+
             lastStream = currentStream
             currentStream =
               spark
