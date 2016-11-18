@@ -105,7 +105,7 @@ object KinesisUtils {
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    *
    * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
-   *  is enabled. Make sure that your checkpoint directory is secure.
+   * is enabled. Make sure that your checkpoint directory is secure.
    */
   // scalastyle:off
   def createStream[T: ClassTag](
@@ -199,7 +199,7 @@ object KinesisUtils {
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    *
    * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
-   *  is enabled. Make sure that your checkpoint directory is secure.
+   * is enabled. Make sure that your checkpoint directory is secure.
    */
   def createStream(
       ssc: StreamingContext,

@@ -67,7 +67,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    *
-   * @note V and C can be different -- for example, one might group an RDD of type
+   * @note V and C can be different -- for example, one might group a RDD of type
    * (Int, Int) into a RDD of type (Int, Seq[Int]).
    */
   @Experimental

@@ -236,7 +236,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * items with the same key).
    *
    * @note V and C can be different -- for example, one might group a RDD of type (Int, Int) into
-   * an RDD of type (Int, List[Int]).
+   * a RDD of type (Int, List[Int]).
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
       mergeValue: JFunction2[C, V, C],
@@ -270,7 +270,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * uses map-side aggregation in shuffling the RDD.
    *
    * @note V and C can be different -- for example, one might group a RDD of type (Int, Int) into
-   * an RDD of type (Int, List[Int]).
+   * a RDD of type (Int, List[Int]).
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
       mergeValue: JFunction2[C, V, C],
