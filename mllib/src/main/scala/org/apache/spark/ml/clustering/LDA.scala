@@ -291,7 +291,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * If using checkpointing, this indicates whether to keep the last
    * checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can
    * cause failures if a data partition is lost, so set this bit with care.
-   * Note that Checkpoints will be cleaned up via reference counting, regardless.
+   * Note that checkpoints will be cleaned up via reference counting, regardless.
    *
    * See [[DistributedLDAModel.getCheckpointFiles]] for getting remaining checkpoints and
    * [[DistributedLDAModel.deleteCheckpointFiles]] for removing remaining checkpoints.
