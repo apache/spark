@@ -177,8 +177,8 @@ case class CreateDataSourceTableAsSelectCommand(
               existingSchema = Some(s.metadata.schema)
             case c: CatalogRelation if c.catalogTable.provider == Some(DDLUtils.HIVE_PROVIDER) =>
               throw new AnalysisException("Saving data in the Hive serde table " +
-                s"${c.catalogTable.identifier} is not supported. Instead, please use the " +
-                "insertInto() API.")
+                s"${c.catalogTable.identifier} is not supported yet. Please use the " +
+                "insertInto() API as an alternative..")
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }

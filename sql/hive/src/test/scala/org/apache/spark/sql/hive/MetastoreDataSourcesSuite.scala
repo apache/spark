@@ -416,14 +416,14 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("saveAsTable(CTAS) using append and insertInto when the target table is Hive serde") {
     val tableName = "tab1"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName stored as SEQUENCEFILE as select 1 as key, 'abc' as value")
+      sql(s"CREATE TABLE $tableName STORED AS SEQUENCEFILE AS SELECT 1 AS key, 'abc' AS value")
 
-      val df = sql(s"select key, value from $tableName")
+      val df = sql(s"SELECT key, value FROM $tableName")
       val e = intercept[AnalysisException] {
         df.write.mode(SaveMode.Append).saveAsTable(tableName)
       }.getMessage
-      assert(e.contains("Saving data in the Hive serde table `default`.`tab1` is not supported. " +
-        "Instead, please use the insertInto() API"))
+      assert(e.contains("Saving data in the Hive serde table `default`.`tab1` is not supported " +
+        "yet. Please use the insertInto() API as an alternative."))
 
       df.write.insertInto(tableName)
       checkAnswer(
@@ -436,8 +436,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("saveAsTable(CTAS) using overwrite when the target table is Hive serde") {
     val tableName = "tab1"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName stored as SEQUENCEFILE as select 1 as key, 'abc' as value")
-      val df = sql(s"select key, value from $tableName")
+      sql(s"CREATE TABLE $tableName STORED AS SEQUENCEFILE AS SELECT 1 AS key, 'abc' AS value")
+      val df = sql(s"SELECT key, value FROM $tableName")
       df.write.mode(SaveMode.Overwrite).saveAsTable(tableName)
       val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
       // When the mode is OVERWRITE, we drop the Hive serde tables and create a data source table
