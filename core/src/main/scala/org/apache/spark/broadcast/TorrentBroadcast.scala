@@ -19,6 +19,7 @@ package org.apache.spark.broadcast
 
 import java.io._
 import java.nio.ByteBuffer
+import java.util.zip.Adler32
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -85,8 +86,19 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   /** Total number of blocks this broadcast variable contains. */
   private val numBlocks: Int = writeBlocks(obj)
 
+  /** The checksum for all the blocks. */
+  private var checksums: Array[Int] = _
+
   override protected def getValue() = {
     _value
+  }
+
+  private def caclChecksum(block: ByteBuffer): Int = {
+    // block is HeapByteBuffer
+    assert(block.hasArray)
+    val adler = new Adler32()
+    adler.update(block.array, block.arrayOffset + block.position, block.limit - block.position)
+    adler.getValue.toInt
   }
 
   /**
@@ -105,7 +117,9 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
     }
     val blocks =
       TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
+    checksums = new Array[Int](blocks.length)
     blocks.zipWithIndex.foreach { case (block, i) =>
+      checksums(i) = caclChecksum(block)
       val pieceId = BroadcastBlockId(id, "piece" + i)
       val bytes = new ChunkedByteBuffer(block.duplicate())
       if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
@@ -135,6 +149,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
         case None =>
           bm.getRemoteBytes(pieceId) match {
             case Some(b) =>
+              val sum = caclChecksum(b.chunks(0))
+              if (sum != checksums(pid)) {
+                throw new SparkException(s"corrupt remote block $pid: $sum != ${checksums(pid)}")
+              }
               // We found the block from remote executors/driver's BlockManager, so put the block
               // in this executor's BlockManager.
               if (!bm.putBytes(pieceId, b, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)) {
