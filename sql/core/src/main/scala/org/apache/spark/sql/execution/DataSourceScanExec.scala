@@ -438,14 +438,16 @@ case class FileSourceScanExec(
     val partitionFiles = selectedPartitions.flatMap { partition =>
       partition.files.map((_, partition.values))
     }
+    val format = fsRelation.fileFormat
+    val splitter =
+      format.buildSplitter(session, fsRelation.location,
+        dataFilters, schema, session.sessionState.newHadoopConf())
+
     val bucketed = partitionFiles.flatMap { case (file, values) =>
       val blockLocations = getBlockLocations(file)
       val filePath = file.getPath.toUri.toString
-      val format = fsRelation.fileFormat
-
       if (format.isSplitable(session, fsRelation.options, file.getPath)) {
-        val validSplits = format.getSplits(session, fsRelation.location, file,
-          dataFilters, schema, session.sessionState.newHadoopConf())
+        val validSplits = splitter(file)
         validSplits.map { split =>
           val hosts = getBlockHosts(blockLocations, split.getStart, split.getLength)
           PartitionedFile(values, filePath, split.getStart, split.getLength, hosts)
@@ -492,15 +494,18 @@ case class FileSourceScanExec(
     val partitionFiles = selectedPartitions.flatMap { partition =>
       partition.files.map((_, partition.values))
     }
+    val format = fsRelation.fileFormat
+    val splitter =
+      format.buildSplitter(session, fsRelation.location,
+        dataFilters, schema, session.sessionState.newHadoopConf())
+
     val splitFiles = partitionFiles.flatMap { case (file, values) =>
       val blockLocations = getBlockLocations(file)
       val filePath = file.getPath.toUri.toString
-      val format = fsRelation.fileFormat
 
       // If the format is splittable, attempt to split and filter the file.
       if (format.isSplitable(session, fsRelation.options, file.getPath)) {
-        val validSplits = format.getSplits(session, fsRelation.location, file,
-          dataFilters, schema, session.sessionState.newHadoopConf())
+        val validSplits = splitter(file)
         validSplits.flatMap { split =>
           val splitOffset = split.getStart
           val end = splitOffset + split.getLength

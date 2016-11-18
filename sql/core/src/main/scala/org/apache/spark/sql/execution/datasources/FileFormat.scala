@@ -90,16 +90,15 @@ trait FileFormat {
   }
 
   /**
-   * For a file, return valid splits that may pass the given data filter.
+   * Allow a splittable FileFormat to produce a function to split individual files.
    */
-  def getSplits(
+  def buildSplitter(
       sparkSession: SparkSession,
       fileIndex: FileIndex,
-      fileStatus: FileStatus,
       filters: Seq[Filter],
       schema: StructType,
-      hadoopConf: Configuration): Seq[FileSplit] = {
-    Seq(new FileSplit(fileStatus.getPath, 0, fileStatus.getLen, Array.empty))
+      hadoopConf: Configuration): (FileStatus => Seq[FileSplit]) = {
+    stat => Seq(new FileSplit(stat.getPath, 0, stat.getLen, Array.empty))
   }
 
   /**

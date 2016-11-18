@@ -19,19 +19,21 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.FileNotFoundException
 import java.net.URI
+import java.util.concurrent.{Callable, TimeUnit}
 import java.util.logging.{Logger => JLogger}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Try}
 
+import com.google.common.cache.{Cache, CacheBuilder, RemovalListener, RemovalNotification}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.{Log => ApacheParquetLog}
-import org.apache.parquet.filter2.compat.{FilterCompat, RowGroupFilter}
+import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.hadoop._
@@ -278,75 +280,47 @@ class ParquetFileFormat
     true
   }
 
-  override def getSplits(
-      sparkSession: SparkSession,
-      fileIndex: FileIndex,
-      fileStatus: FileStatus,
-      filters: Seq[Filter],
-      schema: StructType,
-      hadoopConf: Configuration): Seq[FileSplit] = {
-    if (filters.isEmpty || !sparkSession.sessionState.conf.parquetPartitionPruningEnabled) {
+  override def buildSplitter(
+    sparkSession: SparkSession,
+    fileIndex: FileIndex,
+    filters: Seq[Filter],
+    schema: StructType,
+    hadoopConf: Configuration): (FileStatus => Seq[FileSplit]) = {
+    val pruningEnabled = sparkSession.sessionState.conf.parquetPartitionPruningEnabled
+    val defaultSplitter = super.buildSplitter(sparkSession, fileIndex, filters, schema, hadoopConf)
+    if (!pruningEnabled || filters.isEmpty) {
       // Return immediately to save FileSystem overhead
-      super.getSplits(sparkSession, fileIndex, fileStatus, filters, schema, hadoopConf)
+      defaultSplitter
     } else {
-      val filePath = fileStatus.getPath
-      val rootOption: Option[Path] = fileIndex.rootPaths
-        .find(root => filePath.toString.startsWith(root.toString))
-      val metadataOption = rootOption.flatMap { root =>
-        cachedMetadata.get(root).orElse(getMetadataForPath(filePath, root, hadoopConf))
-          .map { metadata =>
-            cachedMetadata.put(root, metadata)
-            metadata
-          }
+      val splitters = fileIndex.rootPaths.map { root =>
+        val splits = ParquetFileFormat.fileSplits.get(root,
+          new Callable[ParquetFileSplitter] {
+            override def call(): ParquetFileSplitter =
+              createParquetFileSplits(root, hadoopConf, schema)
+          })
+        root -> splits.buildSplitter(filters)
+      }.toMap
+      val compositeSplitter: (FileStatus => Seq[FileSplit]) = { stat =>
+        val filePath = stat.getPath
+        val rootOption: Option[Path] = fileIndex.rootPaths
+          .find(root => filePath.toString.startsWith(root.toString))
+        val splitterForPath = rootOption.flatMap(splitters.get).getOrElse(defaultSplitter)
+        splitterForPath(stat)
       }
-      // If the metadata exists, filter the splits.
-      // Otherwise, fall back to the default implementation.
-      metadataOption
-        .map(filterToSplits(fileStatus, _, rootOption.get, filters, schema, hadoopConf))
-        .getOrElse(super.getSplits(sparkSession, fileIndex, fileStatus,
-          filters, schema, hadoopConf))
+      compositeSplitter
     }
   }
 
-  private def filterToSplits(
-      fileStatus: FileStatus,
-      metadata: ParquetMetadata,
-      metadataRoot: Path,
-      filters: Seq[Filter],
-      schema: StructType,
-      hadoopConf: Configuration): Seq[FileSplit] = {
-    val metadataBlocks = metadata.getBlocks
-
-    // Ensure that the metadata has an entry for the file.
-    // If it does not, do not filter at this stage.
-    val metadataContainsPath = metadataBlocks.asScala.exists { bmd =>
-      new Path(metadataRoot, bmd.getPath) == fileStatus.getPath
-    }
-    if (!metadataContainsPath) {
-      log.warn(s"Found _metadata file for $metadataRoot," +
-        s" but no entries for blocks in ${fileStatus.getPath}. Retaining whole file.")
-      return Seq(new FileSplit(fileStatus.getPath, 0, fileStatus.getLen, Array.empty))
-    }
-
-    val parquetSchema = metadata.getFileMetaData.getSchema
-    val filter = FilterCompat.get(filters
-      .flatMap(ParquetFilters.createFilter(schema, _))
-      .reduce(FilterApi.and))
-    val filteredMetadata =
-      RowGroupFilter.filterRowGroups(filter, metadataBlocks, parquetSchema).asScala
-    filteredMetadata.flatMap { bmd =>
-      val bmdPath = new Path(metadataRoot, bmd.getPath)
-      val fsPath = fileStatus.getPath
-      if (bmdPath == fsPath) {
-        Some(new FileSplit(bmdPath, bmd.getStartingPos, bmd.getTotalByteSize, Array.empty))
-      } else {
-        None
-      }
-    }
+  private def createParquetFileSplits(
+    root: Path,
+    hadoopConf: Configuration,
+    schema: StructType): ParquetFileSplitter = {
+    getMetadataForPath(root, hadoopConf)
+      .map(meta => new ParquetMetadataFileSplitter(root, meta.getBlocks.asScala, schema))
+      .getOrElse(ParquetDefaultFileSplitter)
   }
 
   private def getMetadataForPath(
-      filePath: Path,
       rootPath: Path,
       conf: Configuration): Option[ParquetMetadata] = {
     val fs = rootPath.getFileSystem(conf)
@@ -523,6 +497,21 @@ class ParquetFileFormat
 }
 
 object ParquetFileFormat extends Logging {
+
+  @transient private val fileSplits: Cache[Path, ParquetFileSplitter] =
+    CacheBuilder.newBuilder()
+      .expireAfterAccess(4, TimeUnit.HOURS)
+      .concurrencyLevel(1)
+      .softValues()
+      .removalListener(new RemovalListener[Path, ParquetFileSplitter] {
+          override def onRemoval(removalNotification:
+                                 RemovalNotification[Path, ParquetFileSplitter]): Unit = {
+            val path = removalNotification.getKey
+            log.info(s"Removing value for path $path from cache, " +
+              s"cause: ${removalNotification.getCause}")
+          }
+      }).build()
+
   private[parquet] def readSchema(
       footers: Seq[Footer], sparkSession: SparkSession): Option[StructType] = {
 
