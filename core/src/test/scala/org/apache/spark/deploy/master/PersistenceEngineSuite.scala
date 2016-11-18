@@ -119,7 +119,7 @@ class PersistenceEngineSuite extends SparkFunSuite {
 
   private def findFreePort(conf: SparkConf): Int = {
     val candidatePort = RandomUtils.nextInt(1024, 65536)
-    Utils.startServiceOnPort(candidatePort, (trialPort: Int) => {
+    Utils.startServiceOnPort(candidatePort, (trialPort: Int, securePort: Int) => {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)

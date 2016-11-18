@@ -284,7 +284,7 @@ private[spark] object JettyUtils extends Logging {
     }
 
     // Bind to the given port, or throw a java.net.BindException if the port is occupied
-    def connect(currentPort: Int): (Server, Int) = {
+    def connect(currentPort: Int, securePort: Int = sslOptions.port): (Server, Int) = {
       val pool = new QueuedThreadPool
       if (serverName.nonEmpty) {
         pool.setName(serverName)
