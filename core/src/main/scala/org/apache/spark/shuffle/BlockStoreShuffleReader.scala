@@ -50,7 +50,8 @@ private[spark] class BlockStoreShuffleReader[K, C](
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
       SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
-      SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue))
+      SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue),
+      SparkEnv.get.conf.getBoolean("spark.shuffle.tryDecompress", true))
 
     val serializerInstance = dep.serializer.newInstance()
 
