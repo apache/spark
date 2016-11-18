@@ -161,7 +161,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   /** Starts the stream, resuming if data has already been processed. It must not be running. */
   case class StartStream(
       trigger: Trigger = ProcessingTime(0),
-      triggerClock: Clock = new SystemClock)
+      triggerClock: Clock = new SystemClock,
+      additionalConfs: Map[String, String] = Map.empty)
     extends StreamAction
 
   /** Advance the trigger clock's time manually. */
@@ -240,6 +241,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
     val sink = new MemorySink(stream.schema, outputMode)
+    val resetConfValues = mutable.Map[String, Option[String]]()
 
     @volatile
     var streamDeathCause: Throwable = null
@@ -330,7 +332,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       startedTest.foreach { action =>
         logInfo(s"Processing test stream action: $action")
         action match {
-          case StartStream(trigger, triggerClock) =>
+          case StartStream(trigger, triggerClock, additionalConfs) =>
             verify(currentStream == null, "stream already running")
             verify(triggerClock.isInstanceOf[SystemClock]
               || triggerClock.isInstanceOf[StreamManualClock],
@@ -338,6 +340,14 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             if (triggerClock.isInstanceOf[StreamManualClock]) {
               manualClockExpectedTime = triggerClock.asInstanceOf[StreamManualClock].getTimeMillis()
             }
+
+            additionalConfs.foreach(pair => {
+              val value =
+                if (spark.conf.contains(pair._1)) Some(spark.conf.get(pair._1)) else None
+              resetConfValues(pair._1) = value
+              spark.conf.set(pair._1, pair._2)
+            })
+
             lastStream = currentStream
             currentStream =
               spark
@@ -519,6 +529,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
         currentStream.stop()
       }
       spark.streams.removeListener(statusCollector)
+
+      // Rollback prev configuration values
+      resetConfValues.foreach {
+        case (key, Some(value)) => spark.conf.set(key, value)
+        case (key, None) => spark.conf.unset(key)
+      }
     }
   }
 

@@ -33,12 +33,13 @@ import org.apache.spark.sql.SparkSession
  * by a newline character. If a source offset is missing, then
  * that line will contain a string value defined in the
  * SERIALIZED_VOID_OFFSET variable in [[OffsetSeqLog]] companion object.
- * For instance, when dealine wiht [[LongOffset]] types:
- *   v1   // version 1
- *   {0}  // LongOffset 0
- *   {3}  // LongOffset 3
- *   -    // No offset for this source i.e., an invalid JSON string
- *   {2}  // LongOffset 2
+ * For instance, when dealing with [[LongOffset]] types:
+ *   v1        // version 1
+ *   metadata
+ *   {0}       // LongOffset 0
+ *   {3}       // LongOffset 3
+ *   -         // No offset for this source i.e., an invalid JSON string
+ *   {2}       // LongOffset 2
  *   ...
  */
 class OffsetSeqLog(sparkSession: SparkSession, path: String)
@@ -58,13 +59,25 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
     if (version != OffsetSeqLog.VERSION) {
       throw new IllegalStateException(s"Unknown log version: ${version}")
     }
-    OffsetSeq.fill(lines.map(parseOffset).toArray: _*)
+
+    // read metadata
+    val metadata = lines.next().trim match {
+      case "" => None
+      case md => Some(md)
+    }
+    OffsetSeq.fill(metadata, lines.map(parseOffset).toArray: _*)
   }
 
-  override protected def serialize(metadata: OffsetSeq, out: OutputStream): Unit = {
+  override protected def serialize(offsetSeq: OffsetSeq, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
     out.write(OffsetSeqLog.VERSION.getBytes(UTF_8))
-    metadata.offsets.map(_.map(_.json)).foreach { offset =>
+
+    // write metadata
+    out.write('\n')
+    out.write(offsetSeq.metadata.getOrElse("").getBytes(UTF_8))
+
+    // write offsets, one per line
+    offsetSeq.offsets.map(_.map(_.json)).foreach { offset =>
       out.write('\n')
       offset match {
         case Some(json: String) => out.write(json.getBytes(UTF_8))

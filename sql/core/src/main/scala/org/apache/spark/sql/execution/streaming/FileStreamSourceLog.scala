@@ -38,11 +38,12 @@ class FileStreamSourceLog(
   import CompactibleFileStreamLog._
 
   // Configurations about metadata compaction
-  protected override val compactInterval =
+  protected override val defaultCompactInterval: Int =
     sparkSession.sessionState.conf.fileSourceLogCompactInterval
-  require(compactInterval > 0,
-    s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} (was $compactInterval) to a " +
-      s"positive value.")
+
+  require(defaultCompactInterval > 0,
+    s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} " +
+      s"(was $defaultCompactInterval) to a positive value.")
 
   protected override val fileCleanupDelayMs =
     sparkSession.sessionState.conf.fileSourceLogCleanupDelay
