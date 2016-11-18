@@ -530,7 +530,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       }
       spark.streams.removeListener(statusCollector)
 
-      // Rollback previous configuration values
+      // Rollback prev configuration values
       resetConfValues.foreach {
         case (key, Some(value)) => spark.conf.set(key, value)
         case (key, None) => spark.conf.unset(key)
