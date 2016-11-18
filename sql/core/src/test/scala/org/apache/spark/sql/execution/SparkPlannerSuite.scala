@@ -51,6 +51,7 @@ class SparkPlannerSuite extends SharedSQLContext {
       }
     }
 
+    val original = spark.experimental.extraStrategies
     try {
       spark.experimental.extraStrategies = TestStrategy :: Nil
 
@@ -59,7 +60,7 @@ class SparkPlannerSuite extends SharedSQLContext {
       assert(ds.collect().toSeq === Seq("a", "b", "c", "d", "e", "f"))
       assert(planned === 4)
     } finally {
-      spark.experimental.extraStrategies = Nil
+      spark.experimental.extraStrategies = original
     }
   }
 
@@ -93,6 +94,7 @@ class SparkPlannerSuite extends SharedSQLContext {
       }
     }
 
+    val original = spark.experimental.extraStrategies
     try {
       spark.experimental.extraStrategies = TestStrategy :: Nil
 
@@ -101,7 +103,7 @@ class SparkPlannerSuite extends SharedSQLContext {
       assert(ds.collect().toSeq === Seq("a", "b", "c", "d", "e", "f"))
       assert(planned === 4)
     } finally {
-      spark.experimental.extraStrategies = Nil
+      spark.experimental.extraStrategies = original
     }
   }
 }
