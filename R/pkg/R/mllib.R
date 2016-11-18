@@ -303,9 +303,9 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             } else {
               dataFrame(callJMethod(jobj, "rDevianceResiduals"))
             }
-            # If the underlying WeightedLeastSquares using "normal" solver, we can provide coefficients,
-            # standard error of coefficients, t value and p value. Otherwise, it will be fitted by local "l-bfgs",
-            # we can only provide coefficients.
+            # If the underlying WeightedLeastSquares using "normal" solver, we can provide
+            # coefficients, standard error of coefficients, t value and p value. Otherwise,
+            # it will be fitted by local "l-bfgs", we can only provide coefficients.
             if (length(features) == length(coefficients)) {
               coefficients <- matrix(coefficients, ncol = 1)
               colnames(coefficients) <- c("Estimate")
