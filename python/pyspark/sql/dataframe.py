@@ -360,7 +360,7 @@ class DataFrame(object):
 
         .. note:: Experimental
 
-        >>> df.withWatermark(df('timestamp'), '10 minutes')
+        >>> df.withWatermark(df.timestamp, '10 minutes')
         """
         if not eventTime or type(eventTime) is not str:
             raise TypeError("eventTime should be provided as a string")
