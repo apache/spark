@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types.StringType
 
@@ -190,19 +189,6 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(s1, s2), Seq("aa", "bb", "cc"), row1)
     checkEvaluation(StringSplit(s1, s2), null, row2)
     checkEvaluation(StringSplit(s1, s2), null, row3)
-  }
-
-  test("RegExpReplace serialization") {
-    val serializer = new JavaSerializer(new SparkConf()).newInstance
-
-    val row = create_row("abc", "b", "")
-
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.string.at(2)
-
-    val expr: RegExpReplace = serializer.deserialize(serializer.serialize(RegExpReplace(s, p, r)))
-    checkEvaluation(expr, "ac", row)
   }
 
 }

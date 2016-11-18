@@ -498,10 +498,10 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("non-equal correlated scalar subquery") {
     val msg1 = intercept[AnalysisException] {
-      sql("select a, (select b from l l2 where l2.a < l1.a) sum_b from l l1")
+      sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1")
     }
     assert(msg1.getMessage.contains(
-      "The correlated scalar subquery can only contain equality predicates"))
+      "Correlated column is not allowed in a non-equality predicate:"))
   }
 
   test("disjunctive correlated scalar subquery") {
