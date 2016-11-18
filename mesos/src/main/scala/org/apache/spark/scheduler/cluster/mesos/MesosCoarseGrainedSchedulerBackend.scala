@@ -213,7 +213,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           .format(prefixEnv, runScript) +
         s" --driver-url $driverURL" +
         s" --executor-id $taskId" +
-        s" --hostname ${offer.getHostname}" +
+        s" --hostname ${executorHostname(offer)}" +
         s" --cores $numCores" +
         s" --app-id $appId")
     } else {
@@ -225,7 +225,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend" +
         s" --driver-url $driverURL" +
         s" --executor-id $taskId" +
-        s" --hostname ${offer.getHostname}" +
+        s" --hostname ${executorHostname(offer)}" +
         s" --cores $numCores" +
         s" --app-id $appId")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetcherCache))
@@ -418,16 +418,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
             .setName("Task " + taskId)
-
           taskBuilder.addAllResources(resourcesToUse.asJava)
-
-          sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
-            MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
-              image,
-              sc.conf,
-              taskBuilder.getContainerBuilder
-            )
-          }
+          taskBuilder.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
 
           tasks(offer.getId) ::= taskBuilder.build()
           remainingResources(offerId) = resourcesLeft.asJava
@@ -657,6 +649,15 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private def numExecutors(): Int = {
     slaves.values.map(_.taskIDs.size).sum
+  }
+
+  private def executorHostname(offer: Offer): String = {
+    if (sc.conf.getOption("spark.mesos.network.name").isDefined) {
+      // The agent's IP is not visible in a CNI container, so we bind to 0.0.0.0
+      "0.0.0.0"
+    } else {
+      offer.getHostname
+    }
   }
 }
 
