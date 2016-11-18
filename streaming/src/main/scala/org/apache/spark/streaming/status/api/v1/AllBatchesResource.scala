@@ -55,19 +55,7 @@ private[v1] object AllBatchesResource {
         batch <- batches if statuses.contains(status)
       } yield {
         val batchId = batch.batchTime.milliseconds
-        val outputOps = for {
-          (opId, op) <- batch.outputOperations
-          (key, pairs) <- batch.outputOpIdSparkJobIdPairs.groupBy(_.outputOpId) if key == opId
-        } yield new OutputOperationInfo(
-          outputOpId = opId,
-          name = op.name,
-          description = op.description,
-          startTime = op.startTime.map(new Date(_)),
-          endTime = op.endTime.map(new Date(_)),
-          duration = op.duration,
-          failureReason = op.failureReason,
-          jobIds = pairs.map(_.sparkJobId).sorted
-        )
+        val firstFailureReason = batch.outputOperations.flatMap(_._2.failureReason).headOption
 
         new BatchInfo(
           batchId = batchId,
@@ -82,7 +70,7 @@ private[v1] object AllBatchesResource {
           numCompletedOutputOps = batch.numCompletedOutputOp,
           numFailedOutputOps = batch.numFailedOutputOp,
           numTotalOutputOps = batch.outputOperations.size,
-          outputOperations = outputOps.toSeq.sortBy(_.outputOpId)
+          firstFailureReason = firstFailureReason
         )
       }
 

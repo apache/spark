@@ -69,7 +69,7 @@ class BatchInfo private[streaming](
   val numCompletedOutputOps: Int,
   val numFailedOutputOps: Int,
   val numTotalOutputOps: Int,
-  val outputOperations: Seq[OutputOperationInfo]
+  val firstFailureReason: Option[String]
 )
 
 class OutputOperationInfo private[streaming](
