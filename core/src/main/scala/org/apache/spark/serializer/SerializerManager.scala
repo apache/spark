@@ -36,7 +36,7 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 private[spark] class SerializerManager(
     defaultSerializer: Serializer,
     conf: SparkConf,
-    encryptionKey: Option[Array[Byte]]) {
+    val encryptionKey: Option[Array[Byte]]) {
 
   def this(defaultSerializer: Serializer, conf: SparkConf) = this(defaultSerializer, conf, None)
 
@@ -126,7 +126,7 @@ private[spark] class SerializerManager(
   /**
    * Wrap an input stream for encryption if shuffle encryption is enabled
    */
-  private[this] def wrapForEncryption(s: InputStream): InputStream = {
+  def wrapForEncryption(s: InputStream): InputStream = {
     encryptionKey
       .map { key => CryptoStreamUtils.createCryptoInputStream(s, conf, key) }
       .getOrElse(s)
@@ -135,7 +135,7 @@ private[spark] class SerializerManager(
   /**
    * Wrap an output stream for encryption if shuffle encryption is enabled
    */
-  private[this] def wrapForEncryption(s: OutputStream): OutputStream = {
+  def wrapForEncryption(s: OutputStream): OutputStream = {
     encryptionKey
       .map { key => CryptoStreamUtils.createCryptoOutputStream(s, conf, key) }
       .getOrElse(s)
@@ -144,14 +144,14 @@ private[spark] class SerializerManager(
   /**
    * Wrap an output stream for compression if block compression is enabled for its block type
    */
-  private[this] def wrapForCompression(blockId: BlockId, s: OutputStream): OutputStream = {
+  def wrapForCompression(blockId: BlockId, s: OutputStream): OutputStream = {
     if (shouldCompress(blockId)) compressionCodec.compressedOutputStream(s) else s
   }
 
   /**
    * Wrap an input stream for compression if block compression is enabled for its block type
    */
-  private[this] def wrapForCompression(blockId: BlockId, s: InputStream): InputStream = {
+  def wrapForCompression(blockId: BlockId, s: InputStream): InputStream = {
     if (shouldCompress(blockId)) compressionCodec.compressedInputStream(s) else s
   }
 
