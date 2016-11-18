@@ -591,7 +591,7 @@ object ScalaReflection extends ScalaReflection {
           }
 
           val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType),
-            returnNullable = inputObject.nullable || !fieldType.typeSymbol.asClass.isPrimitive)
+            returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
           val clsName = getClassNameFromType(fieldType)
           val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType, newPath) :: Nil

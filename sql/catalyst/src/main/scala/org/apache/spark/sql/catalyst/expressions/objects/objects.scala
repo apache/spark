@@ -180,7 +180,7 @@ case class Invoke(
     propagateNull: Boolean = true,
     returnNullable : Boolean = true) extends Expression with NonSQLExpression {
 
-  override def nullable: Boolean = returnNullable
+  override def nullable: Boolean = targetObject.nullable || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
 
   override def eval(input: InternalRow): Any =
