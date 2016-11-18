@@ -23,7 +23,7 @@ package org.apache.spark.sql.execution.streaming
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
  */
-case class OffsetSeq(offsets: Seq[Option[Offset]]) {
+case class OffsetSeq(offsets: Seq[Option[Offset]], metadata: Option[String] = None) {
 
   /**
    * Unpacks an offset into [[StreamProgress]] by associating each offset with the order list of
@@ -47,7 +47,13 @@ object OffsetSeq {
    * Returns a [[OffsetSeq]] with a variable sequence of offsets.
    * `nulls` in the sequence are converted to `None`s.
    */
-  def fill(offsets: Offset*): OffsetSeq = {
-    OffsetSeq(offsets.map(Option(_)))
+  def fill(offsets: Offset*): OffsetSeq = OffsetSeq.fill(None, offsets: _*)
+
+  /**
+   * Returns a [[OffsetSeq]] with metadata and a variable sequence of offsets.
+   * `nulls` in the sequence are converted to `None`s.
+   */
+  def fill(metadata: Option[String], offsets: Offset*): OffsetSeq = {
+    OffsetSeq(offsets.map(Option(_)), metadata)
   }
 }
