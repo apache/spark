@@ -1152,34 +1152,6 @@ class Analyzer(
           failOnOuterReference(p)
           p
       }
-
-      // SPARK-17348
-      // Looking for a potential incorrect result case.
-      // When a correlated predicate is a non-equality predicate
-      // it must be placed at the immediate child operator.
-      // Otherwise, the pull up of the correlated predicate
-      // will generate a plan with a different semantics
-      // which could return incorrect result.
-      var continue : Boolean = true
-      for (pm <- predicateMap if continue) {
-        assert(pm._2.nonEmpty, "Correlated predicate(s) does not exist.")
-        for (p <- pm._2 if continue)
-          p match {
-            case EqualTo(_, _) | EqualNullSafe(_, _) =>
-              None
-            case _ =>
-              assert(transformed.children.nonEmpty)
-              if (!(transformed.isInstanceOf[Project]) ||
-                  !(pm._1 fastEquals transformed.asInstanceOf[Project].child)) {
-                continue = false
-              }
-          }
-      }
-      if (!continue) {
-        // Report a non-supported case as an exception
-        failAnalysis(s"Correlated column is not allowed in a non-equality predicate:\n$sub")
-      }
-
       (transformed, predicateMap.values.flatten.toSeq)
     }
 
@@ -1272,6 +1244,8 @@ class Analyzer(
         case s @ ScalarSubquery(sub, conditions, exprId)
             if sub.resolved && conditions.isEmpty && sub.output.size != 1 =>
           failAnalysis(s"Scalar subquery must return only one column, but got ${sub.output.size}")
+        // SPARK-1854: block cases where GROUP BY columns
+        // are not part of the correlated columns
         case s @ ScalarSubquery(sub, conditions, exprId)
             if sub.resolved && sub.isInstanceOf[Aggregate] =>
           val groupByColumns =
