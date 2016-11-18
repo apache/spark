@@ -621,6 +621,11 @@
         <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
+        <groupId>com.fasterxml.jackson.dataformat</groupId>
+        <artifactId>jackson-dataformat-cbor</artifactId>
+        <version>${fasterxml.jackson.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.glassfish.jersey.core</groupId>
         <artifactId>jersey-server</artifactId>
         <version>${jersey.version}</version>
@@ -2547,6 +2552,26 @@
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
+      </modules>
+    </profile>
+
+    <!--
+      The cloud profile enables the cloud module.
+      It does not declare the hadoop-* artifacts which
+      the cloud module pulls in; these are delegated to
+      the hadoop-x.y protocols, so permitting different
+      hadoop versions to declare different include/exclude
+      rules (especially transient dependencies).
+
+      To use this profile, the hadoop-2.7 profile must also
+      be declared
+     -->
+    <profile>
+      <id>cloud</id>
+      <properties>
+      </properties>
+      <modules>
+        <module>cloud</module>
       </modules>
     </profile>
 
