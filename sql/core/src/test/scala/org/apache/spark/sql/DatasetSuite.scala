@@ -1052,7 +1052,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(dsString, arrayString)
   }
 
-  test("SPARK-18487: Consume all elements for show/take to avoid memory leak") {
+  test("SPARK-18487: Add completion listener to HashAggregate to avoid memory leak") {
     val rng = new scala.util.Random(42)
     val data = sparkContext.parallelize(Seq.tabulate(100) { i =>
       Row(Array.fill(10)(rng.nextInt(10)))
