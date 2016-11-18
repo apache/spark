@@ -27,11 +27,11 @@ import org.apache.spark.sql.test.SharedSQLContext
 class SparkPlannerSuite extends SharedSQLContext {
   import testImplicits._
 
-  test("Ensure to go down only the first branch, not any other possible branches") {
+  case object NeverPlanned extends LeafNode {
+    override def output: Seq[Attribute] = Nil
+  }
 
-    case object NeverPlanned extends LeafNode {
-      override def output: Seq[Attribute] = Nil
-    }
+  test("Ensure to go down only the first branch, not any other possible branches") {
 
     var planned = 0
     object TestStrategy extends Strategy {
@@ -79,18 +79,26 @@ class SparkPlannerSuite extends SharedSQLContext {
       def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
         case ReturnAnswer(child) =>
           planned += 1
-          NeverExecuted :: planLater(child) :: Nil
+          NeverExecuted :: planLater(child) :: planLater(NeverPlanned) :: Nil
         case Union(children) =>
           planned += 1
-          NeverExecuted :: UnionExec(children.map(planLater)) :: Nil
+          NeverExecuted :: UnionExec(children.map(planLater)) :: planLater(NeverPlanned) :: Nil
         case LocalRelation(output, data) =>
           planned += 1
-          NeverExecuted :: LocalTableScanExec(output, data) :: Nil
+          NeverExecuted :: LocalTableScanExec(output, data) :: planLater(NeverPlanned) :: Nil
+        case NeverPlanned =>
+          fail("QueryPlanner should not go down to this branch.")
         case _ => Nil
       }
 
       override def prunePlans(plans: Iterator[SparkPlan]): Iterator[SparkPlan] = {
-        plans.drop(1)
+        val buff = plans.buffered
+        assert(buff.hasNext)
+        assert(buff.head == NeverExecuted)
+        buff.next() // Drop head, which is a bad plan.
+        assert(buff.hasNext)
+        assert(buff.head != NeverExecuted)
+        buff
       }
     }
 
