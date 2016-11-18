@@ -32,7 +32,7 @@ import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite with Logging {
-  private val N = 10000.toLong  // scale this down for more readable results
+  private val N = 10000L  // scale this down for more readable results
 
   /**
    * Describes a type of sort to test, e.g. two's complement descending. Each sort type has
