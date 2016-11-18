@@ -413,6 +413,40 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("saveAsTable(CTAS) using append and insertInto when the target table is Hive serde") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName stored as SEQUENCEFILE as select 1 as key, 'abc' as value")
+
+      val df = sql(s"select key, value from $tableName")
+      val e = intercept[AnalysisException] {
+        df.write.mode(SaveMode.Append).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains("Saving data in the Hive serde table `default`.`tab1` is not supported. " +
+        "Instead, please use the insertInto() API"))
+
+      df.write.insertInto(tableName)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Row(1, "abc") :: Row(1, "abc") :: Nil
+      )
+    }
+  }
+
+  test("saveAsTable(CTAS) using overwrite when the target table is Hive serde") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName stored as SEQUENCEFILE as select 1 as key, 'abc' as value")
+      val df = sql(s"select key, value from $tableName")
+      df.write.mode(SaveMode.Overwrite).saveAsTable(tableName)
+      val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+      // When the mode is OVERWRITE, we drop the Hive serde tables and create a data source table
+      // TODO: Based on the definition of OVERWRITE, no change should be made on the table
+      // definition. When recreate the table, we need to create a Hive serde table.
+      assert(tableMeta.provider == Some(spark.sessionState.conf.defaultDataSourceName))
+    }
+  }
+
   test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
     withTable("savedJsonTable") {
       // Save the df as a managed table (by not specifying the path).
