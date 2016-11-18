@@ -41,9 +41,86 @@ import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
 
 
+/** Utility trait for [[HiveSimpleUDF]] and [[HiveGenericUDF]]. */
+private[hive] trait HiveUDFCodegen {
+  self: Expression with HiveInspectors =>
+
+  val funcWrapper: HiveFunctionWrapper
+  val children: Seq[Expression]
+
+  def getArgumentInspector(i: Int): ObjectInspector
+
+  def getReturnInspector(): ObjectInspector
+
+  @transient
+  protected lazy val wrappers = children.zipWithIndex.map { case (expr, i) =>
+    wrapperFor(getArgumentInspector(i), expr.dataType)
+  }.toArray
+
+  @transient
+  protected lazy val unwrapper = unwrapperFor(getReturnInspector())
+
+  lazy val udfErrorMessage = {
+    val funcCls = funcWrapper.functionClassName
+    val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
+    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+  }
+
+  def getChildren(): Seq[Expression] = children
+
+  def getWrapper(index: Int): (Any) => Any = wrappers(index)
+
+  def getUnwrapper(): (Any) => Any = unwrapper
+
+  def genCodeForWrapper(ctx: CodegenContext, evals: Seq[ExprCode], udf: String)
+    : (Seq[String], Seq[String]) = {
+    // Generate codes used to convert an argument to a Hive type
+    val converterTerms = children.indices.map { index =>
+      val converterClassName = classOf[Any => Any].getName
+      val converterTerm = ctx.freshName("converter")
+      ctx.addMutableState(converterClassName, converterTerm,
+        s"this.$converterTerm = ($converterClassName) $udf.getWrapper($index);")
+      converterTerm
+    }
+
+    converterTerms.zipWithIndex.map { case (converter, i) =>
+      val eval = evals(i)
+      val argTerm = ctx.freshName("arg")
+      val convert = s"final Object $argTerm = ${eval.isNull} ? " +
+        s"null : $converter.apply(${eval.value});"
+      (convert, argTerm)
+    }.unzip
+  }
+
+  def genCodeForUnwrapper(ctx: CodegenContext, ev: ExprCode, udf: String, callFunc: String)
+    : String = {
+    val resultTerm = ctx.freshName("result")
+
+    // Generate codes used to convert the returned value of `HiveSimpleUDF` to Catalyst type
+    val converterClassName = classOf[Any => Any].getName
+    val catalystConverterTerm = ctx.freshName("catalystConverter")
+    ctx.addMutableState(converterClassName, catalystConverterTerm,
+      s"this.$catalystConverterTerm = ($converterClassName)$udf.getUnwrapper();")
+
+    s"""
+       ${ctx.boxedType(dataType)} $resultTerm = null;
+       try {
+         $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($callFunc);
+       } catch (Exception e) {
+         throw new org.apache.spark.SparkException($udf.udfErrorMessage(), e);
+       }
+       boolean ${ev.isNull} = $resultTerm == null;
+       ${ctx.boxedType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+       if (!${ev.isNull}) {
+         ${ev.value} = $resultTerm;
+       }
+     """
+  }
+}
+
 private[hive] case class HiveSimpleUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends Expression with HiveInspectors with Logging {
+  extends Expression with HiveInspectors with HiveUDFCodegen with Logging {
 
   override def deterministic: Boolean = isUDFDeterministic
 
@@ -73,12 +150,12 @@ private[hive] case class HiveSimpleUDF(
 
   override lazy val dataType = javaClassToDataType(method.getReturnType)
 
-  @transient
-  private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
+  def getArgumentInspector(i: Int): ObjectInspector = toInspector(children(i))
 
-  @transient
-  lazy val unwrapper = unwrapperFor(ObjectInspectorFactory.getReflectionObjectInspector(
-    method.getGenericReturnType, ObjectInspectorOptions.JAVA))
+  def getReturnInspector(): ObjectInspector = {
+    ObjectInspectorFactory.getReflectionObjectInspector(
+      method.getGenericReturnType, ObjectInspectorOptions.JAVA)
+  }
 
   @transient
   private lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
@@ -86,33 +163,16 @@ private[hive] case class HiveSimpleUDF(
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
 
-  // Generate codes used to convert the arguments to Hive types for `HiveSimpleUDF`
-  private[this] def genCodeForConverter(ctx: CodegenContext, index: Int): String = {
-    val converterClassName = classOf[Any => Any].getName
-    val hiveUDFClassName = classOf[HiveSimpleUDF].getName
-
-    val converterTerm = ctx.freshName("converter")
-    val expressionIdx = ctx.references.size - 1
-    ctx.addMutableState(converterClassName, converterTerm,
-      s"this.$converterTerm = ($converterClassName)" +
-        s"(($hiveUDFClassName) references[$expressionIdx]).getWrapper($index);")
-    converterTerm
+  @scala.annotation.varargs
+  def callUdf(args: AnyRef*): AnyRef = {
+    FunctionRegistry.invoke(
+      method,
+      function,
+      conversionHelper.convertIfNecessary(args: _*): _*)
   }
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val hiveUDF = ctx.addReferenceObj("hiveUDF", this)
-
-    // Generate codes used to convert the returned value of `HiveSimpleUDF` to Catalyst type
-    val converterClassName = classOf[Any => Any].getName
-    val catalystConverterTerm = ctx.freshName("catalystConverter")
-    ctx.addMutableState(converterClassName, catalystConverterTerm,
-      s"this.$catalystConverterTerm = ($converterClassName)$hiveUDF.getUnwrapper();")
-
-    val resultTerm = ctx.freshName("result")
-
-    // This must be called before children expressions' codegen
-    // because ctx.references is used in genCodeForConverter
-    val converterTerms = children.indices.map(genCodeForConverter(ctx, _))
 
     // codegen for children expressions
     val evals = children.map(_.genCode(ctx))
@@ -123,54 +183,15 @@ private[hive] case class HiveSimpleUDF(
     // Trying to convert an Object to `int` will cause casting exception.
     val evalCode = evals.map(_.code).mkString
 
-    val (converters, funcArguments) = converterTerms.zipWithIndex.map { case (converter, i) =>
-      val eval = evals(i)
-      val argTerm = ctx.freshName("arg")
-      val convert = s"Object $argTerm = ${eval.isNull} ? null : $converter.apply(${eval.value});"
-      (convert, argTerm)
-    }.unzip
+    val (converters, funcArguments) = genCodeForWrapper(ctx, evals, hiveUDF)
 
-    val getFuncResult = s"$hiveUDF.callUdf(${funcArguments.mkString(", ")})"
-    val callFunc =
-      s"""
-         ${ctx.boxedType(dataType)} $resultTerm = null;
-         try {
-           $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($getFuncResult);
-         } catch (Exception e) {
-           throw new org.apache.spark.SparkException($hiveUDF.udfErrorMessage(), e);
-         }
-       """
+    val callFunc = s"$hiveUDF.callUdf(${funcArguments.mkString(", ")})"
 
     ev.copy(code = s"""
       $evalCode
       ${converters.mkString("\n")}
-      $callFunc
-
-      boolean ${ev.isNull} = $resultTerm == null;
-      ${ctx.boxedType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = $resultTerm;
-      }""")
-  }
-
-  def getChildren(): Seq[Expression] = children
-
-  def getWrapper(index: Int): (Any) => Any = wrappers(index)
-
-  def getUnwrapper(): (Any) => Any = unwrapper
-
-  @scala.annotation.varargs
-  def callUdf(args: AnyRef*): AnyRef = {
-    FunctionRegistry.invoke(
-      method,
-      function,
-      conversionHelper.convertIfNecessary(args: _*): _*)
-  }
-
-  lazy val udfErrorMessage = {
-    val funcCls = funcWrapper.functionClassName
-    val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
-    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+      ${genCodeForUnwrapper(ctx, ev, hiveUDF, callFunc)}
+      """)
   }
 
   // TODO: Finish input output types.
@@ -205,7 +226,7 @@ private[hive] class DeferredObjectAdapter extends DeferredObject {
 
 private[hive] case class HiveGenericUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends Expression with HiveInspectors with Logging {
+  extends Expression with HiveInspectors with HiveUDFCodegen with Logging {
 
   override def nullable: Boolean = true
 
@@ -221,17 +242,9 @@ private[hive] case class HiveGenericUDF(
   private lazy val argumentInspectors = children.map(toInspector)
 
   @transient
-  lazy val returnInspector = {
+  private lazy val returnInspector = {
     function.initializeAndFoldConstants(argumentInspectors.toArray)
   }
-
-  @transient
-  private lazy val wrappers = argumentInspectors.zip(children).map { case (inspect, child) =>
-    wrapperFor(inspect, child.dataType)
-  }.toArray
-
-  @transient
-  private lazy val unwrapper = unwrapperFor(returnInspector)
 
   @transient
   private lazy val isUDFDeterministic = {
@@ -246,33 +259,18 @@ private[hive] case class HiveGenericUDF(
 
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 
-  // Generate codes used to convert the arguments to Hive types for `HiveGenericUDF`
-  private[this] def genCodeForConverter(ctx: CodegenContext, index: Int): String = {
-    val converterClassName = classOf[Any => Any].getName
-    val hiveUDFClassName = classOf[HiveGenericUDF].getName
+  def getArgumentInspector(i: Int): ObjectInspector = argumentInspectors(i)
 
-    val converterTerm = ctx.freshName("converter")
-    val expressionIdx = ctx.references.size - 1
-    ctx.addMutableState(converterClassName, converterTerm,
-      s"this.$converterTerm = ($converterClassName)" +
-        s"(($hiveUDFClassName) references[$expressionIdx]).getWrapper($index);")
-    converterTerm
+  def getReturnInspector(): ObjectInspector = returnInspector
+
+  def getDeferredObjects(): Array[DeferredObject] = deferredObjects
+
+  def callUdf(args: Array[DeferredObject]): AnyRef = {
+    function.evaluate(deferredObjects)
   }
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val hiveUDF = ctx.addReferenceObj("hiveUDF", this)
-
-    // Generate codes used to convert the returned value of `HiveSimpleUDF` to Catalyst type
-    val converterClassName = classOf[Any => Any].getName
-    val catalystConverterTerm = ctx.freshName("catalystConverter")
-    ctx.addMutableState(converterClassName, catalystConverterTerm,
-      s"this.$catalystConverterTerm = ($converterClassName)$hiveUDF.getUnwrapper();")
-
-    val resultTerm = ctx.freshName("result")
-
-    // This must be called before children expressions' codegen
-    // because ctx.references is used in genCodeForConverter
-    val converterTerms = children.indices.map(genCodeForConverter(ctx, _))
 
     // Generate codes used to convert input values into `DeferredObject`s
     val deferredObjectsClassName = classOf[DeferredObject].getName + "[]"
@@ -284,21 +282,15 @@ private[hive] case class HiveGenericUDF(
     val objectInspectorClassName = classOf[ObjectInspector].getName
     val objectInspectorTerm = ctx.freshName("objectInspector")
     ctx.addMutableState(objectInspectorClassName, objectInspectorTerm,
-      s"this.$objectInspectorTerm = ($objectInspectorClassName)$hiveUDF.returnInspector();")
+      s"this.$objectInspectorTerm = ($objectInspectorClassName)$hiveUDF.getReturnInspector();")
 
     // codegen for children expressions
     val evals = children.map(_.genCode(ctx))
 
-    val (converters, funcArguments) = converterTerms.zipWithIndex.map { case (converter, i) =>
-      val eval = evals(i)
-      val argTerm = ctx.freshName("arg")
-      val convert = s"final Object $argTerm = ${eval.isNull} ? " +
-        s"null : $converter.apply(${eval.value});"
-      (convert, argTerm)
-    }.unzip
-
     // Generate the codes for expressions and calling `HiveGenericUDF`.
     val evalCode = evals.map(_.code).mkString
+
+    val (converters, funcArguments) = genCodeForWrapper(ctx, evals, hiveUDF)
 
     val funcClassName = classOf[Function0[AnyRef]].getName
     val deferredObjectAdapterClassName = classOf[DeferredObjectAdapter].getName
@@ -306,6 +298,7 @@ private[hive] case class HiveGenericUDF(
       s"""
          (($deferredObjectAdapterClassName) this.$deferredObjectsTerm[$i])
            .set(new ${funcClassName}<Object>() {
+
              @Override
              public Object call() {
                return ${funcArguments(i)};
@@ -314,46 +307,14 @@ private[hive] case class HiveGenericUDF(
        """.stripMargin
     }
 
-    val getFuncResult = s"$hiveUDF.callUdf($deferredObjectsTerm)"
-    val callFunc =
-      s"""
-         ${ctx.boxedType(dataType)} $resultTerm = null;
-         try {
-           $resultTerm = (${ctx.boxedType(dataType)})$catalystConverterTerm.apply($getFuncResult);
-         } catch (Exception e) {
-           throw new org.apache.spark.SparkException($hiveUDF.udfErrorMessage(), e);
-         }
-       """
+    val callFunc = s"$hiveUDF.callUdf($deferredObjectsTerm)"
 
     ev.copy(code = s"""
       $evalCode
       ${converters.mkString("\n")}
       ${argsTerm.mkString("\n")}
-      $callFunc
-
-      boolean ${ev.isNull} = $resultTerm == null;
-      ${ctx.boxedType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = $resultTerm;
-      }""")
-  }
-
-  def getChildren(): Seq[Expression] = children
-
-  def getWrapper(index: Int): (Any) => Any = wrappers(index)
-
-  def getUnwrapper(): (Any) => Any = unwrapper
-
-  def getDeferredObjects(): Array[DeferredObject] = deferredObjects
-
-  def callUdf(args: Array[DeferredObject]): AnyRef = {
-    function.evaluate(deferredObjects)
-  }
-
-  lazy val udfErrorMessage = {
-    val funcCls = funcWrapper.functionClassName
-    val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
-    s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+      ${genCodeForUnwrapper(ctx, ev, hiveUDF, callFunc)}
+      """)
   }
 
   override def eval(input: InternalRow): Any = {
