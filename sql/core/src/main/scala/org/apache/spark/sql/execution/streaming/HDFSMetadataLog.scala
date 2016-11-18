@@ -199,8 +199,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       (e.getMessage != null && e.getMessage.startsWith("File already exists: "))
   }
 
-  override def get(batchId: Long): Option[T] = {
-    val batchMetadataFile = batchIdToPath(batchId)
+  protected def get(batchMetadataFile: Path): Option[T] = {
     if (fileManager.exists(batchMetadataFile)) {
       val input = fileManager.open(batchMetadataFile)
       try {
@@ -214,13 +213,19 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
+  override def get(batchId: Long): Option[T] = {
+    get(batchIdToPath(batchId))
+  }
+
+  protected def listExistingFiles(): Array[Path] = {
+    fileManager.list(metadataPath, batchFilesFilter).map(_.getPath)
+  }
+
   override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, T)] = {
-    val files = fileManager.list(metadataPath, batchFilesFilter)
-    val batchIds = files
-      .map(f => pathToBatchId(f.getPath))
+    val batchIds = listExistingFiles().map(p => pathToBatchId(p))
       .filter { batchId =>
         (endId.isEmpty || batchId <= endId.get) && (startId.isEmpty || batchId >= startId.get)
-    }
+      }
     batchIds.sorted.map(batchId => (batchId, get(batchId))).filter(_._2.isDefined).map {
       case (batchId, metadataOption) =>
         (batchId, metadataOption.get)
@@ -228,8 +233,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   }
 
   override def getLatest(): Option[(Long, T)] = {
-    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
-      .map(f => pathToBatchId(f.getPath))
+    val batchIds = listExistingFiles()
+      .map(p => pathToBatchId(p))
       .sorted
       .reverse
     for (batchId <- batchIds) {
@@ -245,9 +250,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    * Removes all the log entry earlier than thresholdBatchId (exclusive).
    */
   override def purge(thresholdBatchId: Long): Unit = {
-    val batchIds = fileManager.list(metadataPath, batchFilesFilter)
-      .map(f => pathToBatchId(f.getPath))
-
+    val batchIds = listExistingFiles()
+      .map(p => pathToBatchId(p))
     for (batchId <- batchIds if batchId < thresholdBatchId) {
       val path = batchIdToPath(batchId)
       fileManager.delete(path)
