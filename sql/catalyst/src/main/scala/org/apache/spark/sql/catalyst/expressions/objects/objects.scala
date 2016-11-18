@@ -65,7 +65,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
     } else {
       "false"
     }
-    val argValues = arguments.zipWithIndex.map { case (e, i) =>
+    val argValues = arguments.map { e =>
       val argValue = ctx.freshName("argValue")
       ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
       argValue
