@@ -51,6 +51,16 @@ private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
     new OneReceiverResource(listener)
   }
 
+  @Path("batches")
+  def getBatches(): AllBatchesResource = {
+    new AllBatchesResource(listener)
+  }
+
+  @Path("batches/{batchId}")
+  def getBatch(): OneBatchResource = {
+    new OneBatchResource(listener)
+  }
+
 }
 
 private[spark] object StreamingApiRootResource {
