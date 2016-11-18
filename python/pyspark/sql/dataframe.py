@@ -1673,6 +1673,7 @@ def _test():
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext, SparkSession
     import pyspark.sql.dataframe
+    from pyspark.sql.functions import from_unixtime
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
@@ -1689,7 +1690,9 @@ def _test():
                                    Row(name='Tom', age=None, height=None),
                                    Row(name=None, age=None, height=None)]).toDF()
     globs['sdf'] = sc.parallelize([Row(name='Tom', timestamp=1479441846),
-                                   Row(name='Bob', timestamp=1479442946)]).toDF()
+                                   Row(name='Bob', timestamp=1479442946)]).toDF().select('name',
+                                                                                         from_unixtime('timestamp'))
+                
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
