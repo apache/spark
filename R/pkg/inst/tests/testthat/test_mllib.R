@@ -175,7 +175,7 @@ test_that("spark.glm summary", {
   b <- c(1, 2, 3, 4)
   data <- as.data.frame(cbind(A, b))
   df <- createDataFrame(data)
-  stats <- summary(spark.glm(df, b ~ . -1))
+  stats <- summary(spark.glm(df, b ~ . - 1))
   coefs <- unlist(stats$coefficients)
   expect_true(all(abs(c(0.5, 0.25) - coefs) < 1e-4))
 })
