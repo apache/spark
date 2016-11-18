@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.{CreateExternalRow, GetExternalRowField, ValidateExternalType}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -134,8 +134,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType)).map {
       case m: ArrayBasedMapData =>
-        val keys = m.keyArray.asInstanceOf[UnsafeArrayData].toIntArray
-        val values = m.valueArray.asInstanceOf[UnsafeArrayData].toBooleanArray
+        val keys = m.keyArray.asInstanceOf[ArrayData].toIntArray
+        val values = m.valueArray.asInstanceOf[ArrayData].toBooleanArray
         keys.zip(values).toMap
     }
     val expected = (0 until length).map((_, true)).toMap :: Nil
