@@ -234,12 +234,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         row.writeToStream(out, buffer)
         count += 1
       }
-      // If iterator has more elements, we should consume them all. Otherwise under wholestage
-      // codegen, as we release resources after consuming all elements (e.g., HashAggregate), it
-      // will cause problems such as memory leak.
-      while (iter.hasNext) {
-        iter.next()
-      }
       out.writeInt(-1)
       out.flush()
       out.close()
