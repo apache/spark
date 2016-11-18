@@ -298,8 +298,7 @@ object CompactibleFileStreamLog {
         (min to n/2).view.filter(i => n % i == 0) :+ n
 
       properDivisors(defaultInterval, latestCompactBatchId + 1).head
-    }
-    else {
+    } else {
       // default compact interval > than any divisor other than latest compact id
       latestCompactBatchId + 1
     }

@@ -18,9 +18,8 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
 
-class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext {
+class CompactibleFileStreamLogSuite extends SparkFunSuite {
 
   import CompactibleFileStreamLog._
 
