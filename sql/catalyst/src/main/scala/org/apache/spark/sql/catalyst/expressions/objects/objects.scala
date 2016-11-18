@@ -59,16 +59,20 @@ trait InvokeLike extends Expression with NonSQLExpression {
   def prepareArguments(ctx: CodegenContext): (String, String, String) = {
 
     val resultIsNull = if (needNullCheck) {
-      ctx.freshName("resultIsNull")
+      val resultIsNull = ctx.freshName("resultIsNull")
+      ctx.addMutableState("boolean", resultIsNull, "")
+      resultIsNull
     } else {
       "false"
     }
     val argValues = arguments.map { e =>
-      ctx.freshName("argValue")
+      val argValue = ctx.freshName("argValue")
+      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
+      argValue
     }
 
     val argCodes = if (needNullCheck) {
-      val reset = s"boolean $resultIsNull = false;"
+      val reset = s"$resultIsNull = false;"
       val argCodes = arguments.zipWithIndex.map { case (e, i) =>
         val expr = e.genCode(ctx)
         val updateResultIsNull = if (e.nullable) {
@@ -77,7 +81,6 @@ trait InvokeLike extends Expression with NonSQLExpression {
           ""
         }
         s"""
-          ${ctx.javaType(e.dataType)} ${argValues(i)} = ${ctx.defaultValue(e.dataType)};
           if (!$resultIsNull) {
             ${expr.code}
             $updateResultIsNull
@@ -91,11 +94,11 @@ trait InvokeLike extends Expression with NonSQLExpression {
         val expr = e.genCode(ctx)
         s"""
           ${expr.code}
-          ${ctx.javaType(e.dataType)} ${argValues(i)} = ${expr.value};
+          ${argValues(i)} = ${expr.value};
         """
       }
     }
-    val argCode = argCodes.mkString("\n")
+    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
     (argCode, argValues.mkString(", "), resultIsNull)
   }
