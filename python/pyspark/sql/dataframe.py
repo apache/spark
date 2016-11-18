@@ -1690,8 +1690,8 @@ def _test():
                                    Row(name='Tom', age=None, height=None),
                                    Row(name=None, age=None, height=None)]).toDF()
     globs['sdf'] = sc.parallelize([Row(name='Tom', timestamp=1479441846),
-                                   Row(name='Bob', timestamp=1479442946)]).toDF().select('name',
-                                                                                         from_unixtime('timestamp'))
+                                   Row(name='Bob', timestamp=1479442946)]).toDF() \
+        .select('name', from_unixtime('timestamp').alias('timestamp'))
                 
 
     (failure_count, test_count) = doctest.testmod(
