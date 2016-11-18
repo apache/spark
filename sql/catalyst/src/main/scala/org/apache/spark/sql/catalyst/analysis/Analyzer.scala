@@ -1272,6 +1272,21 @@ class Analyzer(
         case s @ ScalarSubquery(sub, conditions, exprId)
             if sub.resolved && conditions.isEmpty && sub.output.size != 1 =>
           failAnalysis(s"Scalar subquery must return only one column, but got ${sub.output.size}")
+        case s @ ScalarSubquery(sub, conditions, exprId)
+            if sub.resolved && sub.isInstanceOf[Aggregate] =>
+          val groupByColumns =
+                sub.asInstanceOf[Aggregate].groupingExpressions.flatMap(_.references).toSet
+          val predicateColumns = conditions.flatMap(_.references).toSet
+          val invalidColumns = groupByColumns.diff(predicateColumns)
+          // GROUP BY columns must be a subset of columns in the predicates
+          if (invalidColumns.nonEmpty) {
+            failAnalysis(s"""
+              |GROUP BY column(s) in scalar subquery must exist in the WHERE clause:
+              |${invalidColumns.toString}""".stripMargin.replaceAll("\n", " "))
+          }
+          else {
+            s
+          }
         case s @ ScalarSubquery(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(s, plans, 1)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, exprId) =>
