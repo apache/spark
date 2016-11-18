@@ -84,3 +84,5 @@ gen-java.*
 org.apache.spark.sql.sources.DataSourceRegister
 .*parquet
 spark-deps-.*
+criteo/*
+
