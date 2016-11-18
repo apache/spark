@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.{InternalOutputModes, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Literal}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
@@ -48,6 +49,17 @@ class IncrementalExecution(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
       stateStrategy)
+
+  /**
+   * See [SPARK-18339]
+   * Walk the optimized logical plan and replace CurrentBatchTimestamp
+   * with the desired literal
+   */
+  override lazy val optimizedPlan: LogicalPlan = {
+    sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
+      case CurrentBatchTimestamp(timestamp) => Literal(timestamp)
+    }
+  }
 
   /**
    * Records the current id for a given stateful operator in the query plan as the `state`

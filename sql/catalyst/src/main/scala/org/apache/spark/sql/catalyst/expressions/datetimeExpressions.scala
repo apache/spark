@@ -72,6 +72,28 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
 }
 
 /**
+ * Expression representing the current batch time, which is used by StreamExecution to
+ * 1. prevent optimizer from pushing this expression below a stateful operator
+ * 2. allow IncrementalExecution to substitute this expression with a Literal(timestamp)
+ *
+ * There is no code generation since this expression should be replaced with a literal.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current timestamp at the start of batch evaluation.")
+case class CurrentBatchTimestamp(timestamp: Long) extends LeafExpression
+  with CodegenFallback with Nondeterministic {
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = TimestampType
+
+  override def prettyName: String = "current_batch_timestamp"
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = {}
+
+  override protected def evalInternal(input: InternalRow): Any = timestamp
+}
+
+/**
  * Adds a number of days to startdate.
  */
 @ExpressionDescription(

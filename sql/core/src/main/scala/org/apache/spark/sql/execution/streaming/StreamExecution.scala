@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
@@ -94,6 +94,9 @@ class StreamExecution(
 
   /** The current eventTime watermark, used to bound the lateness of data that will processed. */
   private var currentEventTimeWatermark: Long = 0
+
+  /** The current batch processing timestamp */
+  private var currentBatchTimestamp: Long = 0
 
   /** All stream sources present in the query plan. */
   private val sources =
@@ -288,7 +291,11 @@ class StreamExecution(
         logInfo(s"Resuming streaming query, starting with batch $batchId")
         currentBatchId = batchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
-        logDebug(s"Found possibly uncommitted offsets $availableOffsets")
+        currentBatchTimestamp = nextOffsets.metadata.getOrElse(
+          throw new IllegalStateException("OffsetLog does not contain current batch timestamp!")
+        ).toLong
+        logDebug(s"Found possibly uncommitted offsets $availableOffsets " +
+          s"at batch timestamp $currentBatchTimestamp")
 
         offsetLog.get(batchId - 1).foreach {
           case lastOffsets =>
@@ -344,8 +351,10 @@ class StreamExecution(
       }
     }
     if (hasNewData) {
+      currentBatchTimestamp = triggerClock.getTimeMillis() * 1000L
       reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
-        assert(offsetLog.add(currentBatchId, availableOffsets.toOffsetSeq(sources)),
+        assert(offsetLog.add(currentBatchId,
+          availableOffsets.toOffsetSeq(sources, Some(currentBatchTimestamp.toString))),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
         logInfo(s"Committed offsets for batch $currentBatchId.")
 
@@ -422,6 +431,7 @@ class StreamExecution(
     val replacementMap = AttributeMap(replacements)
     val triggerLogicalPlan = withNewSources transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) => replacementMap(a)
+      case t: CurrentTimestamp => CurrentBatchTimestamp(currentBatchTimestamp)
     }
 
     val executedPlan = reportTimeTaken(OPTIMIZER_LATENCY) {
