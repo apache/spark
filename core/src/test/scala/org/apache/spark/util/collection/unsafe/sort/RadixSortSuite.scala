@@ -156,7 +156,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       val (ref, buffer) = generateTestData(N, rand.nextLong)
       Arrays.sort(ref, toJavaComparator(sortType.referenceComparator))
       val outOffset = RadixSort.sort(
-        buffer, Ints.checkedCast(N), sortType.startByteIdx, sortType.endByteIdx,
+        buffer, N, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
       val result = collectToArray(buffer, outOffset, N)
       assert(ref.view == result.view)
