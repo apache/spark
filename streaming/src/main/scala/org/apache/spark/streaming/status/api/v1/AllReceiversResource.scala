@@ -35,43 +35,46 @@ private[v1] class AllReceiversResource(listener: StreamingJobProgressListener) {
 
 private[v1] object AllReceiversResource {
 
-  def receiverInfoList(listener: StreamingJobProgressListener): Seq[ReceiverInfo] =
-    listener.receivedEventRateWithBatchTime.map { case (streamId, eventRates) =>
+  def receiverInfoList(listener: StreamingJobProgressListener): Seq[ReceiverInfo] = {
+    listener.synchronized {
+      listener.receivedEventRateWithBatchTime.map { case (streamId, eventRates) =>
 
-      val receiverInfo = listener.receiverInfo(streamId)
-      val streamName = receiverInfo.map(_.name).
-        orElse(listener.streamName(streamId)).getOrElse(s"Stream-$streamId")
-      val avgEventRate =
-        if (eventRates.isEmpty) None
-        else Some(eventRates.map(_._2).sum / eventRates.size)
+        val receiverInfo = listener.receiverInfo(streamId)
+        val streamName = receiverInfo.map(_.name).
+          orElse(listener.streamName(streamId)).getOrElse(s"Stream-$streamId")
+        val avgEventRate =
+          if (eventRates.isEmpty) None
+          else Some(eventRates.map(_._2).sum / eventRates.size)
 
-      val lastErrorInfo = receiverInfo match {
-        case None => (None, None, None)
-        case Some(info) =>
-          val someTime =
-            if (info.lastErrorTime >= 0) Some(new Date(info.lastErrorTime))
-            else None
-          val someMessage =
-            if (info.lastErrorMessage.length > 0) Some(info.lastErrorMessage)
-            else None
-          val someError =
-            if (info.lastError.length > 0) Some(info.lastError)
-            else None
+        val lastErrorInfo = receiverInfo match {
+          case None => (None, None, None)
+          case Some(info) =>
+            val someTime =
+              if (info.lastErrorTime >= 0) Some(new Date(info.lastErrorTime))
+              else None
+            val someMessage =
+              if (info.lastErrorMessage.length > 0) Some(info.lastErrorMessage)
+              else None
+            val someError =
+              if (info.lastError.length > 0) Some(info.lastError)
+              else None
 
-          (someTime, someMessage, someError)
-      }
+            (someTime, someMessage, someError)
+        }
 
-      new ReceiverInfo(
-        streamId = streamId,
-        streamName = streamName,
-        isActive = receiverInfo.map(_.active),
-        executorId = receiverInfo.map(_.executorId),
-        executorHost = receiverInfo.map(_.location),
-        lastErrorTime = lastErrorInfo._1,
-        lastErrorMessage = lastErrorInfo._2,
-        lastError = lastErrorInfo._3,
-        avgEventRate = avgEventRate,
-        eventRates = eventRates
-      )
-    }.toSeq
+        new ReceiverInfo(
+          streamId = streamId,
+          streamName = streamName,
+          isActive = receiverInfo.map(_.active),
+          executorId = receiverInfo.map(_.executorId),
+          executorHost = receiverInfo.map(_.location),
+          lastErrorTime = lastErrorInfo._1,
+          lastErrorMessage = lastErrorInfo._2,
+          lastError = lastErrorInfo._3,
+          avgEventRate = avgEventRate,
+          eventRates = eventRates
+        )
+      }.toSeq
+    }
+  }
 }
