@@ -333,12 +333,8 @@ case class NewInstance(
       $argCode
       ${outer.map(_.code).getOrElse("")}
       $prepareIsNull
-    """ +
-      (if (needNullCheck) {
-        s"final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;"
-      } else {
-        s"final $javaType ${ev.value} = $constructorCall;"
-      })
+      final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
+    """
     ev.copy(code = code, isNull = isNull)
   }
 
