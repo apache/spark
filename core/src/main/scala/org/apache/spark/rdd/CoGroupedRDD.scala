@@ -66,7 +66,7 @@ private[spark] class CoGroupPartition(
 
 /**
  * :: DeveloperApi ::
- * A RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
+ * An RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
  * tuple with the list of values for that key.
  *
  * @param rdds parent RDDs.

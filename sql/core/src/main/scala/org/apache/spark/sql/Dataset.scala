@@ -377,7 +377,7 @@ class Dataset[T] private[sql](
 
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
-   * This can be quite convenient in conversion from a RDD of tuples into a [[DataFrame]] with
+   * This can be quite convenient in conversion from an RDD of tuples into a [[DataFrame]] with
    * meaningful names. For example:
    * {{{
    *   val rdd: RDD[(Int, String)] = ...
