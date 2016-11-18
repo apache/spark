@@ -28,14 +28,14 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("primitive type on array") {
-    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
+    val df = sparkContext.parallelize(Seq(1, 2)).toDF("v")
     val resDF = df.selectExpr("Array(v + 2, v + 3)")
     checkAnswer(resDF,
       Seq(Row(Array(3, 4)), Row(Array(4, 5))))
   }
 
   test("primitive array or null on array") {
-    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
+    val df = sparkContext.parallelize(Seq(1, 2)).toDF("v")
     val resDF = df.selectExpr("Array(Array(v, v + 1, v + 2)," +
                               "null," +
                               "Array(v, v - 1, v - 2))")

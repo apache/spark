@@ -59,12 +59,12 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     val unsafeArrayClass = classOf[UnsafeArrayData].getName
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     val ArrayType(dt, _) = dataType
     val evals = children.map(e => e.genCode(ctx))
     val isPrimitiveArray = ctx.isPrimitiveType(dt) && children.forall(!_.nullable)
     if (!isPrimitiveArray) {
+      ctx.addMutableState("Object[]", values, s"this.$values = null;")
       ev.copy(code = s"""
        final boolean ${ev.isNull} = false;
        this.$values = new Object[${children.size}];""" +
