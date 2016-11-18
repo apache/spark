@@ -242,15 +242,16 @@ case class Invoke(
 
     val code = s"""
       ${obj.code}
+      boolean ${ev.isNull} = true;
+      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${obj.isNull}) {
         $argCode
+        ${ev.isNull} = $resultIsNull;
+        if (!${ev.isNull}) {
+          $evaluate
+        }
+        $postNullCheck
       }
-      boolean ${ev.isNull} = ${obj.isNull} || $resultIsNull;
-      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        $evaluate
-      }
-      $postNullCheck
      """
     ev.copy(code = code)
   }
