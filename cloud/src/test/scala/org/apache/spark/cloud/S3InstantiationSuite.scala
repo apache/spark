@@ -17,8 +17,11 @@
 
 package org.apache.spark.cloud
 
+import com.amazonaws.services.s3.S3ClientOptions
 import org.apache.hadoop.fs.s3a.S3AFileSystem
 import org.apache.hadoop.fs.s3native.NativeS3FileSystem
+import org.jets3t.service.S3ServiceException
+import org.joda.time.LocalTime
 
 import org.apache.spark.SparkFunSuite
 
@@ -32,4 +35,15 @@ class S3InstantiationSuite extends SparkFunSuite {
     new NativeS3FileSystem()
   }
 
+  test("Create Jets3t class") {
+    new S3ServiceException("jets3t")
+  }
+
+  test("Create class in Amazon com.amazonaws.services.s3 JAR") {
+    new S3ClientOptions()
+  }
+
+  test("Create Joda Time class") {
+    new LocalTime()
+  }
 }
