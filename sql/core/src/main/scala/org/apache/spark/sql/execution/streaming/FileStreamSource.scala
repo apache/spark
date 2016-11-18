@@ -45,7 +45,7 @@ class FileStreamSource(
 
   private val qualifiedBasePath: Path = {
     val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
-    fs.makeQualified(new Path(path))  // can contains glob patterns
+    fs.makeQualified(new Path(path))  // can contain glob patterns
   }
 
   private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {

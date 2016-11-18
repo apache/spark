@@ -408,10 +408,27 @@ class StreamExecution(
       case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { data =>
           val newPlan = data.logicalPlan
-          assert(output.size == newPlan.output.size,
-            s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
-            s"${Utils.truncatedString(newPlan.output, ",")}")
-          replacements ++= output.zip(newPlan.output)
+          val newPlanOutput = newPlan.output
+          output.foreach { out =>
+            val outputInNewPlan = newPlanOutput.find { newPlanOut =>
+              out.name == newPlanOut.name && out.dataType == newPlanOut.dataType
+            }.getOrElse {
+              throw new AnalysisException(
+                s"""
+                   |Batch does not have expected schema
+                   |Expected: ${output.mkString(",")}
+                   |Actual: ${newPlan.output.mkString(",")}
+                   |
+                   |== Original ==
+                   |$logicalPlan
+                   |
+                   |== Batch ==
+                   |$newPlan
+                 """.stripMargin
+              )
+            }
+            replacements += out -> outputInNewPlan
+          }
           newPlan
         }.getOrElse {
           LocalRelation(output)
