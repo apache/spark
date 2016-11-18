@@ -316,13 +316,7 @@ case class NewInstance(
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
-    var isNull = ev.isNull
-    val prepareIsNull = if (needNullCheck) {
-      s"boolean $isNull = $resultIsNull;"
-    } else {
-      isNull = "false"
-      ""
-    }
+    ev.isNull = resultIsNull
 
     val constructorCall = outer.map { gen =>
       s"${gen.value}.new ${cls.getSimpleName}($argString)"
@@ -333,10 +327,9 @@ case class NewInstance(
     val code = s"""
       $argCode
       ${outer.map(_.code).getOrElse("")}
-      $prepareIsNull
-      final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
+      final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(javaType)} : $constructorCall;
     """
-    ev.copy(code = code, isNull = isNull)
+    ev.copy(code = code)
   }
 
   override def toString: String = s"newInstance($cls)"
