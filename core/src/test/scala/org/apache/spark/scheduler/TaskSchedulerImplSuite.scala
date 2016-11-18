@@ -476,7 +476,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         val executorsWithAnyBlacklisting = execBlacklist ++ execsForBlacklistedNodes
 
         // Schedule a taskset, and make sure our test setup is correct -- we are able to schedule
-        // a task on all executors that aren't blacklisted (whether that executors is a explicitly
+        // a task on all executors that aren't blacklisted (whether that executor is a explicitly
         // blacklisted, or implicitly blacklisted via the node blacklist).
         val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
         assert(firstTaskAttempts.size === offers.size - executorsWithAnyBlacklisting.size)
