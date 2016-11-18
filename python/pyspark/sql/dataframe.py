@@ -1692,7 +1692,6 @@ def _test():
     globs['sdf'] = sc.parallelize([Row(name='Tom', timestamp=1479441846),
                                    Row(name='Bob', timestamp=1479442946)]).toDF() \
         .select('name', from_unixtime('timestamp').alias('timestamp'))
-                
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,
