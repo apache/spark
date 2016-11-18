@@ -99,6 +99,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       transfer,
       blockManager,
       blocksByAddress,
+      (_, in) => in,
       48 * 1024 * 1024,
       Int.MaxValue)
 
@@ -172,6 +173,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       transfer,
       blockManager,
       blocksByAddress,
+      (_, in) => in,
       48 * 1024 * 1024,
       Int.MaxValue)
 
@@ -235,6 +237,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       transfer,
       blockManager,
       blocksByAddress,
+      (_, in) => in,
       48 * 1024 * 1024,
       Int.MaxValue)
 

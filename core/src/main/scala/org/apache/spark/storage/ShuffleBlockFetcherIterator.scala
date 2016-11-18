@@ -17,19 +17,22 @@
 
 package org.apache.spark.storage
 
-import java.io.InputStream
+import java.io.{InputStream, IOException}
+import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.Utils
+import org.apache.spark.util.io.{ChunkedByteBufferInputStream, ChunkedByteBufferOutputStream}
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -56,6 +59,7 @@ final class ShuffleBlockFetcherIterator(
     shuffleClient: ShuffleClient,
     blockManager: BlockManager,
     blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
+    streamWrapper: (BlockId, InputStream) => InputStream,
     maxBytesInFlight: Long,
     maxReqsInFlight: Int)
   extends Iterator[(BlockId, InputStream)] with Logging {
@@ -107,6 +111,9 @@ final class ShuffleBlockFetcherIterator(
 
   /** Current number of requests in flight */
   private[this] var reqsInFlight = 0
+
+  /** The blocks that can't be decompressed successfully */
+  private[this] val corruptedBlocks = mutable.HashSet[String]()
 
   private[this] val shuffleMetrics = context.taskMetrics().createTempShuffleReadMetrics()
 
@@ -305,27 +312,74 @@ final class ShuffleBlockFetcherIterator(
    */
   override def next(): (BlockId, InputStream) = {
     numBlocksProcessed += 1
-    val startFetchWait = System.currentTimeMillis()
-    currentResult = results.take()
-    val result = currentResult
-    val stopFetchWait = System.currentTimeMillis()
-    shuffleMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
 
-    result match {
-      case SuccessFetchResult(_, address, size, buf, isNetworkReqDone) =>
-        if (address != blockManager.blockManagerId) {
-          shuffleMetrics.incRemoteBytesRead(buf.size)
-          shuffleMetrics.incRemoteBlocksFetched(1)
-        }
-        bytesInFlight -= size
-        if (isNetworkReqDone) {
-          reqsInFlight -= 1
-          logDebug("Number of requests in flight " + reqsInFlight)
-        }
-      case _ =>
+    var result: FetchResult = null
+    var input: InputStream = null
+    while (result == null) {
+      val startFetchWait = System.currentTimeMillis()
+      result = results.take()
+      val stopFetchWait = System.currentTimeMillis()
+      shuffleMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
+
+      result match {
+        case SuccessFetchResult(blockId, address, size, buf, isNetworkReqDone) =>
+          if (address != blockManager.blockManagerId) {
+            shuffleMetrics.incRemoteBytesRead(buf.size)
+            shuffleMetrics.incRemoteBlocksFetched(1)
+          }
+          bytesInFlight -= size
+          if (isNetworkReqDone) {
+            reqsInFlight -= 1
+            logDebug("Number of requests in flight " + reqsInFlight)
+          }
+
+          val in = try {
+            buf.createInputStream()
+          } catch {
+            // The exception could only be throwed by local shuffle block
+            case e: IOException if buf.isInstanceOf[FileSegmentManagedBuffer] =>
+              logError("Failed to create input stream from local block", e)
+              buf.release()
+              result = FailureFetchResult(blockId, address, e)
+              null
+          }
+          if (in != null) {
+            input = streamWrapper(blockId, in)
+            // Only copy the stream if it's wrapped by compression or encryption, also the size of
+            // block is small (the decompressed block is smaller than maxBytesInFlight)
+            if (!input.eq(in) && size < maxBytesInFlight / 3) {
+              val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
+              try {
+                // Decompress the whole block at once to detect any corruption, which could increase
+                // the memory usage tne potential increase the chance of OOM.
+                // TODO: manage the memory used here, and spill it into disk in case of OOM.
+                Utils.copyStream(input, out)
+                input = out.toChunkedByteBuffer.toInputStream(true)
+              } catch {
+                case e: IOException =>
+                  buf.release()
+                  if (buf.isInstanceOf[FileSegmentManagedBuffer]
+                    || corruptedBlocks.contains(blockId.toString)) {
+                    result = FailureFetchResult(blockId, address, e)
+                  } else {
+                    logWarning(s"got an corrupted block $blockId from $address, fetch again")
+                    fetchRequests += FetchRequest(address, Array((blockId, size)))
+                    result = null
+                  }
+              } finally {
+                // TODO: release the buf here (earlier)
+                in.close()
+              }
+            }
+          }
+
+        case _ =>
+      }
+
+      // Send fetch requests up to maxBytesInFlight
+      fetchUpToMaxBytes()
     }
-    // Send fetch requests up to maxBytesInFlight
-    fetchUpToMaxBytes()
+    currentResult = result
 
     result match {
       case FailureFetchResult(blockId, address, e) =>
@@ -333,7 +387,7 @@ final class ShuffleBlockFetcherIterator(
 
       case SuccessFetchResult(blockId, address, _, buf, _) =>
         try {
-          (result.blockId, new BufferReleasingInputStream(buf.createInputStream(), this))
+          (result.blockId, new BufferReleasingInputStream(input, this))
         } catch {
           case NonFatal(t) =>
             throwFetchFailedException(blockId, address, t)
