@@ -207,9 +207,9 @@ class DecisionTreeClassificationModel private[ml] (
    *     where gain is scaled by the number of instances passing through node
    *   - Normalize importances for tree to sum to 1.
    *
-   * Note: Feature importance for single decision trees can have high variance due to
-   *       correlated predictor variables. Consider using a [[RandomForestClassifier]]
-   *       to determine feature importance instead.
+   * @note Feature importance for single decision trees can have high variance due to
+   * correlated predictor variables. Consider using a [[RandomForestClassifier]]
+   * to determine feature importance instead.
    */
   @Since("2.0.0")
   lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(this, numFeatures)
