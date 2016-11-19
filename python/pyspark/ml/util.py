@@ -78,7 +78,10 @@ class MLWriter(object):
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for saving."""
+        """
+        Sets the SQL context to use for saving.
+        .. note:: Deprecated in 2.1, use session instead.
+        """
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
     def session(self, sparkSession):
@@ -168,7 +171,10 @@ class MLReader(object):
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
 
     def context(self, sqlContext):
-        """Sets the SQL context to use for loading."""
+        """
+        Sets the SQL context to use for loading.
+        .. note:: Deprecated in 2.1, use session instead.
+        """
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
 
     def session(self, sparkSession):
