@@ -258,11 +258,11 @@ private[spark] object GradientBoostedTrees extends Logging {
     val baseLearnerWeights = new Array[Double](numIterations)
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
-    // Prepare strategy for individual trees, which use regression with variance impurity.
+    // Prepare strategy for individual trees, which all use regression.
+    // TODO(SPARK-16728): changing the strategy here is confusing and should be avoided
     val treeStrategy = boostingStrategy.treeStrategy.copy
     val validationTol = boostingStrategy.validationTol
     treeStrategy.algo = OldAlgo.Regression
-    treeStrategy.impurity = OldVariance
     treeStrategy.assertValid()
 
     // Cache input
@@ -327,6 +327,8 @@ private[spark] object GradientBoostedTrees extends Logging {
       // Note: The setting of baseLearnerWeights is incorrect for losses other than SquaredError.
       //       Technically, the weight should be optimized for the particular loss.
       //       However, the behavior should be reasonable, though not optimal.
+      // Note: For loss-based impurities, which have optimized loss-based leaf predictions,
+      //       using a constant learning rate is correct.
       baseLearnerWeights(m) = learningRate
 
       predError = updatePredictionError(

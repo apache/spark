@@ -19,15 +19,18 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
-import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.tree.impurity.ApproxBernoulliAggregator
+import org.apache.spark.ml.util.{DefaultReadWriteTest, GBTSuiteHelper, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.impurity._
+import org.apache.spark.mllib.tree.loss.LogLoss
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -52,8 +55,8 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
 
   override def beforeAll() {
     super.beforeAll()
-    data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100), 2)
-      .map(_.asML)
+    data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(
+      numFeatures = 10, numInstances = 100), 2).map(_.asML)
     trainData =
       sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120), 2)
         .map(_.asML)
@@ -70,19 +73,66 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     ParamsSuite.checkParams(model)
   }
 
-  test("Binary classification with continuous features: Log Loss") {
-    val categoricalFeatures = Map.empty[Int, Int]
+  test("GBT-specific param defaults") {
+    val gbt = new GBTClassifier()
+    assert(gbt.getImpurity === "loss-based")
+    assert(gbt.getLossType === "logistic")
+  }
+
+  test("GBT-specific param support") {
+    val gbt = new GBTClassifier()
+    for (impurity <- GBTClassifier.supportedImpurities) {
+      gbt.setImpurity(impurity)
+    }
+    for (lossType <- GBTClassifier.supportedLossTypes) {
+      gbt.setLossType(lossType)
+    }
+  }
+
+  test("Binary classification: Variance-based impurity + Log Loss") {
+    // Using a non-loss-based impurity we can just check for equivalence with the old API
     testCombinations.foreach {
       case (maxIter, learningRate, subsamplingRate) =>
         val gbt = new GBTClassifier()
           .setMaxDepth(2)
           .setSubsamplingRate(subsamplingRate)
+          .setImpurity("variance")
           .setLossType("logistic")
           .setMaxIter(maxIter)
           .setStepSize(learningRate)
           .setSeed(123)
-        compareAPIs(data, None, gbt, categoricalFeatures)
+        compareAPIs(data, None, gbt, Map.empty[Int, Int])
     }
+  }
+
+  test("approximate bernoulli impurity") {
+    def grad(pred: Double, label: Double): Double = {
+      -4 * label / (1 + math.exp(2 * label * pred))
+    }
+    def hess(pred: Double, label: Double): Double = {
+      val numerator = 8 * math.exp(2 * label * pred) * math.pow(label, 2)
+      val denominator = math.pow(1 + Math.exp(2 * label * pred), 2)
+      numerator / denominator
+    }
+    val variance = (responses: Seq[Double]) =>
+      GBTSuiteHelper.computeCalculator(responses, new VarianceAggregator).calculate()
+    val newtonRaphson = (prediction: Double, labels: Seq[Double], responses: Seq[Double]) =>
+      -labels.map(grad(prediction, _)).sum / labels.map(hess(prediction, _)).sum
+
+    GBTSuiteHelper.verifyCalculator(
+      new ApproxBernoulliAggregator(),
+      LogLoss,
+      expectedImpurity = variance,
+      expectedPrediction = newtonRaphson)
+  }
+
+  test("Binary classification: Loss-based impurity + Log Loss") {
+    val impurityName = "bernoulli"
+    val loss = LogLoss
+    val expectedImpurity = new ApproxBernoulliAggregator()
+
+    GBTSuiteHelper.verifyGBTConstruction(
+      spark, classification = true, impurityName, loss, expectedImpurity)
   }
 
   test("Checkpointing") {
@@ -125,6 +175,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     GBTClassifier.supportedLossTypes.foreach { loss =>
       val gbt = new GBTClassifier()
         .setMaxIter(maxIter)
+        .setImpurity("variance")
         .setMaxDepth(2)
         .setLossType(loss)
         .setValidationTol(0.0)
@@ -176,7 +227,6 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   test("Feature importance with toy data") {
     val numClasses = 2
     val gbt = new GBTClassifier()
-      .setImpurity("Gini")
       .setMaxDepth(3)
       .setMaxIter(5)
       .setSubsamplingRate(1.0)
@@ -210,11 +260,16 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     val gbt = new GBTClassifier()
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
-    val allParamSettings = TreeTests.allParamSettings ++ Map("lossType" -> "logistic")
+    // Test for all different impurity types.
+    for (impurity <- Seq(Some("loss-based"), Some("variance"), None)) {
+      val allParamSettings = TreeTests.allParamSettings ++
+        Map("lossType" -> "logistic") ++
+        impurity.map("impurity" -> _).toMap
 
-    val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
-    testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+      val continuousData: DataFrame =
+        TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
+      testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+    }
   }
 }
 
@@ -223,15 +278,18 @@ private object GBTClassifierSuite extends SparkFunSuite {
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.
    * Convert the old model to the new format, compare them, and fail if they are not exactly equal.
+   *
+   * The old API only supports variance-based impurity, so gbt should have that setting.
    */
   def compareAPIs(
       data: RDD[LabeledPoint],
       validationData: Option[RDD[LabeledPoint]],
       gbt: GBTClassifier,
       categoricalFeatures: Map[Int, Int]): Unit = {
+    assert(gbt.getImpurity === "variance")
     val numFeatures = data.first().features.size
     val oldBoostingStrategy =
-      gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+      gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification, Variance)
     val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)

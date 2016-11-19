@@ -562,7 +562,7 @@ class GBTParams(TreeEnsembleParams):
 
     .. versionadded:: 1.4.0
     """
-    supportedLossTypes = ["logistic"]
+    supportedLossTypes = ["logistic", "bernoulli"]
 
 
 @inherit_doc
@@ -889,6 +889,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 2.0.2
     """
 
     lossType = Param(Params._dummy(), "lossType",

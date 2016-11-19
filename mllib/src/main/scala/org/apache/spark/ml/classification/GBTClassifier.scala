@@ -40,20 +40,31 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
+ * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for classification.
- * It supports binary labels, as well as both continuous and categorical features.
  * Note: Multiclass labels are not currently supported.
+ * It supports both continuous and categorical features.
  *
- * The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
+ * The implemention offers both Stochastic Gradient Boosting, as in J.H. Friedman 1999,
+ * "Stochastic Gradient Boosting" and TreeBoost, as in Friedman 1999
+ * "Greedy Function Approximation: A Gradient Boosting Machine"
  *
- * Notes on Gradient Boosting vs. TreeBoost:
- *  - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
+ * Notes on Stochastic Gradient Boosting (SGB) vs. TreeBoost:
+ *  - TreeBoost algorithms are a subset of SGB algorithms.
  *  - Both algorithms learn tree ensembles by minimizing loss functions.
- *  - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
- *    based on the loss function, whereas the original gradient boosting method does not.
- *  - We expect to implement TreeBoost in the future:
- *    [https://issues.apache.org/jira/browse/SPARK-4240]
+ *  - TreeBoost has two additional properties that general SGB trees don't:
+ *     - The loss function gradients are directly used as an approximate impurity measure.
+ *     - The value reported at a leaf is given by optimizing the loss function is optimized on
+ *       that leaf node's partition of the data, rather than just being the mean.
+ *  - In the case of squared error loss, variance impurity and mean leaf estimates happen
+ *    to make the SGB and TreeBoost algorithms identical.
+ *
+ * [[GBTClassifier]] will use the `"loss-based"` impurity by default, conforming to
+ * TreeBoost behavior. For SGB, set impurity to `"variance"`.
+ *
+ * Currently, however, even TreeBoost behavior uses variance impurity for split selection for
+ * ease and speed. This is the approach `R`'s
+ * [[https://cran.r-project.org/web/packages/gbm/index.html gbm package]] takes.
  */
 @Since("1.4.0")
 class GBTClassifier @Since("1.4.0") (
@@ -91,14 +102,16 @@ class GBTClassifier @Since("1.4.0") (
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
   /**
-   * The impurity setting is ignored for GBT models.
-   * Individual trees are built using impurity "Variance."
+   * Impurity-setting is currently only offered as a way to recover pre-2.0.2 Spark GBT
+   * behavior (which is Stochastic Gradient Boosting): set impurity to `"variance"` for this.
+   * @param value new impurity value
+   * @return this
    */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = {
-    logWarning("GBTClassifier.setImpurity should NOT be used")
-    this
-  }
+  @deprecated(
+    "Control over impurity will be removed, as it is an implementation detail of GBTs",
+    "2.0.2")
+  override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   // Parameters from TreeEnsembleParams:
 
@@ -136,7 +149,8 @@ class GBTClassifier @Since("1.4.0") (
           LabeledPoint(label, features)
       }
     val numFeatures = oldDataset.first().features.size
-    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+    val boostingStrategy = super.getOldBoostingStrategy(
+      categoricalFeatures, OldAlgo.Classification, getOldImpurity)
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
@@ -156,10 +170,13 @@ class GBTClassifier @Since("1.4.0") (
 
 @Since("1.4.0")
 object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
-
-  /** Accessor for supported loss settings: logistic */
+  /** Accessor for supported loss settings: logistic, bernoulli */
   @Since("1.4.0")
   final val supportedLossTypes: Array[String] = GBTClassifierParams.supportedLossTypes
+
+  /** Accessor for supported entropy settings: loss-based or variance */
+  @Since("2.1")
+  final val supportedImpurities: Array[String] = GBTClassifierParams.supportedImpurities
 
   @Since("2.0.0")
   override def load(path: String): GBTClassifier = super.load(path)

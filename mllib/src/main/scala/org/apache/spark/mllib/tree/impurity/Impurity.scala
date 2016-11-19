@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.tree.impurity
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.ml.tree.impurity.ApproxBernoulliCalculator
 
 /**
  * Trait for calculating information gain.
@@ -31,6 +32,7 @@ trait Impurity extends Serializable {
   /**
    * :: DeveloperApi ::
    * information calculation for multiclass classification
+   *
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
@@ -42,6 +44,7 @@ trait Impurity extends Serializable {
   /**
    * :: DeveloperApi ::
    * information calculation for regression
+   *
    * @param count number of instances
    * @param sum sum of labels
    * @param sumSquares summation of squares of the labels
@@ -56,12 +59,14 @@ trait Impurity extends Serializable {
  * Interface for updating views of a vector of sufficient statistics,
  * in order to compute impurity from a sample.
  * Note: Instances of this class do not hold the data; they operate on views of the data.
+ *
  * @param statsSize  Length of the vector of sufficient statistics for one bin.
  */
 private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Serializable {
 
   /**
    * Merge the stats from one bin into another.
+   *
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for (node, feature, bin) which is modified by the merge.
    * @param otherOffset  Start index of stats for (node, feature, other bin) which is not modified.
@@ -76,6 +81,7 @@ private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Ser
 
   /**
    * Update stats for one (node, feature, bin) with the given label.
+   *
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
@@ -83,6 +89,7 @@ private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Ser
 
   /**
    * Get an [[ImpurityCalculator]] for a (node, feature, bin).
+   *
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
@@ -93,6 +100,7 @@ private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Ser
  * Stores statistics for one (node, feature, bin) for calculating impurity.
  * Unlike [[ImpurityAggregator]], this class stores its own data and is for a specific
  * (node, feature, bin).
+ *
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
 private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) extends Serializable {
@@ -181,13 +189,26 @@ private[spark] object ImpurityCalculator {
 
   /**
    * Create an [[ImpurityCalculator]] instance of the given impurity type and with
-   * the given stats.
+   * the given stats. If impurity is "loss-based", then the loss should be specified as well.
    */
-  def getCalculator(impurity: String, stats: Array[Double]): ImpurityCalculator = {
+  def getCalculator(impurity: String,
+                    loss: String,
+                    stats: Array[Double]): ImpurityCalculator = {
     impurity match {
       case "gini" => new GiniCalculator(stats)
       case "entropy" => new EntropyCalculator(stats)
       case "variance" => new VarianceCalculator(stats)
+      // TODO(vlad17): this dependency into spark.ml is only necessary until SPARK-16728 is resolved
+      // At that point, we can cleanse ourselves of this case-derived-class anti-pattern,
+      // in turn preventing duplicating hacks like this from ever occurring.
+      case "loss-based" => loss match {
+        case "gaussian" | "squared" => new VarianceCalculator(stats)
+        case "bernoulli" | "logistic" => new ApproxBernoulliCalculator(stats)
+        case _ =>
+          throw new IllegalArgumentException(
+            s"ImpurityCalculator builder found impurity type $impurity but could not recognize" +
+              s"loss $loss")
+      }
       case _ =>
         throw new IllegalArgumentException(
           s"ImpurityCalculator builder did not recognize impurity type: $impurity")

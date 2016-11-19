@@ -21,10 +21,12 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, GBTSuiteHelper, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
+import org.apache.spark.mllib.tree.impurity._
+import org.apache.spark.mllib.tree.loss.SquaredError
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -59,21 +61,70 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
         .map(_.asML)
   }
 
-  test("Regression with continuous features") {
-    val categoricalFeatures = Map.empty[Int, Int]
-    GBTRegressor.supportedLossTypes.foreach { loss =>
-      testCombinations.foreach {
-        case (maxIter, learningRate, subsamplingRate) =>
-          val gbt = new GBTRegressor()
-            .setMaxDepth(2)
-            .setSubsamplingRate(subsamplingRate)
-            .setLossType(loss)
-            .setMaxIter(maxIter)
-            .setStepSize(learningRate)
-            .setSeed(123)
-          compareAPIs(data, None, gbt, categoricalFeatures)
-      }
+  test("GBT-specific param defaults") {
+    val gbt = new GBTRegressor()
+    assert(gbt.getImpurity === "variance")
+    assert(gbt.getLossType === "gaussian")
+  }
+
+  test("GBT-specific param support") {
+    val gbt = new GBTRegressor()
+    for (impurity <- GBTRegressor.supportedImpurities) {
+      gbt.setImpurity(impurity)
     }
+    for (lossType <- GBTRegressor.supportedLossTypes) {
+      gbt.setLossType(lossType)
+    }
+  }
+
+  def verifyVarianceImpurityAgainstOldAPI(loss: String): Unit = {
+    // Using a non-loss-based impurity we can just check for equivalence with the old API
+    testCombinations.foreach {
+      case (maxIter, learningRate, subsamplingRate) =>
+        val gbt = new GBTRegressor()
+          .setMaxDepth(2)
+          .setSubsamplingRate(subsamplingRate)
+          .setImpurity("variance")
+          .setLossType(loss)
+          .setMaxIter(maxIter)
+          .setStepSize(learningRate)
+          .setSeed(123)
+        compareAPIs(data, None, gbt, Map.empty[Int, Int])
+    }
+  }
+
+  test("Regression: Variance-based impurity and L2 loss") {
+    verifyVarianceImpurityAgainstOldAPI("squared")
+  }
+
+  test("Regression: Variance-based impurity and L1 loss") {
+    verifyVarianceImpurityAgainstOldAPI("absolute")
+  }
+
+  test("variance impurity") {
+    val variance = (responses: Seq[Double]) => {
+      val sum = responses.sum
+      val sum2 = responses.map(math.pow(_, 2)).sum
+      val n = responses.size
+      sum2 / n - math.pow(sum / n, 2)
+    }
+    val mean = (prediction: Double, labels: Seq[Double], responses: Seq[Double]) =>
+      responses.map(_  - prediction).sum / responses.size
+
+    GBTSuiteHelper.verifyCalculator(
+      new VarianceAggregator(),
+      SquaredError,
+      expectedImpurity = variance,
+      expectedPrediction = mean)
+  }
+
+  test("Regression: loss-based impurity and L2 loss") {
+    val impurityName = "gaussian"
+    val loss = SquaredError
+    val expectedImpurity = new VarianceAggregator()
+
+    GBTSuiteHelper.verifyGBTConstruction(
+      spark, classification = false, impurityName, loss, expectedImpurity)
   }
 
   test("GBTRegressor behaves reasonably on toy data") {
@@ -134,6 +185,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     GBTRegressor.supportedLossTypes.foreach { loss =>
       val gbt = new GBTRegressor()
         .setMaxIter(maxIter)
+        .setImpurity("variance")
         .setMaxDepth(2)
         .setLossType(loss)
         .setValidationTol(0.0)
@@ -181,10 +233,15 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     val gbt = new GBTRegressor()
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
-    val allParamSettings = TreeTests.allParamSettings ++ Map("lossType" -> "squared")
-    val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
-    testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+    // Test for all different impurity types.
+    for (impurity <- Seq(Some("loss-based"), Some("variance"), None)) {
+      val allParamSettings = TreeTests.allParamSettings ++
+        Map("lossType" -> "squared") ++
+        impurity.map("impurity" -> _).toMap
+      val continuousData: DataFrame =
+        TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
+      testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+    }
   }
 }
 
@@ -193,14 +250,18 @@ private object GBTRegressorSuite extends SparkFunSuite {
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.
    * Convert the old model to the new format, compare them, and fail if they are not exactly equal.
+   *
+   * The old API only supports variance-based impurity, so gbt should have that.
    */
   def compareAPIs(
       data: RDD[LabeledPoint],
       validationData: Option[RDD[LabeledPoint]],
       gbt: GBTRegressor,
       categoricalFeatures: Map[Int, Int]): Unit = {
+    assert(gbt.getImpurity == "variance")
     val numFeatures = data.first().features.size
-    val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+    val oldBoostingStrategy = gbt.getOldBoostingStrategy(
+      categoricalFeatures, OldAlgo.Regression, Variance)
     val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)

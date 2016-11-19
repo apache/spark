@@ -21,6 +21,7 @@ import scala.beans.BeanProperty
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.tree.impurity.ApproxBernoulliImpurity
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
@@ -144,7 +145,12 @@ class Strategy @Since("1.3.0") (
           s"DecisionTree Strategy given invalid impurity for Classification: $impurity." +
           s"  Valid settings: Gini, Entropy")
       case Regression =>
-        require(impurity == Variance,
+        // Regression is used under-the-hood in the GBTClassifier, so all of its impurities
+        // could be valid as regression impurities.
+        // TODO(SPARK-16728): the above is only necessary since mllib.tree doesn't have
+        // spark.ml's usual Param.isValid()-checking mechanism. It should be removed with
+        // the resolution of SPARK-16728.
+        require(Set(Variance, ApproxBernoulliImpurity).contains(impurity),
           s"DecisionTree Strategy given invalid impurity for Regression: $impurity." +
           s"  Valid settings: Variance")
       case _ =>

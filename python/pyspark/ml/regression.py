@@ -633,7 +633,7 @@ class GBTParams(TreeEnsembleParams):
     """
     Private class to track supported GBT params.
     """
-    supportedLossTypes = ["squared", "absolute"]
+    supportedLossTypes = ["squared", "absolute", "gaussian", "laplace"]
 
 
 @inherit_doc
@@ -992,6 +992,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 2.0.2
     """
 
     lossType = Param(Params._dummy(), "lossType",
@@ -1003,20 +1005,20 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
+                 checkpointInterval=10, lossType="gaussian", maxIter=20, stepSize=0.1, seed=None,
                  impurity="variance"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
+                 checkpointInterval=10, lossType="gaussian", maxIter=20, stepSize=0.1, seed=None, \
                  impurity="variance")
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                         checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
+                         checkpointInterval=10, lossType="gaussian", maxIter=20, stepSize=0.1,
                          impurity="variance")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)

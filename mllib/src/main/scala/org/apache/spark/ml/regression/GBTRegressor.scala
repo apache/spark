@@ -23,7 +23,6 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
@@ -42,21 +41,31 @@ import org.apache.spark.sql.functions._
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
  *
- * The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
+ * The implemention offers both Stochastic Gradient Boosting, as in J.H. Friedman 1999,
+ * "Stochastic Gradient Boosting" and TreeBoost, as in Friedman 1999
+ * "Greedy Function Approximation: A Gradient Boosting Machine"
  *
- * Notes on Gradient Boosting vs. TreeBoost:
- *  - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
+ * Notes on Stochastic Gradient Boosting (SGB) vs. TreeBoost:
+ *  - TreeBoost algorithms are a subset of SGB algorithms.
  *  - Both algorithms learn tree ensembles by minimizing loss functions.
- *  - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
- *    based on the loss function, whereas the original gradient boosting method does not.
- *     - When the loss is SquaredError, these methods give the same result, but they could differ
- *       for other loss functions.
- *  - We expect to implement TreeBoost in the future:
- *    [https://issues.apache.org/jira/browse/SPARK-4240]
+ *  - TreeBoost has two additional properties that general SGB trees don't:
+ *     - The loss function gradients are directly used as an approximate impurity measure.
+ *     - The value reported at a leaf is given by optimizing the loss function is optimized on
+ *       that leaf node's partition of the data, rather than just being the mean.
+ *  - In the case of squared error loss, variance impurity and mean leaf estimates happen
+ *    to make the SGB and TreeBoost algorithms identical.
+ *
+ * [[GBTRegressor]] will use the usual `"variance"` impurity by default, conforming to
+ * SGB behavior. For TreeBoost, set impurity to `"loss-based"`. Note TreeBoost is currently
+ * incompatible with absolute error.
+ *
+ * Currently, however, even TreeBoost behavior uses variance impurity for split selection for
+ * ease and speed. This is the approach `R`'s
+ * [[https://cran.r-project.org/web/packages/gbm/index.html gbm package]] takes.
  */
 @Since("1.4.0")
 class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
+  extends Regressor[Vector, GBTRegressor, GBTRegressionModel]
   with GBTRegressorParams with DefaultParamsWritable with Logging {
 
   @Since("1.4.0")
@@ -88,14 +97,18 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
   /**
-   * The impurity setting is ignored for GBT models.
-   * Individual trees are built using impurity "Variance."
+   * Note that the loss-based impurity is currently NOT compatible with absolute loss.
+   *
+   * Impurity-setting is currently only offered as a way to recover pre-2.0.2 Spark GBT
+   * behavior (which is Stochastic Gradient Boosting): set impurity to `"variance"` for this.
+   * @param value new impurity value
+   * @return this
    */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = {
-    logWarning("GBTRegressor.setImpurity should NOT be used")
-    this
-  }
+  @deprecated(
+    "Control over impurity will be removed, as it is an implementation detail of GBTs",
+    "2.0.2")
+  override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   // Parameters from TreeEnsembleParams:
   @Since("1.4.0")
@@ -113,7 +126,10 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   // Parameters from GBTRegressorParams:
 
-  /** @group setParam */
+  /**
+   * Note that the loss-based impurity is currently NOT compatible with absolute loss.
+   * @group setParam
+   */
   @Since("1.4.0")
   def setLossType(value: String): this.type = set(lossType, value)
 
@@ -122,7 +138,8 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
-    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+    val boostingStrategy = super.getOldBoostingStrategy(
+      categoricalFeatures, OldAlgo.Regression, getOldImpurity)
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
@@ -141,10 +158,16 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
 @Since("1.4.0")
 object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
-
-  /** Accessor for supported loss settings: squared (L2), absolute (L1) */
+  /**
+   * Accessor for supported loss settings: squared (L2), absolute (L1),
+   * gaussian (alias for squared), laplace (alias for absolute)
+   * */
   @Since("1.4.0")
   final val supportedLossTypes: Array[String] = GBTRegressorParams.supportedLossTypes
+
+  /** Accessor for support entropy settings: loss-based or variance */
+  @Since("2.1")
+  final val supportedImpurities: Array[String] = GBTRegressorParams.supportedImpurities
 
   @Since("2.0.0")
   override def load(path: String): GBTRegressor = super.load(path)
@@ -163,7 +186,7 @@ class GBTRegressionModel private[ml](
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],
     override val numFeatures: Int)
-  extends PredictionModel[Vector, GBTRegressionModel]
+  extends RegressionModel[Vector, GBTRegressionModel]
   with GBTRegressorParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
 
