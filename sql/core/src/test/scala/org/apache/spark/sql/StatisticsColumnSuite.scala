@@ -79,7 +79,7 @@ class StatisticsColumnSuite extends StatisticsTest {
         val tableIdent = TableIdentifier(table, Some("default"))
         val relation = spark.sessionState.catalog.lookupRelation(tableIdent)
         val (_, columnStats) =
-          AnalyzeColumnCommand(tableIdent, columnsToAnalyze).computeColStats(spark, relation)
+          AnalyzeColumnCommand.computeColStats(spark, relation, columnsToAnalyze)
         assert(columnStats.contains(colName1))
         assert(columnStats.contains(colName2))
         // check deduplication
