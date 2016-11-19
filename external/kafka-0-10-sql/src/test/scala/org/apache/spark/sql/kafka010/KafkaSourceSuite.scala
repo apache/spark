@@ -228,105 +228,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
-  test("access offset 0 in Spark job but the topic has been deleted") {
-    KafkaSourceSuite.collectedData.clear()
-
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 1)
-    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray)
-
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("subscribe", topic)
-      // If a topic is deleted and we try to poll data starting from offset 0,
-      // the Kafka consumer will just block until timeout and return an empty result.
-      // So set the timeout to 1 second to make this test fast.
-      .option("kafkaConsumer.pollTimeoutMs", "1000")
-      .option("startingOffsets", "earliest")
-      .option("failOnDataLoss", "false")
-    val kafka = reader.load()
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
-    KafkaSourceSuite.globalTestUtils = testUtils
-    val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
-      override def open(partitionId: Long, version: Long): Boolean = {
-        KafkaSourceSuite.globalTestUtils.deleteTopic(topic)
-        true
-      }
-
-      override def process(value: Int): Unit = {
-        KafkaSourceSuite.collectedData.add(value)
-      }
-
-      override def close(errorOrNull: Throwable): Unit = {}
-    }).start()
-    query.processAllAvailable()
-    assert(KafkaSourceSuite.collectedData.isEmpty)
-    query.stop()
-    // `failOnDataLoss` is `false`, we should not fail the query
-    assert(query.exception.isEmpty)
-  }
-
-  test("access non-zero offset in Spark job but the topic has been deleted") {
-    KafkaSourceSuite.collectedData.clear()
-
-    val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 1)
-    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray)
-
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-      .option("subscribe", topic)
-      .option("startingOffsets", "earliest")
-      .option("failOnDataLoss", "false")
-    val kafka = reader.load()
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
-    KafkaSourceSuite.globalTestUtils = testUtils
-    val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
-
-      private var currentVersion: Long = -1
-
-      override def open(partitionId: Long, version: Long): Boolean = {
-        if (version != 0) {
-          KafkaSourceSuite.globalTestUtils.deleteTopic(topic)
-        }
-        currentVersion = version
-        true
-      }
-
-      override def process(value: Int): Unit = {
-        KafkaSourceSuite.collectedData.add(value)
-      }
-
-      override def close(errorOrNull: Throwable): Unit = {
-        if (currentVersion > 0) {
-          KafkaSourceSuite.collectedData.add(-1)
-        } else {
-          // Let the source create the Spark job
-          KafkaSourceSuite.globalTestUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray)
-        }
-      }
-    }).start()
-    eventually(timeout(streamingTimeout)) {
-      // Make sure the first two batches are done
-      assert(KafkaSourceSuite.collectedData.asScala.lastOption === Some(-1))
-    }
-    // Because `sendMessages` and `deleteTopic` are not atomic, the KafkaConsumer may prefetch some
-    // data between these two operations, which makes the results are indeterminate. So we only
-    // check the first 10 messags.
-    assert(KafkaSourceSuite.collectedData.asScala.take(10) === (1 to 10))
-    query.stop()
-    // `failOnDataLoss` is `false`, we should not fail the query
-    assert(query.exception.isEmpty)
-  }
-
   for (failOnDataLoss <- Seq(true, false)) {
     test(s"assign from latest offsets (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
@@ -548,6 +449,49 @@ class KafkaSourceSuite extends KafkaSourceTest {
         assert(status.sourceStatuses(0).processingRate > 0.0)
       }
     )
+  }
+
+  test("Delete a topic when a Spark job is running") {
+    KafkaSourceSuite.collectedData.clear()
+
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribe", topic)
+      // If a topic is deleted and we try to poll data starting from offset 0,
+      // the Kafka consumer will just block until timeout and return an empty result.
+      // So set the timeout to 1 second to make this test fast.
+      .option("kafkaConsumer.pollTimeoutMs", "1000")
+      .option("startingOffsets", "earliest")
+      .option("failOnDataLoss", "false")
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    KafkaSourceSuite.globalTestUtils = testUtils
+    // The following ForeachWriter will delete the topic before fetching data from Kafka
+    // in executors.
+    val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
+      override def open(partitionId: Long, version: Long): Boolean = {
+        KafkaSourceSuite.globalTestUtils.deleteTopic(topic)
+        true
+      }
+
+      override def process(value: Int): Unit = {
+        KafkaSourceSuite.collectedData.add(value)
+      }
+
+      override def close(errorOrNull: Throwable): Unit = {}
+    }).start()
+    query.processAllAvailable()
+    query.stop()
+    // `failOnDataLoss` is `false`, we should not fail the query
+    assert(query.exception.isEmpty)
   }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
@@ -844,21 +788,28 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
 
     val testTime = 1.minutes
     val startTime = System.currentTimeMillis()
+    // Track the current existing topics
     val topics = mutable.ArrayBuffer[String]()
+    // Track topics that have been deleted
+    val deletedTopics = mutable.Set[String]()
     while (System.currentTimeMillis() - testTime.toMillis < startTime) {
       Random.nextInt(6) match {
-        case 0 =>
+        case 0 => // Create a new topic
           val topic = newTopic()
           topics += topic
           testUtils.createTopic(topic, partitions = 1)
-        case 1 =>
-          if (topics.nonEmpty) {
-            val topic = topics.remove(Random.nextInt(topics.size))
-            testUtils.deleteTopic(topic)
-          }
-        case 2 =>
+        case 1 if topics.nonEmpty => // Delete an existing topic
+          val topic = topics.remove(Random.nextInt(topics.size))
+          testUtils.deleteTopic(topic)
+          deletedTopics += topic
+        case 2 if deletedTopics.nonEmpty => // Recreate a topic that was deleted.
+          val topic = deletedTopics.toSeq(Random.nextInt(deletedTopics.size))
+          deletedTopics -= topic
+          topics += topic
+          testUtils.createTopic(topic, partitions = 1)
+        case 3 =>
           Thread.sleep(100)
-        case _ =>
+        case _ => // Push random messages
           for (topic <- topics) {
             val size = Random.nextInt(10)
             for (_ <- 0 until size) {

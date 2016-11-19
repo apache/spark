@@ -54,15 +54,17 @@ private[kafka010] case class CachedKafkaConsumer private(
   private var nextOffsetInFetchedData = UNKNOWN_OFFSET
 
   /**
-   * Get the record for the given offset, waiting up to timeout ms if IO is necessary.
-   * Sequential forward access will use buffers, but random access will be horribly inefficient.
+   * Get the record for the given offset if available. Otherwise it will either throw error
+   * (if failOnDataLoss = true), or return the next available offset within [offset, untilOffset).
    *
-   * When `failOnDataLoss` is `true`, this will either return record at offset if available, or
-   * throw exception.
-   *
-   * When `failOnDataLoss` is `false`, this will either return record at offset if available, or
-   * return the next earliest available record less than untilOffset, or null. It will not throw
-   * any exception.
+   * @param offset the offset to fetch.
+   * @param untilOffset the max offset to fetch. Exclusive.
+   * @param pollTimeoutMs timeout in milliseconds to poll data from Kafka.
+   * @param failOnDataLoss When `failOnDataLoss` is `true`, this method will either return record at
+   *                       offset if available, or throw exception.when `failOnDataLoss` is `false`,
+   *                       this method will either return record at offset if available, or return
+   *                       the next earliest available record less than untilOffset, or null. It
+   *                       will not throw any exception.
    */
   def get(
       offset: Long,
@@ -75,8 +77,21 @@ private[kafka010] case class CachedKafkaConsumer private(
     var toFetchOffset = offset
     while (toFetchOffset != UNKNOWN_OFFSET) {
       try {
-        val record = fetchData(toFetchOffset, untilOffset, pollTimeoutMs, failOnDataLoss)
+        val record = fetchData(toFetchOffset, pollTimeoutMs)
         if (record == null) {
+          // We cannot fetch anything after `poll`. Two possible cases:
+          // - `earliestOffset` is `offset` but there is nothing for `earliestOffset` right now.
+          // - Cannot fetch any data before timeout.
+          // Because there is no way to distinguish, just skip the rest offsets in the current
+          // partition.
+          val message =
+            if (failOnDataLoss) {
+              s"Cannot fetch record for offset $offset"
+            } else {
+              s"Cannot fetch record for offset $offset. " +
+                s"Records in [$offset, $untilOffset) will be skipped"
+            }
+          reportDataLoss(failOnDataLoss, message)
           reset()
         }
         return record
@@ -90,7 +105,7 @@ private[kafka010] case class CachedKafkaConsumer private(
                 "Recovering from the earliest offset"
             }
           reportDataLoss(failOnDataLoss, message, e)
-          toFetchOffset = getNextEarliestOffset(toFetchOffset, untilOffset)
+          toFetchOffset = getEarliestAvailableOffsetBetween(toFetchOffset, untilOffset)
       }
     }
     reset()
@@ -102,7 +117,7 @@ private[kafka010] case class CachedKafkaConsumer private(
    * [offset, untilOffset) are invalid (e.g., the topic is deleted and recreated), it will return
    * `UNKNOWN_OFFSET`.
    */
-  private def getNextEarliestOffset(offset: Long, untilOffset: Long): Long = {
+  private def getEarliestAvailableOffsetBetween(offset: Long, untilOffset: Long): Long = {
     val (earliestOffset, latestOffset) = getAvailableOffsetRange()
     if (offset >= latestOffset || earliestOffset >= untilOffset) {
       // [offset, untilOffset) and [earliestOffset, latestOffset) have no overlap,
@@ -154,14 +169,11 @@ private[kafka010] case class CachedKafkaConsumer private(
   }
 
   /**
-   * Get the earliest record in [offset, untilOffset). If there is not such record, return null and
-   * clear the fetched data.
+   * Get the record at `offset`. If there is not such record, return null.
    */
   private def fetchData(
       offset: Long,
-      untilOffset: Long,
-      pollTimeoutMs: Long,
-      failOnDataLoss: Boolean): ConsumerRecord[Array[Byte], Array[Byte]] = {
+      pollTimeoutMs: Long): ConsumerRecord[Array[Byte], Array[Byte]] = {
     if (offset != nextOffsetInFetchedData || !fetchedData.hasNext()) {
       // This is the first fetch, or the last pre-fetched data has been drained.
       // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
@@ -170,19 +182,6 @@ private[kafka010] case class CachedKafkaConsumer private(
     }
 
     if (!fetchedData.hasNext()) {
-      // We cannot fetch anything after `poll`. Two possible cases:
-      // - `earliestOffset` is `offset` but there is nothing for `earliestOffset` right now.
-      // - Cannot fetch any data before timeout.
-      // Because there is no way to distinguish, just skip the rest offsets in the current
-      // partition.
-      val message =
-        if (failOnDataLoss) {
-          s"Cannot fetch record for offset $offset"
-        } else {
-          s"Cannot fetch record for offset $offset. " +
-            s"Records in [$offset, $untilOffset) will be skipped"
-        }
-      reportDataLoss(failOnDataLoss, message)
       null
     } else {
       val record = fetchedData.next()

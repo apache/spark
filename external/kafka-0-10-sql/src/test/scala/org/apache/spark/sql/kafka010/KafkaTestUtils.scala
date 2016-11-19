@@ -302,7 +302,9 @@ class KafkaTestUtils extends Logging {
         }
         checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))
       })
-      deletePath && topicPath && replicaManager && logManager && cleaner
+      // ensure the topic is gone
+      val deleted = !zkUtils.getAllTopics().contains(topic)
+      deletePath && topicPath && replicaManager && logManager && cleaner && deleted
     }
     eventually(timeout(10.seconds)) {
       assert(isDeleted, s"$topic not deleted after timeout")
