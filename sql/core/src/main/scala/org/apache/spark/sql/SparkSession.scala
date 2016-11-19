@@ -652,7 +652,7 @@ class SparkSession private(
   /**
    * Synonym for `stop()`.
    *
-   * @since 2.2.0
+   * @since 2.1.0
    */
   override def close(): Unit = stop()
 
