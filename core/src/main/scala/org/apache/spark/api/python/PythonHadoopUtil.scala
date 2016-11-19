@@ -106,7 +106,7 @@ private[python] class WritableToJavaConverter(
 }
 
 /**
- * A converter that converts common types to [[org.apache.hadoop.io.Writable]]. Note that array
+ * A converter that converts common types to [[org.apache.hadoop.io.Writable]]. @note Array
  * types are not supported since the user needs to subclass [[org.apache.hadoop.io.ArrayWritable]]
  * to set the type properly. See [[org.apache.spark.api.python.DoubleArrayWritable]] and
  * [[org.apache.spark.api.python.DoubleArrayToWritableConverter]] for an example. They are used in
@@ -115,7 +115,7 @@ private[python] class WritableToJavaConverter(
 private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
 
   /**
-   * Converts common data types to [[org.apache.hadoop.io.Writable]]. Note that array types are not
+   * Converts common data types to [[org.apache.hadoop.io.Writable]]. @note Array types are not
    * supported out-of-the-box.
    */
   private def convertToWritable(obj: Any): Writable = {

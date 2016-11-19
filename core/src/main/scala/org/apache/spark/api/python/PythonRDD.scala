@@ -760,7 +760,7 @@ private[spark] object PythonRDD extends Logging {
 
   /**
    * Output a Python RDD of key-value pairs as a Hadoop SequenceFile using the Writable types
-   * we convert from the RDD's key and value types. Note that keys and values can't be
+   * we convert from the RDD's key and value types. @note Keys and values can't be
    * [[org.apache.hadoop.io.Writable]] types already, since Writables are not Java
    * `Serializable` and we can't peek at them. The `path` can be on any Hadoop file system.
    */
