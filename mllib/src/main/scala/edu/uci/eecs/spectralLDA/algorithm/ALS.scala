@@ -23,30 +23,31 @@ package edu.uci.eecs.spectralLDA.algorithm
 * Created by Furong Huang on 11/2/15.
 */
 
-import edu.uci.eecs.spectralLDA.utils.{AlgebraUtil, TensorOps}
-import breeze.linalg.{*, DenseMatrix, DenseVector, diag, inv, max, min, norm, qr}
+import breeze.linalg.{*, diag, norm, qr, DenseMatrix, DenseVector}
 import breeze.stats.distributions.{Gaussian, Rand, RandBasis}
+import edu.uci.eecs.spectralLDA.utils.{AlgebraUtil, TensorOps}
+
 
 /** Tensor decomposition by Alternating Least Square (ALS)
-  *
-  * Suppose dimK-by-dimK-by-dimK symmetric tensor T can be decomposed as sum of rank-1 tensors
-  *
-  * $$ T = \sum_{i=1}^{dimK} \lambda_i a_i\otimes b_i\otimes c_i $$
-  *
-  * If we pool all \lambda_i in the vector \Lambda, all the column vectors \lambda_i a_i in A,
-  * b_i in B, c_i in C, then
-  *
-  * $$ T^{1} = A \diag(\Lambda)(C \khatri-rao product B)^{\top} $$
-  *
-  * where T^{1} is a dimK-by-(dimK^2) matrix for the unfolded T.
-  *
-  * @param dimK               tensor T is of shape dimK-by-dimK-by-dimK
-  * @param thirdOrderMoments  dimK-by-(dimK*dimK) matrix for the unfolded 3rd-order moments
-  *                           $\sum_{i=1}^k\alpha_i\beta_i^{\otimes 3}$
-  * @param maxIterations      max iterations for the ALS algorithm
-  * @param tol                tolerance. the dot product threshold is 1-tol
-  * @param restarts           number of restarts of the ALS loop
-  */
+ *
+ * Suppose dimK-by-dimK-by-dimK symmetric tensor T can be decomposed as sum of rank-1 tensors
+ *
+ * $$ T = \sum_{i=1}^{dimK} \lambda_i a_i\otimes b_i\otimes c_i $$
+ *
+ * If we pool all \lambda_i in the vector \Lambda, all the column vectors \lambda_i a_i in A,
+ * b_i in B, c_i in C, then
+ *
+ * $$ T^{1} = A \diag(\Lambda)(C \khatri-rao product B)^{\top} $$
+ *
+ * where T^{1} is a dimK-by-(dimK^2) matrix for the unfolded T.
+ *
+ * @param dimK               tensor T is of shape dimK-by-dimK-by-dimK
+ * @param thirdOrderMoments  dimK-by-(dimK*dimK) matrix for the unfolded 3rd-order moments
+ *                           $\sum_{i=1}^k\alpha_i\beta_i^{\otimes 3}$
+ * @param maxIterations      max iterations for the ALS algorithm
+ * @param tol                tolerance. the dot product threshold is 1-tol
+ * @param restarts           number of restarts of the ALS loop
+ */
 class ALS(dimK: Int,
           thirdOrderMoments: DenseMatrix[Double],
           maxIterations: Int = 500,
@@ -62,16 +63,16 @@ class ALS(dimK: Int,
   assert(restarts > 0, "Number of restarts for ALS must be positive.")
 
   /** Run Alternating Least Squares (ALS)
-    *
-    * Compute the best approximating rank-$k$ tensor $\sum_{i=1}^k\alpha_i\beta_i^{\otimes 3}$
-    *
-    * @param randBasis   default random seed
-    * @return            three dimK-by-dimK matrices with all the $beta_i$ as columns,
-    *                    length-dimK vector for all the eigenvalues
-    */
+   *
+   * Compute the best approximating rank-$k$ tensor $\sum_{i=1}^k\alpha_i\beta_i^{\otimes 3}$
+   *
+   * @param randBasis   default random seed
+   * @return            three dimK-by-dimK matrices with all the $beta_i$ as columns,
+   *                    length-dimK vector for all the eigenvalues
+   */
   def run(implicit randBasis: RandBasis = Rand)
      : (DenseMatrix[Double], DenseMatrix[Double],
-        DenseMatrix[Double], DenseVector[Double])={
+        DenseMatrix[Double], DenseVector[Double]) = {
     val gaussian = Gaussian(mu = 0.0, sigma = 1.0)
 
     var optimalA = DenseMatrix.zeros[Double](dimK, dimK)
@@ -94,7 +95,6 @@ class ALS(dimK: Int,
       var A_prev = DenseMatrix.zeros[Double](dimK, dimK)
       var lambda: breeze.linalg.DenseVector[Double] = DenseVector.zeros[Double](dimK)
 
-      println("Start ALS iterations...")
       var iter: Int = 0
       while ((iter == 0) || (iter < maxIterations &&
         !AlgebraUtil.isConverged(A_prev, A, dotProductThreshold = 1 - tol))) {
@@ -112,14 +112,11 @@ class ALS(dimK: Int,
         C = updatedC
         lambda = updatedLambda3
 
-        println(s"iter $iter\tlambda: max ${max(lambda)}, min ${min(lambda)}")
-
         iter += 1
       }
-      println("Finished ALS iterations.")
 
-      reconstructedLoss = TensorOps.dmatrixNorm(thirdOrderMoments - A * diag(lambda) * TensorOps.krprod(C, B).t)
-      println(s"Reconstructed loss: $reconstructedLoss\tOptimal reconstructed loss: $optimalReconstructedLoss")
+      reconstructedLoss = TensorOps.dmatrixNorm(thirdOrderMoments
+        - A * diag(lambda) * TensorOps.krprod(C, B).t)
 
       if (reconstructedLoss < optimalReconstructedLoss) {
         optimalA = A
@@ -135,9 +132,10 @@ class ALS(dimK: Int,
 
   private def updateALSIteration(unfoldedM3: DenseMatrix[Double],
                                  B: DenseMatrix[Double],
-                                 C: DenseMatrix[Double]): (DenseMatrix[Double], DenseVector[Double]) = {
+                                 C: DenseMatrix[Double]
+                                ): (DenseMatrix[Double], DenseVector[Double]) = {
     val updatedA = unfoldedM3 * TensorOps.krprod(C, B) * TensorOps.to_invert(C, B)
-    val lambda = norm(updatedA(::, *)).toDenseVector
+    val lambda = norm(updatedA(::, *)).t.toDenseVector
     (AlgebraUtil.matrixNormalization(updatedA), lambda)
   }
 }

@@ -22,46 +22,47 @@ package edu.uci.eecs.spectralLDA.datamoments
  * Created by Furong Huang on 11/2/15.
  */
 
-import edu.uci.eecs.spectralLDA.utils.{RandNLA, TensorOps}
 import breeze.linalg._
 import breeze.numerics._
 import breeze.stats.distributions.{Rand, RandBasis}
 import edu.uci.eecs.spectralLDA.textprocessing.TextProcessor
+import edu.uci.eecs.spectralLDA.utils.{RandNLA, TensorOps}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 
 
 /** Data cumulant
-  *
-  * Let the truncated eigendecomposition of the shifted M2 be
-  *
-  * $$M2 = U\Sigma U^T,$$
-  *
-  * where $M2\in\mathsf{R}^{V\times V}$, $U\in\mathsf{R}^{V\times k}$,
-  * $\Sigma\in\mathsf{R}^{k\times k}$, $V$ is the vocabulary size,
-  * $k$ is the number of topics, $k<V$.
-  *
-  * If we denote $W=U\Sigma^{-1/2}$, then $W^T M2 W\approx I$. We call $W$ the whitening matrix.
-  *
-  * $W$ could be used to whiten the shifted M3,
-  *
-  * $$ \frac{\alpha_0(\alpha_0+1)(\alpha_0+2)}{2} M3(W^T,W^T,W^T)
-  *       = \sum_{i=1}^k\alpha_i(W^T\mu_i)^{\otimes 3}
-  *       = \sum_{i=1}^k\alpha_i^{-1/2}(W^T\alpha_i^{1/2}\mu_i)^{\otimes 3} $$
-  *
-  * Note $W^T\alpha_i^{1/2}\mu_i$ are orthonormal, for all $1\le i\le k$.
-  *
-  * @param thirdOrderMoments Scaled whitened M3, precisely,
-  *                            $\frac{\alpha_0(\alpha_0+1)(\alpha_0+2)}{2} M3(W^T,W^T,W^T)$
-  * @param eigenVectorsM2   V-by-k top eigenvectors of shifted M2, stored column-wise
-  * @param eigenValuesM2    length-k top eigenvalues of shifted M2
-  * @param firstOrderMoments  average of term count frequencies M1
-  *
-  * REFERENCES
-  * [Wang2015] Wang Y et al, Fast and Guaranteed Tensor Decomposition via Sketching, 2015,
-  *            http://arxiv.org/abs/1506.04448
-  *
-  */
+ *
+ * Let the truncated eigendecomposition of the shifted M2 be
+ *
+ * $$M2 = U\Sigma U^T,$$
+ *
+ * where $M2\in\mathsf{R}^{V\times V}$, $U\in\mathsf{R}^{V\times k}$,
+ * $\Sigma\in\mathsf{R}^{k\times k}$, $V$ is the vocabulary size,
+ * $k$ is the number of topics, $k<V$.
+ *
+ * If we denote $W=U\Sigma^{-1/2}$, then $W^T M2 W\approx I$. We call $W$ the whitening matrix.
+ *
+ * $W$ could be used to whiten the shifted M3,
+ *
+ * $$ \frac{\alpha_0(\alpha_0+1)(\alpha_0+2)}{2} M3(W^T,W^T,W^T)
+ *       = \sum_{i=1}^k\alpha_i(W^T\mu_i)^{\otimes 3}
+ *       = \sum_{i=1}^k\alpha_i^{-1/2}(W^T\alpha_i^{1/2}\mu_i)^{\otimes 3} $$
+ *
+ * Note $W^T\alpha_i^{1/2}\mu_i$ are orthonormal, for all $1\le i\le k$.
+ *
+ * @param thirdOrderMoments Scaled whitened M3, precisely,
+ *                            $\frac{\alpha_0(\alpha_0+1)(\alpha_0+2)}{2} M3(W^T,W^T,W^T)$
+ * @param eigenVectorsM2   V-by-k top eigenvectors of shifted M2, stored column-wise
+ * @param eigenValuesM2    length-k top eigenvalues of shifted M2
+ * @param firstOrderMoments  average of term count frequencies M1
+ *
+ * REFERENCES
+ * [Wang2015] Wang Y et al, Fast and Guaranteed Tensor Decomposition via Sketching, 2015,
+ *            http://arxiv.org/abs/1506.04448
+ *
+ */
 case class DataCumulant(thirdOrderMoments: DenseMatrix[Double],
                         eigenVectorsM2: DenseMatrix[Double],
                         eigenValuesM2: DenseVector[Double],
@@ -99,7 +100,6 @@ object DataCumulant {
     val dimVocab = validDocuments.map(_._3.length).take(1)(0)
     val numDocs = validDocuments.count()
 
-    println("Start calculating first order moments...")
     val (m1Index: Array[Int], m1Value: Array[Double]) = validDocuments
       .flatMap {
         case (_, length, vec) =>
@@ -115,9 +115,6 @@ object DataCumulant {
 
     // Zero out the terms with low IDF
     firstOrderMoments(termsLowIDF) := 0.0
-    println("Finished calculating first order moments.")
-
-    println("Start calculating second order moments...")
     val (eigenVectors: DenseMatrix[Double], eigenValues: DenseVector[Double]) =
       if (randomisedSVD) {
         RandNLA.whiten2(
@@ -138,31 +135,28 @@ object DataCumulant {
           }
           .reduce(_ + _)
           .map(_ / numDocs.toDouble).toDenseMatrix
-        val M2: DenseMatrix[Double] = E_x1_x2 - alpha0 / (alpha0 + 1) * (firstOrderMoments * firstOrderMoments.t)
+        val M2: DenseMatrix[Double] = (E_x1_x2
+          - alpha0 / (alpha0 + 1) * (firstOrderMoments * firstOrderMoments.t))
         M2(termsLowIDF, ::) := 0.0
         M2(::, termsLowIDF) := 0.0
 
         val eigSym.EigSym(sigma, u) = eigSym(alpha0 * (alpha0 + 1) * M2)
         val i = argsort(sigma)
-        (u(::, i.slice(dimVocab - dimK, dimVocab)).copy, sigma(i.slice(dimVocab - dimK, dimVocab)).copy)
+        (u(::, i.slice(dimVocab - dimK, dimVocab)).copy,
+          sigma(i.slice(dimVocab - dimK, dimVocab)).copy)
       }
-    println("Finished calculating second order moments and whitening matrix.")
 
     val m2ConditionNumber: Double = max(eigenValues) / min(eigenValues)
     if (m2ConditionNumber > m2ConditionNumberUB) {
-      println(s"ERROR: Shifted M2 top $dimK eigenvalues: $eigenValues")
-      println(s"ERROR: Shifted M2 condition number: $m2ConditionNumber > UB $m2ConditionNumberUB")
       sys.exit(2)
     }
 
-    println("Start whitening data with dimensionality reduction...")
     val W: DenseMatrix[Double] = eigenVectors * diag(eigenValues map { x => 1 / (sqrt(x) + 1e-9) })
-    println("Finished whitening data.")
+
 
     // We computing separately the first order, second order, 3rd order terms in Eq (25) (26)
     // in [Wang2015]. For the 2nd order, 3rd order terms, We'd achieve maximum performance with
     // reduceByKey() of w_i, 1\le i\le V, the rows of the whitening matrix W.
-    println("Start calculating third order moments...")
     val firstOrderMoments_whitened = W.t * firstOrderMoments
     val broadcasted_W = sc.broadcast[DenseMatrix[Double]](W)
 
@@ -220,16 +214,13 @@ object DataCumulant {
       .map(_ / numDocs.toDouble)
 
     // sketch of q=W^T M1
-    val q_otimes_3 = 2 * alpha0 * alpha0 / ((alpha0 + 1) * (alpha0 + 2)) * TensorOps.makeRankOneTensor3d(
-      firstOrderMoments_whitened, firstOrderMoments_whitened, firstOrderMoments_whitened
-    )
+    val q_otimes_3 = (2 * alpha0 * alpha0 / ((alpha0 + 1) * (alpha0 + 2))
+      * TensorOps.makeRankOneTensor3d(firstOrderMoments_whitened,
+      firstOrderMoments_whitened, firstOrderMoments_whitened))
 
     broadcasted_W.unpersist()
 
     val whitenedM3 = m3FirstOrderPart + m3SecondOrderPart + m3ThirdOrderPart + q_otimes_3
-    println("Finished calculating third order moments.")
-
-    // val unwhiteningMatrix: breeze.linalg.DenseMatrix[Double] = eigenVectors * breeze.linalg.diag(eigenValues.map(x => scala.math.sqrt(x)))
 
     new DataCumulant(
       whitenedM3 * alpha0 * (alpha0 + 1) * (alpha0 + 2) / 2.0,

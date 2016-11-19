@@ -18,40 +18,41 @@
 
 package edu.uci.eecs.spectralLDA.utils
 
+import breeze.linalg.{argtopk, eigSym, qr, DenseMatrix, DenseVector, SparseVector}
 import breeze.linalg.eigSym.EigSym
 import breeze.linalg.qr.QR
-import breeze.linalg.{DenseMatrix, DenseVector, SparseVector, argtopk, cholesky, eigSym, inv, qr, svd}
-import breeze.numerics.{pow, sqrt}
+import breeze.numerics.sqrt
 import breeze.stats.distributions.{Gaussian, Rand, RandBasis}
+
 import org.apache.spark.rdd.RDD
 
 
 object RandNLA {
   /** Randomised Power Iteration Method for SVD of shifted M2
-    *
-    * As the shifted M2 is of size V-by-V, where V is the vocabulary size, which could be
-    * very large, we carry out Randomised Power Iteration Method for computing the SVD of it
-    * following Musco & Musco 2016. The Nystrom decomposition is also implemented but it
-    * gives much worse empirical performance than Musco & Musco 2016.
-    *
-    * Ref:
-    * Halko, N, P.G. Martinsson, & J.A. Tropp, Finding Structure with Randomness:
-    * Probabilistic Algorithms for Constructing Approximate Matrix Decompositions, 2011
-    * Gu, Ming, Subspace Iteration Randomization and Singular Value Problems, 2014
-    * Musco, Cameron, & Christopher Musco, Randomized Block Krylov Methods for Stronger
-    * and Faster Approximate Singular Value Decomposition, 2016
-    *
-    * @param alpha0     sum of alpha, the Dirichlet prior vector
-    * @param vocabSize  V: the vocabulary size
-    * @param dimK       K: number of topics
-    * @param numDocs    number of documents
-    * @param firstOrderMoments   average of the word count vectors
-    * @param documents  RDD of the documents
-    * @param nIter      number of iterations for the Randomised Power Iteration method,
-    *                   denoted by q in the Algorithm 1 & 2 in the ref paper
-    * @param randBasis  the random seed
-    * @return           V-by-K eigenvector matrix and length-K eigenvalue vector
-    */
+   *
+   * As the shifted M2 is of size V-by-V, where V is the vocabulary size, which could be
+   * very large, we carry out Randomised Power Iteration Method for computing the SVD of it
+   * following Musco & Musco 2016. The Nystrom decomposition is also implemented but it
+   * gives much worse empirical performance than Musco & Musco 2016.
+   *
+   * Ref:
+   * Halko, N, P.G. Martinsson, & J.A. Tropp, Finding Structure with Randomness:
+   * Probabilistic Algorithms for Constructing Approximate Matrix Decompositions, 2011
+   * Gu, Ming, Subspace Iteration Randomization and Singular Value Problems, 2014
+   * Musco, Cameron, & Christopher Musco, Randomized Block Krylov Methods for Stronger
+   * and Faster Approximate Singular Value Decomposition, 2016
+   *
+   * @param alpha0     sum of alpha, the Dirichlet prior vector
+   * @param vocabSize  V: the vocabulary size
+   * @param dimK       K: number of topics
+   * @param numDocs    number of documents
+   * @param firstOrderMoments   average of the word count vectors
+   * @param documents  RDD of the documents
+   * @param nIter      number of iterations for the Randomised Power Iteration method,
+   *                   denoted by q in the Algorithm 1 & 2 in the ref paper
+   * @param randBasis  the random seed
+   * @return           V-by-K eigenvector matrix and length-K eigenvalue vector
+   */
   def whiten2(alpha0: Double,
               vocabSize: Int,
               dimK: Int,
@@ -108,21 +109,21 @@ object RandNLA {
   }
 
   /** Musco-Musco method for randomised eigendecomposition of Hermitian matrix
-    *
-    * We could first do the eigendecomposition (AQ)^* AQ=USU^*. If A=HKH^*; apparently
-    * K=S^{1/2}, H=QU.
-    *
-    * Empirically for the Spectral LDA model, this decomposition algorithm often
-    * gives better final results than the Nystrom method.
-    *
-    * Ref:
-    * Musco, Cameron, & Christopher Musco, Randomized Block Krylov Methods for Stronger
-    * and Faster Approximate Singular Value Decomposition, 2016
-    *
-    * @param aq product of the original n-by-n matrix A and a n-by-k test matrix
-    * @param q  the n-by-k test matrix
-    * @return   the top k eigenvalues, top k eigenvectors of the original matrix A
-    */
+   *
+   * We could first do the eigendecomposition (AQ)^* AQ=USU^*. If A=HKH^*; apparently
+   * K=S^{1/2}, H=QU.
+   *
+   * Empirically for the Spectral LDA model, this decomposition algorithm often
+   * gives better final results than the Nystrom method.
+   *
+   * Ref:
+   * Musco, Cameron, & Christopher Musco, Randomized Block Krylov Methods for Stronger
+   * and Faster Approximate Singular Value Decomposition, 2016
+   *
+   * @param aq product of the original n-by-n matrix A and a n-by-k test matrix
+   * @param q  the n-by-k test matrix
+   * @return   the top k eigenvalues, top k eigenvectors of the original matrix A
+   */
   def decomp2(aq: DenseMatrix[Double],
               q: DenseMatrix[Double])
       : (DenseVector[Double], DenseMatrix[Double]) = {
@@ -179,12 +180,12 @@ object RandNLA {
 
 
   /** Return the contribution of a document to M2, multiplied by the test matrix
-    *
-    * @param S   n-by-k test matrix
-    * @param Wc  length-n word count vector
-    * @param len total word count
-    * @return    M2*S, i.e (Wc*Wc.t-diag(Wc))/(len*(len-1.0))*S
-    */
+   *
+   * @param S   n-by-k test matrix
+   * @param Wc  length-n word count vector
+   * @param len total word count
+   * @return    M2*S, i.e (Wc*Wc.t-diag(Wc))/(len*(len-1.0))*S
+   */
   private[utils] def accumulate_M_mul_S(S: breeze.linalg.DenseMatrix[Double],
                                         Wc: breeze.linalg.SparseVector[Double],
                                         len: Double)

@@ -23,14 +23,14 @@ package edu.uci.eecs.spectralLDA.utils
  */
 
 import breeze.linalg._
-import scalaxy.loops._
 import scala.language.postfixOps
+import scalaxy.loops._
+
 
 object AlgebraUtil {
-
   def matrixNormalization(B: DenseMatrix[Double]): DenseMatrix[Double] = {
     val A: DenseMatrix[Double] = B.copy
-    val colNorms: DenseVector[Double] = norm(A(::, *)).toDenseVector
+    val colNorms: DenseVector[Double] = norm(A(::, *)).t.toDenseVector
 
     for (i <- 0 until A.cols optimized) {
       A(::, i) :/= colNorms(i)
@@ -46,7 +46,6 @@ object AlgebraUtil {
     }
 
     val dprod = diag(oldA.t * newA)
-    println(s"dot(oldA, newA): ${diag(oldA.t * newA)}")
 
     all(dprod :> dotProductThreshold)
   }
@@ -54,5 +53,4 @@ object AlgebraUtil {
   def Cumsum(xs: Array[Double]): Array[Double] = {
     xs.scanLeft(0.0)(_ + _).tail
   }
-  
 }

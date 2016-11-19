@@ -18,22 +18,22 @@
 
 package edu.uci.eecs.spectralLDA.utils
 
-import breeze.linalg.{*, CSCMatrix, Counter, DenseMatrix, DenseVector, SparseVector, Tensor, norm}
+import breeze.linalg.{*, norm, CSCMatrix, DenseMatrix, DenseVector, SparseVector}
+import breeze.linalg.{Counter, Tensor}
 import breeze.math.{Complex, Semiring}
 import breeze.storage.Zero
-
 import scala.reflect.ClassTag
 
 
 object TensorOps {
   /** Complex matrix norm */
   def matrixNorm(m: DenseMatrix[Complex]): Double = {
-    norm(norm(m(::, *)).toDenseVector)
+    norm(norm(m(::, *)).t.toDenseVector)
   }
 
   /** Double matrix norm */
   def dmatrixNorm(m: DenseMatrix[Double]): Double = {
-    norm(norm(m(::, *)).toDenseVector)
+    norm(norm(m(::, *)).t.toDenseVector)
   }
 
   /** Unfold 3rd-order tensor */
@@ -108,3 +108,4 @@ object TensorOps {
     prod
   }
 }
+
