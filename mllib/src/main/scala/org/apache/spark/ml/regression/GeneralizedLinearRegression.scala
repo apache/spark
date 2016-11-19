@@ -879,8 +879,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
    * Private copy of model to ensure Params are not modified outside this class.
    * Coefficients is not a deep copy, but that is acceptable.
    *
-   * NOTE: [[predictionCol]] must be set correctly before the value of [[model]] is set,
-   *       and [[model]] must be set before [[predictions]] is set!
+   * @note [[predictionCol]] must be set correctly before the value of [[model]] is set,
+   * and [[model]] must be set before [[predictions]] is set!
    */
   protected val model: GeneralizedLinearRegressionModel =
     origModel.copy(ParamMap.empty).setPredictionCol(predictionCol)

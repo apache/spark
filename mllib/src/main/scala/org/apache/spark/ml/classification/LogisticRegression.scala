@@ -1191,8 +1191,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
    * See http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
@@ -1200,8 +1200,8 @@ class BinaryLogisticRegressionSummary private[classification] (
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
@@ -1210,8 +1210,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Returns the precision-recall curve, which is a Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
@@ -1219,8 +1219,8 @@ class BinaryLogisticRegressionSummary private[classification] (
   /**
    * Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val fMeasureByThreshold: DataFrame = {
@@ -1232,8 +1232,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val precisionByThreshold: DataFrame = {
@@ -1245,8 +1245,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the recall.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val recallByThreshold: DataFrame = {
@@ -1401,18 +1401,18 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    $$
  * </blockquote></p>
  *
- * @note In order to avoid unnecessary computation during calculation of the gradient updates
- *       we lay out the coefficients in column major order during training. This allows us to
- *       perform feature standardization once, while still retaining sequential memory access
- *       for speed. We convert back to row major order when we create the model,
- *       since this form is optimal for the matrix operations used for prediction.
- *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
  * @param multinomial Whether to use multinomial (softmax) or binary loss
+ *
+ * @note In order to avoid unnecessary computation during calculation of the gradient updates
+ * we lay out the coefficients in column major order during training. This allows us to
+ * perform feature standardization once, while still retaining sequential memory access
+ * for speed. We convert back to row major order when we create the model,
+ * since this form is optimal for the matrix operations used for prediction.
  */
 private class LogisticAggregator(
     bcCoefficients: Broadcast[Vector],
