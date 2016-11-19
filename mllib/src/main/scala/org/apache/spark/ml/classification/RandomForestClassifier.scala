@@ -158,7 +158,7 @@ class RandomForestClassificationModel private[ml] (
     @Since("1.6.0") override val numFeatures: Int,
     @Since("1.5.0") override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
-  with RandomForestClassificationModelParams with TreeEnsembleModel[DecisionTreeClassificationModel]
+  with RandomForestClassifierParams with TreeEnsembleModel[DecisionTreeClassificationModel]
   with MLWritable with Serializable {
 
   require(_trees.nonEmpty, "RandomForestClassificationModel requires at least 1 tree.")

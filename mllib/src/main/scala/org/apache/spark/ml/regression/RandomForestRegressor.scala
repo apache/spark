@@ -144,7 +144,7 @@ class RandomForestRegressionModel private[ml] (
     private val _trees: Array[DecisionTreeRegressionModel],
     override val numFeatures: Int)
   extends PredictionModel[Vector, RandomForestRegressionModel]
-  with RandomForestRegressionModelParams with TreeEnsembleModel[DecisionTreeRegressionModel]
+  with RandomForestRegressorParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
 
   require(_trees.nonEmpty, "RandomForestRegressionModel requires at least 1 tree.")

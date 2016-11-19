@@ -183,6 +183,11 @@ class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees
 
+  /**
+   * Number of trees in ensemble
+   */
+  val getNumTrees: Int = trees.length
+
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
