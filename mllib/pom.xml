@@ -113,6 +113,11 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.nativelibs4java</groupId>
+      <artifactId>scalaxy-loops_${scala.binary.version}</artifactId>
+      <version>0.3.4</version>
+    </dependency>
   </dependencies>
   <profiles>
     <profile>
