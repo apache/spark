@@ -96,7 +96,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
     )
   }
 
-  ignore("recovery") {
+  test("recovery") {
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()

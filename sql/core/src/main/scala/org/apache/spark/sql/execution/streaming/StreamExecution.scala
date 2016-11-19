@@ -151,7 +151,7 @@ class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
+  val offsetLog = new StreamExecutionProgressLog(sparkSession, checkpointFile("offsets"))
 
   /** Whether the query is currently active or not */
   override def isActive: Boolean = state == ACTIVE
@@ -284,20 +284,22 @@ class StreamExecution(
    */
   private def populateStartOffsets(): Unit = {
     offsetLog.getLatest() match {
-      case Some((batchId, nextOffsets)) =>
+      case Some((batchId, nextProgress)) =>
         logInfo(s"Resuming streaming query, starting with batch $batchId")
         currentBatchId = batchId
-        availableOffsets = nextOffsets.toStreamProgress(sources)
+        availableOffsets = nextProgress.offsetSeq.toStreamProgress(sources)
+        currentEventTimeWatermark = nextProgress.watermark
         logDebug(s"Found possibly uncommitted offsets $availableOffsets")
 
         offsetLog.get(batchId - 1).foreach {
-          case lastOffsets =>
-            committedOffsets = lastOffsets.toStreamProgress(sources)
+          case latestProgress =>
+            committedOffsets = latestProgress.offsetSeq.toStreamProgress(sources)
             logDebug(s"Resuming with committed offsets: $committedOffsets")
         }
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
+        currentEventTimeWatermark = 0
         constructNextBatch()
     }
   }
@@ -345,7 +347,12 @@ class StreamExecution(
     }
     if (hasNewData) {
       reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
-        assert(offsetLog.add(currentBatchId, availableOffsets.toOffsetSeq(sources)),
+        assert(
+          offsetLog.add(
+            currentBatchId,
+            new StreamExecutionProgress(
+              availableOffsets.toOffsetSeq(sources),
+              currentEventTimeWatermark)),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
         logInfo(s"Committed offsets for batch $currentBatchId.")
 
@@ -357,7 +364,7 @@ class StreamExecution(
         // sources to discard data from the previous batch.
         val prevBatchOff = offsetLog.get(currentBatchId - 1)
         if (prevBatchOff.isDefined) {
-          prevBatchOff.get.toStreamProgress(sources).foreach {
+          prevBatchOff.get.offsetSeq.toStreamProgress(sources).foreach {
             case (src, off) => src.commit(off)
           }
         }
