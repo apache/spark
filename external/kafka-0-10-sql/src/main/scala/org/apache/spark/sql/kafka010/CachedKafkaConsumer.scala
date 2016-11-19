@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
 
@@ -41,17 +42,20 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   private val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
-  private val consumer = {
+  private var consumer = createConsumer
+
+  /** Iterator to the already fetch data */
+  private var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
+  private var nextOffsetInFetchedData = UNKNOWN_OFFSET
+
+  /** Create a KafkaConsumer to fetch records for `topicPartition` */
+  private def createConsumer: KafkaConsumer[Array[Byte], Array[Byte]] = {
     val c = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
     val tps = new ju.ArrayList[TopicPartition]()
     tps.add(topicPartition)
     c.assign(tps)
     c
   }
-
-  /** Iterator to the already fetch data */
-  private var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
-  private var nextOffsetInFetchedData = UNKNOWN_OFFSET
 
   /**
    * Get the record for the given offset if available. Otherwise it will either throw error
@@ -74,41 +78,25 @@ private[kafka010] case class CachedKafkaConsumer private(
     require(offset < untilOffset,
       s"offset must always be less than untilOffset [offset: $offset, untilOffset: $untilOffset]")
     logDebug(s"Get $groupId $topicPartition nextOffset $nextOffsetInFetchedData requested $offset")
+    // The following loop is basically for `failOnDataLoss = false`. When `failOnDataLoss` is
+    // `false`, firstly, we will try to fetch the record at `offset`. If no such record, then we
+    // will move to the next available offset within `[offset, untilOffset)` and retry.
+    // If `failOnDataLoss` is `true`, the loop body will be executed only once.
     var toFetchOffset = offset
     while (toFetchOffset != UNKNOWN_OFFSET) {
       try {
-        val record = fetchData(toFetchOffset, pollTimeoutMs)
-        if (record == null) {
-          // We cannot fetch anything after `poll`. Two possible cases:
-          // - `earliestOffset` is `offset` but there is nothing for `earliestOffset` right now.
-          // - Cannot fetch any data before timeout.
-          // Because there is no way to distinguish, just skip the rest offsets in the current
-          // partition.
-          val message =
-            if (failOnDataLoss) {
-              s"Cannot fetch record for offset $offset"
-            } else {
-              s"Cannot fetch record for offset $offset. " +
-                s"Records in [$offset, $untilOffset) will be skipped"
-            }
-          reportDataLoss(failOnDataLoss, message)
-          reset()
-        }
-        return record
+        return fetchData(toFetchOffset, pollTimeoutMs)
       } catch {
         case e: OffsetOutOfRangeException =>
-          val message =
-            if (failOnDataLoss) {
-              s"Cannot fetch offset $toFetchOffset"
-            } else {
-              s"Cannot fetch offset $toFetchOffset. Some data may be lost. " +
-                "Recovering from the earliest offset"
-            }
-          reportDataLoss(failOnDataLoss, message, e)
+          // When there is some error thrown, it's better to use a new consumer to drop all cached
+          // states in the old consumer. We don't need to worry about the performance because this
+          // is not a normal path.
+          resetConsumer()
+          reportDataLoss(failOnDataLoss, s"Cannot fetch offset $toFetchOffset", e)
           toFetchOffset = getEarliestAvailableOffsetBetween(toFetchOffset, untilOffset)
       }
     }
-    reset()
+    resetFetchedData()
     null
   }
 
@@ -119,6 +107,7 @@ private[kafka010] case class CachedKafkaConsumer private(
    */
   private def getEarliestAvailableOffsetBetween(offset: Long, untilOffset: Long): Long = {
     val (earliestOffset, latestOffset) = getAvailableOffsetRange()
+    logWarning(s"Some data may be lost. Recovering from the earliest offset: $earliestOffset")
     if (offset >= latestOffset || earliestOffset >= untilOffset) {
       // [offset, untilOffset) and [earliestOffset, latestOffset) have no overlap,
       // either
@@ -169,7 +158,10 @@ private[kafka010] case class CachedKafkaConsumer private(
   }
 
   /**
-   * Get the record at `offset`. If there is not such record, return null.
+   * Get the record at `offset`.
+   *
+   * @throws OffsetOutOfRangeException if `offset` is out of range
+   * @throws TimeoutException if cannot fetch the record in `pollTimeoutMs` milliseconds.
    */
   private def fetchData(
       offset: Long,
@@ -182,7 +174,18 @@ private[kafka010] case class CachedKafkaConsumer private(
     }
 
     if (!fetchedData.hasNext()) {
-      null
+      // We cannot fetch anything after `poll`. Two possible cases:
+      // - `offset` is out of range so that Kafka returns nothing. Just throw
+      // `OffsetOutOfRangeException` to let the caller handle it.
+      // - Cannot fetch any data before timeout. TimeoutException will be thrown.
+      val (earliestOffset, latestOffset) = getAvailableOffsetRange()
+      if (offset < earliestOffset || offset >= latestOffset) {
+        throw new OffsetOutOfRangeException(
+          Map(topicPartition -> java.lang.Long.valueOf(offset)).asJava)
+      } else {
+        throw new TimeoutException(
+          s"Cannot fetch record for offset $offset in $pollTimeoutMs milliseconds")
+      }
     } else {
       val record = fetchedData.next()
       nextOffsetInFetchedData = record.offset + 1
@@ -193,10 +196,15 @@ private[kafka010] case class CachedKafkaConsumer private(
     }
   }
 
-  /**
-   * Reset the internal pre-fetched data.
-   */
-  private def reset(): Unit = {
+  /** Create a new consumer and reset cached states */
+  private def resetConsumer(): Unit = {
+    consumer.close()
+    consumer = createConsumer
+    resetFetchedData()
+  }
+
+  /** Reset the internal pre-fetched data. */
+  private def resetFetchedData(): Unit = {
     nextOffsetInFetchedData = UNKNOWN_OFFSET
     fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
   }
@@ -308,7 +316,10 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
     // If this is reattempt at running the task, then invalidate cache and start with
     // a new consumer
     if (TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
-      cache.remove(key)
+      val removedConsumer = cache.remove(key)
+      if (removedConsumer != null) {
+        removedConsumer.close()
+      }
       new CachedKafkaConsumer(topicPartition, kafkaParams)
     } else {
       if (!cache.containsKey(key)) {
