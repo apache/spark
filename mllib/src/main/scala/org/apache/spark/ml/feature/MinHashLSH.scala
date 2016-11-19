@@ -32,8 +32,14 @@ import org.apache.spark.sql.types.StructType
  * :: Experimental ::
  *
  * Model produced by [[MinHashLSH]], where multiple hash functions are stored. Each hash function is
- * picked from a hash function for a specific set `S` with cardinality equal to `numEntries`:
+ * picked from a hash family for a specific set `S` with cardinality equal to `numEntries`:
  *    `h_i(x) = ((x \cdot a_i + b_i) \mod prime) \mod numEntries`
+ *
+ * This hash family is approximately min-wise independent according to the reference.
+ *
+ * Reference:
+ * [[http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.121.8215&rep=rep1&type=pdf Min-wise
+ * independent permutations]]
  *
  * @param randCoefficients Pairs of random coefficients. Each pair is used by one hash function.
  */
