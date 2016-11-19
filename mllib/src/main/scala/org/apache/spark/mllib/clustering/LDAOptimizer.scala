@@ -93,9 +93,11 @@ final class EMLDAOptimizer extends LDAOptimizer {
   /**
    * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
    * Deleting the checkpoint can cause failures if a data partition is lost, so set this bit with
-   * care.  Note that checkpoints will be cleaned up via reference counting, regardless.
+   * care.
    *
    * Default: true
+   *
+   * @note Checkpoints will be cleaned up via reference counting, regardless.
    */
   @Since("2.0.0")
   def setKeepLastCheckpoint(keepLastCheckpoint: Boolean): this.type = {
@@ -348,7 +350,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * Mini-batch fraction in (0, 1], which sets the fraction of document sampled and used in
    * each iteration.
    *
-   * Note that this should be adjusted in synch with [[LDA.setMaxIterations()]]
+   * @note This should be adjusted in synch with [[LDA.setMaxIterations()]]
    * so the entire corpus is used.  Specifically, set both so that
    * maxIterations * miniBatchFraction >= 1.
    *
