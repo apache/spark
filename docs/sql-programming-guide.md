@@ -1089,7 +1089,7 @@ the following case-sensitive options:
   <tr>
      <td><code>maxConnections</code></td>
      <td>
-       If set, limits the maximum number of JDBC connections that can be used. Only applies when writing. It works by limiting the operation's parallelism, which depends on the input's partition count. If its partition count exceeds this limit, the operation will coalesce the input to fewer partitions before writing.
+       The maximum number of concurrent JDBC connections that can be used, if set. Only applies when writing. It works by limiting the operation's parallelism, which depends on the input's partition count. If its partition count exceeds this limit, the operation will coalesce the input to fewer partitions before writing.
      </td>
   </tr>
 
