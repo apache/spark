@@ -1107,6 +1107,9 @@ case class TruncDate(date: Expression, format: Expression)
     Examples:
       > SELECT _FUNC_('2009-07-31', '2009-07-30');
        1
+
+      > SELECT _FUNC_('2009-07-30', '2009-07-31');
+       -1
   """)
 // scalastyle:on line.size.limit
 case class DateDiff(endDate: Expression, startDate: Expression)
