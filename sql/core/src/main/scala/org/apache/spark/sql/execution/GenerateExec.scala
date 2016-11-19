@@ -242,9 +242,9 @@ case class GenerateExec(
     // iterator contains no input. We do this by adding an 'outer' variable which guarantees
     // execution of the first iteration even if there is no input. Evaluation of the iterator is
     // prevented by checks in the next() and accessor code.
-    val outerVal = ctx.freshName("outer")
     val numOutput = metricTerm(ctx, "numOutputRows")
     if (outer) {
+      val outerVal = ctx.freshName("outer")
       s"""
          |${data.code}
          |scala.collection.Iterator<InternalRow> $iterator = ${data.value}.toIterator();
