@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.beans.Introspector
+import java.io.Closeable
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
@@ -72,7 +73,7 @@ import org.apache.spark.util.Utils
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState])
-  extends Serializable with Logging { self =>
+  extends Serializable with Closeable with Logging { self =>
 
   private[sql] def this(sc: SparkContext) {
     this(sc, None)
@@ -646,6 +647,13 @@ class SparkSession private(
   def stop(): Unit = {
     sparkContext.stop()
   }
+
+  /**
+   * Synonym for `stop()`.
+   *
+   * @since 2.2.0
+   */
+  override def close(): Unit = stop()
 
   /**
    * Parses the data type in our internal string representation. The data type string should
