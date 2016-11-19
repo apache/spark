@@ -150,7 +150,7 @@ case class StaticInvoke(
     val code = s"""
       $argCode
       boolean ${ev.isNull} = $resultIsNull;
-      final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : $callFunc;
+      final $javaType ${ev.value} = $resultIsNull ? ${ctx.defaultValue(dataType)} : $callFunc;
       $postNullCheck
      """
     ev.copy(code = code)
