@@ -742,8 +742,8 @@ object Unidoc {
       "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
       "-public",
       "-noqualifier", "java.lang",
-      "-tag", """note:a:Note\:""",
       "-tag", """example:a:Example\:""",
+      "-tag", """note:a:Note\:""",
       "-tag", "group:X",
       "-tag", "tparam:X"
     ),
