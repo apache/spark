@@ -411,7 +411,9 @@ class StreamExecution(
           val newPlanOutput = newPlan.output
           output.foreach { out =>
             val outputInNewPlan = newPlanOutput.find { newPlanOut =>
-              out.name == newPlanOut.name && out.dataType == newPlanOut.dataType
+              out.name.toLowerCase == newPlanOut.name.toLowerCase &&
+                // the line below means that we don't support schema evolution for now
+                out.dataType == newPlanOut.dataType
             }.getOrElse {
               throw new AnalysisException(
                 s"""
