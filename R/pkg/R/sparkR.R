@@ -566,12 +566,11 @@ sparkCheckInstall <- function(sparkHome, master, deployMode) {
       NULL
     } else {
       if (isMasterLocal(master)) {
-        msg <- paste0("Spark not found in SPARK_HOME: ",
-                      sparkHome)
+        msg <- paste0("Spark not found in SPARK_HOME: ", sparkHome)
         message(msg)
         packageLocalDir <- install.spark()
         packageLocalDir
-      } else if (endsWith(master, "client") || deployMode == "client") {
+      } else if (isClientMode(master) || deployMode == "client") {
         msg <- paste0("Spark not found in SPARK_HOME: ",
                       sparkHome, "\n", installInstruction("remote"))
         stop(msg)
