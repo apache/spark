@@ -1089,7 +1089,7 @@ the following case-sensitive options:
   <tr>
      <td><code>maxConnections</code></td>
      <td>
-       The number of JDBC connections, which specifies the maximum number of simultaneous JDBC connections that are allowed. This option applies only to writing with <code>coalesce<code/> operation if needed. It defaults to the number of partitions of RDD.
+       If set, limits the maximum number of JDBC connections that can be used. Only applies when writing. It works by limiting the operation's parallelism, which depends on the input's partition count. If its partition count exceeds this limit, the operation will coalesce the input to fewer partitions before writing.
      </td>
   </tr>
 
