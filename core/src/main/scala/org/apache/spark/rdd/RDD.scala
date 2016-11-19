@@ -428,7 +428,7 @@ abstract class RDD[T: ClassTag](
    * current upstream partitions will be executed in parallel (per whatever
    * the current partitioning is).
    *
-   * Note: With shuffle = true, you can actually coalesce to a larger number
+   * @note With shuffle = true, you can actually coalesce to a larger number
    * of partitions. This is useful if you have a small number of partitions,
    * say 100, potentially with a few partitions being abnormally large. Calling
    * coalesce(1000, shuffle = true) will result in 1000 partitions with the
@@ -466,14 +466,14 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    *
-   * Note: this is NOT guaranteed to provide exactly the fraction of the count
-   * of the given [[RDD]].
-   *
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]
    *  with replacement: expected number of times each element is chosen; fraction must be >= 0
    * @param seed seed for the random number generator
+   *
+   * @note This is NOT guaranteed to provide exactly the fraction of the count
+   * of the given [[RDD]].
    */
   def sample(
       withReplacement: Boolean,
@@ -537,13 +537,13 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a fixed-size sampled subset of this RDD in an array
    *
-   * @note this method should only be used if the resulting array is expected to be small, as
-   * all the data is loaded into the driver's memory.
-   *
    * @param withReplacement whether sampling is done with replacement
    * @param num size of the returned sample
    * @param seed seed for the random number generator
    * @return sample of specified size in an array
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def takeSample(
       withReplacement: Boolean,
@@ -618,7 +618,7 @@ abstract class RDD[T: ClassTag](
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
    *
-   * Note that this method performs a shuffle internally.
+   * @note This method performs a shuffle internally.
    */
   def intersection(other: RDD[T]): RDD[T] = withScope {
     this.map(v => (v, null)).cogroup(other.map(v => (v, null)))
@@ -630,7 +630,7 @@ abstract class RDD[T: ClassTag](
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
    *
-   * Note that this method performs a shuffle internally.
+   * @note This method performs a shuffle internally.
    *
    * @param partitioner Partitioner to use for the resulting RDD
    */
@@ -646,7 +646,7 @@ abstract class RDD[T: ClassTag](
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.  Performs a hash partition across the cluster
    *
-   * Note that this method performs a shuffle internally.
+   * @note This method performs a shuffle internally.
    *
    * @param numPartitions How many partitions to use in the resulting RDD
    */
@@ -674,7 +674,7 @@ abstract class RDD[T: ClassTag](
    * mapping to that key. The ordering of elements within each group is not guaranteed, and
    * may even differ each time the resulting RDD is evaluated.
    *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * @note This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
@@ -687,7 +687,7 @@ abstract class RDD[T: ClassTag](
    * mapping to that key. The ordering of elements within each group is not guaranteed, and
    * may even differ each time the resulting RDD is evaluated.
    *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * @note This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
@@ -702,7 +702,7 @@ abstract class RDD[T: ClassTag](
    * mapping to that key. The ordering of elements within each group is not guaranteed, and
    * may even differ each time the resulting RDD is evaluated.
    *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * @note This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
@@ -921,7 +921,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an array that contains all of the elements in this RDD.
    *
-   * @note this method should only be used if the resulting array is expected to be small, as
+   * @note This method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
    */
   def collect(): Array[T] = withScope {
@@ -934,7 +934,7 @@ abstract class RDD[T: ClassTag](
    *
    * The iterator will consume as much memory as the largest partition in this RDD.
    *
-   * Note: this results in multiple Spark jobs, and if the input RDD is the result
+   * @note This results in multiple Spark jobs, and if the input RDD is the result
    * of a wide transformation (e.g. join with different partitioners), to avoid
    * recomputing the input RDD should be cached first.
    */
@@ -1182,7 +1182,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return the count of each unique value in this RDD as a local map of (value, count) pairs.
    *
-   * Note that this method should only be used if the resulting map is expected to be small, as
+   * @note This method should only be used if the resulting map is expected to be small, as
    * the whole thing is loaded into the driver's memory.
    * To handle very large results, consider using rdd.map(x =&gt; (x, 1L)).reduceByKey(_ + _), which
    * returns an RDD[T, Long] instead of a map.
@@ -1272,7 +1272,7 @@ abstract class RDD[T: ClassTag](
    * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
    * This method needs to trigger a spark job when this RDD contains more than one partitions.
    *
-   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * @note Some RDDs, such as those returned by groupBy(), do not guarantee order of
    * elements in a partition. The index assigned to each element is therefore not guaranteed,
    * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
@@ -1286,7 +1286,7 @@ abstract class RDD[T: ClassTag](
    * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
    *
-   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * @note Some RDDs, such as those returned by groupBy(), do not guarantee order of
    * elements in a partition. The unique ID assigned to each element is therefore not guaranteed,
    * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
    * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
@@ -1305,10 +1305,10 @@ abstract class RDD[T: ClassTag](
    * results from that partition to estimate the number of additional partitions needed to satisfy
    * the limit.
    *
-   * @note this method should only be used if the resulting array is expected to be small, as
+   * @note This method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
    *
-   * @note due to complications in the internal implementation, this method will raise
+   * @note Due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
@@ -1370,7 +1370,7 @@ abstract class RDD[T: ClassTag](
    *   // returns Array(6, 5)
    * }}}
    *
-   * @note this method should only be used if the resulting array is expected to be small, as
+   * @note This method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
    *
    * @param num k, the number of top elements to return
@@ -1393,7 +1393,7 @@ abstract class RDD[T: ClassTag](
    *   // returns Array(2, 3)
    * }}}
    *
-   * @note this method should only be used if the resulting array is expected to be small, as
+   * @note This method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
    *
    * @param num k, the number of elements to return
@@ -1438,7 +1438,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * @note due to complications in the internal implementation, this method will raise an
+   * @note Due to complications in the internal implementation, this method will raise an
    * exception if called on an RDD of `Nothing` or `Null`. This may be come up in practice
    * because, for example, the type of `parallelize(Seq())` is `RDD[Nothing]`.
    * (`parallelize(Seq())` should be avoided anyway in favor of `parallelize(Seq[T]())`.)

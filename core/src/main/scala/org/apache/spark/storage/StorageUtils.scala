@@ -71,7 +71,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /**
    * Return the blocks stored in this block manager.
    *
-   * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
+   * @note This is somewhat expensive, as it involves cloning the underlying maps and then
    * concatenating them together. Much faster alternatives exist for common operations such as
    * contains, get, and size.
    */
@@ -80,7 +80,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /**
    * Return the RDD blocks stored in this block manager.
    *
-   * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
+   * @note This is somewhat expensive, as it involves cloning the underlying maps and then
    * concatenating them together. Much faster alternatives exist for common operations such as
    * getting the memory, disk, and off-heap memory sizes occupied by this RDD.
    */
@@ -128,7 +128,8 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /**
    * Return whether the given block is stored in this block manager in O(1) time.
-   * Note that this is much faster than `this.blocks.contains`, which is O(blocks) time.
+   *
+   * @note This is much faster than `this.blocks.contains`, which is O(blocks) time.
    */
   def containsBlock(blockId: BlockId): Boolean = {
     blockId match {
@@ -141,7 +142,8 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /**
    * Return the given block stored in this block manager in O(1) time.
-   * Note that this is much faster than `this.blocks.get`, which is O(blocks) time.
+   *
+   * @note This is much faster than `this.blocks.get`, which is O(blocks) time.
    */
   def getBlock(blockId: BlockId): Option[BlockStatus] = {
     blockId match {
@@ -154,19 +156,22 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /**
    * Return the number of blocks stored in this block manager in O(RDDs) time.
-   * Note that this is much faster than `this.blocks.size`, which is O(blocks) time.
+   *
+   * @note This is much faster than `this.blocks.size`, which is O(blocks) time.
    */
   def numBlocks: Int = _nonRddBlocks.size + numRddBlocks
 
   /**
    * Return the number of RDD blocks stored in this block manager in O(RDDs) time.
-   * Note that this is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
+   *
+   * @note This is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
    */
   def numRddBlocks: Int = _rddBlocks.values.map(_.size).sum
 
   /**
    * Return the number of blocks that belong to the given RDD in O(1) time.
-   * Note that this is much faster than `this.rddBlocksById(rddId).size`, which is
+   *
+   * @note This is much faster than `this.rddBlocksById(rddId).size`, which is
    * O(blocks in this RDD) time.
    */
   def numRddBlocksById(rddId: Int): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)

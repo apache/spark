@@ -268,9 +268,9 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.
  *
- * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
- *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
- *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
+ * @note For high-dimensional data (with many features), this algorithm may perform poorly.
+ * This is due to high-dimensional data (a) making it difficult to cluster at all (based
+ * on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
 @Since("2.0.0")
 @Experimental

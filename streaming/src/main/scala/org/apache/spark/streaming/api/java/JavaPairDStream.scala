@@ -74,7 +74,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def repartition(numPartitions: Int): JavaPairDStream[K, V] = dstream.repartition(numPartitions)
 
-  /** Method that generates a RDD for the given Duration */
+  /** Method that generates an RDD for the given Duration */
   def compute(validTime: Time): JavaPairRDD[K, V] = {
     dstream.compute(validTime) match {
       case Some(rdd) => new JavaPairRDD(rdd)

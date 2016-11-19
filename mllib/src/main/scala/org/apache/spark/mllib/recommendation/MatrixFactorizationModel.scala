@@ -43,14 +43,14 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Model representing the result of matrix factorization.
  *
- * Note: If you create the model directly using constructor, please be aware that fast prediction
- * requires cached user/product features and their associated partitioners.
- *
  * @param rank Rank for the features in this model.
  * @param userFeatures RDD of tuples where each tuple represents the userId and
  *                     the features computed for this user.
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
+ *
+ * @note If you create the model directly using constructor, please be aware that fast prediction
+ * requires cached user/product features and their associated partitioners.
  */
 @Since("0.8.0")
 class MatrixFactorizationModel @Since("0.8.0") (

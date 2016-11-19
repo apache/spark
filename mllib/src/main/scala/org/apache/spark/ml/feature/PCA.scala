@@ -142,8 +142,9 @@ class PCAModel private[ml] (
 
   /**
    * Transform a vector by computed Principal Components.
-   * NOTE: Vectors to be transformed must be the same length
-   * as the source vectors given to [[PCA.fit()]].
+   *
+   * @note Vectors to be transformed must be the same length as the source vectors given
+   * to [[PCA.fit()]].
    */
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {

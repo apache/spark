@@ -99,27 +99,29 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
 
   /**
    * Return a sampled subset of this RDD with a random seed.
-   * Note: this is NOT guaranteed to provide exactly the fraction of the count
-   * of the given [[RDD]].
    *
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]
    *  with replacement: expected number of times each element is chosen; fraction must be >= 0
+   *
+   * @note This is NOT guaranteed to provide exactly the fraction of the count
+   * of the given [[RDD]].
    */
   def sample(withReplacement: Boolean, fraction: Double): JavaRDD[T] =
     sample(withReplacement, fraction, Utils.random.nextLong)
 
   /**
    * Return a sampled subset of this RDD, with a user-supplied seed.
-   * Note: this is NOT guaranteed to provide exactly the fraction of the count
-   * of the given [[RDD]].
    *
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]
    *  with replacement: expected number of times each element is chosen; fraction must be >= 0
    * @param seed seed for the random number generator
+   *
+   * @note This is NOT guaranteed to provide exactly the fraction of the count
+   * of the given [[RDD]].
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): JavaRDD[T] =
     wrapRDD(rdd.sample(withReplacement, fraction, seed))
@@ -157,7 +159,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
    *
-   * Note that this method performs a shuffle internally.
+   * @note This method performs a shuffle internally.
    */
   def intersection(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.intersection(other.rdd))
 

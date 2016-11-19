@@ -98,7 +98,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param initTreeWeight: learning rate assigned to the first tree.
    * @param initTree: first DecisionTreeModel.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
    */
   def computeInitialPredictionAndError(
@@ -121,7 +121,7 @@ private[spark] object GradientBoostedTrees extends Logging {
    * @param treeWeight: Learning rate.
    * @param tree: Tree using which the prediction and error should be updated.
    * @param loss: evaluation metric.
-   * @return a RDD with each element being a zip of the prediction and error
+   * @return an RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
    */
   def updatePredictionError(

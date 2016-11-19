@@ -103,10 +103,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Whether to standardize the training features before fitting the model.
    * The coefficients of models will be always returned on the original scale,
-   * so it will be transparent for users. Note that with/without standardization,
-   * the models should be always converged to the same solution when no regularization
-   * is applied. In R's GLMNET package, the default behavior is true as well.
+   * so it will be transparent for users.
    * Default is true.
+   *
+   * @note With/without standardization, the models should be always converged
+   * to the same solution when no regularization is applied. In R's GLMNET package,
+   * the default behavior is true as well.
    *
    * @group setParam
    */
@@ -624,8 +626,8 @@ class LinearRegressionSummary private[regression] (
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val explainedVariance: Double = metrics.explainedVariance
@@ -634,8 +636,8 @@ class LinearRegressionSummary private[regression] (
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanAbsoluteError: Double = metrics.meanAbsoluteError
@@ -644,8 +646,8 @@ class LinearRegressionSummary private[regression] (
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanSquaredError: Double = metrics.meanSquaredError
@@ -654,8 +656,8 @@ class LinearRegressionSummary private[regression] (
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val rootMeanSquaredError: Double = metrics.rootMeanSquaredError
@@ -664,8 +666,8 @@ class LinearRegressionSummary private[regression] (
    * Returns R^2^, the coefficient of determination.
    * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val r2: Double = metrics.r2

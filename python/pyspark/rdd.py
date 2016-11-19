@@ -1218,7 +1218,7 @@ class RDD(object):
 
     def top(self, num, key=None):
         """
-        Get the top N elements from a RDD.
+        Get the top N elements from an RDD.
 
         Note that this method should only be used if the resulting array is expected
         to be small, as all the data is loaded into the driver's memory.
@@ -1242,7 +1242,7 @@ class RDD(object):
 
     def takeOrdered(self, num, key=None):
         """
-        Get the N elements from a RDD ordered in ascending order or as
+        Get the N elements from an RDD ordered in ascending order or as
         specified by the optional key function.
 
         Note that this method should only be used if the resulting array is expected

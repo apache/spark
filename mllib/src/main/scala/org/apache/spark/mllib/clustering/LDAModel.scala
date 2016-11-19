@@ -66,7 +66,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *
    * This is the parameter to a symmetric Dirichlet distribution.
    *
-   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * @note The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    */
   @Since("1.5.0")

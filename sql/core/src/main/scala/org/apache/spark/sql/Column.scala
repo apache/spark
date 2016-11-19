@@ -118,7 +118,7 @@ class TypedColumn[-T, U](
  *   $"a" === $"b"
  * }}}
  *
- * Note that the internal Catalyst expression can be accessed via "expr", but this method is for
+ * @note The internal Catalyst expression can be accessed via "expr", but this method is for
  * debugging purposes only and can change in any future Spark releases.
  *
  * @groupname java_expr_ops Java-specific expression operators

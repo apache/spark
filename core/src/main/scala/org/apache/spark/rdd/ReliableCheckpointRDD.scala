@@ -151,7 +151,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   }
 
   /**
-   * Write a RDD partition's data to a checkpoint file.
+   * Write an RDD partition's data to a checkpoint file.
    */
   def writePartitionToCheckpointFile[T: ClassTag](
       path: String,

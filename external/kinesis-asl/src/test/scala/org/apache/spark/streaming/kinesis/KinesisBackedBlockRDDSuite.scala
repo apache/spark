@@ -221,7 +221,7 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
     assert(collectedData.toSet === testData.toSet)
 
     // Verify that the block fetching is skipped when isBlockValid is set to false.
-    // This is done by using a RDD whose data is only in memory but is set to skip block fetching
+    // This is done by using an RDD whose data is only in memory but is set to skip block fetching
     // Using that RDD will throw exception, as it skips block fetching even if the blocks are in
     // in BlockManager.
     if (testIsBlockValid) {

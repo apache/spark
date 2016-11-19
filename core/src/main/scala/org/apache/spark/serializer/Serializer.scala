@@ -40,7 +40,7 @@ import org.apache.spark.util.NextIterator
  *
  * 2. Java serialization interface.
  *
- * Note that serializers are not required to be wire-compatible across different versions of Spark.
+ * @note Serializers are not required to be wire-compatible across different versions of Spark.
  * They are intended to be used to serialize/de-serialize data within a single Spark application.
  */
 @DeveloperApi

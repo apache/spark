@@ -223,7 +223,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create a RDD from Kafka using offset ranges for each topic and partition.
+   * Create an RDD from Kafka using offset ranges for each topic and partition.
    *
    * @param sc SparkContext object
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
@@ -255,7 +255,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+   * Create an RDD from Kafka using offset ranges for each topic and partition. This allows you
    * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
    * as the metadata.
    *
@@ -303,7 +303,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create a RDD from Kafka using offset ranges for each topic and partition.
+   * Create an RDD from Kafka using offset ranges for each topic and partition.
    *
    * @param jsc JavaSparkContext object
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
@@ -340,7 +340,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+   * Create an RDD from Kafka using offset ranges for each topic and partition. This allows you
    * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
    * as the metadata.
    *

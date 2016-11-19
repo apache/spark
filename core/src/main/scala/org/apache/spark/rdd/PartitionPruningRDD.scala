@@ -48,7 +48,7 @@ private[spark] class PruneDependency[T](rdd: RDD[T], partitionFilterFunc: Int =>
 
 /**
  * :: DeveloperApi ::
- * A RDD used to prune RDD partitions/partitions so we can avoid launching tasks on
+ * An RDD used to prune RDD partitions/partitions so we can avoid launching tasks on
  * all partitions. An example use case: If we know the RDD is partitioned by range,
  * and the execution DAG has a filter on the key, we can avoid launching tasks
  * on partitions that don't have the range covering the key.

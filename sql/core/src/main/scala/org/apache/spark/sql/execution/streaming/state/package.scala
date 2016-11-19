@@ -28,7 +28,7 @@ package object state {
 
   implicit class StateStoreOps[T: ClassTag](dataRDD: RDD[T]) {
 
-    /** Map each partition of a RDD along with data in a [[StateStore]]. */
+    /** Map each partition of an RDD along with data in a [[StateStore]]. */
     def mapPartitionsWithStateStore[U: ClassTag](
         sqlContext: SQLContext,
         checkpointLocation: String,
@@ -49,7 +49,7 @@ package object state {
         storeUpdateFunction)
     }
 
-    /** Map each partition of a RDD along with data in a [[StateStore]]. */
+    /** Map each partition of an RDD along with data in a [[StateStore]]. */
     private[streaming] def mapPartitionsWithStateStore[U: ClassTag](
         checkpointLocation: String,
         operatorId: Long,
