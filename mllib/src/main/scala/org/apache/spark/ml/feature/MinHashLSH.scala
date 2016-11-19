@@ -35,14 +35,12 @@ import org.apache.spark.sql.types.StructType
  * picked from a hash function for a specific set `S` with cardinality equal to `numEntries`:
  *    `h_i(x) = ((x \cdot a_i + b_i) \mod prime) \mod numEntries`
  *
- * @param numEntries The number of entries of the hash functions.
  * @param randCoefficients Pairs of random coefficients. Each pair is used by one hash function.
  */
 @Experimental
 @Since("2.1.0")
 class MinHashLSHModel private[ml](
     override val uid: String,
-    private[ml] val numEntries: Int,
     private[ml] val randCoefficients: Array[(Int, Int)])
   extends LSHModel[MinHashLSHModel] {
 
@@ -53,7 +51,7 @@ class MinHashLSHModel private[ml](
       val elemsList = elems.toSparse.indices.toList
       val hashValues = randCoefficients.map({ case (a: Int, b: Int) =>
         elemsList.map { elem: Int =>
-          ((1 + elem) * a + b) % MinHashLSH.HASH_PRIME % numEntries
+          ((1 + elem) * a + b) % MinHashLSH.HASH_PRIME
         }.min.toDouble
       })
       // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
@@ -128,11 +126,10 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
     require(inputDim <= MinHashLSH.HASH_PRIME,
       s"The input vector dimension $inputDim exceeds the threshold ${MinHashLSH.HASH_PRIME}.")
     val rand = new Random($(seed))
-    val numEntry = inputDim
     val randCoefs: Array[(Int, Int)] = Array.fill(2 * $(numHashTables)) {
         (1 + rand.nextInt(MinHashLSH.HASH_PRIME - 1), rand.nextInt(MinHashLSH.HASH_PRIME - 1))
       }
-    new MinHashLSHModel(uid, numEntry, randCoefs)
+    new MinHashLSHModel(uid, randCoefs)
   }
 
   @Since("2.1.0")
@@ -166,12 +163,11 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
   private[MinHashLSHModel] class MinHashLSHModelWriter(instance: MinHashLSHModel)
     extends MLWriter {
 
-    private case class Data(numEntries: Int, randCoefficients: Array[Int])
+    private case class Data(randCoefficients: Array[Int])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.numEntries, instance.randCoefficients
-        .flatMap(tuple => Array(tuple._1, tuple._2)))
+      val data = Data(instance.randCoefficients.flatMap(tuple => Array(tuple._1, tuple._2)))
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -186,11 +182,10 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("numEntries", "randCoefficients").head()
-      val numEntries = data.getAs[Int](0)
-      val randCoefficients = data.getAs[Seq[Int]](1).grouped(2)
+      val data = sparkSession.read.parquet(dataPath).select("randCoefficients").head()
+      val randCoefficients = data.getAs[Seq[Int]](0).grouped(2)
         .map(tuple => (tuple(0), tuple(1))).toArray
-      val model = new MinHashLSHModel(metadata.uid, numEntries, randCoefficients)
+      val model = new MinHashLSHModel(metadata.uid, randCoefficients)
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

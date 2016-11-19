@@ -39,7 +39,7 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
   test("params") {
     ParamsSuite.checkParams(new MinHashLSH)
-    val model = new MinHashLSHModel("mh", numEntries = 2, randCoefficients = Array((1, 0)))
+    val model = new MinHashLSHModel("mh", randCoefficients = Array((1, 0)))
     ParamsSuite.checkParams(model)
   }
 
@@ -50,7 +50,6 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
   test("read/write") {
     def checkModelData(model: MinHashLSHModel, model2: MinHashLSHModel): Unit = {
-      assert(model.numEntries === model2.numEntries)
       assertResult(model.randCoefficients)(model2.randCoefficients)
     }
     val mh = new MinHashLSH()
@@ -59,25 +58,23 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   }
 
   test("hashFunction") {
-    val model = new MinHashLSHModel("mh", numEntries = 20,
-      randCoefficients = Array((0, 1), (1, 2), (3, 0)))
+    val model = new MinHashLSHModel("mh", randCoefficients = Array((0, 1), (1, 2), (3, 0)))
     val res = model.hashFunction(Vectors.sparse(10, Seq((2, 1.0), (3, 1.0), (5, 1.0), (7, 1.0))))
     assert(res.length == 3)
     assert(res(0).equals(Vectors.dense(1.0)))
     assert(res(1).equals(Vectors.dense(5.0)))
-    assert(res(2).equals(Vectors.dense(4.0)))
+    assert(res(2).equals(Vectors.dense(9.0)))
   }
 
   test("hashFunction: empty vector") {
-    val model = new MinHashLSHModel("mh", numEntries = 20,
-      randCoefficients = Array((0, 1), (1, 2), (3, 0)))
+    val model = new MinHashLSHModel("mh", randCoefficients = Array((0, 1), (1, 2), (3, 0)))
     intercept[IllegalArgumentException] {
       model.hashFunction(Vectors.sparse(10, Seq()))
     }
   }
 
   test("keyDistance") {
-    val model = new MinHashLSHModel("mh", numEntries = 20, randCoefficients = Array((1, 0)))
+    val model = new MinHashLSHModel("mh", randCoefficients = Array((1, 0)))
     val v1 = Vectors.sparse(10, Seq((2, 1.0), (3, 1.0), (5, 1.0), (7, 1.0)))
     val v2 = Vectors.sparse(10, Seq((1, 1.0), (3, 1.0), (5, 1.0), (7, 1.0), (9, 1.0)))
     val keyDist = model.keyDistance(v1, v2)
