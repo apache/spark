@@ -1100,9 +1100,8 @@ case class TruncDate(date: Expression, format: Expression)
 /**
  * Returns the number of days from startDate to endDate.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(endDate, startDate) - Returns the number of days between `endDate` and `startDate`.",
+  usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.",
   extended = """
     Examples:
       > SELECT _FUNC_('2009-07-31', '2009-07-30');
@@ -1111,7 +1110,6 @@ case class TruncDate(date: Expression, format: Expression)
       > SELECT _FUNC_('2009-07-30', '2009-07-31');
        -1
   """)
-// scalastyle:on line.size.limit
 case class DateDiff(endDate: Expression, startDate: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
