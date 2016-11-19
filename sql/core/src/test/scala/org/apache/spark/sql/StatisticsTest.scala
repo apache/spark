@@ -19,10 +19,11 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
-import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, ColumnStatStruct}
+import org.apache.spark.sql.execution.command.AnalyzeColumnCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+
 
 trait StatisticsTest extends QueryTest with SharedSQLContext {
 
@@ -36,7 +37,7 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
       val tableIdent = TableIdentifier(table, Some("default"))
       val relation = spark.sessionState.catalog.lookupRelation(tableIdent)
       val (_, columnStats) =
-        AnalyzeColumnCommand(tableIdent, columns.map(_.name)).computeColStats(spark, relation)
+        AnalyzeColumnCommand.computeColStats(spark, relation, columns.map(_.name))
       expectedColStatsSeq.foreach { case (field, expectedColStat) =>
         assert(columnStats.contains(field.name))
         val colStat = columnStats(field.name)
@@ -48,7 +49,7 @@ trait StatisticsTest extends QueryTest with SharedSQLContext {
 
         // check if we get the same colStat after encoding and decoding
         val encodedCS = colStat.toString
-        val numFields = ColumnStatStruct.numStatFields(field.dataType)
+        val numFields = AnalyzeColumnCommand.numStatFields(field.dataType)
         val decodedCS = ColumnStat(numFields, encodedCS)
         StatisticsTest.checkColStat(
           dataType = field.dataType,
