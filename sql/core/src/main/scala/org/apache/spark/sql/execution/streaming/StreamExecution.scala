@@ -411,15 +411,19 @@ class StreamExecution(
           val newPlanOutput = newPlan.output
           output.foreach { out =>
             val outputInNewPlan = newPlanOutput.find { newPlanOut =>
+              // we can't use semanticEquals here because `AttributeReference.semanticEquals`
+              // checks the equality of expression id's, but we're guaranteed that they will be
+              // different here
               out.name.toLowerCase == newPlanOut.name.toLowerCase &&
                 // the line below means that we don't support schema evolution for now
                 out.dataType == newPlanOut.dataType
             }.getOrElse {
+              val availableColumns = newPlan.output.map(a => s"${a.name} of ${a.dataType}")
               throw new AnalysisException(
                 s"""
                    |Batch does not have expected schema
-                   |Expected: ${output.mkString(",")}
-                   |Actual: ${newPlan.output.mkString(",")}
+                   |Missing Column: ${out.name} of ${out.dataType}
+                   |Available Columns: ${availableColumns.mkString(", ")}
                    |
                    |== Original ==
                    |$logicalPlan
