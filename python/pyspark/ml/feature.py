@@ -236,9 +236,8 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         " a document. For each document, terms with frequency/count less than the given" +
         " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
         " times the term must appear in the document); if this is a double in [0,1), then this " +
-        "specifies a fraction (out of the document's token count). Default 1.0" +
-        ".. note:: the parameter is only used in transform of CountVectorizerModel and does not " +
-        "    affect fitting.",
+        "specifies a fraction (out of the document's token count). Note that the parameter is " +
+        "only used in transform of CountVectorizerModel and does not affect fitting. Default 1.0",
         typeConverter=TypeConverters.toFloat)
     minDF = Param(
         Params._dummy(), "minDF", "Specifies the minimum number of" +
