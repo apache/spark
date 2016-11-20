@@ -26,8 +26,9 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.aggregate.MergePartialAggregate
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
@@ -40,7 +41,8 @@ import org.apache.spark.util.Utils
  * While this is not a public class, we should avoid changing the function names for the sake of
  * changing them, because a lot of developers use the feature for debugging.
  */
-class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
+class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan)
+    extends RuleExecutor[SparkPlan] {
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
@@ -96,18 +98,27 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
    * row format conversions as needed.
    */
-  protected def prepareForExecution(plan: SparkPlan): SparkPlan = {
-    preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
-  }
+  protected def prepareForExecution(plan: SparkPlan): SparkPlan = execute(plan)
+
+  private val fixedPoint = FixedPoint(sparkSession.sessionState.conf.optimizerMaxIterations)
 
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
-  protected def preparations: Seq[Rule[SparkPlan]] = Seq(
-    python.ExtractPythonUDFs,
-    PlanSubqueries(sparkSession),
-    EnsureRequirements(sparkSession.sessionState.conf),
-    CollapseCodegenStages(sparkSession.sessionState.conf),
-    ReuseExchange(sparkSession.sessionState.conf),
-    ReuseSubquery(sparkSession.sessionState.conf))
+  override protected def batches: Seq[Batch] = Seq(
+    Batch("ExtractPythonUDFs", Once,
+      python.ExtractPythonUDFs),
+    Batch("PlanSubqueries", Once,
+      PlanSubqueries(sparkSession)),
+    Batch("EnsureRequirements", Once,
+      EnsureRequirements(sparkSession.sessionState.conf)),
+    Batch("MergePartialAggregate", fixedPoint,
+      MergePartialAggregate),
+    Batch("CollapseCodegenStages", Once,
+      CollapseCodegenStages(sparkSession.sessionState.conf)),
+    Batch("ReuseResources", Once,
+      ReuseExchange(sparkSession.sessionState.conf),
+      ReuseSubquery(sparkSession.sessionState.conf)
+    )
+  )
 
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: AnalysisException => e.toString }

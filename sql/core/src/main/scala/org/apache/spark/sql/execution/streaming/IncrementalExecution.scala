@@ -112,7 +112,7 @@ class IncrementalExecution(
     }
   }
 
-  override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
+  override protected def batches: Seq[Batch] = Batch("AddState", Once, state) +: super.batches
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
