@@ -1017,7 +1017,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         .mode("overwrite")
         .parquet(src.toString)
       val sdf = spark.readStream
-        .schema(StructType(Seq(StructField("id", LongType)))) // omit 'part'
+        .schema(StructType(Seq(StructField("ID", LongType)))) // omit 'part' also change case
         .format("parquet")
         .load(src.toString)
       try {
