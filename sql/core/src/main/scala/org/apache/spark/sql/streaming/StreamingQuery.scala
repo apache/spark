@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.UUID
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.SparkSession
 
@@ -38,11 +40,10 @@ trait StreamingQuery {
   def name: String
 
   /**
-   * Returns the unique id of this query. This id is automatically generated and is unique across
-   * all queries that have been started in the current process.
+   * Returns the unique id of this query. This id an is automatically generated UUID.
    * @since 2.0.0
    */
-  def id: Long
+  def id: UUID
 
   /**
    * Returns the [[SparkSession]] associated with `this`.
@@ -63,24 +64,27 @@ trait StreamingQuery {
   def exception: Option[StreamingQueryException]
 
   /**
-   * Returns the current status of the query.
+   * Returns the current status of the query, such as a whether data is available to process as
+   * well as a human readable description of what is happening right now.
    * @since 2.0.2
    */
   def status: StreamingQueryStatus
 
   /**
-   * Returns current status of all the sources.
-   * @since 2.0.0
+   * Returns an array of the most recent progress updates, which include information about
+   * timing as well as the amount of data being processed for each trigger.  The number of records
+   * retained for each stream is configured by `spark.sql.streaming.numProgressRecords`
+   *
+   *  @since 2.1.0
    */
-  @deprecated("use status.sourceStatuses", "2.0.2")
-  def sourceStatuses: Array[SourceStatus]
+  def recentProgress: Array[StreamingQueryProgress]
 
   /**
-   * Returns current status of the sink.
-   * @since 2.0.0
+   * Returns the most recent update on the status of the streaming query.
+   *
+   * @since 2.1.0
    */
-  @deprecated("use status.sinkStatus", "2.0.2")
-  def sinkStatus: SinkStatus
+  def lastProgress: StreamingQueryProgress
 
   /**
    * Waits for the termination of `this` query, either by `query.stop()` or by an exception.

@@ -24,6 +24,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ManualClock
 
+/*
 class StreamMetricsSuite extends SparkFunSuite {
   import StreamMetrics._
 
@@ -196,8 +197,8 @@ class StreamMetricsSuite extends SparkFunSuite {
       "latency"))
   }
 
-  private def newStreamMetrics(sources: Source*): StreamMetrics = {
-    new StreamMetrics(sources.toSet, clock, "test")
+  private def newStreamMetrics(sources: Source*): StreamMetricsReporter = {
+    new StreamMetricsReporter(sources.toSet, clock, "test")
   }
 
   private val clock = new ManualClock()
@@ -211,3 +212,4 @@ class StreamMetricsSuite extends SparkFunSuite {
     override def toString(): String = s"source$id"
   }
 }
+*/

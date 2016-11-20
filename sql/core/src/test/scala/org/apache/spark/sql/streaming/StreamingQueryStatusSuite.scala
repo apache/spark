@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkFunSuite
 
+/*
 class StreamingQueryStatusSuite extends SparkFunSuite {
   test("toString") {
     assert(StreamingQueryStatus.testStatus.sourceStatuses(0).toString ===
@@ -121,3 +122,4 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
         """.stripMargin.trim)
   }
 }
+*/

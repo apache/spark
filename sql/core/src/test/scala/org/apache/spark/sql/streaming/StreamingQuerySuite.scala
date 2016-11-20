@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.util.Utils
 
-
+/*
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
 
   import AwaitTerminationTester._
@@ -369,3 +369,4 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
     }
   }
 }
+*/

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import scala.util.control.NonFatal
+
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -26,17 +28,25 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * Status and metrics of a streaming sink.
+ * Reports metrics on data being read from a given streaming source.
  *
- * @param description Description of the source corresponding to this status.
- * @param offsetDesc Description of the current offsets up to which data has been written
- *                   by the sink.
- * @since 2.0.0
+ * @param description Description of the source.
+ * @param startOffset The starting offset for data being read.
+ * @param endOffset The ending offset for data being read.
+ * @param numRecords The number of records read from this source.
+ * @param inputRecordsPerSecond The rate at which data is arriving from this source.
+ * @param processedRecordsPerSecond The rate at which data from this source is being procressed by
+ *                                  Spark.
+ * @since 2.1.0
  */
 @Experimental
-class SinkStatus private(
+class SourceProgress protected[sql](
     val description: String,
-    val offsetDesc: String) {
+    val startOffset: String,
+    val endOffset: String,
+    val numRecords: Long,
+    val inputRecordsPerSecond: Double,
+    val processedRecordsPerSecond: Double) {
 
   /** The compact JSON representation of this status. */
   def json: String = compact(render(jsonValue))
@@ -44,19 +54,20 @@ class SinkStatus private(
   /** The pretty (i.e. indented) JSON representation of this status. */
   def prettyJson: String = pretty(render(jsonValue))
 
+  override def toString: String = prettyJson
+
   private[sql] def jsonValue: JValue = {
     ("description" -> JString(description)) ~
-    ("offsetDesc" -> JString(offsetDesc))
+    ("startOffset" -> tryParse(startOffset)) ~
+    ("endOffset" -> tryParse(endOffset)) ~
+    ("numRecords" -> JInt(numRecords)) ~
+    ("inputRecordsPerSecond" -> JDouble(inputRecordsPerSecond)) ~
+    ("processedRecordsPerSecond" -> JDouble(processedRecordsPerSecond))
   }
 
-  private[sql] def prettyString: String = {
-    s"""$description
-       |Committed offsets: $offsetDesc
-       |""".stripMargin
+  private def tryParse(json: String) = try {
+    parse(json)
+  } catch {
+    case NonFatal(e) => JString(json)
   }
-}
-
-/** Companion object, primarily for creating SinkStatus instances internally */
-private[sql] object SinkStatus {
-  def apply(desc: String, offsetDesc: String): SinkStatus = new SinkStatus(desc, offsetDesc)
 }

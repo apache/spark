@@ -997,9 +997,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       testStream(input)(
         AddTextFileData("100", src, tmp),
         CheckAnswer("100"),
-        AssertOnLastQueryStatus { status =>
-          assert(status.triggerDetails.get("numRows.input.total") === "1")
-          assert(status.sourceStatuses(0).processingRate > 0.0)
+        AssertOnQuery { query =>
+          val actualProgress = query.recentProgress
+              .find(_.numRecords > 0)
+              .getOrElse(sys.error("Could not find records with data."))
+          assert(actualProgress.numRecords === 1)
+          assert(actualProgress.sources(0).processedRecordsPerSecond > 0.0)
+          true
         }
       )
     }
