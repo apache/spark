@@ -440,7 +440,6 @@ class StreamExecution(
           LocalRelation(output)
         }
     }
-    println(replacements)
     // Rewire the plan to use the new attributes that were returned by the source.
     val replacementMap = AttributeMap(replacements)
     val triggerLogicalPlan = withNewSources transformAllExpressions {
