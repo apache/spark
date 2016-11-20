@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Literal}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -35,7 +36,7 @@ class IncrementalExecution(
     val checkpointLocation: String,
     val currentBatchId: Long,
     val currentEventTimeWatermark: Long)
-  extends QueryExecution(sparkSession, logicalPlan) {
+  extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // TODO: make this always part of planning.
   val stateStrategy =
@@ -57,7 +58,9 @@ class IncrementalExecution(
    */
   override lazy val optimizedPlan: LogicalPlan = {
     sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
-      case CurrentBatchTimestamp(timestamp) => Literal(timestamp)
+      case CurrentBatchTimestamp(timestamp) =>
+        logInfo(s"Current batch timestamp = $timestamp")
+        Literal(timestamp)
     }
   }
 

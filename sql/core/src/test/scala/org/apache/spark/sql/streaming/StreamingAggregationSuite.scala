@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
+import org.apache.spark.util.ManualClock
 
 object FailureSinglton {
   var firstTime = true
@@ -235,4 +236,49 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       CheckLastBatch(("a", 30), ("b", 3), ("c", 1))
     )
   }
+
+  test("prune results by time, complete mode") {
+    import testImplicits._
+    import StreamingAggregationSuite._
+    clock = new StreamManualClock
+
+    val inputData = MemoryStream[Long]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Long, Long)]
+        .where('value >= current_timestamp().cast("long") - 10L)
+
+    testStream(aggregated, Complete)(
+      StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
+
+      // advance clock to 10 seconds
+      AddData(inputData, 0L, 5L, 5L, 10L),
+      AdvanceManualClock(10 * 1000),
+      AssertOnQuery { _ => clock.getTimeMillis() === 10 * 1000 },
+      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+
+      // advance clock to 20 seconds
+      AddData(inputData, 15L, 15L, 20L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
+
+      // advance clock to 30 seconds
+      AddData(inputData, 0L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((20L, 1)),
+
+      // advance clock to 40 seconds
+      AddData(inputData, 25L, 30L, 40L, 45L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((30L, 1), (40L, 1), (45L, 1))
+    )
+  }
+}
+
+object StreamingAggregationSuite {
+  // Singleton reference to clock that does not get serialized in task closures
+  @volatile var clock: ManualClock = null
 }
