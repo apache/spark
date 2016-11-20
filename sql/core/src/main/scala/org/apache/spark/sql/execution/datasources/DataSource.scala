@@ -87,27 +87,51 @@ case class DataSource(
    * Infer the schema of the given FileFormat, returns a pair of schema and partition column names.
    */
   private def inferFileFormatSchema(format: FileFormat): (StructType, Seq[String]) = {
-    userSpecifiedSchema.map(_ -> partitionColumns).orElse {
-      val allPaths = caseInsensitiveOptions.get("path")
+    lazy val tempFileCatalog = {
+      val allPaths = caseInsensitiveOptions.get("path") ++ paths
       val globbedPaths = allPaths.toSeq.flatMap { path =>
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      val fileCatalog = new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
-      val partitionSchema = fileCatalog.partitionSpec().partitionColumns
-      val inferred = format.inferSchema(
+      new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
+    }
+    val partitionSchema = if (partitionColumns.isEmpty && catalogTable.isEmpty) {
+      // Try to infer partitioning, because no DataSource in the read path provides the partitioning
+      // columns properly unless it is a Hive DataSource
+      val resolved = tempFileCatalog.partitionSchema.map { partitionField =>
+        val equality = sparkSession.sessionState.conf.resolver
+        // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
+        userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
+          partitionField)
+      }
+      StructType(resolved)
+    } else {
+      lazy val inferredPartitions = tempFileCatalog.partitionSchema
+      val partitionFields = partitionColumns.map { partitionColumn =>
+        userSpecifiedSchema.flatMap(_.find(_.name == partitionColumn)).orElse {
+          inferredPartitions.find(_.name == partitionColumn)
+        }.getOrElse {
+          throw new AnalysisException("Failed to resolve the schema for the partition column: " +
+            s"$partitionColumn. It must be specified manually.")
+        }
+      }
+      StructType(partitionFields)
+    }
+    val tableSchema = userSpecifiedSchema.map { schema =>
+      val equality = sparkSession.sessionState.conf.resolver
+      StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
+    }.orElse {
+      format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
-        fileCatalog.allFiles())
-
-      inferred.map { inferredSchema =>
-        StructType(inferredSchema ++ partitionSchema) -> partitionSchema.map(_.name)
-      }
+        tempFileCatalog.allFiles())
     }.getOrElse {
       throw new AnalysisException("Unable to infer schema. It must be specified manually.")
     }
+    // always append partitions to the end
+    StructType(tableSchema ++ partitionSchema) -> partitionSchema.map(_.name)
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
@@ -230,13 +254,16 @@ case class DataSource(
    * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
    * [[DataSource]]
    *
-   * @param checkFilesExist Whether to confirm that the files exist when generating the
-   *                        non-streaming file based datasource. StructuredStreaming jobs already
-   *                        list file existence, and when generating incremental jobs, the batch
-   *                        is considered as a non-streaming file based data source. Since we know
-   *                        that files already exist, we don't need to check them again.
+   * @param isStreaming Whether a Streaming Source is asking us for resolution. In this case, we
+   *                    have some special cases where we don't want to duplicate work. These are:
+   *                      1. We already know that the files exist, therefore we don't need to check
+   *                    once again.
+   *                      2. The user already specified the schema. We still fall back to
+   *                    `inferFileFormatSchema` to maintain similar semantics to batch data, but
+   *                    we won't have to perform any expensive operations there, because everything
+   *                    should already be provided
    */
-  def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
+  def resolveRelation(isStreaming: Boolean = false): BaseRelation = {
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
@@ -272,7 +299,7 @@ case class DataSource(
 
         HadoopFsRelation(
           fileCatalog,
-          partitionSchema = fileCatalog.partitionSpec().partitionColumns,
+          partitionSchema = fileCatalog.partitionSchema,
           dataSchema = dataSchema,
           bucketSpec = None,
           format,
@@ -280,6 +307,12 @@ case class DataSource(
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
+        val (schema, partitionColumns) = inferFileFormatSchema(format)
+        val dataSchema = if (isStreaming) {
+          schema
+        } else {
+          StructType(schema.dropRight(partitionColumns.length))
+        }
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val globbedPaths = allPaths.flatMap { path =>
           val hdfsPath = new Path(path)
@@ -291,22 +324,17 @@ case class DataSource(
             throw new AnalysisException(s"Path does not exist: $qualified")
           }
           // Sufficient to check head of the globPath seq for non-glob scenario
-          if (checkFilesExist && !fs.exists(globPath.head)) {
+          // Don't need to check once again if files exist in streaming mode
+          if (!isStreaming && !fs.exists(globPath.head)) {
             throw new AnalysisException(s"Path does not exist: ${globPath.head}")
           }
           globPath
         }.toArray
 
-        // If they gave a schema, then we try and figure out the types of the partition columns
-        // from that schema.
-        val partitionSchema = userSpecifiedSchema.map { schema =>
-          StructType(
-            partitionColumns.map { c =>
-              // TODO: Case sensitivity.
-              schema
-                  .find(_.name.toLowerCase() == c.toLowerCase())
-                  .getOrElse(throw new AnalysisException(s"Invalid partition column '$c'"))
-            })
+        val partitionSchema = if (partitionColumns.isEmpty) {
+          None
+        } else {
+          Some(StructType(schema.takeRight(partitionColumns.length)))
         }
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
@@ -316,27 +344,12 @@ case class DataSource(
             catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L))
         } else {
-          new InMemoryFileIndex(
-            sparkSession, globbedPaths, options, partitionSchema)
-        }
-
-        val dataSchema = userSpecifiedSchema.map { schema =>
-          val equality = sparkSession.sessionState.conf.resolver
-          StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
-        }.orElse {
-          format.inferSchema(
-            sparkSession,
-            caseInsensitiveOptions,
-            fileCatalog.asInstanceOf[InMemoryFileIndex].allFiles())
-        }.getOrElse {
-          throw new AnalysisException(
-            s"Unable to infer schema for $format at ${allPaths.take(2).mkString(",")}. " +
-              "It must be specified manually")
+          new InMemoryFileIndex(sparkSession, globbedPaths, options, partitionSchema)
         }
 
         HadoopFsRelation(
           fileCatalog,
-          partitionSchema = fileCatalog.partitionSchema,
+          partitionSchema = partitionSchema.getOrElse(StructType(Nil)),
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,

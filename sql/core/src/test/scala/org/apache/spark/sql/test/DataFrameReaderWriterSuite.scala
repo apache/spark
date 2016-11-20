@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
@@ -571,6 +571,36 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         assert(
           spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
       }
+    }
+  }
+
+  test("SPARK-18510: Data corruption from user specified partition column schemas") {
+    import org.apache.spark.sql.functions.udf
+    import testImplicits._
+    withTempDir { src =>
+      val createArray = udf { (length: Long) =>
+        for (i <- 1 to length.toInt) yield i.toString
+      }
+      spark.range(4).select(createArray('id + 1) as 'ex, 'id, 'id % 4 as 'part).coalesce(1).write
+        .partitionBy("part", "id")
+        .mode("overwrite")
+        .parquet(src.toString)
+      // make sure to specify the schema in the wrong order. Partition column in the middle, etc.
+      // Also let's say that the partition columns are Strings instead of Longs.
+      val schema = new StructType()
+        .add("id", StringType)
+        .add("ex", ArrayType(StringType))
+      val df = spark.read
+        .schema(schema)
+        .format("parquet")
+        .load(src.toString)
+
+      checkAnswer(
+        df,
+        // notice how `part` is ordered before `id`
+        Row(Array("1"), 0, "0") :: Row(Array("1", "2"), 1, "1") ::
+          Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil
+      )
     }
   }
 }

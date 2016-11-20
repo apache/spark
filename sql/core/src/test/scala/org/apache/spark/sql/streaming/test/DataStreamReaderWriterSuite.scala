@@ -29,7 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, StreamingQuery, StreamTest}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 object LastOptions {
@@ -531,5 +531,45 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
     assert(e.getMessage.contains("does not support recovering"))
     assert(e.getMessage.contains("checkpoint location"))
+  }
+
+  test("SPARK-18510: Data corruption from user specified partition column schemas") {
+    import org.apache.spark.sql.functions.udf
+    import testImplicits._
+    withTempDir { src =>
+      val createArray = udf { (length: Long) =>
+        for (i <- 1 to length.toInt) yield i.toString
+      }
+      spark.range(4).select(createArray('id + 1) as 'ex, 'id, 'id % 4 as 'part).coalesce(1).write
+        .partitionBy("part", "id")
+        .mode("overwrite")
+        .parquet(src.toString)
+      // make sure to specify the schema in the wrong order. Partition column in the middle, etc.
+      // Also let's say that the partition columns are Strings instead of Longs.
+      val schema = new StructType()
+        .add("id", StringType)
+        .add("ex", ArrayType(StringType))
+
+      try {
+        val sdf = spark.readStream
+          .schema(schema)
+          .format("parquet")
+          .load(src.toString)
+
+        val sq = sdf.writeStream
+          .queryName("corruption_test")
+          .format("memory")
+          .start()
+        sq.processAllAvailable()
+        checkAnswer(
+          spark.table("corruption_test"),
+          // notice how `part` is ordered before `id`
+          Row(Array("1"), 0, "0") :: Row(Array("1", "2"), 1, "1") ::
+            Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil
+        )
+      } finally {
+        spark.streams.active.foreach(_.stop())
+      }
+    }
   }
 }
