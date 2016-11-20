@@ -90,7 +90,7 @@ class SparkConf(object):
     All setter methods in this class support chaining. For example,
     you can write C{conf.setMaster("local").setAppName("My app")}.
 
-    .. note:: once a SparkConf object is passed to Spark, it is cloned
+    .. note:: Once a SparkConf object is passed to Spark, it is cloned
         and can no longer be modified by the user.
     """
 

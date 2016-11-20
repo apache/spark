@@ -593,7 +593,7 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
         If using checkpointing and :py:attr:`LDA.keepLastCheckpoint` is set to true, then there may
         be saved checkpoint files.  This method is provided so that users can manage those files.
 
-        .. note:: removing the checkpoints can cause failures if a partition is lost and is needed
+        .. note:: Removing the checkpoints can cause failures if a partition is lost and is needed
             by certain :py:class:`DistributedLDAModel` methods.  Reference counting will clean up
             the checkpoints when this model and derivative data go out of scope.
 

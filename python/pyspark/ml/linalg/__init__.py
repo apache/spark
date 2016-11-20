@@ -748,7 +748,7 @@ class Vectors(object):
     """
     Factory methods for working with vectors.
 
-    .. note:: dense vectors are simply represented as NumPy array objects,
+    .. note:: Dense vectors are simply represented as NumPy array objects,
         so there is no need to covert them for use in MLlib. For sparse vectors,
         the factory methods in this class create an MLlib-compatible type, or users
         can pass in SciPy's C{scipy.sparse} column vectors.

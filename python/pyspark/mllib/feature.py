@@ -407,7 +407,7 @@ class HashingTF(object):
     Maps a sequence of terms to their term frequencies using the hashing
     trick.
 
-    .. note:: the terms must be hashable (can not be dict/set/list...).
+    .. note:: The terms must be hashable (can not be dict/set/list...).
 
     :param numFeatures: number of features (default: 2^20)
 
@@ -551,7 +551,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         """
         Transforms a word to its vector representation
 
-        .. note:: local use only
+        .. note:: Local use only
 
         :param word: a word
         :return: vector representation of word(s)
@@ -570,7 +570,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         :param num: number of synonyms to find
         :return: array of (word, cosineSimilarity)
 
-        .. note:: local use only
+        .. note:: Local use only
         """
         if not isinstance(word, basestring):
             word = _convert_to_vector(word)

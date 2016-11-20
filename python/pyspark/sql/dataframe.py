@@ -409,7 +409,7 @@ class DataFrame(object):
     def cache(self):
         """Persists the :class:`DataFrame` with the default storage level (C{MEMORY_AND_DISK}).
 
-        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         self._jdf.cache()
@@ -422,7 +422,7 @@ class DataFrame(object):
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
         If no storage level is specified defaults to (C{MEMORY_AND_DISK}).
 
-        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -850,7 +850,7 @@ class DataFrame(object):
     def head(self, n=None):
         """Returns the first ``n`` rows.
 
-        .. note:: this method should only be used if the resulting array is expected
+        .. note:: This method should only be used if the resulting array is expected
             to be small, as all the data is loaded into the driver's memory.
 
         :param n: int, default 1. Number of rows to return.
@@ -1516,7 +1516,7 @@ class DataFrame(object):
 
         This is only available if Pandas is installed and available.
 
-        .. note:: this method should only be used if the resulting Pandas's DataFrame is expected
+        .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
         >>> df.toPandas()  # doctest: +SKIP

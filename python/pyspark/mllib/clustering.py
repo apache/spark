@@ -699,7 +699,7 @@ class StreamingKMeansModel(KMeansModel):
     * n_t+1: New number of weights.
     * a: Decay Factor, which gives the forgetfulness.
 
-    .. note:: if a is set to 1, it is the weighted mean of the previous
+    .. note:: If a is set to 1, it is the weighted mean of the previous
         and new data. If it set to zero, the old centroids are completely
         forgotten.
 

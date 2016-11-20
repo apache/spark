@@ -427,7 +427,7 @@ class RDD(object):
         """
         Return a fixed-size sampled subset of this RDD.
 
-        .. note:: this method should only be used if the resulting array is expected
+        .. note:: This method should only be used if the resulting array is expected
             to be small, as all the data is loaded into the driver's memory.
 
         >>> rdd = sc.parallelize(range(0, 10))
@@ -539,7 +539,7 @@ class RDD(object):
         Return the intersection of this RDD and another one. The output will
         not contain any duplicate elements, even if the input RDDs did.
 
-        .. note:: this method performs a shuffle internally.
+        .. note:: This method performs a shuffle internally.
 
         >>> rdd1 = sc.parallelize([1, 10, 2, 3, 4, 5])
         >>> rdd2 = sc.parallelize([1, 6, 2, 3, 7, 8])
@@ -771,7 +771,7 @@ class RDD(object):
         """
         Return a list that contains all of the elements in this RDD.
 
-        .. note:: this method should only be used if the resulting array is expected
+        .. note:: This method should only be used if the resulting array is expected
             to be small, as all the data is loaded into the driver's memory.
         """
         with SCCallSiteSync(self.context) as css:
@@ -1219,7 +1219,7 @@ class RDD(object):
         """
         Get the top N elements from an RDD.
 
-        .. note:: this method should only be used if the resulting array is expected
+        .. note:: This method should only be used if the resulting array is expected
             to be small, as all the data is loaded into the driver's memory.
 
         .. note:: It returns the list sorted in descending order.

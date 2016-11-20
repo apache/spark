@@ -742,7 +742,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
     For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
 
-    .. note:: since zero values will probably be transformed to non-zero values, output of the
+    .. note:: Since zero values will probably be transformed to non-zero values, output of the
         transformer will be DenseVector even for sparse input.
 
     >>> from pyspark.ml.linalg import Vectors
@@ -1015,7 +1015,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     one, and hence linearly dependent.
     So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
 
-    .. note:: this is different from scikit-learn's OneHotEncoder,
+    .. note:: This is different from scikit-learn's OneHotEncoder,
         which keeps all categories. The output vectors are sparse.
 
     .. seealso::
