@@ -693,8 +693,8 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaClassificationModel
           - Normalize importances for tree to sum to 1.
 
         .. note:: Feature importance for single decision trees can have high variance due to
-              correlated predictor variables. Consider using a :py:class:`RandomForestClassifier`
-              to determine feature importance instead.
+            correlated predictor variables. Consider using a :py:class:`RandomForestClassifier`
+            to determine feature importance instead.
         """
         return self._call_java("featureImportances")
 
