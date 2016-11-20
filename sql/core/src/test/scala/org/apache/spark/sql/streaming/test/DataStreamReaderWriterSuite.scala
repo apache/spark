@@ -556,6 +556,11 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
           .format("parquet")
           .load(src.toString)
 
+        assert(sdf.schema.toList === List(
+          StructField("ex", ArrayType(StringType)),
+          StructField("part", IntegerType), // inferred partitionColumn dataType
+          StructField("id", StringType))) // used user provided partitionColumn dataType
+
         val sq = sdf.writeStream
           .queryName("corruption_test")
           .format("memory")

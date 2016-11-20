@@ -595,6 +595,11 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         .format("parquet")
         .load(src.toString)
 
+      assert(df.schema.toList === List(
+        StructField("ex", ArrayType(StringType)),
+        StructField("part", IntegerType), // inferred partitionColumn dataType
+        StructField("id", StringType))) // used user provided partitionColumn dataType
+
       checkAnswer(
         df,
         // notice how `part` is ordered before `id`
