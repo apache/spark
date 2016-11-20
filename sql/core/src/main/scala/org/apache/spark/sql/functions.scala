@@ -476,7 +476,7 @@ object functions {
    *
    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
    *
-   * Note: the list of columns should match with grouping columns exactly, or empty (means all the
+   * @note The list of columns should match with grouping columns exactly, or empty (means all the
    * grouping columns).
    *
    * @group agg_funcs
@@ -489,7 +489,7 @@ object functions {
    *
    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
    *
-   * Note: the list of columns should match with grouping columns exactly.
+   * @note The list of columns should match with grouping columns exactly.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -1120,7 +1120,7 @@ object functions {
    * Generate a random column with independent and identically distributed (i.i.d.) samples
    * from U[0.0, 1.0].
    *
-   * Note that this is indeterministic when data partitions are not fixed.
+   * @note This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1140,7 +1140,7 @@ object functions {
    * Generate a column with independent and identically distributed (i.i.d.) samples from
    * the standard normal distribution.
    *
-   * Note that this is indeterministic when data partitions are not fixed.
+   * @note This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1159,7 +1159,7 @@ object functions {
   /**
    * Partition ID.
    *
-   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
+   * @note This is indeterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    * @since 1.6.0
@@ -2207,7 +2207,7 @@ object functions {
    * Locate the position of the first occurrence of substr column in the given string.
    * Returns null if either of the arguments are null.
    *
-   * NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
+   * @note The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2242,7 +2242,8 @@ object functions {
 
   /**
    * Locate the position of the first occurrence of substr.
-   * NOTE: The position is not zero based, but 1 based index. Returns 0 if substr
+   *
+   * @note The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2255,7 +2256,7 @@ object functions {
   /**
    * Locate the position of the first occurrence of substr in a string column, after position pos.
    *
-   * NOTE: The position is not zero based, but 1 based index. returns 0 if substr
+   * @note The position is not zero based, but 1 based index. returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2369,7 +2370,8 @@ object functions {
 
   /**
    * Splits str around pattern (pattern is a regular expression).
-   * NOTE: pattern is a string representation of the regular expression.
+   *
+   * @note Pattern is a string representation of the regular expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2468,7 +2470,7 @@ object functions {
    * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
    * pattern letters of [[java.text.SimpleDateFormat]] can be used.
    *
-   * NOTE: Use when ever possible specialized functions like [[year]]. These benefit from a
+   * @note Use when ever possible specialized functions like [[year]]. These benefit from a
    * specialized implementation.
    *
    * @group datetime_funcs

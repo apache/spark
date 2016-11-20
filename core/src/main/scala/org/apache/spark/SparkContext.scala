@@ -281,7 +281,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse.
    *
-   * '''Note:''' As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+   * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
    * plan to set some global configurations for all Hadoop RDDs.
    */
   def hadoopConfiguration: Configuration = _hadoopConfiguration
@@ -700,7 +700,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Execute a block of code in a scope such that all new RDDs created in this body will
    * be part of the same scope. For more detail, see {{org.apache.spark.rdd.RDDOperationScope}}.
    *
-   * Note: Return statements are NOT allowed in the given body.
+   * @note Return statements are NOT allowed in the given body.
    */
   private[spark] def withScope[U](body: => U): U = RDDOperationScope.withScope[U](this)(body)
 
@@ -927,7 +927,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
-   * '''Note:''' We ensure that the byte array for each record in the resulting RDD
+   * @note We ensure that the byte array for each record in the resulting RDD
    * has the provided record length.
    *
    * @param path Directory to the input data files, the path can be comma separated paths as the
@@ -970,7 +970,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param valueClass Class of the values
    * @param minPartitions Minimum number of Hadoop Splits to generate.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -995,7 +995,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -1034,7 +1034,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path, minPartitions)
    * }}}
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -1058,7 +1058,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path)
    * }}}
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -1084,7 +1084,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -1124,7 +1124,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param kClass Class of the keys
    * @param vClass Class of the values
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -1150,7 +1150,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Get an RDD for a Hadoop SequenceFile with given key and value types.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -1169,7 +1169,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Get an RDD for a Hadoop SequenceFile with given key and value types.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -1199,7 +1199,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * for the appropriate type. In addition, we pass the converter a ClassTag of its type to
    * allow it to figure out the Writable class to use in the subclass case.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD or directly passing it to an aggregation or shuffle
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
@@ -1330,16 +1330,18 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Register the given accumulator.  Note that accumulators must be registered before use, or it
-   * will throw exception.
+   * Register the given accumulator.
+   *
+   * @note Accumulators must be registered before use, or it will throw exception.
    */
   def register(acc: AccumulatorV2[_, _]): Unit = {
     acc.register(this)
   }
 
   /**
-   * Register the given accumulator with given name.  Note that accumulators must be registered
-   * before use, or it will throw exception.
+   * Register the given accumulator with given name.
+   *
+   * @note Accumulators must be registered before use, or it will throw exception.
    */
   def register(acc: AccumulatorV2[_, _], name: String): Unit = {
     acc.register(this, name = Some(name))
@@ -1550,7 +1552,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executors.
    *
-   * Note: This is an indication to the cluster manager that the application wishes to adjust
+   * @note This is an indication to the cluster manager that the application wishes to adjust
    * its resource usage downwards. If the application wishes to replace the executors it kills
    * through this method with new ones, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
@@ -1572,7 +1574,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * :: DeveloperApi ::
    * Request that the cluster manager kill the specified executor.
    *
-   * Note: This is an indication to the cluster manager that the application wishes to adjust
+   * @note This is an indication to the cluster manager that the application wishes to adjust
    * its resource usage downwards. If the application wishes to replace the executor it kills
    * through this method with a new one, it should follow up explicitly with a call to
    * {{SparkContext#requestExecutors}}.
@@ -1590,7 +1592,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * this request. This assumes the cluster manager will automatically and eventually
    * fulfill all missing application resource requests.
    *
-   * Note: The replace is by no means guaranteed; another application on the same cluster
+   * @note The replace is by no means guaranteed; another application on the same cluster
    * can steal the window of opportunity and acquire this application's resources in the
    * mean time.
    *
@@ -1639,7 +1641,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Returns an immutable map of RDDs that have marked themselves as persistent via cache() call.
-   * Note that this does not necessarily mean the caching or computation was successful.
+   *
+   * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
 
@@ -2298,7 +2301,7 @@ object SparkContext extends Logging {
    * singleton object. Because we can only have one active SparkContext per JVM,
    * this is useful when applications may wish to share a SparkContext.
    *
-   * Note: This function cannot be used to create multiple SparkContext instances
+   * @note This function cannot be used to create multiple SparkContext instances
    * even if multiple contexts are allowed.
    */
   def getOrCreate(config: SparkConf): SparkContext = {
@@ -2323,7 +2326,7 @@ object SparkContext extends Logging {
    *
    * This method allows not passing a SparkConf (useful if just retrieving).
    *
-   * Note: This function cannot be used to create multiple SparkContext instances
+   * @note This function cannot be used to create multiple SparkContext instances
    * even if multiple contexts are allowed.
    */
   def getOrCreate(): SparkContext = {

@@ -140,7 +140,7 @@ abstract class JdbcDialect extends Serializable {
  * tried in reverse order. A user-added dialect will thus be applied first,
  * overwriting the defaults.
  *
- * Note that all new dialects are applied to new jdbc DataFrames only. Make
+ * @note All new dialects are applied to new jdbc DataFrames only. Make
  * sure to register your dialects first.
  */
 @DeveloperApi
