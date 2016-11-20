@@ -115,8 +115,8 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
         Applies transformation on a vector or an RDD[Vector].
 
         .. note:: In Python, transform cannot currently be used within
-              an RDD transformation or action.
-              Call transform directly on the RDD instead.
+            an RDD transformation or action.
+            Call transform directly on the RDD instead.
 
         :param vector: Vector or RDD of Vector to be transformed.
         """
@@ -140,8 +140,8 @@ class StandardScalerModel(JavaVectorTransformer):
         Applies standardization transformation on a vector.
 
         .. note:: In Python, transform cannot currently be used within
-              an RDD transformation or action.
-              Call transform directly on the RDD instead.
+            an RDD transformation or action.
+            Call transform directly on the RDD instead.
 
         :param vector: Vector or RDD of Vector to be standardized.
         :return: Standardized vector. If the variance of a column is
@@ -470,8 +470,8 @@ class IDFModel(JavaVectorTransformer):
         documents will have an entry of 0.
 
         .. note:: In Python, transform cannot currently be used within
-              an RDD transformation or action.
-              Call transform directly on the RDD instead.
+            an RDD transformation or action.
+            Call transform directly on the RDD instead.
 
         :param x: an RDD of term frequency vectors or a term frequency
                   vector
