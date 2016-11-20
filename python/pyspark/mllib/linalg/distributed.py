@@ -70,14 +70,14 @@ class RowMatrix(DistributedMatrix):
     """
     def __init__(self, rows, numRows=0, numCols=0):
         """
-        Note: This docstring is not shown publicly.
-
         Create a wrapper over a Java RowMatrix.
 
         Publicly, we require that `rows` be an RDD.  However, for
         internal usage, `rows` can also be a Java RowMatrix
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
+
+        .. note:: This docstring is not shown publicly.
 
         >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6]])
         >>> mat = RowMatrix(rows)
@@ -171,8 +171,9 @@ class RowMatrix(DistributedMatrix):
     def computeCovariance(self):
         """
         Computes the covariance matrix, treating each row as an
-        observation. Note that this cannot be computed on matrices
-        with more than 65535 columns.
+        observation.
+
+        .. note:: this cannot be computed on matrices with more than 65535 columns.
 
         >>> rows = sc.parallelize([[1, 2], [2, 1]])
         >>> mat = RowMatrix(rows)
@@ -185,8 +186,9 @@ class RowMatrix(DistributedMatrix):
     @since('2.0.0')
     def computeGramianMatrix(self):
         """
-        Computes the Gramian matrix `A^T A`. Note that this cannot be
-        computed on matrices with more than 65535 columns.
+        Computes the Gramian matrix `A^T A`.
+
+        .. note:: this cannot be computed on matrices with more than 65535 columns.
 
         >>> rows = sc.parallelize([[1, 2, 3], [4, 5, 6]])
         >>> mat = RowMatrix(rows)
@@ -342,14 +344,14 @@ class IndexedRowMatrix(DistributedMatrix):
     """
     def __init__(self, rows, numRows=0, numCols=0):
         """
-        Note: This docstring is not shown publicly.
-
         Create a wrapper over a Java IndexedRowMatrix.
 
         Publicly, we require that `rows` be an RDD.  However, for
         internal usage, `rows` can also be a Java IndexedRowMatrix
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
+
+        .. note:: This docstring is not shown publicly.
 
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(1, [4, 5, 6])])
@@ -458,8 +460,9 @@ class IndexedRowMatrix(DistributedMatrix):
     @since('2.0.0')
     def computeGramianMatrix(self):
         """
-        Computes the Gramian matrix `A^T A`. Note that this cannot be
-        computed on matrices with more than 65535 columns.
+        Computes the Gramian matrix `A^T A`.
+
+        .. note:: this cannot be computed on matrices with more than 65535 columns.
 
         >>> rows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
         ...                        IndexedRow(1, [4, 5, 6])])
@@ -571,14 +574,14 @@ class CoordinateMatrix(DistributedMatrix):
     """
     def __init__(self, entries, numRows=0, numCols=0):
         """
-        Note: This docstring is not shown publicly.
-
         Create a wrapper over a Java CoordinateMatrix.
 
         Publicly, we require that `rows` be an RDD.  However, for
         internal usage, `rows` can also be a Java CoordinateMatrix
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
+
+        .. note:: This docstring is not shown publicly.
 
         >>> entries = sc.parallelize([MatrixEntry(0, 0, 1.2),
         ...                           MatrixEntry(6, 4, 2.1)])
@@ -808,14 +811,14 @@ class BlockMatrix(DistributedMatrix):
     """
     def __init__(self, blocks, rowsPerBlock, colsPerBlock, numRows=0, numCols=0):
         """
-        Note: This docstring is not shown publicly.
-
         Create a wrapper over a Java BlockMatrix.
 
         Publicly, we require that `blocks` be an RDD.  However, for
         internal usage, `blocks` can also be a Java BlockMatrix
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
+
+        .. note:: This docstring is not shown publicly.
 
         >>> blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
         ...                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])

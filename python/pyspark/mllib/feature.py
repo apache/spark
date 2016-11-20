@@ -114,7 +114,7 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
         """
         Applies transformation on a vector or an RDD[Vector].
 
-        Note: In Python, transform cannot currently be used within
+        .. note:: In Python, transform cannot currently be used within
               an RDD transformation or action.
               Call transform directly on the RDD instead.
 
@@ -139,7 +139,7 @@ class StandardScalerModel(JavaVectorTransformer):
         """
         Applies standardization transformation on a vector.
 
-        Note: In Python, transform cannot currently be used within
+        .. note:: In Python, transform cannot currently be used within
               an RDD transformation or action.
               Call transform directly on the RDD instead.
 
@@ -407,7 +407,7 @@ class HashingTF(object):
     Maps a sequence of terms to their term frequencies using the hashing
     trick.
 
-    Note: the terms must be hashable (can not be dict/set/list...).
+    .. note:: the terms must be hashable (can not be dict/set/list...).
 
     :param numFeatures: number of features (default: 2^20)
 
@@ -469,7 +469,7 @@ class IDFModel(JavaVectorTransformer):
         the terms which occur in fewer than `minDocFreq`
         documents will have an entry of 0.
 
-        Note: In Python, transform cannot currently be used within
+        .. note:: In Python, transform cannot currently be used within
               an RDD transformation or action.
               Call transform directly on the RDD instead.
 
@@ -551,7 +551,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         """
         Transforms a word to its vector representation
 
-        Note: local use only
+        .. note:: local use only
 
         :param word: a word
         :return: vector representation of word(s)
@@ -570,7 +570,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         :param num: number of synonyms to find
         :return: array of (word, cosineSimilarity)
 
-        Note: local use only
+        .. note:: local use only
         """
         if not isinstance(word, basestring):
             word = _convert_to_vector(word)
