@@ -2478,9 +2478,22 @@
               <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
               <tags>
                 <tag>
+                  <name>example</name>
+                  <placement>a</placement>
+                  <head>Example:</head>
+                </tag>
+                <tag>
                   <name>note</name>
                   <placement>a</placement>
                   <head>Note:</head>
+                </tag>
+                <tag>
+                  <name>group</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>tparam</name>
+                  <placement>X</placement>
                 </tag>
               </tags>
             </configuration>
