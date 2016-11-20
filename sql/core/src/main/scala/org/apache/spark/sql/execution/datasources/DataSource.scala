@@ -108,9 +108,13 @@ case class DataSource(
       }
       StructType(resolved)
     } else {
+      // in streaming mode, we have already inferred and registered partition columns, we will
+      // never have to re-use this
       lazy val inferredPartitions = tempFileCatalog.partitionSchema
       val partitionFields = partitionColumns.map { partitionColumn =>
         userSpecifiedSchema.flatMap(_.find(_.name == partitionColumn)).orElse {
+          logDebug(s"Schema of partition column: $partitionColumn not found in specified schema. " +
+            "Falling back to inferred dataType if it exists.")
           inferredPartitions.find(_.name == partitionColumn)
         }.getOrElse {
           throw new AnalysisException("Failed to resolve the schema for the partition column: " +
@@ -307,11 +311,11 @@ case class DataSource(
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
-        val (schema, partitionColumns) = inferFileFormatSchema(format)
+        val (schema, inferredPartitionColumns) = inferFileFormatSchema(format)
         val dataSchema = if (isStreaming) {
           schema
         } else {
-          StructType(schema.dropRight(partitionColumns.length))
+          StructType(schema.dropRight(inferredPartitionColumns.length))
         }
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val globbedPaths = allPaths.flatMap { path =>
@@ -331,10 +335,10 @@ case class DataSource(
           globPath
         }.toArray
 
-        val partitionSchema = if (partitionColumns.isEmpty) {
+        val partitionSchema = if (inferredPartitionColumns.isEmpty) {
           None
         } else {
-          Some(StructType(schema.takeRight(partitionColumns.length)))
+          Some(StructType(schema.takeRight(inferredPartitionColumns.length)))
         }
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
