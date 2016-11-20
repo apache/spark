@@ -55,7 +55,7 @@ class MesosClusterDispatcherArgumentsSuite extends SparkFunSuite
     assert(Option(mesosDispClusterArgs.masterUrl).isDefined)
     assert(mesosDispClusterArgs.masterUrl == masterUrl.stripPrefix("mesos://"))
     assert(Option(mesosDispClusterArgs.zookeeperUrl).isDefined)
-    assert(mesosDispClusterArgs.zookeeperUrl contains zookeeperUrl)
+    assert(mesosDispClusterArgs.zookeeperUrl == Some(zookeeperUrl))
     assert(mesosDispClusterArgs.name == name)
     assert(mesosDispClusterArgs.webUiPort == webUiPort.toInt)
     assert(mesosDispClusterArgs.port == port.toInt)
