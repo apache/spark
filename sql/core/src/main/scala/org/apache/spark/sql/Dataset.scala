@@ -554,8 +554,7 @@ class Dataset[T] private[sql](
    * @param delayThreshold the minimum delay to wait to data to arrive late, relative to the latest
    *                       record that has been processed in the form of an interval
    *                       (e.g. "1 minute" or "5 hours").
-   *
-   * @group streaming
+    * @group streaming
    * @since 2.1.0
    */
   @Experimental
@@ -582,8 +581,7 @@ class Dataset[T] private[sql](
    * }}}
    *
    * @param numRows Number of rows to show
-   *
-   * @group action
+    * @group action
    * @since 1.6.0
    */
   def show(numRows: Int): Unit = show(numRows, truncate = true)
@@ -602,8 +600,7 @@ class Dataset[T] private[sql](
    *
    * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *                 be truncated and all cells will be aligned right
-   *
-   * @group action
+    * @group action
    * @since 1.6.0
    */
   def show(truncate: Boolean): Unit = show(20, truncate)
@@ -618,11 +615,11 @@ class Dataset[T] private[sql](
    *   1983  03    0.410516        0.442194
    *   1984  04    0.450090        0.483521
    * }}}
-   * @param numRows Number of rows to show
+    *
+    * @param numRows Number of rows to show
    * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *              be truncated and all cells will be aligned right
-   *
-   * @group action
+    * @group action
    * @since 1.6.0
    */
   // scalastyle:off println
@@ -684,8 +681,7 @@ class Dataset[T] private[sql](
    * Behaves as an INNER JOIN and requires a subsequent join predicate.
    *
    * @param right Right side of the join operation.
-   *
-   * @group untypedrel
+    * @group untypedrel
    * @since 2.0.0
    */
   def join(right: Dataset[_]): DataFrame = withPlan {
@@ -705,12 +701,10 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join operation.
    * @param usingColumn Name of the column to join on. This column must exist on both sides.
-   *
-   * @note If you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
-   * @group untypedrel
+    * @note If you perform a self-join using this function without aliasing the input
+   *        [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   *        there is no way to disambiguate which side of the join you would like to reference.
+    * @group untypedrel
    * @since 2.0.0
    */
   def join(right: Dataset[_], usingColumn: String): DataFrame = {
@@ -730,16 +724,38 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
-   *
-   * @note If you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
-   * @group untypedrel
+    * @note If you perform a self-join using this function without aliasing the input
+   *        [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   *        there is no way to disambiguate which side of the join you would like to reference.
+    * @group untypedrel
    * @since 2.0.0
    */
   def join(right: Dataset[_], usingColumns: Seq[String]): DataFrame = {
     join(right, usingColumns, "inner")
+  }
+
+  /**
+    * Equi-join with another [[DataFrame]] using the given column.
+    *
+    * Different from other join functions, the join column will only appear once in the output,
+    * i.e. similar to SQL's `JOIN USING` syntax.
+    *
+    * {{{
+    *   // Joining df1 and df2 using the column "user_id"
+    *   df1.join(df2, "user_id","left")
+    * }}}
+    *
+    * @param right       Right side of the join operation.
+    * @param usingColumn Name of the column to join on. This column must exist on both sides.
+    * @param joinType    One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+    * @note If you perform a self-join using this function without aliasing the input
+    *       [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+    *       there is no way to disambiguate which side of the join you would like to reference.
+    * @group untypedrel
+    * @since 2.0.0
+    */
+  def join(right: Dataset[_], usingColumn: String, joinType: String): DataFrame = {
+    join(right, Seq(usingColumn), joinType)
   }
 
   /**
@@ -751,12 +767,10 @@ class Dataset[T] private[sql](
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
-   *
-   * @note If you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
-   * @group untypedrel
+    * @note If you perform a self-join using this function without aliasing the input
+   *        [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   *        there is no way to disambiguate which side of the join you would like to reference.
+    * @group untypedrel
    * @since 2.0.0
    */
   def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame = {
@@ -806,8 +820,7 @@ class Dataset[T] private[sql](
    * @param right Right side of the join.
    * @param joinExprs Join expression.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
-   *
-   * @group untypedrel
+    * @group untypedrel
    * @since 2.0.0
    */
   def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
@@ -857,10 +870,8 @@ class Dataset[T] private[sql](
    * Explicit cartesian join with another [[DataFrame]].
    *
    * @param right Right side of the join operation.
-   *
-   * @note Cartesian joins are very expensive without an extra filter that can be pushed down.
-   *
-   * @group untypedrel
+    * @note Cartesian joins are very expensive without an extra filter that can be pushed down.
+    * @group untypedrel
    * @since 2.1.0
    */
   def crossJoin(right: Dataset[_]): DataFrame = withPlan {
@@ -883,8 +894,7 @@ class Dataset[T] private[sql](
    * @param other Right side of the join.
    * @param condition Join expression.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
-   *
-   * @group typedrel
+    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -955,8 +965,7 @@ class Dataset[T] private[sql](
    *
    * @param other Right side of the join.
    * @param condition Join expression.
-   *
-   * @group typedrel
+    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1046,8 +1055,7 @@ class Dataset[T] private[sql](
    * Selects column based on the column name and return it as a [[Column]].
    *
    * @note The column name can also reference to a nested column like `a.b`.
-   *
-   * @group untypedrel
+    * @group untypedrel
    * @since 2.0.0
    */
   def apply(colName: String): Column = col(colName)
@@ -1056,8 +1064,7 @@ class Dataset[T] private[sql](
    * Selects column based on the column name and return it as a [[Column]].
    *
    * @note The column name can also reference to a nested column like `a.b`.
-   *
-   * @group untypedrel
+    * @group untypedrel
    * @since 2.0.0
    */
   def col(colName: String): Column = colName match {
@@ -1394,7 +1401,8 @@ class Dataset[T] private[sql](
    *     "age" -> "max"
    *   ))
    * }}}
-   * @group untypedrel
+    *
+    * @group untypedrel
    * @since 2.0.0
    */
   @scala.annotation.varargs
@@ -1513,7 +1521,8 @@ class Dataset[T] private[sql](
    *     "age" -> "max"
    *   ))
    * }}}
-   * @group untypedrel
+    *
+    * @group untypedrel
    * @since 2.0.0
    */
   @scala.annotation.varargs
@@ -1625,8 +1634,7 @@ class Dataset[T] private[sql](
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
-   *
-   * @group typedrel
+    * @group typedrel
    * @since 1.6.0
    */
   def intersect(other: Dataset[T]): Dataset[T] = withSetOperator {
@@ -1639,8 +1647,7 @@ class Dataset[T] private[sql](
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
-   *
-   * @group typedrel
+    * @group typedrel
    * @since 2.0.0
    */
   def except(other: Dataset[T]): Dataset[T] = withSetOperator {
@@ -1653,11 +1660,9 @@ class Dataset[T] private[sql](
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
    * @param seed Seed for sampling.
-   *
-   * @note This is NOT guaranteed to provide exactly the fraction of the count
-   * of the given [[Dataset]].
-   *
-   * @group typedrel
+    * @note This is NOT guaranteed to provide exactly the fraction of the count
+   *        of the given [[Dataset]].
+    * @group typedrel
    * @since 1.6.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
@@ -1674,11 +1679,9 @@ class Dataset[T] private[sql](
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
-   *
-   * @note This is NOT guaranteed to provide exactly the fraction of the total count
-   * of the given [[Dataset]].
-   *
-   * @group typedrel
+    * @note This is NOT guaranteed to provide exactly the fraction of the total count
+   *        of the given [[Dataset]].
+    * @group typedrel
    * @since 1.6.0
    */
   def sample(withReplacement: Boolean, fraction: Double): Dataset[T] = {
@@ -1692,8 +1695,7 @@ class Dataset[T] private[sql](
    * @param seed Seed for sampling.
    *
    * For Java API, use [[randomSplitAsList]].
-   *
-   * @group typedrel
+    * @group typedrel
    * @since 2.0.0
    */
   def randomSplit(weights: Array[Double], seed: Long): Array[Dataset[T]] = {
@@ -1722,8 +1724,7 @@ class Dataset[T] private[sql](
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
-   *
-   * @group typedrel
+    * @group typedrel
    * @since 2.0.0
    */
   def randomSplitAsList(weights: Array[Double], seed: Long): java.util.List[Dataset[T]] = {
@@ -2099,8 +2100,7 @@ class Dataset[T] private[sql](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-   *
-   * @group action
+    * @group action
    * @since 1.6.0
    */
   def head(n: Int): Array[T] = withTypedCallback("head", limit(n)) { df =>
@@ -2109,14 +2109,16 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the first row.
-   * @group action
+    *
+    * @group action
    * @since 1.6.0
    */
   def head(): T = head(1).head
 
   /**
    * Returns the first row. Alias for head().
-   * @group action
+    *
+    * @group action
    * @since 1.6.0
    */
   def first(): T = head()
@@ -2380,8 +2382,7 @@ class Dataset[T] private[sql](
    * @note this results in multiple Spark jobs, and if the input Dataset is the result
    * of a wide transformation (e.g. join with different partitioners), to avoid
    * recomputing the input Dataset should be cached first.
-   *
-   * @group action
+    * @group action
    * @since 2.0.0
    */
   def toLocalIterator(): java.util.Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
@@ -2392,7 +2393,8 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the number of rows in the Dataset.
-   * @group action
+    *
+    * @group action
    * @since 1.6.0
    */
   def count(): Long = withCallback("count", groupBy().count()) { df =>
@@ -2457,8 +2459,7 @@ class Dataset[T] private[sql](
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
-   *
-   * @group typedrel
+    * @group typedrel
    * @since 2.0.0
    */
   def distinct(): Dataset[T] = dropDuplicates()
@@ -2484,11 +2485,11 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the given storage level.
-   * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
+    *
+    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
    *                 `MEMORY_AND_DISK_2`, etc.
-   *
-   * @group basic
+    * @group basic
    * @since 1.6.0
    */
   def persist(newLevel: StorageLevel): this.type = {
@@ -2512,8 +2513,7 @@ class Dataset[T] private[sql](
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
    *
    * @param blocking Whether to block until all blocks are deleted.
-   *
-   * @group basic
+    * @group basic
    * @since 1.6.0
    */
   def unpersist(blocking: Boolean): this.type = {
@@ -2545,14 +2545,16 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a [[JavaRDD]] of [[T]]s.
-   * @group basic
+    *
+    * @group basic
    * @since 1.6.0
    */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
 
   /**
    * Returns the content of the Dataset as a [[JavaRDD]] of [[T]]s.
-   * @group basic
+    *
+    * @group basic
    * @since 1.6.0
    */
   def javaRDD: JavaRDD[T] = toJavaRDD
@@ -2578,8 +2580,7 @@ class Dataset[T] private[sql](
    * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
    *
    * @throws AnalysisException if the view name already exists
-   *
-   * @group basic
+    * @group basic
    * @since 2.0.0
    */
   @throws[AnalysisException]
@@ -2610,8 +2611,7 @@ class Dataset[T] private[sql](
    * view, e.g. `SELECT * FROM _global_temp.view1`.
    *
    * @throws AnalysisException if the view name already exists
-   *
-   * @group basic
+    * @group basic
    * @since 2.1.0
    */
   @throws[AnalysisException]
@@ -2670,7 +2670,8 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
-   * @since 2.0.0
+    *
+    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
