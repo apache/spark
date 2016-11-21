@@ -58,11 +58,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
     val expr: Expression = serializer.deserialize(serializer.serialize(expression))
     // No codegen version expects GenericArrayData
-    val catalystValue = expected match {
-      case arr: Array[Byte] if expression.dataType == BinaryType => arr
-      case arr: Array[_] => new GenericArrayData(arr.map(CatalystTypeConverters.convertToCatalyst))
-      case _ => CatalystTypeConverters.convertToCatalyst(expected)
-    }
+    val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     // Codegen version expects UnsafeArrayData for array expect Array(Binarytype)
     val catalystValueForCodegen = expected match {
        case arr: Array[Byte] if expression.dataType == BinaryType => arr
