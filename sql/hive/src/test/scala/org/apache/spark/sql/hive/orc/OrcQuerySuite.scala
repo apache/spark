@@ -355,7 +355,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
             spark.read.orc(path)
           }.getMessage
 
-          assert(errorMessage.contains("Unable to infer schema"))
+          assert(errorMessage.contains("Unable to infer schema for ORC"))
 
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
           singleRowDF.createOrReplaceTempView("single")

@@ -155,6 +155,10 @@ case class DataSource(
     if (justPartitioning) {
       partitionSchema -> partitionSchema.map(_.name)
     }
+    if (catalogTable.isDefined && userSpecifiedSchema.isDefined) {
+      // backwards compatibility before SPARK-18510. Return the schema of catalog tables as is
+      return userSpecifiedSchema.get -> partitionSchema.map(_.name)
+    }
     val tableSchema = userSpecifiedSchema.map { schema =>
       val equality = sparkSession.sessionState.conf.resolver
       StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
@@ -164,7 +168,9 @@ case class DataSource(
         caseInsensitiveOptions,
         tempFileCatalog.allFiles())
     }.getOrElse {
-      throw new AnalysisException("Unable to infer schema. It must be specified manually.")
+      val exampleFiles = tempFileCatalog.allFiles().take(2).mkString(",")
+      throw new AnalysisException(
+        s"Unable to infer schema for $format at $exampleFiles. It must be specified manually.")
     }
     // always append partitions to the end
     StructType(tableSchema ++ partitionSchema) -> partitionSchema.map(_.name)
