@@ -568,8 +568,11 @@ case class MapObjects private(
           $loopNullCheck
 
           ${genFunction.code}
-          $convertedArray[$loopIndex] =
-            ${genFunction.isNull} ? null : ($convertedType) $genFunctionValue;
+          if (${genFunction.isNull}) {
+            $convertedArray[$loopIndex] = null;
+          } else {
+            $convertedArray[$loopIndex] = $genFunctionValue;
+          }
 
           $loopIndex += 1;
         }
@@ -722,8 +725,11 @@ case class ExternalMapToCatalyst private(
             }
 
             ${genValueConverter.code}
-            $convertedValues[$index] =
-              ${genValueConverter.isNull} ? null : ($convertedValueType) ${genValueConverter.value};
+            if (${genValueConverter.isNull}) {
+              $convertedValues[$index] = null;
+            } else {
+              $convertedValues[$index] = ($convertedValueType) ${genValueConverter.value};
+            }
 
             $index++;
           }
@@ -759,8 +765,12 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
     val childrenCodes = children.zipWithIndex.map { case (e, i) =>
       val eval = e.genCode(ctx)
       eval.code + s"""
-        $values[$i] = ${eval.isNull} ? null : (Object) ${eval.value};
-      """
+          if (${eval.isNull}) {
+            $values[$i] = null;
+          } else {
+            $values[$i] = ${eval.value};
+          }
+         """
     }
 
     val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
