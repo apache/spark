@@ -544,6 +544,53 @@ class CodegenContext {
         """
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
+    case MapType(keyType, valueType, _, true) =>
+      val compareFunc = freshName("compareMap")
+      val funcCode: String =
+        s"""
+          public int $compareFunc(MapData a, MapData b) {
+            int lengthA = a.numElements();
+            int lengthB = b.numElements();
+            ArrayData aKeys = a.keyArray();
+            ArrayData aValues = a.valueArray();
+            ArrayData bKeys = b.keyArray();
+            ArrayData bValues = b.valueArray();
+            int minLength = (lengthA > lengthB) ? lengthB : lengthA;
+            for (int i = 0; i < minLength; i++) {
+              ${javaType(keyType)} keyA = ${getValue("aKeys", valueType, "i")};
+              ${javaType(keyType)} keyB = ${getValue("bKeys", valueType, "i")};
+              int comp = ${genComp(valueType, "keyA", "keyB")};
+              if (comp != 0) {
+                return comp;
+              }
+              boolean isNullA = aValues.isNullAt(i);
+              boolean isNullB = bValues.isNullAt(i);
+              if (isNullA && isNullB) {
+                // Nothing
+              } else if (isNullA) {
+                return -1;
+              } else if (isNullB) {
+                return 1;
+              } else {
+                ${javaType(valueType)} valueA = ${getValue("aValues", valueType, "i")};
+                ${javaType(valueType)} valueB = ${getValue("bValues", valueType, "i")};
+                int comp = ${genComp(valueType, "valueA", "valueB")};
+                if (comp != 0) {
+                  return comp;
+                }
+              }
+            }
+
+            if (lengthA < lengthB) {
+              return -1;
+            } else if (lengthA > lengthB) {
+              return 1;
+            }
+            return 0;
+          }
+        """
+      addNewFunction(compareFunc, funcCode)
+      s"this.$compareFunc($c1, $c2)"
     case schema: StructType =>
       INPUT_ROW = "i"
       val comparisons = GenerateOrdering.genComparisons(this, schema)

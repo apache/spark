@@ -190,7 +190,8 @@ trait CheckAnalysis extends PredicateHelper {
               case e if e.dataType.isInstanceOf[BinaryType] =>
                 failAnalysis(s"binary type expression ${e.sql} cannot be used " +
                   "in join conditions")
-              case e if e.dataType.isInstanceOf[MapType] =>
+              case e if e.dataType.isInstanceOf[MapType] &&
+                       !e.dataType.asInstanceOf[MapType].ordered =>
                 failAnalysis(s"map type expression ${e.sql} cannot be used " +
                   "in join conditions")
               case _ => // OK

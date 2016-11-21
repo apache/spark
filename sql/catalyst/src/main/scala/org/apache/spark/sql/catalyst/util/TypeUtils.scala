@@ -69,9 +69,14 @@ object TypeUtils {
   }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    for (i <- 0 until x.length; if i < y.length) {
-      val res = x(i).compareTo(y(i))
-      if (res != 0) return res
+    var i = 0
+    val length = scala.math.min(x.length, y.length)
+    while (i < length) {
+      val res = x(i) - y(i)
+      if (res != 0) {
+        return res
+      }
+      i += 1
     }
     x.length - y.length
   }

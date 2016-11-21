@@ -104,6 +104,7 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables ::
+      SortMaps ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -2330,5 +2331,29 @@ object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
           kv
       }
       CreateNamedStruct(children.toList)
+  }
+}
+
+/**
+ * MapType expressions are not comparable.
+ */
+object SortMaps extends Rule[LogicalPlan] {
+  private def hasUnorderedMap(e: Expression): Boolean = e.dataType match {
+    case m: MapType => !m.ordered
+    case _ => false
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
+    case cmp @ BinaryComparison(left, right) if cmp.resolved && hasUnorderedMap(left) =>
+      cmp.withNewChildren(SortMap(left) :: right :: Nil)
+    case cmp @ BinaryComparison(left, right) if cmp.resolved && hasUnorderedMap(right) =>
+      cmp.withNewChildren(left :: SortMap(right) :: Nil)
+  } transform {
+    case a: Aggregate if a.resolved && a.groupingExpressions.exists(hasUnorderedMap) =>
+      a.transformExpressionsUp {
+        case a: Attribute if hasUnorderedMap(a) =>
+          Alias(SortMap(a), a.name)(exprId = a.exprId, qualifier = a.qualifier)
+        case e if hasUnorderedMap(e) => SortMap(e)
+      }
   }
 }

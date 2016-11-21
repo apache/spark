@@ -53,6 +53,10 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
             a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case a: ArrayType if order.direction == Descending =>
             a.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+          case m: MapType if m.ordered && order.direction == Ascending =>
+            m.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
+          case m: MapType if m.ordered && order.direction == Descending =>
+            m.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
           case s: StructType if order.direction == Ascending =>
             s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case s: StructType if order.direction == Descending =>
@@ -66,7 +70,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
       }
       i += 1
     }
-    return 0
+    0
   }
 }
 
@@ -92,6 +96,7 @@ object RowOrdering {
     case dt: AtomicType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)
+    case map: MapType => map.ordered
     case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
     case _ => false
   }
