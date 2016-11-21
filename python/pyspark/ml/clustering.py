@@ -27,7 +27,8 @@ __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
            'LDA', 'LDAModel', 'LocalLDAModel', 'DistributedLDAModel']
 
 
-class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class GaussianMixtureModel(JavaModel, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
+                           HasProbabilityCol, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -181,7 +182,8 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         return self.getOrDefault(self.k)
 
 
-class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable, HasFeaturesCol,
+                  HasPredictionCol, HasMaxIter, HasTol, HasSeed):
     """
     Model fitted by KMeans.
 
@@ -324,7 +326,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         return self.getOrDefault(self.initSteps)
 
 
-class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class BisectingKMeansModel(JavaModel, HasFeaturesCol, HasPredictionCol, HasMaxIter,
+                           HasSeed, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -461,7 +464,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
 
 @inherit_doc
-class LDAModel(JavaModel):
+class LDAModel(JavaModel, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval):
     """
     .. note:: Experimental
 
