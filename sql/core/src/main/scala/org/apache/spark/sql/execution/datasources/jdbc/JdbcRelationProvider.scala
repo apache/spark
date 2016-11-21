@@ -39,7 +39,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       null
     } else {
       JDBCPartitioningInfo(
-        partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.toInt)
+        partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.get)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
     JDBCRelation(parts, jdbcOptions)(sqlContext.sparkSession)
