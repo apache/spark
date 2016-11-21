@@ -405,8 +405,11 @@ setMethod("reduceByKeyLocally",
 #'
 #' Generic function to combine the elements for each key using a custom set of
 #' aggregation functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)],
-#' for a "combined type" C. Note that V and C can be different -- for example, one
+#' for a "combined type" C.
+#'
+#' Note: V and C can be different -- for example, one
 #' might group an RDD of type (Int, Int) into an RDD of type (Int, Seq[Int]).
+#'
 #' Users provide three functions:
 #' \itemize{
 #'   \item createCombiner, which turns a V into a C (e.g., creates a one-element list)
