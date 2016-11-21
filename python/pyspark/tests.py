@@ -390,6 +390,23 @@ class CheckpointTests(ReusedPySparkTestCase):
         self.assertEqual([1, 2, 3, 4], recovered.collect())
 
 
+class LocalCheckpointTests(ReusedPySparkTestCase):
+
+    def test_basic_localcheckpointing(self):
+        parCollection = self.sc.parallelize([1, 2, 3, 4])
+        flatMappedRDD = parCollection.flatMap(lambda x: range(1, x + 1))
+
+        self.assertFalse(flatMappedRDD.isCheckpointed())
+        self.assertFalse(flatMappedRDD.isLocallyCheckpointed())
+
+        flatMappedRDD.localCheckpoint()
+        result = flatMappedRDD.collect()
+        time.sleep(1)  # 1 second
+        self.assertTrue(flatMappedRDD.isCheckpointed())
+        self.assertTrue(flatMappedRDD.isLocallyCheckpointed())
+        self.assertEqual(flatMappedRDD.collect(), result)
+
+
 class AddFileTests(PySparkTestCase):
 
     def test_add_py_file(self):
