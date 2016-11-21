@@ -126,13 +126,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create a [[ShowTablesCommand]] logical plan.
    * Example SQL :
    * {{{
-   *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+   *   SHOW TABLES [EXTENDED] [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards']
+   *   [PARTITION(partition_spec)];
    * }}}
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed("SHOW TABLES [EXTENDED] ... PARTITION", ctx)
+    }
     ShowTablesCommand(
       Option(ctx.db).map(_.getText),
-      Option(ctx.pattern).map(string))
+      Option(ctx.pattern).map(string),
+      ctx.EXTENDED != null)
   }
 
   /**
