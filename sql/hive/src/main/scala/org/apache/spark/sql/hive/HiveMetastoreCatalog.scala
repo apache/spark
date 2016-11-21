@@ -64,7 +64,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val dataSource =
           DataSource(
             sparkSession,
-            userSpecifiedSchema = Some(table.schema),
+            // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+            // inferred at runtime. We should still support it.
+            userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
             partitionColumns = table.partitionColumnNames,
             bucketSpec = table.bucketSpec,
             className = table.provider.get,

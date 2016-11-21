@@ -80,5 +80,6 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
       assert(result.synchronized { sent === result })
     }
+    ssc.stop()
   }
 }

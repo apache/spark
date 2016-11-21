@@ -222,9 +222,9 @@ The `sql` function enables applications to run SQL queries programmatically and 
 
 ## Global Temporary View
 
-Temporay views in Spark SQL are session-scoped and will disappear if the session that creates it
+Temporary views in Spark SQL are session-scoped and will disappear if the session that creates it
 terminates. If you want to have a temporary view that is shared among all sessions and keep alive
-until the Spark application terminiates, you can create a global temporary view. Global temporary
+until the Spark application terminates, you can create a global temporary view. Global temporary
 view is tied to a system preserved database `global_temp`, and we must use the qualified name to
 refer it, e.g. `SELECT * FROM global_temp.view1`.
 
@@ -1029,7 +1029,7 @@ following command:
 bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
 {% endhighlight %}
 
-Tables from the remote database can be loaded as a DataFrame or Spark SQL Temporary table using
+Tables from the remote database can be loaded as a DataFrame or Spark SQL temporary view using
 the Data Sources API. Users can specify the JDBC connection properties in the data source options.
 <code>user</code> and <code>password</code> are normally provided as connection properties for
 logging into the data sources. In addition to the connection properties, Spark also supports
@@ -1083,6 +1083,13 @@ the following case-sensitive options:
      <td><code>batchsize</code></td>
      <td>
        The JDBC batch size, which determines how many rows to insert per round trip. This can help performance on JDBC drivers. This option applies only to writing. It defaults to <code>1000</code>.
+     </td>
+  </tr>
+
+  <tr>
+     <td><code>maxConnections</code></td>
+     <td>
+       The maximum number of concurrent JDBC connections that can be used, if set. Only applies when writing. It works by limiting the operation's parallelism, which depends on the input's partition count. If its partition count exceeds this limit, the operation will coalesce the input to fewer partitions before writing.
      </td>
   </tr>
 

@@ -202,6 +202,15 @@ of the most common options to set are:
     or remotely ("cluster") on one of the nodes inside the cluster.
   </td>
 </tr>
+<tr>
+  <td><code>spark.log.callerContext</code></td>
+  <td>(none)</td>
+  <td>
+    Application information that will be written into Yarn RM log/HDFS audit log when running on Yarn/HDFS.
+    Its length depends on the Hadoop configuration <code>hadoop.caller.context.max.size</code>. It should be concise,
+    and typically can have up to 50 characters.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
@@ -1175,7 +1184,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.rpc.askTimeout</code></td>
-  <td>120s</td>
+  <td><code>spark.network.timeout</code></td>
   <td>
     Duration for an RPC ask operation to wait before timing out.
   </td>
@@ -1530,8 +1539,34 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.authenticate.encryption.aes.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable AES for over-the-wire encryption
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.encryption.aes.cipher.keySize</code></td>
+  <td>16</td>
+  <td>
+    The bytes of AES cipher key which is effective when AES cipher is enabled. AES
+    works with 16, 24 and 32 bytes keys.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.encryption.aes.cipher.class</code></td>
+  <td>null</td>
+  <td>
+    Specify the underlying implementation class of crypto cipher. Set null here to use default.
+    In order to use OpenSslCipher users should install openssl. Currently, there are two cipher
+    classes available in Commons Crypto library:
+        org.apache.commons.crypto.cipher.OpenSslCipher
+        org.apache.commons.crypto.cipher.JceCipher
+  </td>
+</tr>
+<tr>
   <td><code>spark.core.connection.ack.wait.timeout</code></td>
-  <td>60s</td>
+  <td><code>spark.network.timeout</code></td>
   <td>
     How long for the connection to wait for ack to occur before timing
     out and giving up. To avoid unwilling timeout caused by long pause like GC,
@@ -1916,7 +1951,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td><code>spark.r.heartBeatInterval</code></td>
   <td>100</td>
   <td>
-    Interval for heartbeats sents from SparkR backend to R process to prevent connection timeout.
+    Interval for heartbeats sent from SparkR backend to R process to prevent connection timeout.
   </td>
 </tr>
 

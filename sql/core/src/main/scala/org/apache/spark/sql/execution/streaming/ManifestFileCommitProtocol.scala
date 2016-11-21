@@ -96,6 +96,12 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     file
   }
 
+  override def newTaskTempFileAbsPath(
+      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
+    throw new UnsupportedOperationException(
+      s"$this does not support adding files with an absolute path")
+  }
+
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
     if (addedFiles.nonEmpty) {
       val fs = new Path(addedFiles.head).getFileSystem(taskContext.getConfiguration)

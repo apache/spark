@@ -103,10 +103,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Whether to standardize the training features before fitting the model.
    * The coefficients of models will be always returned on the original scale,
-   * so it will be transparent for users. Note that with/without standardization,
-   * the models should be always converged to the same solution when no regularization
-   * is applied. In R's GLMNET package, the default behavior is true as well.
+   * so it will be transparent for users.
    * Default is true.
+   *
+   * @note With/without standardization, the models should be always converged
+   * to the same solution when no regularization is applied. In R's GLMNET package,
+   * the default behavior is true as well.
    *
    * @group setParam
    */
@@ -171,7 +173,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * @group setParam
    */
   @Since("1.6.0")
-  def setSolver(value: String): this.type = set(solver, value)
+  def setSolver(value: String): this.type = {
+    require(Set("auto", "l-bfgs", "normal").contains(value),
+      s"Solver $value was not supported. Supported options: auto, l-bfgs, normal")
+    set(solver, value)
+  }
   setDefault(solver -> "auto")
 
   /**
@@ -219,7 +225,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         model.diagInvAtWA.toArray,
         model.objectiveHistory)
 
-      return lrModel.setSummary(trainingSummary)
+      return lrModel.setSummary(Some(trainingSummary))
     }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -272,7 +278,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           model,
           Array(0D),
           Array(0D))
-        return model.setSummary(trainingSummary)
+        return model.setSummary(Some(trainingSummary))
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
@@ -394,7 +400,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       model,
       Array(0D),
       objectiveHistory)
-    model.setSummary(trainingSummary)
+    model.setSummary(Some(trainingSummary))
   }
 
   @Since("1.4.0")
@@ -440,8 +446,9 @@ class LinearRegressionModel private[ml] (
     throw new SparkException("No training summary available for this LinearRegressionModel")
   }
 
-  private[regression] def setSummary(summary: LinearRegressionTrainingSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[regression]
+  def setSummary(summary: Option[LinearRegressionTrainingSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -484,8 +491,7 @@ class LinearRegressionModel private[ml] (
   @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegressionModel = {
     val newModel = copyValues(new LinearRegressionModel(uid, coefficients, intercept), extra)
-    if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
-    newModel.setParent(parent)
+    newModel.setSummary(trainingSummary).setParent(parent)
   }
 
   /**
@@ -620,8 +626,8 @@ class LinearRegressionSummary private[regression] (
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val explainedVariance: Double = metrics.explainedVariance
@@ -630,8 +636,8 @@ class LinearRegressionSummary private[regression] (
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanAbsoluteError: Double = metrics.meanAbsoluteError
@@ -640,8 +646,8 @@ class LinearRegressionSummary private[regression] (
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val meanSquaredError: Double = metrics.meanSquaredError
@@ -650,8 +656,8 @@ class LinearRegressionSummary private[regression] (
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val rootMeanSquaredError: Double = metrics.rootMeanSquaredError
@@ -660,8 +666,8 @@ class LinearRegressionSummary private[regression] (
    * Returns R^2^, the coefficient of determination.
    * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    *
-   * Note: This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   val r2: Double = metrics.r2

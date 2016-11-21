@@ -92,6 +92,9 @@ class StreamExecution(
   /** The current batchId or -1 if execution has not yet been initialized. */
   private var currentBatchId: Long = -1
 
+  /** The current eventTime watermark, used to bound the lateness of data that will processed. */
+  private var currentEventTimeWatermark: Long = 0
+
   /** All stream sources present in the query plan. */
   private val sources =
     logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
@@ -427,7 +430,8 @@ class StreamExecution(
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
-        currentBatchId)
+        currentBatchId,
+        currentEventTimeWatermark)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
@@ -435,6 +439,25 @@ class StreamExecution(
       new Dataset(sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
     sink.addBatch(currentBatchId, nextBatch)
     reportNumRows(executedPlan, triggerLogicalPlan, newData)
+
+    // Update the eventTime watermark if we find one in the plan.
+    // TODO: Does this need to be an AttributeMap?
+    lastExecution.executedPlan.collect {
+      case e: EventTimeWatermarkExec =>
+        logTrace(s"Maximum observed eventTime: ${e.maxEventTime.value}")
+        (e.maxEventTime.value / 1000) - e.delay.milliseconds()
+    }.headOption.foreach { newWatermark =>
+      if (newWatermark > currentEventTimeWatermark) {
+        logInfo(s"Updating eventTime watermark to: $newWatermark ms")
+        currentEventTimeWatermark = newWatermark
+      } else {
+        logTrace(s"Event time didn't move: $newWatermark < $currentEventTimeWatermark")
+      }
+
+      if (newWatermark != 0) {
+        streamMetrics.reportTriggerDetail(EVENT_TIME_WATERMARK, newWatermark)
+      }
+    }
 
     awaitBatchLock.lock()
     try {

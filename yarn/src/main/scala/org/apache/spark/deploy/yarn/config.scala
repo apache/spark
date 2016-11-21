@@ -40,6 +40,11 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val AM_PORT =
+    ConfigBuilder("spark.yarn.am.port")
+      .intConf
+      .createWithDefault(0)
+
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +
