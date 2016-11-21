@@ -24,11 +24,13 @@ import org.apache.spark.streaming.ui.StreamingJobProgressListener
 import org.apache.spark.streaming.ui.StreamingJobProgressListener._
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class OneOutputOperationResource(
-    listener: StreamingJobProgressListener, batchId: Long) {
+private[v1] class OneOutputOperationResource(listener: StreamingJobProgressListener) {
 
   @GET
-  def oneOperation(@PathParam("outputOpId") opId: OutputOpId): OutputOperationInfo = {
+  def oneOperation(
+      @PathParam("batchId") batchId: Long,
+      @PathParam("outputOpId") opId: OutputOpId): OutputOperationInfo = {
+
     val someOutputOp = AllOutputOperationsResource.outputOperationInfoList(listener, batchId)
       .find { _.outputOpId == opId }
     someOutputOp.getOrElse(throw new NotFoundException("unknown output operation: " + opId))

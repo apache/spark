@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.status.api.v1
 
 import java.util.Date
-import javax.ws.rs.{GET, Produces}
+import javax.ws.rs.{GET, PathParam, Produces}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.streaming.Time
@@ -26,11 +26,10 @@ import org.apache.spark.streaming.ui.StreamingJobProgressListener
 import org.apache.spark.streaming.status.api.v1.AllOutputOperationsResource._
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class AllOutputOperationsResource(
-    listener: StreamingJobProgressListener, batchId: Long) {
+private[v1] class AllOutputOperationsResource(listener: StreamingJobProgressListener) {
 
   @GET
-  def operationsList(): Seq[OutputOperationInfo] = {
+  def operationsList(@PathParam("batchId") batchId: Long): Seq[OutputOperationInfo] = {
     outputOperationInfoList(listener, batchId).sortBy(_.outputOpId)
   }
 }
