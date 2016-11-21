@@ -533,7 +533,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     assert(e.getMessage.contains("checkpoint location"))
   }
 
-  test("SPARK-18510: Data corruption from user specified partition column schemas") {
+  test("SPARK-18510: use user specified types for partition columns in file sources") {
     import org.apache.spark.sql.functions.udf
     import testImplicits._
     withTempDir { src =>
