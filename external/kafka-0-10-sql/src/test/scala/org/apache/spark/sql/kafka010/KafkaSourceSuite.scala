@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.util.Random
@@ -28,7 +29,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.streaming.{ ProcessingTime, StreamTest }
+import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 
 abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
@@ -411,6 +412,43 @@ class KafkaSourceSuite extends KafkaSourceTest {
         assert(status.sourceStatuses(0).processingRate > 0.0)
       }
     )
+  }
+
+  test("Kafka column types") {
+    val now = System.currentTimeMillis()
+    val topic = newTopic()
+    testUtils.createTopic(newTopic(), partitions = 1)
+    testUtils.sendMessages(topic, Array(1).map(_.toString))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("startingOffsets", s"earliest")
+      .option("subscribe", topic)
+
+    val kafka = reader.load()
+    val query = kafka
+      .writeStream
+      .format("memory")
+      .outputMode("append")
+      .queryName("kafkaColumnTypes")
+      .start()
+    query.processAllAvailable()
+    val rows = spark.table("kafkaColumnTypes").collect()
+    assert(rows.length === 1, s"Unexpected results: ${rows.toList}")
+    val row = rows(0)
+    assert(row.getAs[Array[Byte]]("key") === null, s"Unexpected results: $row")
+    assert(row.getAs[Array[Byte]]("value") === "1".getBytes(UTF_8), s"Unexpected results: $row")
+    assert(row.getAs[String]("topic") === topic, s"Unexpected results: $row")
+    assert(row.getAs[Int]("partition") === 0, s"Unexpected results: $row")
+    assert(row.getAs[Long]("offset") === 0L, s"Unexpected results: $row")
+    // We cannot check the exact timestamp as it's the time that messages were inserted by the
+    // producer. So here we just use a low bound to make sure the internal conversion works.
+    assert(row.getAs[java.sql.Timestamp]("timestamp").getTime >= now, s"Unexpected results: $row")
+    assert(row.getAs[Int]("timestampType") === 0, s"Unexpected results: $row")
+    query.stop()
   }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
