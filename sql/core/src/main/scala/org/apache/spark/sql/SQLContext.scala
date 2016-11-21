@@ -181,9 +181,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
-   * Note that the user-defined functions must be deterministic. Due to optimization,
-   * duplicate invocations may be eliminated or the function may even be invoked more times than
-   * it is present in the query.
    *
    * The following example registers a Scala closure as UDF:
    * {{{
@@ -207,6 +204,10 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    *       (Integer arg1, String arg2) -> arg2 + arg1,
    *       DataTypes.StringType);
    * }}}
+   *
+   * @note The user-defined functions must be deterministic. Due to optimization,
+   * duplicate invocations may be eliminated or the function may even be invoked more times than
+   * it is present in the query.
    *
    * @group basic
    * @since 1.3.0

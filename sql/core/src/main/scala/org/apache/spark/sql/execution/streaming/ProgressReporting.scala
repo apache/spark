@@ -55,6 +55,7 @@ trait ProgressReporting extends Logging {
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
   private var currentTriggerEndTimestamp = -1L
+  // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
   private var currentDurationsMs = new util.HashMap[String, Long]()
 
