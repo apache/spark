@@ -223,7 +223,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         model.diagInvAtWA.toArray,
         model.objectiveHistory)
 
-      return lrModel.setSummary(trainingSummary)
+      return lrModel.setSummary(Some(trainingSummary))
     }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -276,7 +276,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           model,
           Array(0D),
           Array(0D))
-        return model.setSummary(trainingSummary)
+        return model.setSummary(Some(trainingSummary))
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
@@ -398,7 +398,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       model,
       Array(0D),
       objectiveHistory)
-    model.setSummary(trainingSummary)
+    model.setSummary(Some(trainingSummary))
   }
 
   @Since("1.4.0")
@@ -444,8 +444,9 @@ class LinearRegressionModel private[ml] (
     throw new SparkException("No training summary available for this LinearRegressionModel")
   }
 
-  private[regression] def setSummary(summary: LinearRegressionTrainingSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[regression]
+  def setSummary(summary: Option[LinearRegressionTrainingSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -488,8 +489,7 @@ class LinearRegressionModel private[ml] (
   @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegressionModel = {
     val newModel = copyValues(new LinearRegressionModel(uid, coefficients, intercept), extra)
-    if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
-    newModel.setParent(parent)
+    newModel.setSummary(trainingSummary).setParent(parent)
   }
 
   /**

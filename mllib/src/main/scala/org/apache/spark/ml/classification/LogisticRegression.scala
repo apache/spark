@@ -661,7 +661,7 @@ class LogisticRegression @Since("1.2.0") (
         $(labelCol),
         $(featuresCol),
         objectiveHistory)
-      model.setSummary(logRegSummary)
+      model.setSummary(Some(logRegSummary))
     } else {
       model
     }
@@ -803,9 +803,9 @@ class LogisticRegressionModel private[spark] (
     }
   }
 
-  private[classification] def setSummary(
-      summary: LogisticRegressionTrainingSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[classification]
+  def setSummary(summary: Option[LogisticRegressionTrainingSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -900,8 +900,7 @@ class LogisticRegressionModel private[spark] (
   override def copy(extra: ParamMap): LogisticRegressionModel = {
     val newModel = copyValues(new LogisticRegressionModel(uid, coefficientMatrix, interceptVector,
       numClasses, isMultinomial), extra)
-    if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
-    newModel.setParent(parent)
+    newModel.setSummary(trainingSummary).setParent(parent)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {
