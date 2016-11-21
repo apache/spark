@@ -1650,8 +1650,7 @@ setMethod("subtract",
 #' The output will not contain any duplicate elements,
 #' even if the input RDDs did. Performs a hash partition
 #' across the cluster.
-#'
-#' Note: This method performs a shuffle internally.
+#' Note that this method performs a shuffle internally.
 #'
 #' @param x An RDD.
 #' @param other An RDD.

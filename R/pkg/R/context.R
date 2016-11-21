@@ -182,8 +182,7 @@ writeToTempFile <- function(serializedSlices) {
 #' This function can be used to include a package on all workers before the
 #' user's code is executed. This is useful in scenarios where other R package
 #' functions are used in a function passed to functions like \code{lapply}.
-#'
-#  Note: The package is assumed to be installed on every node in the Spark
+#' NOTE: The package is assumed to be installed on every node in the Spark
 #' cluster.
 #'
 #' @param sc SparkContext to use
