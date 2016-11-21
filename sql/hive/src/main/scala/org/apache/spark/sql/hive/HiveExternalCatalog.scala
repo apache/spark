@@ -411,7 +411,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
     }
 
-    properties
+    properties.toMap
   }
 
   private def defaultTablePath(tableIdent: TableIdentifier): String = {
@@ -518,7 +518,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     verifyTableProperties(tableDefinition)
 
     // convert table statistics to properties so that we can persist them through hive api
-    val withStatsProps = if (tableDefinition.stats.isDefined) {
+    val withStatsProps: CatalogTable = if (tableDefinition.stats.isDefined) {
       val stats = tableDefinition.stats.get
       var statsProperties: Map[String, String] =
         Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
@@ -539,6 +539,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       client.alterTable(withStatsProps)
     } else {
       val oldTableDef = getRawTable(db, withStatsProps.identifier.table)
+
+      val (tableSchema, schemaChange) = if (oldTableDef.schema.equals(withStatsProps.schema)) {
+        (oldTableDef.schema, false)
+      } else {
+        (withStatsProps.schema, true)
+      }
 
       val newStorage = if (DDLUtils.isHiveTable(tableDefinition)) {
         tableDefinition.storage
@@ -591,11 +597,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is. Also add old data source properties to table
       // properties, to retain the data source table format.
-      val oldDataSourceProps = oldTableDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
-      val newTableProps = oldDataSourceProps ++ withStatsProps.properties + partitionProviderProp
+      val dataSourceProps = if (schemaChange) {
+        tableMetaToTableProps(withStatsProps).filter(_._1.startsWith(DATASOURCE_PREFIX))
+      } else {
+        oldTableDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
+      }
+      val newTableProps = dataSourceProps ++ withStatsProps.properties + partitionProviderProp
       val newDef = withStatsProps.copy(
         storage = newStorage,
-        schema = oldTableDef.schema,
+        schema = tableSchema,
         partitionColumnNames = oldTableDef.partitionColumnNames,
         bucketSpec = oldTableDef.bucketSpec,
         properties = newTableProps)

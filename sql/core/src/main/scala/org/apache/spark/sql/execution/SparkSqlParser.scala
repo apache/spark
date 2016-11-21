@@ -742,6 +742,21 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
+   * Create a [[AlterTableAddColumnsCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1 ADD COLUMNS (c1 int);
+   * }}}
+   */
+  override def visitAddTableColumns(ctx: AddTableColumnsContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableAddColumnsCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
+    )
+  }
+
+  /**
    * Create an [[AlterTableSetPropertiesCommand]] command.
    *
    * For example:
