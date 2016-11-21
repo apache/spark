@@ -798,15 +798,18 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
           val topic = newTopic()
           topics += topic
           testUtils.createTopic(topic, partitions = 1)
+          logInfo(s"Create topic $topic")
         case 1 if topics.nonEmpty => // Delete an existing topic
           val topic = topics.remove(Random.nextInt(topics.size))
           testUtils.deleteTopic(topic)
+          logInfo(s"Delete topic $topic")
           deletedTopics += topic
         case 2 if deletedTopics.nonEmpty => // Recreate a topic that was deleted.
           val topic = deletedTopics.toSeq(Random.nextInt(deletedTopics.size))
           deletedTopics -= topic
           topics += topic
           testUtils.createTopic(topic, partitions = 1)
+          logInfo(s"Create topic $topic")
         case 3 =>
           Thread.sleep(100)
         case _ => // Push random messages
