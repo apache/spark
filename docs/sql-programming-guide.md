@@ -1077,7 +1077,8 @@ the following case-sensitive options:
      <td>
        The number of partitions that can be used, if set. It works by limiting both read and write
        operations' parallelism. If the number of partitions to write exceeds this limit, the
-       operation will coalesce the data set to fewer partitions before writing.
+       operation will coalesce the data set to fewer partitions before writing. In other words,
+       this determines the maximum number of concurrent JDBC connections.
      </td>
   </tr>
 
