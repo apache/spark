@@ -41,24 +41,27 @@ private[v1] object AllOutputOperationsResource {
       listener: StreamingJobProgressListener, batchId: Long): Seq[OutputOperationInfo] = {
 
     listener.synchronized {
-      for {
-        batch <- listener.getBatchUIData(Time(batchId))
-        (opId, op) <- batch.outputOperations
-      } yield {
-        val jobIds =
-          batch.outputOpIdSparkJobIdPairs.filter(_.outputOpId == opId).map(_.sparkJobId).sorted
+      listener.getBatchUIData(Time(batchId)) match {
+        case Some(batch) => {
+          for ((opId, op) <- batch.outputOperations) yield {
+            val jobIds =
+              batch.outputOpIdSparkJobIdPairs.filter(_.outputOpId == opId).map(_.sparkJobId).sorted
 
-        new OutputOperationInfo(
-          outputOpId = opId,
-          name = op.name,
-          description = op.description,
-          startTime = op.startTime.map(new Date(_)),
-          endTime = op.endTime.map(new Date(_)),
-          duration = op.duration,
-          failureReason = op.failureReason,
-          jobIds = jobIds
-        )
+            new OutputOperationInfo(
+              outputOpId = opId,
+              name = op.name,
+              description = op.description,
+              startTime = op.startTime.map(new Date(_)),
+              endTime = op.endTime.map(new Date(_)),
+              duration = op.duration,
+              failureReason = op.failureReason,
+              jobIds = jobIds
+            )
+          }
+        }.toSeq
+
+        case None => throw new NotFoundException("unknown batch: " + batchId)
       }
-    }.toSeq
+    }
   }
 }
