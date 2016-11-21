@@ -669,8 +669,8 @@ object JdbcUtils extends Logging {
     val isolationLevel = options.isolationLevel
     val maxConnections = options.maxConnections
     val repartitionedDF =
-      if (maxConnections != null && maxConnections.toInt < df.rdd.getNumPartitions) {
-        df.coalesce(maxConnections.toInt)
+      if (maxConnections.isDefined && maxConnections.get.toInt < df.rdd.getNumPartitions) {
+        df.coalesce(maxConnections.get.toInt)
       } else {
         df
       }

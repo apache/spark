@@ -123,9 +123,9 @@ class JDBCOptions(
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
     }
   // the maximum number of connections
-  val maxConnections = parameters.getOrElse(JDBC_MAX_CONNECTIONS, null)
-  require(maxConnections == null || maxConnections.toInt > 0,
-    s"Invalid value `$maxConnections` for parameter `$JDBC_MAX_CONNECTIONS`. " +
+  val maxConnections = parameters.get(JDBC_MAX_CONNECTIONS)
+  require(maxConnections.isEmpty || maxConnections.get.toInt > 0,
+    s"Invalid value `${maxConnections.get}` for parameter `$JDBC_MAX_CONNECTIONS`. " +
       "The minimum value is 1.")
 }
 
