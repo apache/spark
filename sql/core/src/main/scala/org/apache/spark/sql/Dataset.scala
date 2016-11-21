@@ -377,7 +377,7 @@ class Dataset[T] private[sql](
 
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
-   * This can be quite convenient in conversion from a RDD of tuples into a [[DataFrame]] with
+   * This can be quite convenient in conversion from an RDD of tuples into a [[DataFrame]] with
    * meaningful names. For example:
    * {{{
    *   val rdd: RDD[(Int, String)] = ...
@@ -703,12 +703,12 @@ class Dataset[T] private[sql](
    *   df1.join(df2, "user_id")
    * }}}
    *
-   * Note that if you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @param right Right side of the join operation.
    * @param usingColumn Name of the column to join on. This column must exist on both sides.
+   *
+   * @note If you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -728,12 +728,12 @@ class Dataset[T] private[sql](
    *   df1.join(df2, Seq("user_id", "user_name"))
    * }}}
    *
-   * Note that if you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   *
+   * @note If you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -748,13 +748,13 @@ class Dataset[T] private[sql](
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
    *
-   * Note that if you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   *
+   * @note If you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -856,9 +856,9 @@ class Dataset[T] private[sql](
   /**
    * Explicit cartesian join with another [[DataFrame]].
    *
-   * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
-   *
    * @param right Right side of the join operation.
+   *
+   * @note Cartesian joins are very expensive without an extra filter that can be pushed down.
    *
    * @group untypedrel
    * @since 2.1.0
@@ -1044,7 +1044,8 @@ class Dataset[T] private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
-   * Note that the column name can also reference to a nested column like `a.b`.
+   *
+   * @note The column name can also reference to a nested column like `a.b`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -1053,7 +1054,8 @@ class Dataset[T] private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
-   * Note that the column name can also reference to a nested column like `a.b`.
+   *
+   * @note The column name can also reference to a nested column like `a.b`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -1621,7 +1623,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset.
    * This is equivalent to `INTERSECT` in SQL.
    *
-   * Note that, equality checking is performed directly on the encoded representation of the data
+   * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
@@ -1635,7 +1637,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset.
    * This is equivalent to `EXCEPT` in SQL.
    *
-   * Note that, equality checking is performed directly on the encoded representation of the data
+   * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
@@ -1648,12 +1650,12 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows, using a user-supplied seed.
    *
-   * Note: this is NOT guaranteed to provide exactly the fraction of the count
-   * of the given [[Dataset]].
-   *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
    * @param seed Seed for sampling.
+   *
+   * @note This is NOT guaranteed to provide exactly the fraction of the count
+   * of the given [[Dataset]].
    *
    * @group typedrel
    * @since 1.6.0
@@ -1670,11 +1672,11 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows, using a random seed.
    *
-   * Note: this is NOT guaranteed to provide exactly the fraction of the total count
-   * of the given [[Dataset]].
-   *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
+   *
+   * @note This is NOT guaranteed to provide exactly the fraction of the total count
+   * of the given [[Dataset]].
    *
    * @group typedrel
    * @since 1.6.0
@@ -2375,7 +2377,7 @@ class Dataset[T] private[sql](
    *
    * The iterator will consume as much memory as the largest partition in this Dataset.
    *
-   * Note: this results in multiple Spark jobs, and if the input Dataset is the result
+   * @note this results in multiple Spark jobs, and if the input Dataset is the result
    * of a wide transformation (e.g. join with different partitioners), to avoid
    * recomputing the input Dataset should be cached first.
    *
@@ -2453,7 +2455,7 @@ class Dataset[T] private[sql](
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `dropDuplicates`.
    *
-   * Note that, equality checking is performed directly on the encoded representation of the data
+   * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel

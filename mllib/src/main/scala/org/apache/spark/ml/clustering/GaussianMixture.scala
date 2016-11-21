@@ -90,8 +90,7 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
     val copied = copyValues(new GaussianMixtureModel(uid, weights, gaussians), extra)
-    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
-    copied.setParent(this.parent)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   @Since("2.0.0")
@@ -150,8 +149,8 @@ class GaussianMixtureModel private[ml] (
 
   private var trainingSummary: Option[GaussianMixtureSummary] = None
 
-  private[clustering] def setSummary(summary: GaussianMixtureSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[clustering] def setSummary(summary: Option[GaussianMixtureSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -268,9 +267,9 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.
  *
- * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
- *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
- *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
+ * @note For high-dimensional data (with many features), this algorithm may perform poorly.
+ * This is due to high-dimensional data (a) making it difficult to cluster at all (based
+ * on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
 @Since("2.0.0")
 @Experimental
@@ -340,7 +339,7 @@ class GaussianMixture @Since("2.0.0") (
       .setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
-    model.setSummary(summary)
+    model.setSummary(Some(summary))
     instr.logNumFeatures(model.gaussians.head.mean.size)
     instr.logSuccess(model)
     model

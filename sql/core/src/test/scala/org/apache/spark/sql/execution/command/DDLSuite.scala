@@ -1426,8 +1426,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("DESCRIBE FUNCTION 'concat'"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
-        Row("Usage: concat(str1, str2, ..., strN) " +
-          "- Returns the concatenation of `str1`, `str2`, ..., `strN`.") :: Nil
+        Row("Usage: concat(str1, str2, ..., strN) - " +
+            "Returns the concatenation of str1, str2, ..., strN.") :: Nil
     )
     // extended mode
     checkAnswer(
