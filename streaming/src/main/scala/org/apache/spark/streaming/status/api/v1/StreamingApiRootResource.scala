@@ -46,7 +46,7 @@ private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
     new AllReceiversResource(listener)
   }
 
-  @Path("receivers/{streamId}")
+  @Path("receivers/{streamId: \\d+}")
   def getReceiver(): OneReceiverResource = {
     new OneReceiverResource(listener)
   }
@@ -56,17 +56,17 @@ private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
     new AllBatchesResource(listener)
   }
 
-  @Path("batches/{batchId}")
+  @Path("batches/{batchId: \\d+}")
   def getBatch(): OneBatchResource = {
     new OneBatchResource(listener)
   }
 
-  @Path("batches/{batchId}/operations")
+  @Path("batches/{batchId: \\d+}/operations")
   def getOutputOperations(): AllOutputOperationsResource = {
     new AllOutputOperationsResource(listener)
   }
 
-  @Path("batches/{batchId}/operations/{outputOpId}")
+  @Path("batches/{batchId: \\d+}/operations/{outputOpId: \\d+}")
   def getOutputOperation(): OneOutputOperationResource = {
     new OneOutputOperationResource(listener)
   }
