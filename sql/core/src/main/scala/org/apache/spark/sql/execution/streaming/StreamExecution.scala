@@ -51,7 +51,7 @@ import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 case class StreamExecutionMetadata(
     var currentEventTimeWatermark: Long = 0,
     var currentBatchTimestamp: Long = 0) {
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats = StreamExecutionMetadata.formats
 
   /**
    * JSON string representation of this object.
