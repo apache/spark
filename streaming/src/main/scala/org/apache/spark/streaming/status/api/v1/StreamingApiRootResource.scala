@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.status.api.v1
 
 import javax.servlet.ServletContext
-import javax.ws.rs.{Path, PathParam, WebApplicationException}
+import javax.ws.rs.{Path, WebApplicationException}
 import javax.ws.rs.core.{Context, Response}
 
 import com.sun.jersey.spi.container.servlet.ServletContainer
@@ -27,7 +27,6 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.eclipse.jetty.servlet.ServletHolder
 import org.apache.spark.status.api.v1.UIRoot
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
-import org.apache.spark.streaming.status.api.v1.StreamingApiRootResource._
 
 @Path("/v1")
 private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
@@ -63,17 +62,13 @@ private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
   }
 
   @Path("batches/{batchId}/operations")
-  def getOutputOperations(@PathParam("batchId") batchId: Long): AllOutputOperationsResource = {
-    withListenerAndBatchId(listener, batchId) { (listener, batchId) =>
-      new AllOutputOperationsResource(listener, batchId)
-    }
+  def getOutputOperations(): AllOutputOperationsResource = {
+    new AllOutputOperationsResource(listener)
   }
 
   @Path("batches/{batchId}/operations/{outputOpId}")
-  def getOutputOperation(@PathParam("batchId") batchId: Long): OneOutputOperationResource = {
-    withListenerAndBatchId(listener, batchId) { (listener, batchId) =>
-      new OneOutputOperationResource(listener, batchId)
-    }
+  def getOutputOperation(): OneOutputOperationResource = {
+    new OneOutputOperationResource(listener)
   }
 
 }
@@ -100,15 +95,6 @@ private[spark] object StreamingApiRootResource {
     UIRootFromServletContext.setStartTimeMillis(jerseyContext, startTimeMillis)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext
-  }
-
-  private def withListenerAndBatchId[T](listener: StreamingJobProgressListener, batchId: Long)
-      (f: (StreamingJobProgressListener, Long) => T): T = {
-
-    listener.retainedBatches.find { _.batchTime.milliseconds == batchId } match {
-      case Some(batch) => f(listener, batchId)
-      case None => throw new NotFoundException("unknown batch: " + batchId)
-    }
   }
 }
 
