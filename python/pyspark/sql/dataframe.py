@@ -326,7 +326,7 @@ class DataFrame(object):
     def checkpoint(self, eager=True):
         """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
         logical plan of this DataFrame, which is especially useful in iterative algorithms where the
-        plan may grow exponentially. It will be saved to a file inside the checkpoint
+        plan may grow exponentially. It will be saved to files inside the checkpoint
         directory set with L{SparkContext.setCheckpointDir()}.
 
         :param eager: Whether to checkpoint this DataFrame immediately
@@ -360,7 +360,7 @@ class DataFrame(object):
 
         .. note:: Experimental
 
-        >>> sdf.withWatermark('timestamp', '10 minutes')
+        >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
         """
         if not eventTime or type(eventTime) is not str:
             raise TypeError("eventTime should be provided as a string")
@@ -1689,9 +1689,8 @@ def _test():
                                    Row(name='Bob', age=5, height=None),
                                    Row(name='Tom', age=None, height=None),
                                    Row(name=None, age=None, height=None)]).toDF()
-    globs['sdf'] = sc.parallelize([Row(name='Tom', timestamp=1479441846),
-                                   Row(name='Bob', timestamp=1479442946)]).toDF() \
-        .select('name', from_unixtime('timestamp').alias('timestamp'))
+    globs['sdf'] = sc.parallelize([Row(name='Tom', time=1479441846),
+                                   Row(name='Bob', time=1479442946)]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.dataframe, globs=globs,

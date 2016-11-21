@@ -487,7 +487,7 @@ class Dataset[T] private[sql](
   /**
    * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
    * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
-   * plan may grow exponentially. It will be saved to a file inside the checkpoint
+   * plan may grow exponentially. It will be saved to files inside the checkpoint
    * directory set with `SparkContext#setCheckpointDir`.
    *
    * @group basic
@@ -500,7 +500,7 @@ class Dataset[T] private[sql](
   /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
    * logical plan of this Dataset, which is especially useful in iterative algorithms where the
-   * plan may grow exponentially. It will be saved to a file inside the checkpoint
+   * plan may grow exponentially. It will be saved to files inside the checkpoint
    * directory set with `SparkContext#setCheckpointDir`.
    *
    * @group basic
