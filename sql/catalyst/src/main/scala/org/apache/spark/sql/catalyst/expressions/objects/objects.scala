@@ -513,11 +513,23 @@ case class MapObjects private(
       case _ => s"$loopIsNull = $loopValue == null;"
     }
 
+    val setValue = if (lambdaFunction.nullable) {
+      s"""
+        if (${genFunction.isNull}) {
+          $convertedArray[$loopIndex] = null;
+        } else {
+          $convertedArray[$loopIndex] = $genFunctionValue;
+        }
+      """
+    } else {
+      s"$convertedArray[$loopIndex] = $genFunctionValue;"
+    }
+
     val code = s"""
       ${genInputData.code}
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-    """ +
-      ctx.nullSafeExec(inputData.nullable, genInputData.isNull)(s"""
+
+      if (!${genInputData.isNull}) {
         $determineCollectionType
         $convertedType[] $convertedArray = null;
         int $dataLength = $getLength;
@@ -529,15 +541,14 @@ case class MapObjects private(
           $loopNullCheck
 
           ${genFunction.code}
-        """ +
-        ctx.nullSafeExec(lambdaFunction.nullable, genFunction.isNull)(s"""
-          $convertedArray[$loopIndex] = $genFunctionValue;
-        """) + s"""
+          $setValue
+
           $loopIndex += 1;
         }
 
         ${ev.value} = new ${classOf[GenericArrayData].getName}($convertedArray);
-      """)
+      }
+    """
     ev.copy(code = code, isNull = genInputData.isNull)
   }
 }
