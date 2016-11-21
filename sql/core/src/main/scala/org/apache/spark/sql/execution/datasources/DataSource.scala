@@ -107,23 +107,27 @@ case class DataSource(
           partitionField)
       }
       StructType(resolved)
-    } else if (catalogTable.nonEmpty) {
-      catalogTable.get.partitionSchema
     } else {
       // in streaming mode, we have already inferred and registered partition columns, we will
       // never have to re-use this
       lazy val inferredPartitions = tempFileCatalog.partitionSchema
-      val partitionFields = partitionColumns.map { partitionColumn =>
-        userSpecifiedSchema.flatMap(_.find(_.name == partitionColumn)).orElse {
-          logDebug(s"Schema of partition column: $partitionColumn not found in specified schema. " +
-            "Falling back to inferred dataType if it exists.")
-          inferredPartitions.find(_.name == partitionColumn)
-        }.getOrElse {
-          throw new AnalysisException("Failed to resolve the schema for the partition column: " +
-            s"$partitionColumn. It must be specified manually.")
+      // maintain old behavior before SPARK-18510. If userSpecifiedSchema is empty used inferred
+      // partitioning
+      if (userSpecifiedSchema.isEmpty) {
+        inferredPartitions
+      } else {
+        val partitionFields = partitionColumns.map { partitionColumn =>
+          userSpecifiedSchema.flatMap(_.find(_.name == partitionColumn)).orElse {
+            logDebug(s"Schema of partition column: $partitionColumn not found in specified " +
+              "schema. Falling back to inferred dataType if it exists.")
+            inferredPartitions.find(_.name == partitionColumn)
+          }.getOrElse {
+            throw new AnalysisException("Failed to resolve the schema for the partition column: " +
+              s"$partitionColumn. It must be specified manually.")
+          }
         }
+        StructType(partitionFields)
       }
-      StructType(partitionFields)
     }
     val tableSchema = userSpecifiedSchema.map { schema =>
       val equality = sparkSession.sessionState.conf.resolver

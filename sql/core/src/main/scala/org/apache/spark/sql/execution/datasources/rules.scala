@@ -126,7 +126,6 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
       normalizeColumnName(tableDesc.identifier, schema, colName, "partition")
     }
     checkDuplication(normalizedPartitionCols, "partition")
-
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
       if (tableDesc.provider.get == DDLUtils.HIVE_PROVIDER) {
         // When we hit this branch, it means users didn't specify schema for the table to be
