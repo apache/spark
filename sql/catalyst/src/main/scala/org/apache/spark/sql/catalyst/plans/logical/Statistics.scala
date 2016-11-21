@@ -65,9 +65,11 @@ case class Statistics(
 /**
  * Statistics collected for a column.
  *
- * The JVM data type stored in min/max is the external data type (used in Row) for the
+ * 1. Supported data types are defined in `ColumnStat.supportsType`.
+ * 2. The JVM data type stored in min/max is the external data type (used in Row) for the
  * corresponding Catalyst data type. For example, for DateType we store java.sql.Date, and for
  * TimestampType we store java.sql.Timestamp.
+ * 3. For integral types, they are all upcasted to longs, i.e. shorts are stored as longs.
  *
  * @param ndv number of distinct values
  * @param min minimum value
