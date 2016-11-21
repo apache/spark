@@ -28,6 +28,9 @@ addons:
       - mysql-client-core-5.6
       - mysql-client-5.6
       - krb5-user
+      - krb5-kdc
+      - krb5-admin-server
+      - python-selinux
   postgresql: "9.2"
 python:
   - "2.7"
@@ -35,6 +38,8 @@ python:
 env:
   global:
     - TRAVIS_CACHE=$HOME/.travis_cache/
+    - KRB5_CONFIG=/etc/krb5.conf
+    - KRB5_KTNAME=/etc/airflow.keytab
     # Travis on google cloud engine has a global /etc/boto.cfg that
     # does not work with python 3
     - BOTO_CONFIG=/tmp/bogusvalue

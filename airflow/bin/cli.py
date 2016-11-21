@@ -15,12 +15,15 @@
 
 from __future__ import print_function
 import logging
+
 import reprlib
+
 import os
 import subprocess
 import textwrap
 import warnings
 from datetime import datetime
+from importlib import import_module
 
 import argparse
 from builtins import input
@@ -39,6 +42,7 @@ import time
 import psutil
 
 import airflow
+from airflow import api
 from airflow import jobs, settings
 from airflow import configuration as conf
 from airflow.exceptions import AirflowException
@@ -56,6 +60,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import exc
 
 DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
+
+api.load_auth()
+
+api_module = import_module(conf.get('cli', 'api_client'))
+api_client = api_module.Client(api_base_url=conf.get('cli', 'endpoint_url'),
+                               auth=api.api_auth.client_auth)
 
 
 def sigint_handler(sig, frame):
@@ -164,32 +174,20 @@ def backfill(args, dag=None):
 
 
 def trigger_dag(args):
-    dag = get_dag(args)
+    """
+    Creates a dag run for the specified dag
+    :param args:
+    :return:
+    """
+    try:
+        message = api_client.trigger_dag(dag_id=args.dag_id,
+                                         run_id=args.run_id,
+                                         conf=args.conf)
+    except IOError as err:
+        logging.error(err)
+        raise AirflowException(err)
 
-    if not dag:
-        logging.error("Cannot find dag {}".format(args.dag_id))
-        sys.exit(1)
-
-    execution_date = datetime.now()
-    run_id = args.run_id or "manual__{0}".format(execution_date.isoformat())
-
-    dr = DagRun.find(dag_id=args.dag_id, run_id=run_id)
-    if dr:
-        logging.error("This run_id {} already exists".format(run_id))
-        raise AirflowException()
-
-    run_conf = {}
-    if args.conf:
-        run_conf = json.loads(args.conf)
-
-    trigger = dag.create_dagrun(
-        run_id=run_id,
-        execution_date=execution_date,
-        state=State.RUNNING,
-        conf=run_conf,
-        external_trigger=True
-    )
-    logging.info("Created {}".format(trigger))
+    logging.info(message)
 
 
 def pool(args):

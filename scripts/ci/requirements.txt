@@ -49,6 +49,7 @@ python-daemon
 python-dateutil
 redis
 requests
+requests-kerberos
 setproctitle
 slackclient
 sphinx

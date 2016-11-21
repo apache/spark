@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -10,14 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
 
-org.name=TEST
-org.domain=LOCAL
-kdc.bind.address=localhost
-kdc.port=8888
-instance=DefaultKrbServer
-max.ticket.lifetime=86400000
-max.renewable.lifetime=604800000
-transport=TCP
-debug=true
 
+class Client:
+    def __init__(self, api_base_url, auth):
+        self._api_base_url = api_base_url
+        self._auth = auth
+
+    def trigger_dag(self, dag_id, run_id=None, conf=None):
+        """
+        Creates a dag run for the specified dag
+        :param dag_id:
+        :param run_id:
+        :param conf:
+        :return:
+        """
+        raise NotImplementedError()
