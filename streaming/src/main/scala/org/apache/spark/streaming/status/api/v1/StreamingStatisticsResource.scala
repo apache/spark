@@ -21,12 +21,11 @@ import java.util.Date
 import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.status.api.v1.UIRoot
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class StreamingStatisticsResource(
-    uiRoot: UIRoot, listener: StreamingJobProgressListener, startTimeMillis: Long) {
+    listener: StreamingJobProgressListener, startTimeMillis: Long) {
 
   @GET
   def streamingStatistics(): StreamingStatistics = {
