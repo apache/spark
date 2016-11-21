@@ -31,14 +31,9 @@ import org.apache.spark.streaming.ui.StreamingJobProgressListener
 @Path("/v1")
 private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
 
-  @Path("streaminginfo")
-  def getStreamingInfo(): StreamingInfoResource = {
-    new StreamingInfoResource(uiRoot, listener)
-  }
-
   @Path("statistics")
   def getStreamingStatistics(): StreamingStatisticsResource = {
-    new StreamingStatisticsResource(uiRoot, listener, startTimeMillis)
+    new StreamingStatisticsResource(listener, startTimeMillis)
   }
 
   @Path("receivers")
@@ -105,7 +100,7 @@ private[v1] object UIRootFromServletContext {
   def setListener(contextHandler: ContextHandler, listener: StreamingJobProgressListener): Unit = {
     contextHandler.setAttribute(attribute + "_listener", listener)
   }
-  
+
   def getListener(context: ServletContext): StreamingJobProgressListener = {
     context.getAttribute(attribute + "_listener").asInstanceOf[StreamingJobProgressListener]
   }
@@ -117,7 +112,7 @@ private[v1] object UIRootFromServletContext {
   def getStartTimeMillis(context: ServletContext): Long = {
     context.getAttribute(attribute + "_startTimeMillis").asInstanceOf[Long]
   }
-  
+
   def setUiRoot(contextHandler: ContextHandler, uiRoot: UIRoot): Unit = {
     contextHandler.setAttribute(attribute, uiRoot)
   }
