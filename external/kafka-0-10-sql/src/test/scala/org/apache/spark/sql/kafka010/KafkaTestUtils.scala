@@ -306,7 +306,7 @@ class KafkaTestUtils extends Logging {
       val deleted = !zkUtils.getAllTopics().contains(topic)
       deletePath && topicPath && replicaManager && logManager && cleaner && deleted
     }
-    eventually(timeout(10.seconds)) {
+    eventually(timeout(30.seconds)) {
       assert(isDeleted, s"$topic not deleted after timeout")
     }
   }
