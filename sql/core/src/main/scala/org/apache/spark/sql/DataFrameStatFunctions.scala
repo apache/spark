@@ -21,19 +21,18 @@ import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
- * :: Experimental ::
  * Statistic functions for [[DataFrame]]s.
  *
  * @since 1.4.0
  */
-@Experimental
+@InterfaceStability.Stable
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
@@ -61,13 +60,16 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities
    *
+   * @note NaN values will be removed from the numerical column before calculation
+   *
    * @since 2.0.0
    */
   def approxQuantile(
       col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df, Seq(col), probabilities, relativeError).head.toArray
+    StatFunctions.multipleApproxQuantiles(df.select(col).na.drop(),
+      Seq(col), probabilities, relativeError).head.toArray
   }
 
   /**

@@ -27,16 +27,18 @@ import org.apache.spark.sql.streaming.OutputMode
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
  * plan incrementally. Possibly preserving state in between each execution.
  */
-class IncrementalExecution private[sql](
+class IncrementalExecution(
     sparkSession: SparkSession,
     logicalPlan: LogicalPlan,
     val outputMode: OutputMode,
     val checkpointLocation: String,
-    val currentBatchId: Long)
+    val currentBatchId: Long,
+    val currentEventTimeWatermark: Long)
   extends QueryExecution(sparkSession, logicalPlan) {
 
   // TODO: make this always part of planning.
-  val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy +:
+  val stateStrategy =
+    sparkSession.sessionState.planner.StatefulAggregationStrategy +:
     sparkSession.sessionState.planner.StreamingRelationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies
 
@@ -57,17 +59,17 @@ class IncrementalExecution private[sql](
   val state = new Rule[SparkPlan] {
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSaveExec(keys, None, None,
+      case StateStoreSaveExec(keys, None, None, None,
              UnaryExecNode(agg,
                StateStoreRestoreExec(keys2, None, child))) =>
         val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId)
-        val returnAllStates = if (outputMode == InternalOutputModes.Complete) true else false
         operatorId += 1
 
         StateStoreSaveExec(
           keys,
           Some(stateId),
-          Some(returnAllStates),
+          Some(outputMode),
+          Some(currentEventTimeWatermark),
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,

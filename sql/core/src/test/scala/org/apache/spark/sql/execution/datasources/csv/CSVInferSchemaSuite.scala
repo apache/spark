@@ -60,9 +60,9 @@ class CSVInferSchemaSuite extends SparkFunSuite {
   }
 
   test("Timestamp field types are inferred correctly via custom data format") {
-    var options = new CSVOptions(Map("dateFormat" -> "yyyy-mm"))
+    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-mm"))
     assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
-    options = new CSVOptions(Map("dateFormat" -> "yyyy"))
+    options = new CSVOptions(Map("timestampFormat" -> "yyyy"))
     assert(CSVInferSchema.inferField(TimestampType, "2015", options) == TimestampType)
   }
 
@@ -108,5 +108,10 @@ class CSVInferSchemaSuite extends SparkFunSuite {
   test("Merging Nulltypes should yield Nulltype.") {
     val mergedNullTypes = CSVInferSchema.mergeRowTypes(Array(NullType), Array(NullType))
     assert(mergedNullTypes.deep == Array(NullType).deep)
+  }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val options = new CSVOptions(Map("TiMeStampFormat" -> "yyyy-mm"))
+    assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
   }
 }

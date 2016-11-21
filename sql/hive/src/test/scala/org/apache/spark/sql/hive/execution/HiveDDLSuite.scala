@@ -22,12 +22,16 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveDDLSuite
@@ -135,10 +139,20 @@ class HiveDDLSuite
         sql(s"CREATE VIEW $viewName COMMENT 'no comment' AS SELECT * FROM $tabName")
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
-        assert(tableMetadata.properties.get("comment") == Option("BLABLA"))
-        assert(viewMetadata.properties.get("comment") == Option("no comment"))
+        assert(tableMetadata.comment == Option("BLABLA"))
+        assert(viewMetadata.comment == Option("no comment"))
+        // Ensure that `comment` is removed from the table property
+        assert(tableMetadata.properties.get("comment").isEmpty)
+        assert(viewMetadata.properties.get("comment").isEmpty)
       }
     }
+  }
+
+  test("create table: partition column names exist in table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
+    }
+    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
   }
 
   test("add/drop partitions - external table") {
@@ -186,9 +200,8 @@ class HiveDDLSuite
         val message = intercept[AnalysisException] {
           sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
         }
-        assert(message.getMessage.contains(
-          "Partition spec is invalid. The spec (ds, unknowncol) must be contained within the " +
-            "partition spec (ds, hr) defined in table '`default`.`exttable_with_partitions`'"))
+        assert(message.getMessage.contains("unknownCol is not a valid partition column in table " +
+          "`default`.`exttable_with_partitions`"))
 
         sql(
           s"""
@@ -210,6 +223,108 @@ class HiveDDLSuite
         // drop table will not delete the data of external table
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
       }
+    }
+  }
+
+  test("SPARK-17732: Drop partitions by filter") {
+    withTable("sales") {
+      sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
+
+      for (country <- Seq("US", "CA", "KR")) {
+        for (quarter <- 1 to 4) {
+          sql(s"ALTER TABLE sales ADD PARTITION (country = '$country', quarter = '$quarter')")
+        }
+      }
+
+      sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter > '2')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=CA/quarter=1") ::
+        Row("country=CA/quarter=2") ::
+        Row("country=KR/quarter=1") ::
+        Row("country=KR/quarter=2") ::
+        Row("country=KR/quarter=3") ::
+        Row("country=KR/quarter=4") ::
+        Row("country=US/quarter=1") ::
+        Row("country=US/quarter=2") ::
+        Row("country=US/quarter=3") ::
+        Row("country=US/quarter=4") :: Nil)
+
+      sql("ALTER TABLE sales DROP PARTITION (country < 'KR'), PARTITION (quarter <= '1')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=2") ::
+        Row("country=KR/quarter=3") ::
+        Row("country=KR/quarter=4") ::
+        Row("country=US/quarter=2") ::
+        Row("country=US/quarter=3") ::
+        Row("country=US/quarter=4") :: Nil)
+
+      sql("ALTER TABLE sales DROP PARTITION (country='KR', quarter='4')")
+      sql("ALTER TABLE sales DROP PARTITION (country='US', quarter='3')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=2") ::
+        Row("country=KR/quarter=3") ::
+        Row("country=US/quarter=2") ::
+        Row("country=US/quarter=4") :: Nil)
+
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= 2), PARTITION (quarter >= '4')")
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=3") :: Nil)
+
+      // According to the declarative partition spec definitions, this drops the union of target
+      // partitions without exceptions. Hive raises exceptions because it handles them sequentially.
+      sql("ALTER TABLE sales DROP PARTITION (quarter <= 4), PARTITION (quarter <= '3')")
+      checkAnswer(sql("SHOW PARTITIONS sales"), Nil)
+    }
+  }
+
+  test("SPARK-17732: Error handling for drop partitions by filter") {
+    withTable("sales") {
+      sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
+
+      val m = intercept[AnalysisException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown = 'KR')")
+      }.getMessage
+      assert(m.contains("unknown is not a valid partition column in table"))
+
+      val m2 = intercept[AnalysisException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown < 'KR')")
+      }.getMessage
+      assert(m2.contains("unknown is not a valid partition column in table"))
+
+      val m3 = intercept[AnalysisException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown <=> 'KR')")
+      }.getMessage
+      assert(m3.contains("'<=>' operator is not allowed in partition specification"))
+
+      val m4 = intercept[ParseException] {
+        sql("ALTER TABLE sales DROP PARTITION (unknown <=> upper('KR'))")
+      }.getMessage
+      assert(m4.contains("'<=>' operator is not allowed in partition specification"))
+
+      val m5 = intercept[ParseException] {
+        sql("ALTER TABLE sales DROP PARTITION (country < 'KR', quarter)")
+      }.getMessage
+      assert(m5.contains("Invalid partition filter specification"))
+
+      sql(s"ALTER TABLE sales ADD PARTITION (country = 'KR', quarter = '3')")
+      val m6 = intercept[AnalysisException] {
+        sql("ALTER TABLE sales DROP PARTITION (quarter <= '4'), PARTITION (quarter <= '2')")
+      }.getMessage
+      // The query is not executed because `PARTITION (quarter <= '2')` is invalid.
+      checkAnswer(sql("SHOW PARTITIONS sales"),
+        Row("country=KR/quarter=3") :: Nil)
+      assert(m6.contains("There is no partition for (`quarter` <= '2')"))
+    }
+  }
+
+  test("SPARK-17732: Partition filter is not allowed in ADD PARTITION") {
+    withTable("sales") {
+      sql("CREATE TABLE sales(id INT) PARTITIONED BY (country STRING, quarter STRING)")
+
+      val m = intercept[ParseException] {
+        sql("ALTER TABLE sales ADD PARTITION (country = 'US', quarter < '1')")
+      }.getMessage()
+      assert(m.contains("Invalid partition filter specification"))
     }
   }
 
@@ -286,8 +401,50 @@ class HiveDDLSuite
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         }.getMessage
         assert(message.contains(
-          "Attempted to unset non-existent property 'p' in table '`view1`'"))
+          "Attempted to unset non-existent property 'p' in table '`default`.`view1`'"))
       }
+    }
+  }
+
+  private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
+    val message = intercept[AnalysisException](sql(sqlText)).getMessage
+    assert(message.contains("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+  }
+
+  private def assertErrorForAlterViewOnTable(sqlText: String): Unit = {
+    val message = intercept[AnalysisException](sql(sqlText)).getMessage
+    assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+  }
+
+  test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      val message = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $tabName (height INT, length INT) TBLPROPERTIES('EXTERNAL'='TRUE')")
+      }.getMessage
+      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
+    }
+  }
+
+  test("alter table - SET TBLPROPERTIES EXTERNAL to TRUE") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      val catalog = spark.sessionState.catalog
+      sql(s"CREATE TABLE $tabName (height INT, length INT)")
+      assert(
+        catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
+      val message = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')")
+      }.getMessage
+      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
+      // The table type is not changed to external
+      assert(
+        catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
+      // The table property is case sensitive. Thus, external is allowed
+      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('external' = 'TRUE')")
+      // The table type is not changed to external
+      assert(
+        catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
     }
   }
 
@@ -303,45 +460,42 @@ class HiveDDLSuite
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
 
-        var message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName RENAME TO $newViewName")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName RENAME TO $newViewName")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
 
-        message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
-        }.getMessage
-        assert(message.contains(
-          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
+
+        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
       }
     }
   }
@@ -356,7 +510,7 @@ class HiveDDLSuite
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assume(oldPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) !=
+    assume(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
@@ -364,8 +518,46 @@ class HiveDDLSuite
       |""".stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(newPart.storage.serde == Some(expectedSerde))
-    assume(newPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) ==
+    assume(newPart.storage.properties.filterKeys(expectedSerdeProps.contains) ==
       expectedSerdeProps)
+  }
+
+  test("MSCK REPAIR RABLE") {
+    val catalog = spark.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1")
+    sql("CREATE TABLE tab1 (height INT, length INT) PARTITIONED BY (a INT, b INT)")
+    val part1 = Map("a" -> "1", "b" -> "5")
+    val part2 = Map("a" -> "2", "b" -> "6")
+    val root = new Path(catalog.getTableMetadata(tableIdent).location)
+    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    // valid
+    fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "_SUCCESS"))  // file
+    fs.mkdirs(new Path(new Path(root, "A=2"), "B=6"))
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "b.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), "c.csv"))  // file
+    fs.createNewFile(new Path(new Path(root, "A=2/B=6"), ".hiddenFile"))  // file
+    fs.mkdirs(new Path(new Path(root, "A=2/B=6"), "_temporary"))
+
+    // invalid
+    fs.mkdirs(new Path(new Path(root, "a"), "b"))  // bad name
+    fs.mkdirs(new Path(new Path(root, "b=1"), "a=1"))  // wrong order
+    fs.mkdirs(new Path(root, "a=4")) // not enough columns
+    fs.createNewFile(new Path(new Path(root, "a=1"), "b=4"))  // file
+    fs.createNewFile(new Path(new Path(root, "a=1"), "_SUCCESS"))  // _SUCCESS
+    fs.mkdirs(new Path(new Path(root, "a=1"), "_temporary"))  // _temporary
+    fs.mkdirs(new Path(new Path(root, "a=1"), ".b=4"))  // start with .
+
+    try {
+      sql("MSCK REPAIR TABLE tab1")
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(part1, part2))
+      assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
+      assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
+    } finally {
+      fs.delete(root, true)
+    }
   }
 
   test("drop table using drop view") {
@@ -428,6 +620,41 @@ class HiveDDLSuite
       assert(
         sql(s"DESC EXTENDED $tabName").collect()
           .exists(_.getString(0) == "# Detailed Table Information"))
+    }
+  }
+
+  test("desc table for Hive table - partitioned table") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (b int)")
+
+      assert(sql("DESC tbl").collect().containsSlice(
+        Seq(
+          Row("a", "int", null),
+          Row("b", "int", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("b", "int", null)
+        )
+      ))
+    }
+  }
+
+  test("desc formatted table for permanent view") {
+    withTable("tbl") {
+      withView("view1") {
+        sql("CREATE TABLE tbl(a int)")
+        sql("CREATE VIEW view1 AS SELECT * FROM tbl")
+        assert(sql("DESC FORMATTED view1").collect().containsSlice(
+          Seq(
+            Row("# View Information", "", ""),
+            Row("View Original Text:", "SELECT * FROM tbl", ""),
+            Row("View Expanded Text:",
+              "SELECT `gen_attr_0` AS `a` FROM (SELECT `gen_attr_0` FROM " +
+              "(SELECT `a` AS `gen_attr_0` FROM `default`.`tbl`) AS gen_subquery_0) AS tbl",
+              "")
+          )
+        ))
+      }
     }
   }
 
@@ -495,53 +722,46 @@ class HiveDDLSuite
   }
 
   private def dropDatabase(cascade: Boolean, tableExists: Boolean): Unit = {
-    withTempPath { tmpDir =>
-      val path = tmpDir.toString
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val dbName = "db1"
-        val fs = new Path(path).getFileSystem(spark.sessionState.newHadoopConf())
-        val dbPath = new Path(path)
-        // the database directory does not exist
-        assert(!fs.exists(dbPath))
+    val dbName = "db1"
+    val dbPath = new Path(spark.sessionState.conf.warehousePath)
+    val fs = dbPath.getFileSystem(spark.sessionState.newHadoopConf())
 
-        sql(s"CREATE DATABASE $dbName")
-        val catalog = spark.sessionState.catalog
-        val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
-        val db1 = catalog.getDatabaseMetadata(dbName)
-        assert(db1 == CatalogDatabase(
-          dbName,
-          "",
-          expectedDBLocation,
-          Map.empty))
-        // the database directory was created
-        assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
-        sql(s"USE $dbName")
+    sql(s"CREATE DATABASE $dbName")
+    val catalog = spark.sessionState.catalog
+    val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
+    val db1 = catalog.getDatabaseMetadata(dbName)
+    assert(db1 == CatalogDatabase(
+      dbName,
+      "",
+      expectedDBLocation,
+      Map.empty))
+    // the database directory was created
+    assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
+    sql(s"USE $dbName")
 
-        val tabName = "tab1"
-        assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
-        sql(s"CREATE TABLE $tabName as SELECT 1")
-        assert(tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+    val tabName = "tab1"
+    assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+    sql(s"CREATE TABLE $tabName as SELECT 1")
+    assert(tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
 
-        if (!tableExists) {
-          sql(s"DROP TABLE $tabName")
-          assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
-        }
+    if (!tableExists) {
+      sql(s"DROP TABLE $tabName")
+      assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+    }
 
-        sql(s"USE default")
-        val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
-        if (tableExists && !cascade) {
-          val message = intercept[AnalysisException] {
-            sql(sqlDropDatabase)
-          }.getMessage
-          assert(message.contains(s"Database $dbName is not empty. One or more tables exist."))
-          // the database directory was not removed
-          assert(fs.exists(new Path(expectedDBLocation)))
-        } else {
-          sql(sqlDropDatabase)
-          // the database directory was removed and the inclusive table directories are also removed
-          assert(!fs.exists(new Path(expectedDBLocation)))
-        }
-      }
+    sql(s"USE default")
+    val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
+    if (tableExists && !cascade) {
+      val message = intercept[AnalysisException] {
+        sql(sqlDropDatabase)
+      }.getMessage
+      assert(message.contains(s"Database $dbName is not empty. One or more tables exist."))
+      // the database directory was not removed
+      assert(fs.exists(new Path(expectedDBLocation)))
+    } else {
+      sql(sqlDropDatabase)
+      // the database directory was removed and the inclusive table directories are also removed
+      assert(!fs.exists(new Path(expectedDBLocation)))
     }
   }
 
@@ -594,6 +814,218 @@ class HiveDDLSuite
     }
   }
 
+  test("CREATE TABLE LIKE a temporary view") {
+    val sourceViewName = "tab1"
+    val targetTabName = "tab2"
+    withTempView(sourceViewName) {
+      withTable(targetTabName) {
+        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+          .createTempView(sourceViewName)
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
+
+        val sourceTable = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
+          TableIdentifier(sourceViewName))
+        val targetTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
+
+        checkCreateTableLike(sourceTable, targetTable)
+      }
+    }
+  }
+
+  test("CREATE TABLE LIKE a data source table") {
+    val sourceTabName = "tab1"
+    val targetTabName = "tab2"
+    withTable(sourceTabName, targetTabName) {
+      spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        .write.format("json").saveAsTable(sourceTabName)
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+
+      val sourceTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
+      val targetTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
+      // The table type of the source table should be a Hive-managed data source table
+      assert(DDLUtils.isDatasourceTable(sourceTable))
+      assert(sourceTable.tableType == CatalogTableType.MANAGED)
+
+      checkCreateTableLike(sourceTable, targetTable)
+    }
+  }
+
+  test("CREATE TABLE LIKE an external data source table") {
+    val sourceTabName = "tab1"
+    val targetTabName = "tab2"
+    withTable(sourceTabName, targetTabName) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+          .write.format("parquet").save(path)
+        sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '$path')")
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+
+        // The source table should be an external data source table
+        val sourceTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(sourceTabName, Some("default")))
+        val targetTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
+        // The table type of the source table should be an external data source table
+        assert(DDLUtils.isDatasourceTable(sourceTable))
+        assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
+
+        checkCreateTableLike(sourceTable, targetTable)
+      }
+    }
+  }
+
+  test("CREATE TABLE LIKE a managed Hive serde table") {
+    val catalog = spark.sessionState.catalog
+    val sourceTabName = "tab1"
+    val targetTabName = "tab2"
+    withTable(sourceTabName, targetTabName) {
+      sql(s"CREATE TABLE $sourceTabName TBLPROPERTIES('prop1'='value1') AS SELECT 1 key, 'a'")
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+
+      val sourceTable = catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
+      assert(sourceTable.tableType == CatalogTableType.MANAGED)
+      assert(sourceTable.properties.get("prop1").nonEmpty)
+      val targetTable = catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
+
+      checkCreateTableLike(sourceTable, targetTable)
+    }
+  }
+
+  test("CREATE TABLE LIKE an external Hive serde table") {
+    val catalog = spark.sessionState.catalog
+    withTempDir { tmpDir =>
+      val basePath = tmpDir.getCanonicalPath
+      val sourceTabName = "tab1"
+      val targetTabName = "tab2"
+      withTable(sourceTabName, targetTabName) {
+        assert(tmpDir.listFiles.isEmpty)
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE $sourceTabName (key INT comment 'test', value STRING)
+             |COMMENT 'Apache Spark'
+             |PARTITIONED BY (ds STRING, hr STRING)
+             |LOCATION '$basePath'
+           """.stripMargin)
+        for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $sourceTabName
+               |partition (ds='$ds',hr='$hr')
+               |SELECT 1, 'a'
+             """.stripMargin)
+        }
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+
+        val sourceTable = catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
+        assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
+        assert(sourceTable.comment == Option("Apache Spark"))
+        val targetTable = catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
+
+        checkCreateTableLike(sourceTable, targetTable)
+      }
+    }
+  }
+
+  test("CREATE TABLE LIKE a view") {
+    val sourceTabName = "tab1"
+    val sourceViewName = "view"
+    val targetTabName = "tab2"
+    withTable(sourceTabName, targetTabName) {
+      withView(sourceViewName) {
+        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+          .write.format("json").saveAsTable(sourceTabName)
+        sql(s"CREATE VIEW $sourceViewName AS SELECT * FROM $sourceTabName")
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
+
+        val sourceView = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(sourceViewName, Some("default")))
+        // The original source should be a VIEW with an empty path
+        assert(sourceView.tableType == CatalogTableType.VIEW)
+        assert(sourceView.viewText.nonEmpty && sourceView.viewOriginalText.nonEmpty)
+        val targetTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
+
+        checkCreateTableLike(sourceView, targetTable)
+      }
+    }
+  }
+
+  private def checkCreateTableLike(sourceTable: CatalogTable, targetTable: CatalogTable): Unit = {
+    // The created table should be a MANAGED table with empty view text and original text.
+    assert(targetTable.tableType == CatalogTableType.MANAGED,
+      "the created table must be a Hive managed table")
+    assert(targetTable.viewText.isEmpty && targetTable.viewOriginalText.isEmpty,
+      "the view text and original text in the created table must be empty")
+    assert(targetTable.comment.isEmpty,
+      "the comment in the created table must be empty")
+    assert(targetTable.unsupportedFeatures.isEmpty,
+      "the unsupportedFeatures in the create table must be empty")
+
+    val metastoreGeneratedProperties = Seq(
+      "CreateTime",
+      "transient_lastDdlTime",
+      "grantTime",
+      "lastUpdateTime",
+      "last_modified_by",
+      "last_modified_time",
+      "Owner:",
+      "COLUMN_STATS_ACCURATE",
+      "numFiles",
+      "numRows",
+      "rawDataSize",
+      "totalSize",
+      "totalNumberFiles",
+      "maxFileSize",
+      "minFileSize"
+    )
+    assert(targetTable.properties.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
+      "the table properties of source tables should not be copied in the created table")
+
+    if (DDLUtils.isDatasourceTable(sourceTable) ||
+        sourceTable.tableType == CatalogTableType.VIEW) {
+      assert(DDLUtils.isDatasourceTable(targetTable),
+        "the target table should be a data source table")
+    } else {
+      assert(!DDLUtils.isDatasourceTable(targetTable),
+        "the target table should be a Hive serde table")
+    }
+
+    if (sourceTable.tableType == CatalogTableType.VIEW) {
+      // Source table is a temporary/permanent view, which does not have a provider. The created
+      // target table uses the default data source format
+      assert(targetTable.provider == Option(spark.sessionState.conf.defaultDataSourceName))
+    } else {
+      assert(targetTable.provider == sourceTable.provider)
+    }
+
+    assert(targetTable.storage.locationUri.nonEmpty, "target table path should not be empty")
+    assert(sourceTable.storage.locationUri != targetTable.storage.locationUri,
+      "source table/view path should be different from target table path")
+
+    // The source table contents should not been seen in the target table.
+    assert(spark.table(sourceTable.identifier).count() != 0, "the source table should be nonempty")
+    assert(spark.table(targetTable.identifier).count() == 0, "the target table should be empty")
+
+    // Their schema should be identical
+    checkAnswer(
+      sql(s"DESC ${sourceTable.identifier}"),
+      sql(s"DESC ${targetTable.identifier}"))
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      // Check whether the new table can be inserted using the data from the original table
+      sql(s"INSERT INTO TABLE ${targetTable.identifier} SELECT * FROM ${sourceTable.identifier}")
+    }
+
+    // After insertion, the data should be identical
+    checkAnswer(
+      sql(s"SELECT * FROM ${sourceTable.identifier}"),
+      sql(s"SELECT * FROM ${targetTable.identifier}"))
+  }
+
   test("desc table for data source table") {
     withTable("tab1") {
       val tabName = "tab1"
@@ -611,6 +1043,75 @@ class HiveDDLSuite
     }
   }
 
+  test("create table with the same name as an index table") {
+    val tabName = "tab1"
+    val indexName = tabName + "_index"
+    withTable(tabName) {
+      // Spark SQL does not support creating index. Thus, we have to use Hive client.
+      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      sql(s"CREATE TABLE $tabName(a int)")
+
+      try {
+        client.runSqlHive(
+          s"CREATE INDEX $indexName ON TABLE $tabName (a) AS 'COMPACT' WITH DEFERRED REBUILD")
+        val indexTabName =
+          spark.sessionState.catalog.listTables("default", s"*$indexName*").head.table
+        intercept[TableAlreadyExistsException] {
+          sql(s"CREATE TABLE $indexTabName(b int)")
+        }
+        intercept[TableAlreadyExistsException] {
+          sql(s"ALTER TABLE $tabName RENAME TO $indexTabName")
+        }
+
+        // When tableExists is not invoked, we still can get an AnalysisException
+        val e = intercept[AnalysisException] {
+          sql(s"DESCRIBE $indexTabName")
+        }.getMessage
+        assert(e.contains("Hive index table is not supported."))
+      } finally {
+        client.runSqlHive(s"DROP INDEX IF EXISTS $indexName ON $tabName")
+      }
+    }
+  }
+
+  test("insert skewed table") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      // Spark SQL does not support creating skewed table. Thus, we have to use Hive client.
+      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      client.runSqlHive(
+        s"""
+           |CREATE Table $tabName(col1 int, col2 int)
+           |PARTITIONED BY (part1 string, part2 string)
+           |SKEWED BY (col1) ON (3, 4) STORED AS DIRECTORIES
+         """.stripMargin)
+      val hiveTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+
+      assert(hiveTable.unsupportedFeatures.contains("skewed columns"))
+
+      // Call loadDynamicPartitions against a skewed table with enabling list bucketing
+      sql(
+        s"""
+           |INSERT OVERWRITE TABLE $tabName
+           |PARTITION (part1='a', part2)
+           |SELECT 3, 4, 'b'
+         """.stripMargin)
+
+      // Call loadPartitions against a skewed table with enabling list bucketing
+      sql(
+        s"""
+           |INSERT INTO TABLE $tabName
+           |PARTITION (part1='a', part2='b')
+           |SELECT 1, 2
+         """.stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * from $tabName"),
+        Row(3, 4, "a", "b") :: Row(1, 2, "a", "b") :: Nil)
+    }
+  }
+
   test("desc table for data source table - no user-defined schema") {
     Seq("parquet", "json", "orc").foreach { fileFormat =>
       withTable("t1") {
@@ -621,7 +1122,7 @@ class HiveDDLSuite
 
           val desc = sql("DESC FORMATTED t1").collect().toSeq
 
-          assert(desc.contains(Row("id", "bigint", "")))
+          assert(desc.contains(Row("id", "bigint", null)))
         }
       }
     }
@@ -638,13 +1139,13 @@ class HiveDDLSuite
 
       assert(formattedDesc.containsSlice(
         Seq(
-          Row("a", "bigint", ""),
-          Row("b", "bigint", ""),
-          Row("c", "bigint", ""),
-          Row("d", "bigint", ""),
+          Row("a", "bigint", null),
+          Row("b", "bigint", null),
+          Row("c", "bigint", null),
+          Row("d", "bigint", null),
           Row("# Partition Information", "", ""),
-          Row("# col_name", "", ""),
-          Row("d", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("d", "bigint", null),
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
           Row("Database:", "default", "")
@@ -664,6 +1165,95 @@ class HiveDDLSuite
           Row("Sort Columns:", "[c]", "")
         )
       ))
+    }
+  }
+
+  test("datasource and statistics table property keys are not allowed") {
+    import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_PREFIX
+    import org.apache.spark.sql.hive.HiveExternalCatalog.STATISTICS_PREFIX
+
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a INT) STORED AS parquet")
+
+      Seq(DATASOURCE_PREFIX, STATISTICS_PREFIX).foreach { forbiddenPrefix =>
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${forbiddenPrefix}foo' = 'loser')")
+        }
+        assert(e.getMessage.contains(forbiddenPrefix + "foo"))
+
+        val e2 = intercept[AnalysisException] {
+          sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${forbiddenPrefix}foo')")
+        }
+        assert(e2.getMessage.contains(forbiddenPrefix + "foo"))
+
+        val e3 = intercept[AnalysisException] {
+          sql(s"CREATE TABLE tbl TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
+        }
+        assert(e3.getMessage.contains(forbiddenPrefix + "foo"))
+      }
+    }
+  }
+
+  test("truncate table - datasource table") {
+    import testImplicits._
+
+    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
+    // Test both a Hive compatible and incompatible code path.
+    Seq("json", "parquet").foreach { format =>
+      withTable("rectangles") {
+        data.write.format(format).saveAsTable("rectangles")
+        assume(spark.table("rectangles").collect().nonEmpty,
+          "bad test; table was empty to begin with")
+
+        sql("TRUNCATE TABLE rectangles")
+        assert(spark.table("rectangles").collect().isEmpty)
+
+        // not supported since the table is not partitioned
+        val e = intercept[AnalysisException] {
+          sql("TRUNCATE TABLE rectangles PARTITION (width=1)")
+        }
+        assert(e.message.contains("Operation not allowed"))
+      }
+    }
+  }
+
+  test("truncate partitioned table - datasource table") {
+    import testImplicits._
+
+    val data = (1 to 10).map { i => (i % 3, i % 5, i) }.toDF("width", "length", "height")
+
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
+      // supported since partitions are stored in the metastore
+      sql("TRUNCATE TABLE partTable PARTITION (width=1, length=1)")
+      assert(spark.table("partTable").filter($"width" === 1).collect().nonEmpty)
+      assert(spark.table("partTable").filter($"width" === 1 && $"length" === 1).collect().isEmpty)
+    }
+
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
+      // support partial partition spec
+      sql("TRUNCATE TABLE partTable PARTITION (width=1)")
+      assert(spark.table("partTable").collect().nonEmpty)
+      assert(spark.table("partTable").filter($"width" === 1).collect().isEmpty)
+    }
+
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
+      // do nothing if no partition is matched for the given partial partition spec
+      sql("TRUNCATE TABLE partTable PARTITION (width=100)")
+      assert(spark.table("partTable").count() == data.count())
+
+      // throw exception if no partition is matched for the given non-partial partition spec.
+      intercept[NoSuchPartitionException] {
+        sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
+      }
+
+      // throw exception if the column in partition spec is not a partition column.
+      val e = intercept[AnalysisException] {
+        sql("TRUNCATE TABLE partTable PARTITION (unknown=1)")
+      }
+      assert(e.message.contains("unknown is not a valid partition column"))
     }
   }
 }

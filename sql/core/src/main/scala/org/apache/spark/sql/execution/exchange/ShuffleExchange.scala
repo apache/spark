@@ -40,14 +40,12 @@ case class ShuffleExchange(
     child: SparkPlan,
     @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
 
-  override private[sql] lazy val metrics = Map(
+  override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"))
 
   override def nodeName: String = {
     val extraInfo = coordinator match {
-      case Some(exchangeCoordinator) if exchangeCoordinator.isEstimated =>
-        s"(coordinator id: ${System.identityHashCode(coordinator)})"
-      case Some(exchangeCoordinator) if !exchangeCoordinator.isEstimated =>
+      case Some(exchangeCoordinator) =>
         s"(coordinator id: ${System.identityHashCode(coordinator)})"
       case None => ""
     }
@@ -81,7 +79,8 @@ case class ShuffleExchange(
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
    * the returned ShuffleDependency will be the input of shuffle.
    */
-  private[sql] def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
+  private[exchange] def prepareShuffleDependency()
+    : ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchange.prepareShuffleDependency(
       child.execute(), child.output, newPartitioning, serializer)
   }
@@ -92,7 +91,7 @@ case class ShuffleExchange(
    * partition start indices array. If this optional array is defined, the returned
    * [[ShuffledRowRDD]] will fetch pre-shuffle partitions based on indices of this array.
    */
-  private[sql] def preparePostShuffleRDD(
+  private[exchange] def preparePostShuffleRDD(
       shuffleDependency: ShuffleDependency[Int, InternalRow, InternalRow],
       specifiedPartitionStartIndices: Option[Array[Int]] = None): ShuffledRowRDD = {
     // If an array of partition start indices is provided, we need to use this array
@@ -194,7 +193,7 @@ object ShuffleExchange {
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
    * the returned ShuffleDependency will be the input of shuffle.
    */
-  private[sql] def prepareShuffleDependency(
+  def prepareShuffleDependency(
       rdd: RDD[InternalRow],
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,

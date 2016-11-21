@@ -44,7 +44,7 @@ private[spark] class YarnClientSchedulerBackend(
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
-    sc.ui.foreach { ui => conf.set("spark.driver.appUIAddress", ui.appUIAddress) }
+    sc.ui.foreach { ui => conf.set("spark.driver.appUIAddress", ui.webUrl) }
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += ("--arg", hostport)
@@ -65,7 +65,7 @@ private[spark] class YarnClientSchedulerBackend(
     // reads the credentials from HDFS, just like the executors and updates its own credentials
     // cache.
     if (conf.contains("spark.yarn.credentials.file")) {
-      YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
+      YarnSparkHadoopUtil.get.startCredentialUpdater(conf)
     }
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
@@ -149,7 +149,7 @@ private[spark] class YarnClientSchedulerBackend(
     client.reportLauncherState(SparkAppHandle.State.FINISHED)
 
     super.stop()
-    YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
+    YarnSparkHadoopUtil.get.stopCredentialUpdater()
     client.stop()
     logInfo("Stopped")
   }

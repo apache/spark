@@ -18,6 +18,8 @@
 package org.apache.spark
 
 // scalastyle:off
+import java.io.File
+
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
 import org.apache.spark.internal.Logging
@@ -39,6 +41,15 @@ abstract class SparkFunSuite
     } finally {
       super.afterAll()
     }
+  }
+
+  // helper function
+  protected final def getTestResourceFile(file: String): File = {
+    new File(getClass.getClassLoader.getResource(file).getFile)
+  }
+
+  protected final def getTestResourcePath(file: String): String = {
+    getTestResourceFile(file).getCanonicalPath
   }
 
   /**

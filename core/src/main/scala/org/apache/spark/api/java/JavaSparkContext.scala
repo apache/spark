@@ -298,7 +298,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop SequenceFile with given key and value types.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -316,7 +316,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop SequenceFile.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -366,7 +366,7 @@ class JavaSparkContext(val sc: SparkContext)
    * @param valueClass Class of the values
    * @param minPartitions Minimum number of Hadoop Splits to generate.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -396,7 +396,7 @@ class JavaSparkContext(val sc: SparkContext)
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -416,7 +416,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop file with an arbitrary InputFormat.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -437,7 +437,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Get an RDD for a Hadoop file with an arbitrary InputFormat
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -458,7 +458,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -487,7 +487,7 @@ class JavaSparkContext(val sc: SparkContext)
    * @param kClass Class of the keys
    * @param vClass Class of the values
    *
-   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * @note Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -670,6 +670,19 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
+   * Add a file to be downloaded with this Spark job on every node.
+   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   * use `SparkFiles.get(fileName)` to find its download location.
+   *
+   * A directory can be given if the recursive option is set to true. Currently directories are only
+   * supported for Hadoop-supported filesystems.
+   */
+  def addFile(path: String, recursive: Boolean): Unit = {
+    sc.addFile(path, recursive)
+  }
+
+  /**
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI.
@@ -681,7 +694,7 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
    *
-   * '''Note:''' As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+   * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
    * plan to set some global configurations for all Hadoop RDDs.
    */
   def hadoopConfiguration(): Configuration = {
@@ -798,7 +811,8 @@ class JavaSparkContext(val sc: SparkContext)
 
   /**
    * Returns a Java map of JavaRDDs that have marked themselves as persistent via cache() call.
-   * Note that this does not necessarily mean the caching or computation was successful.
+   *
+   * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
     sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s))

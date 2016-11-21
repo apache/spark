@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
 @ChannelHandler.Sharable
 public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
-  private final Logger logger = LoggerFactory.getLogger(MessageEncoder.class);
+  private static final Logger logger = LoggerFactory.getLogger(MessageEncoder.class);
 
   /***
    * Encodes a Message by invoking its encode() method. For non-data messages, we will add one

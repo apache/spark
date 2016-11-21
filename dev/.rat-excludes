@@ -100,3 +100,5 @@ spark-deps-.*
 org.apache.spark.scheduler.ExternalClusterManager
 .*\.sql
 .Rbuildignore
+org.apache.spark.deploy.yarn.security.ServiceCredentialProvider
+spark-warehouse

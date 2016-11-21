@@ -74,7 +74,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def repartition(numPartitions: Int): JavaPairDStream[K, V] = dstream.repartition(numPartitions)
 
-  /** Method that generates a RDD for the given Duration */
+  /** Method that generates an RDD for the given Duration */
   def compute(validTime: Time): JavaPairRDD[K, V] = {
     dstream.compute(validTime) match {
       case Some(rdd) => new JavaPairRDD(rdd)
@@ -471,9 +471,10 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       val list: JList[V] = values.asJava
       val scalaState: Optional[S] = JavaUtils.optionToOptional(state)
       val result: Optional[S] = in.apply(list, scalaState)
-      result.isPresent match {
-        case true => Some(result.get())
-        case _ => None
+      if (result.isPresent) {
+        Some(result.get())
+      } else {
+        None
       }
     }
     scalaFunc

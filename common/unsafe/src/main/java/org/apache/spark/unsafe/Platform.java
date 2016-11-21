@@ -29,6 +29,8 @@ public final class Platform {
 
   private static final Unsafe _UNSAFE;
 
+  public static final int BOOLEAN_ARRAY_OFFSET;
+
   public static final int BYTE_ARRAY_OFFSET;
 
   public static final int SHORT_ARRAY_OFFSET;
@@ -55,7 +57,7 @@ public final class Platform {
       // We at least know x86 and x64 support unaligned access.
       String arch = System.getProperty("os.arch", "");
       //noinspection DynamicRegexReplaceableByCompiledPattern
-      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64)$");
+      _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
     }
     unaligned = _unaligned;
   }
@@ -235,6 +237,7 @@ public final class Platform {
     _UNSAFE = unsafe;
 
     if (_UNSAFE != null) {
+      BOOLEAN_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(boolean[].class);
       BYTE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(byte[].class);
       SHORT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(short[].class);
       INT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(int[].class);
@@ -242,6 +245,7 @@ public final class Platform {
       FLOAT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(float[].class);
       DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
     } else {
+      BOOLEAN_ARRAY_OFFSET = 0;
       BYTE_ARRAY_OFFSET = 0;
       SHORT_ARRAY_OFFSET = 0;
       INT_ARRAY_OFFSET = 0;

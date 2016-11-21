@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.commons.codec.binary.Base64
+
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.types._
+
 /**
  * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
  * corresponding statistic produced by the children.  To override this behavior, override
@@ -31,6 +37,81 @@ package org.apache.spark.sql.catalyst.plans.logical
  *
  * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
  *                    defaults to the product of children's `sizeInBytes`.
+ * @param rowCount Estimated number of rows.
+ * @param colStats Column-level statistics.
  * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
  */
-case class Statistics(sizeInBytes: BigInt, isBroadcastable: Boolean = false)
+case class Statistics(
+    sizeInBytes: BigInt,
+    rowCount: Option[BigInt] = None,
+    colStats: Map[String, ColumnStat] = Map.empty,
+    isBroadcastable: Boolean = false) {
+
+  override def toString: String = "Statistics(" + simpleString + ")"
+
+  /** Readable string representation for the Statistics. */
+  def simpleString: String = {
+    Seq(s"sizeInBytes=$sizeInBytes",
+      if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
+      s"isBroadcastable=$isBroadcastable"
+    ).filter(_.nonEmpty).mkString(", ")
+  }
+}
+
+/**
+ * Statistics for a column.
+ */
+case class ColumnStat(statRow: InternalRow) {
+
+  def forNumeric[T <: AtomicType](dataType: T): NumericColumnStat[T] = {
+    NumericColumnStat(statRow, dataType)
+  }
+  def forString: StringColumnStat = StringColumnStat(statRow)
+  def forBinary: BinaryColumnStat = BinaryColumnStat(statRow)
+  def forBoolean: BooleanColumnStat = BooleanColumnStat(statRow)
+
+  override def toString: String = {
+    // use Base64 for encoding
+    Base64.encodeBase64String(statRow.asInstanceOf[UnsafeRow].getBytes)
+  }
+}
+
+object ColumnStat {
+  def apply(numFields: Int, str: String): ColumnStat = {
+    // use Base64 for decoding
+    val bytes = Base64.decodeBase64(str)
+    val unsafeRow = new UnsafeRow(numFields)
+    unsafeRow.pointTo(bytes, bytes.length)
+    ColumnStat(unsafeRow)
+  }
+}
+
+case class NumericColumnStat[T <: AtomicType](statRow: InternalRow, dataType: T) {
+  // The indices here must be consistent with `ColumnStatStruct.numericColumnStat`.
+  val numNulls: Long = statRow.getLong(0)
+  val max: T#InternalType = statRow.get(1, dataType).asInstanceOf[T#InternalType]
+  val min: T#InternalType = statRow.get(2, dataType).asInstanceOf[T#InternalType]
+  val ndv: Long = statRow.getLong(3)
+}
+
+case class StringColumnStat(statRow: InternalRow) {
+  // The indices here must be consistent with `ColumnStatStruct.stringColumnStat`.
+  val numNulls: Long = statRow.getLong(0)
+  val avgColLen: Double = statRow.getDouble(1)
+  val maxColLen: Long = statRow.getInt(2)
+  val ndv: Long = statRow.getLong(3)
+}
+
+case class BinaryColumnStat(statRow: InternalRow) {
+  // The indices here must be consistent with `ColumnStatStruct.binaryColumnStat`.
+  val numNulls: Long = statRow.getLong(0)
+  val avgColLen: Double = statRow.getDouble(1)
+  val maxColLen: Long = statRow.getInt(2)
+}
+
+case class BooleanColumnStat(statRow: InternalRow) {
+  // The indices here must be consistent with `ColumnStatStruct.booleanColumnStat`.
+  val numNulls: Long = statRow.getLong(0)
+  val numTrues: Long = statRow.getLong(1)
+  val numFalses: Long = statRow.getLong(2)
+}

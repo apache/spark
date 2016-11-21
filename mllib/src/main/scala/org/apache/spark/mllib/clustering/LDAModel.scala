@@ -66,7 +66,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *
    * This is the parameter to a symmetric Dirichlet distribution.
    *
-   * Note: The topics' distributions over terms are called "beta" in the original LDA paper
+   * @note The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    */
   @Since("1.5.0")
@@ -784,7 +784,13 @@ class DistributedLDAModel private[clustering] (
   @Since("1.5.0")
   def topTopicsPerDocument(k: Int): RDD[(Long, Array[Int], Array[Double])] = {
     graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
-      val topIndices = argtopk(topicCounts, k)
+      // TODO: Remove work-around for the breeze bug.
+      // https://github.com/scalanlp/breeze/issues/561
+      val topIndices = if (k == topicCounts.length) {
+        Seq.range(0, k)
+      } else {
+        argtopk(topicCounts, k)
+      }
       val sumCounts = sum(topicCounts)
       val weights = if (sumCounts != 0) {
         topicCounts(topIndices) / sumCounts

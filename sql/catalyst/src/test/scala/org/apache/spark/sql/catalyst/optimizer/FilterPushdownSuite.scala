@@ -34,7 +34,6 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
-        PushProjectThroughSample,
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
@@ -110,6 +109,12 @@ class FilterPushdownSuite extends PlanTest {
 
     // We can not use comparePlans here because it normalized the plan.
     assert(optimized == correctAnswer)
+  }
+
+  test("SPARK-16994: filter should not be pushed through limit") {
+    val originalQuery = testRelation.limit(10).where('a === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
   }
 
   test("can't push without rewrite") {
@@ -585,22 +590,6 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
-  test("push project and filter down into sample") {
-    val x = testRelation.subquery('x)
-    val originalQuery =
-      Sample(0.0, 0.6, false, 11L, x)().select('a)
-
-    val originalQueryAnalyzed =
-      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
-
-    val optimized = Optimize.execute(originalQueryAnalyzed)
-
-    val correctAnswer =
-      Sample(0.0, 0.6, false, 11L, x.select('a))()
-
-    comparePlans(optimized, correctAnswer.analyze)
-  }
-
   test("aggregate: push down filter when filter on group by expression") {
     val originalQuery = testRelation
                         .groupBy('a)('a, count('b) as 'c)
@@ -693,6 +682,23 @@ class FilterPushdownSuite extends PlanTest {
       .select('a, 'b)
       .groupBy('a)('a + Rand(10) as 'aa, count('b) as 'c, Rand(11).as("rnd"))
       .where('c === 2L && 'aa + Rand(10).as("rnd") === 3 && 'rnd === 5)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-17712: aggregate: don't push down filters that are data-independent") {
+    val originalQuery = LocalRelation.apply(testRelation.output, Seq.empty)
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -997,5 +1003,19 @@ class FilterPushdownSuite extends PlanTest {
       .where('a - 'b > 1).select('a, 'b, 'c, 'window).analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("join condition pushdown: deterministic and non-deterministic") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    // Verify that all conditions preceding the first non-deterministic condition are pushed down
+    // by the optimizer and others are not.
+    val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
+      "x.a".attr === Rand(10) && "y.b".attr === 5))
+    val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
+        condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }

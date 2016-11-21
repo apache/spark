@@ -169,6 +169,10 @@ object ExpressionEncoder {
       ClassTag(cls))
   }
 
+  // Tuple1
+  def tuple[T](e: ExpressionEncoder[T]): ExpressionEncoder[Tuple1[T]] =
+    tuple(Seq(e)).asInstanceOf[ExpressionEncoder[Tuple1[T]]]
+
   def tuple[T1, T2](
       e1: ExpressionEncoder[T1],
       e2: ExpressionEncoder[T2]): ExpressionEncoder[(T1, T2)] =
@@ -252,7 +256,7 @@ case class ExpressionEncoder[T](
   private lazy val extractProjection = GenerateUnsafeProjection.generate(serializer)
 
   @transient
-  private lazy val inputRow = new GenericMutableRow(1)
+  private lazy val inputRow = new GenericInternalRow(1)
 
   @transient
   private lazy val constructProjection = GenerateSafeProjection.generate(deserializer :: Nil)

@@ -19,6 +19,8 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
+import org.apache.commons.math3.util.CombinatoricsUtils
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.linalg._
@@ -74,9 +76,11 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
  * (n + d choose d) (including 1 and first-order values). For example, let f([a, b, c], 3) be the
  * function that expands [a, b, c] to their monomials of degree 3. We have the following recursion:
  *
- * {{{
- * f([a, b, c], 3) = f([a, b], 3) ++ f([a, b], 2) * c ++ f([a, b], 1) * c^2 ++ [c^3]
- * }}}
+ * <p><blockquote>
+ *    $$
+ *    f([a, b, c], 3) &= f([a, b], 3) ++ f([a, b], 2) * c ++ f([a, b], 1) * c^2 ++ [c^3]
+ *    $$
+ * </blockquote></p>
  *
  * To handle sparsity, if c is zero, we can skip all monomials that contain it. We remember the
  * current index and increment it properly for sparse input.
@@ -84,11 +88,11 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
 @Since("1.6.0")
 object PolynomialExpansion extends DefaultParamsReadable[PolynomialExpansion] {
 
-  private def choose(n: Int, k: Int): Int = {
-    Range(n, n - k, -1).product / Range(k, 1, -1).product
+  private def getPolySize(numFeatures: Int, degree: Int): Int = {
+    val n = CombinatoricsUtils.binomialCoefficient(numFeatures + degree, degree)
+    require(n <= Integer.MAX_VALUE)
+    n.toInt
   }
-
-  private def getPolySize(numFeatures: Int, degree: Int): Int = choose(numFeatures + degree, degree)
 
   private def expandDense(
       values: Array[Double],

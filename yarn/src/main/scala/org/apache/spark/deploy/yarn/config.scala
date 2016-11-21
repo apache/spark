@@ -40,6 +40,11 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val AM_PORT =
+    ConfigBuilder("spark.yarn.am.port")
+      .intConf
+      .createWithDefault(0)
+
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +
@@ -318,6 +323,16 @@ package object config {
     .internal()
     .stringConf
     .createOptional
+
+  private[spark] val CREDENTIALS_RENEWAL_TIME = ConfigBuilder("spark.yarn.credentials.renewalTime")
+    .internal()
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefault(Long.MaxValue)
+
+  private[spark] val CREDENTIALS_UPDATE_TIME = ConfigBuilder("spark.yarn.credentials.updateTime")
+    .internal()
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefault(Long.MaxValue)
 
   // The list of cache-related config entries. This is used by Client and the AM to clean
   // up the environment so that these settings do not appear on the web UI.

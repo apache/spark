@@ -36,7 +36,8 @@ import org.apache.spark.sql.types.{DoubleType, NumericType, StructType}
  * The last category is not included by default (configurable via [[OneHotEncoder!.dropLast]]
  * because it makes the vector entries sum up to one, and hence linearly dependent.
  * So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
- * Note that this is different from scikit-learn's OneHotEncoder, which keeps all categories.
+ *
+ * @note This is different from scikit-learn's OneHotEncoder, which keeps all categories.
  * The output vectors are sparse.
  *
  * @see [[StringIndexer]] for converting categorical values into category indices
@@ -164,8 +165,8 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
     // data transformation
     val size = outputAttrGroup.size
     val oneValue = Array(1.0)
-    val emptyValues = Array[Double]()
-    val emptyIndices = Array[Int]()
+    val emptyValues = Array.empty[Double]
+    val emptyIndices = Array.empty[Int]
     val encode = udf { label: Double =>
       if (label < size) {
         Vectors.sparse(size, Array(label.toInt), oneValue)

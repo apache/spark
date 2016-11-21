@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.kafka
 
 import java.io.OutputStream
-import java.lang.{Integer => JInt, Long => JLong}
+import java.lang.{Integer => JInt, Long => JLong, Number => JNumber}
 import java.nio.charset.StandardCharsets
 import java.util.{List => JList, Map => JMap, Set => JSet}
 
@@ -223,7 +223,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create a RDD from Kafka using offset ranges for each topic and partition.
+   * Create an RDD from Kafka using offset ranges for each topic and partition.
    *
    * @param sc SparkContext object
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
@@ -255,7 +255,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+   * Create an RDD from Kafka using offset ranges for each topic and partition. This allows you
    * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
    * as the metadata.
    *
@@ -303,7 +303,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create a RDD from Kafka using offset ranges for each topic and partition.
+   * Create an RDD from Kafka using offset ranges for each topic and partition.
    *
    * @param jsc JavaSparkContext object
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
@@ -340,7 +340,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+   * Create an RDD from Kafka using offset ranges for each topic and partition. This allows you
    * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
    * as the metadata.
    *
@@ -682,7 +682,7 @@ private[kafka] class KafkaUtilsPythonHelper {
       jssc: JavaStreamingContext,
       kafkaParams: JMap[String, String],
       topics: JSet[String],
-      fromOffsets: JMap[TopicAndPartition, JLong]): JavaDStream[(Array[Byte], Array[Byte])] = {
+      fromOffsets: JMap[TopicAndPartition, JNumber]): JavaDStream[(Array[Byte], Array[Byte])] = {
     val messageHandler =
       (mmd: MessageAndMetadata[Array[Byte], Array[Byte]]) => (mmd.key, mmd.message)
     new JavaDStream(createDirectStream(jssc, kafkaParams, topics, fromOffsets, messageHandler))
@@ -692,7 +692,7 @@ private[kafka] class KafkaUtilsPythonHelper {
       jssc: JavaStreamingContext,
       kafkaParams: JMap[String, String],
       topics: JSet[String],
-      fromOffsets: JMap[TopicAndPartition, JLong]): JavaDStream[Array[Byte]] = {
+      fromOffsets: JMap[TopicAndPartition, JNumber]): JavaDStream[Array[Byte]] = {
     val messageHandler = (mmd: MessageAndMetadata[Array[Byte], Array[Byte]]) =>
       new PythonMessageAndMetadata(mmd.topic, mmd.partition, mmd.offset, mmd.key(), mmd.message())
     val stream = createDirectStream(jssc, kafkaParams, topics, fromOffsets, messageHandler).
@@ -704,7 +704,7 @@ private[kafka] class KafkaUtilsPythonHelper {
       jssc: JavaStreamingContext,
       kafkaParams: JMap[String, String],
       topics: JSet[String],
-      fromOffsets: JMap[TopicAndPartition, JLong],
+      fromOffsets: JMap[TopicAndPartition, JNumber],
       messageHandler: MessageAndMetadata[Array[Byte], Array[Byte]] => V): DStream[V] = {
 
     val currentFromOffsets = if (!fromOffsets.isEmpty) {

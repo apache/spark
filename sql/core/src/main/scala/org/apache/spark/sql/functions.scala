@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -36,8 +37,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * :: Experimental ::
- * Functions available for [[DataFrame]].
+ * Functions available for DataFrame operations.
  *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
@@ -52,7 +52,7 @@ import org.apache.spark.util.Utils
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
-@Experimental
+@InterfaceStability.Stable
 // scalastyle:off
 object functions {
 // scalastyle:on
@@ -109,7 +109,6 @@ object functions {
   /**
    * Returns a sort expression based on ascending order of the column.
    * {{{
-   *   // Sort by dept in ascending order, and then age in descending order.
    *   df.sort(asc("dept"), desc("age"))
    * }}}
    *
@@ -119,9 +118,32 @@ object functions {
   def asc(columnName: String): Column = Column(columnName).asc
 
   /**
+   * Returns a sort expression based on ascending order of the column,
+   * and null values return before non-null values.
+   * {{{
+   *   df.sort(asc_nulls_last("dept"), desc("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def asc_nulls_first(columnName: String): Column = Column(columnName).asc_nulls_first
+
+  /**
+   * Returns a sort expression based on ascending order of the column,
+   * and null values appear after non-null values.
+   * {{{
+   *   df.sort(asc_nulls_last("dept"), desc("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def asc_nulls_last(columnName: String): Column = Column(columnName).asc_nulls_last
+
+  /**
    * Returns a sort expression based on the descending order of the column.
    * {{{
-   *   // Sort by dept in ascending order, and then age in descending order.
    *   df.sort(asc("dept"), desc("age"))
    * }}}
    *
@@ -130,17 +152,72 @@ object functions {
    */
   def desc(columnName: String): Column = Column(columnName).desc
 
+  /**
+   * Returns a sort expression based on the descending order of the column,
+   * and null values appear before non-null values.
+   * {{{
+   *   df.sort(asc("dept"), desc_nulls_first("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def desc_nulls_first(columnName: String): Column = Column(columnName).desc_nulls_first
+
+  /**
+   * Returns a sort expression based on the descending order of the column,
+   * and null values appear after non-null values.
+   * {{{
+   *   df.sort(asc("dept"), desc_nulls_last("age"))
+   * }}}
+   *
+   * @group sort_funcs
+   * @since 2.1.0
+   */
+  def desc_nulls_last(columnName: String): Column = Column(columnName).desc_nulls_last
+
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Aggregate functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Aggregate function: returns the approximate number of distinct items in a group.
-   *
    * @group agg_funcs
    * @since 1.3.0
    */
-  def approxCountDistinct(e: Column): Column = withAggregateFunction {
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(e: Column): Column = approx_count_distinct(e)
+
+  /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(columnName: String): Column = approx_count_distinct(columnName)
+
+  /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(e: Column, rsd: Double): Column = approx_count_distinct(e, rsd)
+
+  /**
+   * @group agg_funcs
+   * @since 1.3.0
+   */
+  @deprecated("Use approx_count_distinct", "2.1.0")
+  def approxCountDistinct(columnName: String, rsd: Double): Column = {
+    approx_count_distinct(Column(columnName), rsd)
+  }
+
+  /**
+   * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  def approx_count_distinct(e: Column): Column = withAggregateFunction {
     HyperLogLogPlusPlus(e.expr)
   }
 
@@ -148,9 +225,9 @@ object functions {
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.1.0
    */
-  def approxCountDistinct(columnName: String): Column = approxCountDistinct(column(columnName))
+  def approx_count_distinct(columnName: String): Column = approx_count_distinct(column(columnName))
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
@@ -158,9 +235,9 @@ object functions {
    * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.1.0
    */
-  def approxCountDistinct(e: Column, rsd: Double): Column = withAggregateFunction {
+  def approx_count_distinct(e: Column, rsd: Double): Column = withAggregateFunction {
     HyperLogLogPlusPlus(e.expr, rsd, 0, 0)
   }
 
@@ -170,10 +247,10 @@ object functions {
    * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.1.0
    */
-  def approxCountDistinct(columnName: String, rsd: Double): Column = {
-    approxCountDistinct(Column(columnName), rsd)
+  def approx_count_distinct(columnName: String, rsd: Double): Column = {
+    approx_count_distinct(Column(columnName), rsd)
   }
 
   /**
@@ -399,7 +476,7 @@ object functions {
    *
    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
    *
-   * Note: the list of columns should match with grouping columns exactly, or empty (means all the
+   * @note The list of columns should match with grouping columns exactly, or empty (means all the
    * grouping columns).
    *
    * @group agg_funcs
@@ -412,7 +489,7 @@ object functions {
    *
    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
    *
-   * Note: the list of columns should match with grouping columns exactly.
+   * @note The list of columns should match with grouping columns exactly.
    *
    * @group agg_funcs
    * @since 2.0.0
@@ -820,7 +897,7 @@ object functions {
 
   /**
    * Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
-   * partition. Fow example, if `n` is 4, the first quarter of the rows will get value 1, the second
+   * partition. For example, if `n` is 4, the first quarter of the rows will get value 1, the second
    * quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
    *
    * This is equivalent to the NTILE function in SQL.
@@ -1040,9 +1117,10 @@ object functions {
   def not(e: Column): Column = !e
 
   /**
-   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   * Generate a random column with independent and identically distributed (i.i.d.) samples
+   * from U[0.0, 1.0].
    *
-   * Note that this is indeterministic when data partitions are not fixed.
+   * @note This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1050,7 +1128,8 @@ object functions {
   def rand(seed: Long): Column = withExpr { Rand(seed) }
 
   /**
-   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   * Generate a random column with independent and identically distributed (i.i.d.) samples
+   * from U[0.0, 1.0].
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1058,9 +1137,10 @@ object functions {
   def rand(): Column = rand(Utils.random.nextLong)
 
   /**
-   * Generate a column with i.i.d. samples from the standard normal distribution.
+   * Generate a column with independent and identically distributed (i.i.d.) samples from
+   * the standard normal distribution.
    *
-   * Note that this is indeterministic when data partitions are not fixed.
+   * @note This is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1068,7 +1148,8 @@ object functions {
   def randn(seed: Long): Column = withExpr { Randn(seed) }
 
   /**
-   * Generate a column with i.i.d. samples from the standard normal distribution.
+   * Generate a column with independent and identically distributed (i.i.d.) samples from
+   * the standard normal distribution.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1076,9 +1157,9 @@ object functions {
   def randn(): Column = randn(Utils.random.nextLong)
 
   /**
-   * Partition ID of the Spark task.
+   * Partition ID.
    *
-   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
+   * @note This is indeterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
    * @since 1.6.0
@@ -1800,8 +1881,8 @@ object functions {
   def shiftLeft(e: Column, numBits: Int): Column = withExpr { ShiftLeft(e.expr, lit(numBits).expr) }
 
   /**
-   * Shift the given value numBits right. If the given value is a long value, it will return
-   * a long value else it will return an integer value.
+   * (Signed) shift the given value numBits right. If the given value is a long value, it will
+   * return a long value else it will return an integer value.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1902,36 +1983,64 @@ object functions {
   def tanh(columnName: String): Column = tanh(Column(columnName))
 
   /**
-   * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
-   *
    * @group math_funcs
    * @since 1.4.0
    */
-  def toDegrees(e: Column): Column = withExpr { ToDegrees(e.expr) }
+  @deprecated("Use degrees", "2.1.0")
+  def toDegrees(e: Column): Column = degrees(e)
+
+  /**
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use degrees", "2.1.0")
+  def toDegrees(columnName: String): Column = degrees(Column(columnName))
 
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
    * @group math_funcs
+   * @since 2.1.0
+   */
+  def degrees(e: Column): Column = withExpr { ToDegrees(e.expr) }
+
+  /**
+   * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
+   *
+   * @group math_funcs
+   * @since 2.1.0
+   */
+  def degrees(columnName: String): Column = degrees(Column(columnName))
+
+  /**
+   * @group math_funcs
    * @since 1.4.0
    */
-  def toDegrees(columnName: String): Column = toDegrees(Column(columnName))
+  @deprecated("Use radians", "2.1.0")
+  def toRadians(e: Column): Column = radians(e)
+
+  /**
+   * @group math_funcs
+   * @since 1.4.0
+   */
+  @deprecated("Use radians", "2.1.0")
+  def toRadians(columnName: String): Column = radians(Column(columnName))
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 2.1.0
    */
-  def toRadians(e: Column): Column = withExpr { ToRadians(e.expr) }
+  def radians(e: Column): Column = withExpr { ToRadians(e.expr) }
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
    * @group math_funcs
-   * @since 1.4.0
+   * @since 2.1.0
    */
-  def toRadians(columnName: String): Column = toRadians(Column(columnName))
+  def radians(columnName: String): Column = radians(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Misc functions
@@ -2098,7 +2207,7 @@ object functions {
    * Locate the position of the first occurrence of substr column in the given string.
    * Returns null if either of the arguments are null.
    *
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   * @note The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2133,7 +2242,8 @@ object functions {
 
   /**
    * Locate the position of the first occurrence of substr.
-   * NOTE: The position is not zero based, but 1 based index, returns 0 if substr
+   *
+   * @note The position is not zero based, but 1 based index. Returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2146,7 +2256,7 @@ object functions {
   /**
    * Locate the position of the first occurrence of substr in a string column, after position pos.
    *
-   * NOTE: The position is not zero based, but 1 based index. returns 0 if substr
+   * @note The position is not zero based, but 1 based index. returns 0 if substr
    * could not be found in str.
    *
    * @group string_funcs
@@ -2175,7 +2285,8 @@ object functions {
   def ltrim(e: Column): Column = withExpr {StringTrimLeft(e.expr) }
 
   /**
-   * Extract a specific(idx) group identified by a java regex, from the specified string column.
+   * Extract a specific group matched by a Java regex, from the specified string column.
+   * If the regex did not match, or the specified group did not match, an empty string is returned.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2259,7 +2370,8 @@ object functions {
 
   /**
    * Splits str around pattern (pattern is a regular expression).
-   * NOTE: pattern is a string representation of the regular expression.
+   *
+   * @note Pattern is a string representation of the regular expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2358,7 +2470,7 @@ object functions {
    * A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
    * pattern letters of [[java.text.SimpleDateFormat]] can be used.
    *
-   * NOTE: Use when ever possible specialized functions like [[year]]. These benefit from a
+   * @note Use when ever possible specialized functions like [[year]]. These benefit from a
    * specialized implementation.
    *
    * @group datetime_funcs
@@ -2560,7 +2672,8 @@ object functions {
   }
 
   /**
-   * Assumes given timestamp is UTC and converts to given timezone.
+   * Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
+   * that corresponds to the same time of day in the given timezone.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2569,7 +2682,8 @@ object functions {
   }
 
   /**
-   * Assumes given timestamp is in given timezone and converts to UTC.
+   * Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
+   * another timestamp that corresponds to the same time of day in UTC.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2605,12 +2719,15 @@ object functions {
    *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
-   *                       valid duration identifiers.
+   *                       valid duration identifiers. Note that the duration is a fixed length of
+   *                       time, and does not vary over time according to a calendar. For example,
+   *                       `1 day` always means 86,400,000 milliseconds, not a calendar day.
    * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
    *                      A new window will be generated every `slideDuration`. Must be less than
    *                      or equal to the `windowDuration`. Check
    *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration
-   *                      identifiers.
+   *                      identifiers. This duration is likewise absolute, and does not vary
+    *                     according to a calendar.
    * @param startTime The offset with respect to 1970-01-01 00:00:00 UTC with which to start
    *                  window intervals. For example, in order to have hourly tumbling windows that
    *                  start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
@@ -2620,6 +2737,7 @@ object functions {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def window(
       timeColumn: Column,
       windowDuration: String,
@@ -2659,16 +2777,21 @@ object functions {
    *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
-   *                       valid duration identifiers.
+   *                       valid duration identifiers. Note that the duration is a fixed length of
+   *                       time, and does not vary over time according to a calendar. For example,
+   *                       `1 day` always means 86,400,000 milliseconds, not a calendar day.
    * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
    *                      A new window will be generated every `slideDuration`. Must be less than
    *                      or equal to the `windowDuration`. Check
-   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration.
+   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration
+   *                      identifiers. This duration is likewise absolute, and does not vary
+   *                     according to a calendar.
    *
    * @group datetime_funcs
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
     window(timeColumn, windowDuration, slideDuration, "0 second")
   }
@@ -2707,6 +2830,7 @@ object functions {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def window(timeColumn: Column, windowDuration: String): Column = {
     window(timeColumn, windowDuration, windowDuration, "0 second")
   }
@@ -2764,6 +2888,105 @@ object functions {
   }
 
   /**
+   * (Scala-specific) Parses a column containing a JSON string into a [[StructType]] with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def from_json(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
+    JsonToStruct(schema, options, e.expr)
+  }
+
+  /**
+   * (Java-specific) Parses a column containing a JSON string into a [[StructType]] with the
+   * specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def from_json(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
+    from_json(e, schema, options.asScala.toMap)
+
+  /**
+   * Parses a column containing a JSON string into a [[StructType]] with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def from_json(e: Column, schema: StructType): Column =
+    from_json(e, schema, Map.empty[String, String])
+
+  /**
+   * Parses a column containing a JSON string into a [[StructType]] with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string as a json string
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column =
+    from_json(e, DataType.fromJson(schema).asInstanceOf[StructType], options)
+
+
+  /**
+   * (Scala-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a struct column.
+   * @param options options to control how the struct column is converted into a json string.
+   *                accepts the same options and the json data source.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column, options: Map[String, String]): Column = withExpr {
+    StructToJson(options, e.expr)
+  }
+
+  /**
+   * (Java-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a struct column.
+   * @param options options to control how the struct column is converted into a json string.
+   *                accepts the same options and the json data source.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column, options: java.util.Map[String, String]): Column =
+    to_json(e, options.asScala.toMap)
+
+  /**
+   * Converts a column containing a [[StructType]] into a JSON string with the
+   * specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a struct column.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def to_json(e: Column): Column =
+    to_json(e, Map.empty[String, String])
+
+  /**
    * Returns length of array or map.
    *
    * @group collection_funcs
@@ -2781,7 +3004,7 @@ object functions {
   def sort_array(e: Column): Column = sort_array(e, asc = true)
 
   /**
-   * Sorts the input array for the given column in ascending / descending order,
+   * Sorts the input array for the given column in ascending or descending order,
    * according to the natural ordering of the array elements.
    *
    * @group collection_funcs
@@ -2983,5 +3206,4 @@ object functions {
   def callUDF(udfName: String, cols: Column*): Column = withExpr {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
-
 }

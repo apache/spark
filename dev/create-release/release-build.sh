@@ -80,7 +80,7 @@ NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
 
 MVN="build/mvn --force"
-PUBLISH_PROFILES="-Pyarn -Phive -Phive-thriftserver -Phadoop-2.2"
+PUBLISH_PROFILES="-Pmesos -Pyarn -Phive -Phive-thriftserver -Phadoop-2.2"
 PUBLISH_PROFILES="$PUBLISH_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
 
 rm -rf spark
@@ -162,14 +162,35 @@ if [[ "$1" == "package" ]]; then
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
 
+    # Write out the NAME and VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
+    # to dev0 to be closer to PEP440. We use the NAME as a "local version".
+    PYSPARK_VERSION=`echo "$SPARK_VERSION+$NAME" |  sed -r "s/-/./" | sed -r "s/SNAPSHOT/dev0/"`
+    echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
+
     # Get maven home set by MVN
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
 
-    ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz $FLAGS \
+    echo "Creating distribution"
+    ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --pip $FLAGS \
       -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
     cd ..
-    cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
 
+    echo "Copying and signing python distribution"
+    PYTHON_DIST_NAME=pyspark-$PYSPARK_VERSION.tar.gz
+    cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_DIST_NAME .
+
+    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+      --output $PYTHON_DIST_NAME.asc \
+      --detach-sig $PYTHON_DIST_NAME
+    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+      MD5 $PYTHON_DIST_NAME > \
+      $PYTHON_DIST_NAME.md5
+    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+      SHA512 $PYTHON_DIST_NAME > \
+      $PYTHON_DIST_NAME.sha
+
+    echo "Copying and signing regular binary distribution"
+    cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
       --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
       --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
@@ -186,12 +207,13 @@ if [[ "$1" == "package" ]]; then
 
   # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
   # share the same Zinc server.
-  make_binary_release "hadoop2.3" "-Psparkr -Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" "3033" &
-  make_binary_release "hadoop2.4" "-Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" "3034" &
-  make_binary_release "hadoop2.6" "-Psparkr -Phadoop-2.6 -Phive -Phive-thriftserver -Pyarn" "3035" &
-  make_binary_release "hadoop2.7" "-Psparkr -Phadoop-2.7 -Phive -Phive-thriftserver -Pyarn" "3036" &
-  make_binary_release "hadoop2.4-without-hive" "-Psparkr -Phadoop-2.4 -Pyarn" "3037" &
-  make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn" "3038" &
+  FLAGS="-Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos"
+  make_binary_release "hadoop2.3" "-Phadoop-2.3 $FLAGS" "3033" &
+  make_binary_release "hadoop2.4" "-Phadoop-2.4 $FLAGS" "3034" &
+  make_binary_release "hadoop2.6" "-Phadoop-2.6 $FLAGS" "3035" &
+  make_binary_release "hadoop2.7" "-Phadoop-2.7 $FLAGS" "3036" &
+  make_binary_release "hadoop2.4-without-hive" "-Psparkr -Phadoop-2.4 -Pyarn -Pmesos" "3037" &
+  make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn -Pmesos" "3038" &
   wait
   rm -rf spark-$SPARK_VERSION-bin-*/
 
@@ -207,6 +229,7 @@ if [[ "$1" == "package" ]]; then
   # Re-upload a second time and leave the files in the timestamped upload directory:
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir 'spark-*'
+  LFTP mput -O $dest_dir 'pyspark-*'
   exit 0
 fi
 

@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -119,18 +119,19 @@ object RowEncoder {
         "fromString",
         inputObject :: Nil)
 
-    case t @ ArrayType(et, _) => et match {
-      case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
-        // TODO: validate input type for primitive array.
-        NewInstance(
-          classOf[GenericArrayData],
-          inputObject :: Nil,
-          dataType = t)
-      case _ => MapObjects(
-        element => serializerFor(ValidateExternalType(element, et), et),
-        inputObject,
-        ObjectType(classOf[Object]))
-    }
+    case t @ ArrayType(et, cn) =>
+      et match {
+        case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
+          StaticInvoke(
+            classOf[ArrayData],
+            t,
+            "toArrayData",
+            inputObject :: Nil)
+        case _ => MapObjects(
+          element => serializerFor(ValidateExternalType(element, et), et),
+          inputObject,
+          ObjectType(classOf[Object]))
+      }
 
     case t @ MapType(kt, vt, valueNullable) =>
       val keys =
@@ -206,6 +207,7 @@ object RowEncoder {
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
+    case p: PythonUserDefinedType => externalDataTypeFor(p.sqlType)
     case udt: UserDefinedType[_] => ObjectType(udt.userClass)
   }
 
@@ -220,8 +222,14 @@ object RowEncoder {
     CreateExternalRow(fields, schema)
   }
 
-  private def deserializerFor(input: Expression): Expression = input.dataType match {
+  private def deserializerFor(input: Expression): Expression = {
+    deserializerFor(input, input.dataType)
+  }
+
+  private def deserializerFor(input: Expression, dataType: DataType): Expression = dataType match {
     case dt if ScalaReflection.isNativeType(dt) => input
+
+    case p: PythonUserDefinedType => deserializerFor(input, p.sqlType)
 
     case udt: UserDefinedType[_] =>
       val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
