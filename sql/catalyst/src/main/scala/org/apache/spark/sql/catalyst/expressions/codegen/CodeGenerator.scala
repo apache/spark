@@ -517,7 +517,9 @@ class CodegenContext {
       val funcCode: String =
         s"""
           public int $compareFunc(ArrayData a, ArrayData b) {
-            if (a instanceof UnsafeArrayData && b instanceof UnsafeArrayData && a == b) {
+            // when comparing unsafe arrays, try equals first as it compares the binary directly
+            // which is very fast.
+            if (a instanceof UnsafeArrayData && b instanceof UnsafeArrayData && a.equals(b)) {
               return 0;
             }
             int lengthA = a.numElements();
@@ -559,7 +561,9 @@ class CodegenContext {
       val funcCode: String =
         s"""
           public int $compareFunc(InternalRow a, InternalRow b) {
-            if (a instanceof UnsafeRow && b instanceof UnsafeRow && a == b) {
+            // when comparing unsafe rows, try equals first as it compares the binary directly
+            // which is very fast.
+            if (a instanceof UnsafeRow && b instanceof UnsafeRow && a.equals(b)) {
               return 0;
             }
             InternalRow i = null;
