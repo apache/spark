@@ -1063,8 +1063,9 @@ the following case-sensitive options:
   <tr>
     <td><code>partitionColumn, lowerBound, upperBound</code></td>
     <td>
-      These options must all be specified if any of them is specified. They describe how to
-      partition the table when reading in parallel from multiple workers.
+      These options must all be specified if any of them is specified. In addition,
+      <code>numPartitions</code> must be specified. They describe how to partition the table when
+      reading in parallel from multiple workers.
       <code>partitionColumn</code> must be a numeric column from the table in question. Notice
       that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
       partition stride, not for filtering the rows in table. So all rows in the table will be
@@ -1076,9 +1077,10 @@ the following case-sensitive options:
      <td><code>numPartitions</code></td>
      <td>
        The number of partitions that can be used, if set. It works by limiting both read and write
-       operations' parallelism. If the number of partitions to write exceeds this limit, the
-       operation will coalesce the data set to fewer partitions before writing. In other words,
-       this determines the maximum number of concurrent JDBC connections.
+       operations' parallelism. In other words, this determines the maximum number of concurrent
+       JDBC connections. For reading, it will make partitions less than or equal to this maximum.
+       For writing, if the number of partitions to write exceeds this limit, the operation will
+       coalesce the data set with this maximum before writing.
      </td>
   </tr>
 
