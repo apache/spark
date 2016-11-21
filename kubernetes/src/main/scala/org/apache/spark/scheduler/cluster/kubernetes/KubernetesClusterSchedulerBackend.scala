@@ -50,15 +50,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
   var shutdownToPod = mutable.Map.empty[String, String] // pending shutdown
   var executorID = 0
 
-  val sparkDriverImage = sc.getConf.get("spark.kubernetes.driver.image")
-  val clientJarUri = sc.getConf.get("spark.executor.jar")
-  val ns = sc.getConf.get("spark.kubernetes.namespace")
-  val dynamicExecutors = Utils.isDynamicAllocationEnabled(sc.getConf)
+  val sparkImage = conf.get("spark.kubernetes.sparkImage")
+  val clientJarUri = conf.get("spark.executor.jar")
+  val ns = conf.get(
+    "spark.kubernetes.namespace",
+    KubernetesClusterScheduler.defaultNameSpace)
+  val dynamicExecutors = Utils.isDynamicAllocationEnabled(conf)
 
   // executor back-ends take their configuration this way
   if (dynamicExecutors) {
-    sc.getConf.setExecutorEnv("spark.dynamicAllocation.enabled", "true")
-    sc.getConf.setExecutorEnv("spark.shuffle.service.enabled", "true")
+    conf.setExecutorEnv("spark.dynamicAllocation.enabled", "true")
+    conf.setExecutorEnv("spark.shuffle.service.enabled", "true")
   }
 
   override def start(): Unit = {
@@ -159,12 +161,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
       initialNumExecutors
     } else {
-      val targetNumExecutors =
-        sys.env
-          .get("SPARK_EXECUTOR_INSTANCES")
-          .map(_.toInt)
-          .getOrElse(numExecutors)
-      conf.get(EXECUTOR_INSTANCES).getOrElse(targetNumExecutors)
+      conf.get(EXECUTOR_INSTANCES).getOrElse(numExecutors)
     }
   }
 
@@ -195,7 +192,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       .withNewSpec()
       .withRestartPolicy("OnFailure")
 
-      .addNewContainer().withName("spark-executor").withImage(sparkDriverImage)
+      .addNewContainer().withName("spark-executor").withImage(sparkImage)
       .withImagePullPolicy("IfNotPresent")
       .withCommand("/opt/executor.sh")
       .withArgs(submitArgs :_*)

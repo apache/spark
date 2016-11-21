@@ -35,6 +35,11 @@ import org.apache.spark.util.Utils
 
 import scala.util.Random
 
+private[spark] object KubernetesClusterScheduler {
+  def defaultNameSpace = "default"
+  def defaultServiceAccountName = "default"
+}
+
 /**
   * This is a simple extension to ClusterScheduler
   * */
@@ -45,14 +50,26 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
   private val DEFAULT_CORES = 1.0
 
   logInfo("Created KubernetesClusterScheduler instance")
+
   var client = setupKubernetesClient()
   val driverName = s"spark-driver-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
   val svcName = s"spark-svc-${Random.alphanumeric take 5 mkString("")}".toLowerCase()
-  val instances = conf.get(EXECUTOR_INSTANCES).getOrElse(1)
-  val serviceAccountName = conf.get("spark.kubernetes.serviceAccountName", "default")
-  val nameSpace = conf.get("spark.kubernetes.namespace", "default")
+  val nameSpace = conf.get(
+    "spark.kubernetes.namespace",
+    KubernetesClusterScheduler.defaultNameSpace)
+  val serviceAccountName = conf.get(
+    "spark.kubernetes.serviceAccountName",
+    KubernetesClusterScheduler.defaultServiceAccountName)
 
-  logWarning("instances: " +  instances)
+  // Anything that should either not be passed to driver config in the cluster, or
+  // that is going to be explicitly managed as command argument to the driver pod
+  val confBlackList = scala.collection.Set(
+    "spark.master",
+    "spark.app.name",
+    "spark.submit.deployMode",
+    "spark.executor.jar",
+    "spark.dynamicAllocation.enabled",
+    "spark.shuffle.service.enabled")
 
   def start(args: ClientArguments): Unit = {
     startDriver(client, args)
@@ -73,7 +90,7 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
     val driverDescription = buildDriverDescription(args)
 
     // image needs to support shim scripts "/opt/driver.sh" and "/opt/executor.sh"
-    val sparkDriverImage = conf.getOption("spark.kubernetes.sparkImage").getOrElse {
+    val sparkImage = conf.getOption("spark.kubernetes.sparkImage").getOrElse {
       // TODO: this needs to default to some standard Apache Spark image
       throw new SparkException("Spark image not set. Please configure spark.kubernetes.sparkImage")
     }
@@ -91,10 +108,10 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
       s"--class=${args.userClass}",
       s"--master=$kubernetesHost",
       s"--executor-memory=${driverDescription.mem}",
-      s"--conf=spark.executor.jar=$clientJarUri",
-      s"--conf=spark.executor.instances=$instances",
-      s"--conf=spark.kubernetes.namespace=$nameSpace",
-      s"--conf=spark.kubernetes.driver.image=$sparkDriverImage")
+      s"--conf spark.executor.jar=$clientJarUri")
+
+    submitArgs ++= conf.getAll.filter { case (name, _) => !confBlackList.contains(name) }
+      .map { case (name, value) => s"--conf ${name}=${value}" }
 
     if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
       submitArgs ++= Vector(
@@ -117,7 +134,7 @@ private[spark] class KubernetesClusterScheduler(conf: SparkConf)
       .withServiceAccount(serviceAccountName)
       .addNewContainer()
       .withName("spark-driver")
-      .withImage(sparkDriverImage)
+      .withImage(sparkImage)
       .withImagePullPolicy("Always")
       .withCommand(s"/opt/driver.sh")
       .withArgs(submitArgs :_*)
