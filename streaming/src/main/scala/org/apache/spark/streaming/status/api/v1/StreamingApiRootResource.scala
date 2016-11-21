@@ -21,6 +21,7 @@ import javax.servlet.ServletContext
 import javax.ws.rs.{Path, WebApplicationException}
 import javax.ws.rs.core.{Context, Response}
 
+import com.sun.jersey.api.core.ResourceConfig
 import com.sun.jersey.spi.container.servlet.ServletContainer
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.ServletContextHandler
@@ -83,8 +84,8 @@ private[spark] object StreamingApiRootResource {
       "com.sun.jersey.api.core.PackagesResourceConfig")
     holder.setInitParameter("com.sun.jersey.config.property.packages",
       "org.apache.spark.streaming.status.api.v1")
-    // holder.setInitParameter(ResourceConfig.PROPERTY_CONTAINER_REQUEST_FILTERS,
-    // classOf[SecurityFilter].getCanonicalName)
+    holder.setInitParameter(ResourceConfig.PROPERTY_CONTAINER_REQUEST_FILTERS,
+      classOf[SecurityFilter].getCanonicalName)
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     UIRootFromServletContext.setListener(jerseyContext, listener)
     UIRootFromServletContext.setStartTimeMillis(jerseyContext, startTimeMillis)
