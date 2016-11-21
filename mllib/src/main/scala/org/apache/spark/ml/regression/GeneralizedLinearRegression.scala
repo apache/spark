@@ -226,7 +226,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * @group setParam
    */
   @Since("2.0.0")
-  def setSolver(value: String): this.type = set(solver, value)
+  def setSolver(value: String): this.type = {
+    require("irls" == value,
+      s"Solver $value was not supported. Supported options: irls")
+    set(solver, value)
+  }
   setDefault(solver -> "irls")
 
   /**
