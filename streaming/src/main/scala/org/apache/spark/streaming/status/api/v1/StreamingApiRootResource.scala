@@ -30,7 +30,7 @@ import org.apache.spark.status.api.v1.UIRoot
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Path("/v1")
-private[v1] class StreamingApiRootResource extends UIRootFromServletContext{
+private[v1] class StreamingApiRootResource extends StreamingUIRootFromServletContext{
 
   @Path("statistics")
   def getStreamingStatistics(): StreamingStatisticsResource = {
@@ -86,15 +86,15 @@ private[spark] object StreamingApiRootResource {
       "org.apache.spark.streaming.status.api.v1")
     holder.setInitParameter(ResourceConfig.PROPERTY_CONTAINER_REQUEST_FILTERS,
       classOf[SecurityFilter].getCanonicalName)
-    UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
-    UIRootFromServletContext.setListener(jerseyContext, listener)
-    UIRootFromServletContext.setStartTimeMillis(jerseyContext, startTimeMillis)
+    StreamingUIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
+    StreamingUIRootFromServletContext.setListener(jerseyContext, listener)
+    StreamingUIRootFromServletContext.setStartTimeMillis(jerseyContext, startTimeMillis)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext
   }
 }
 
-private[v1] object UIRootFromServletContext {
+private[v1] object StreamingUIRootFromServletContext {
 
   private val attribute = getClass.getCanonicalName
 
@@ -123,13 +123,14 @@ private[v1] object UIRootFromServletContext {
   }
 }
 
-private[v1] trait UIRootFromServletContext {
+private[v1] trait StreamingUIRootFromServletContext {
   @Context
   var servletContext: ServletContext = _
 
-  def uiRoot: UIRoot = UIRootFromServletContext.getUiRoot(servletContext)
-  def listener: StreamingJobProgressListener = UIRootFromServletContext.getListener(servletContext)
-  def startTimeMillis: Long = UIRootFromServletContext.getStartTimeMillis(servletContext)
+  def uiRoot: UIRoot = StreamingUIRootFromServletContext.getUiRoot(servletContext)
+  def listener: StreamingJobProgressListener =
+    StreamingUIRootFromServletContext.getListener(servletContext)
+  def startTimeMillis: Long = StreamingUIRootFromServletContext.getStartTimeMillis(servletContext)
 }
 
 private[v1] class NotFoundException(msg: String) extends WebApplicationException(

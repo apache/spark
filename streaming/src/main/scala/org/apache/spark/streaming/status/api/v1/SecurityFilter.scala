@@ -21,7 +21,10 @@ import javax.ws.rs.core.Response
 
 import com.sun.jersey.spi.container.{ContainerRequest, ContainerRequestFilter}
 
-private[v1] class SecurityFilter extends ContainerRequestFilter with UIRootFromServletContext {
+private[v1] class SecurityFilter
+    extends ContainerRequestFilter
+    with StreamingUIRootFromServletContext {
+
   def filter(req: ContainerRequest): ContainerRequest = {
     val user = Option(req.getUserPrincipal).map { _.getName }.orNull
     if (uiRoot.securityManager.checkUIViewPermissions(user)) {
