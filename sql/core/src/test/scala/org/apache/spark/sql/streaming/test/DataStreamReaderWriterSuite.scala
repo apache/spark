@@ -544,8 +544,9 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .partitionBy("part", "id")
         .mode("overwrite")
         .parquet(src.toString)
-      // make sure to specify the schema in the wrong order. Partition column in the middle, etc.
+      // Specify a random ordering of the schema, partition column in the middle, etc.
       // Also let's say that the partition columns are Strings instead of Longs.
+      // partition columns should go to the end
       val schema = new StructType()
         .add("id", StringType)
         .add("ex", ArrayType(StringType))
