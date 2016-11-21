@@ -412,7 +412,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
         recordsRead == 3
       }
     )
-
   }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"

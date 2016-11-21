@@ -62,11 +62,18 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
   /**
    * Returns the query if there is an active query with the given id, or null.
    *
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def get(id: UUID): StreamingQuery = activeQueriesLock.synchronized {
     activeQueries.get(id).orNull
   }
+
+  /**
+   * Returns the query if there is an active query with the given id, or null.
+   *
+   * @since 2.1.0
+   */
+  def get(id: String): StreamingQuery = get(UUID.fromString(id))
 
   /**
    * Wait until any of the queries on the associated SQLContext has terminated since the

@@ -28,8 +28,8 @@ import org.apache.spark.metrics.source.{Source => CodahaleSource}
 import org.apache.spark.util.Clock
 
 /**
- * Class that serves some of the metrics through Codahale/DropWizard metrics
- *
+ * Serves metrics from a [[org.apache.spark.sql.streaming.StreamingQuery]] to
+ * Codahale/DropWizard metrics
  */
 class StreamMetricsReporter(
     stream: StreamExecution,
