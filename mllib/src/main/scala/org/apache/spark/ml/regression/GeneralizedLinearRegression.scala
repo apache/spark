@@ -1067,8 +1067,8 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   /**
    * Whether the underlying [[WeightedLeastSquares]] using the "normal" solver.
    */
-  private[ml] val isNotNormalSolver: Boolean = {
-    diagInvAtWA.length == 1 && diagInvAtWA(0) == 0
+  private[ml] val isNormalSolver: Boolean = {
+    diagInvAtWA.length != 1 || diagInvAtWA(0) != 0
   }
 
   /**
@@ -1081,11 +1081,11 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val coefficientStandardErrors: Array[Double] = {
-    if (isNotNormalSolver) {
+    if (isNormalSolver) {
+      diagInvAtWA.map(_ * dispersion).map(math.sqrt)
+    } else {
       throw new UnsupportedOperationException(
         "No Std. Error of coefficients available for this GeneralizedLinearRegressionModel")
-    } else {
-      diagInvAtWA.map(_ * dispersion).map(math.sqrt)
     }
   }
 
@@ -1099,16 +1099,16 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val tValues: Array[Double] = {
-    if (isNotNormalSolver) {
-      throw new UnsupportedOperationException(
-        "No t-statistic available for this GeneralizedLinearRegressionModel")
-    } else {
+    if (isNormalSolver) {
       val estimate = if (model.getFitIntercept) {
         Array.concat(model.coefficients.toArray, Array(model.intercept))
       } else {
         model.coefficients.toArray
       }
       estimate.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
+    } else {
+      throw new UnsupportedOperationException(
+        "No t-statistic available for this GeneralizedLinearRegressionModel")
     }
   }
 
@@ -1122,10 +1122,7 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val pValues: Array[Double] = {
-    if (isNotNormalSolver) {
-      throw new UnsupportedOperationException(
-        "No p-value available for this GeneralizedLinearRegressionModel")
-    } else {
+    if (isNormalSolver) {
       if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
         tValues.map { x => 2.0 * (1.0 - dist.Gaussian(0.0, 1.0).cdf(math.abs(x))) }
       } else {
@@ -1133,6 +1130,9 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
           2.0 * (1.0 - dist.StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x)))
         }
       }
+    } else {
+      throw new UnsupportedOperationException(
+        "No p-value available for this GeneralizedLinearRegressionModel")
     }
   }
 }

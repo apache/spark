@@ -278,8 +278,10 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 
 #' @param object a fitted generalized linear model.
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
-#'         including at least the coefficients, null/residual deviance, null/residual degrees
-#'         of freedom, AIC and number of iterations IRLS takes.
+#'         including at least the coefficients matrix (which includes coefficients, standard error
+#'         of coefficients, t value and p value), null/residual deviance, null/residual degrees of
+#'         freedom, AIC and number of iterations IRLS takes. If there are collinear columns
+#'         in you data, the coefficients matrix only provides coefficients.
 #'
 #' @rdname spark.glm
 #' @export

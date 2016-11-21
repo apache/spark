@@ -144,13 +144,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       features
     }
 
-    val rCoefficients: Array[Double] = if (summary.isNotNormalSolver) {
-      if (glm.getFitIntercept) {
-        Array(glm.intercept) ++ glm.coefficients.toArray
-      } else {
-        glm.coefficients.toArray
-      }
-    } else {
+    val rCoefficients: Array[Double] = if (summary.isNormalSolver) {
       val rCoefficientStandardErrors = if (glm.getFitIntercept) {
         Array(summary.coefficientStandardErrors.last) ++
           summary.coefficientStandardErrors.dropRight(1)
@@ -175,6 +169,12 @@ private[r] object GeneralizedLinearRegressionWrapper
           rCoefficientStandardErrors ++ rTValues ++ rPValues
       } else {
         glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      }
+    } else {
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray
+      } else {
+        glm.coefficients.toArray
       }
     }
 

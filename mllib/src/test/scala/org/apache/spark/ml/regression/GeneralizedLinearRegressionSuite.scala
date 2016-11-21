@@ -1059,6 +1059,12 @@ class GeneralizedLinearRegressionSuite
     intercept[UnsupportedOperationException] {
       model.summary.coefficientStandardErrors
     }
+    intercept[UnsupportedOperationException] {
+      model.summary.pValues
+    }
+    intercept[UnsupportedOperationException] {
+      model.summary.tValues
+    }
   }
 
   test("read/write") {
