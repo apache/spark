@@ -503,17 +503,16 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
           val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
           val eval1 = left.genCode(ctx)
           ev.copy(code = s"""
-              ${eval1.code}
-              boolean ${ev.isNull} = ${eval1.isNull};
-              ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-            """ +
-            ctx.nullSafeExec(left.nullable, eval1.isNull)(s"""
+            ${eval1.code}
+            boolean ${ev.isNull} = ${eval1.isNull};
+            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+            if (!${ev.isNull}) {
               try {
                 ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
               } catch (java.text.ParseException e) {
                 ${ev.isNull} = true;
               }
-            """))
+            }""")
         }
       case StringType =>
         val sdf = classOf[SimpleDateFormat].getName
@@ -532,22 +531,22 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
       case TimestampType =>
         val eval1 = left.genCode(ctx)
         ev.copy(code = s"""
-            ${eval1.code}
-            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          """ +
-          ctx.nullSafeExec(left.nullable, eval1.isNull)(s"""
+          ${eval1.code}
+          boolean ${ev.isNull} = ${eval1.isNull};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
             ${ev.value} = ${eval1.value} / 1000000L;
-          """), isNull = eval1.isNull)
+          }""")
       case DateType =>
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
         ev.copy(code = s"""
           ${eval1.code}
+          boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          """ +
-          ctx.nullSafeExec(left.nullable, eval1.isNull)(s"""
+          if (!${ev.isNull}) {
             ${ev.value} = $dtu.daysToMillis(${eval1.value}) / 1000L;
-          """), isNull = eval1.isNull)
+          }""")
     }
   }
 }
@@ -621,18 +620,17 @@ case class FromUnixTime(sec: Expression, format: Expression)
         val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
         val t = left.genCode(ctx)
         ev.copy(code = s"""
-            ${t.code}
-            boolean ${ev.isNull} = ${t.isNull};
-            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          """ +
-          ctx.nullSafeExec(left.nullable, t.isNull)(s"""
+          ${t.code}
+          boolean ${ev.isNull} = ${t.isNull};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          if (!${ev.isNull}) {
             try {
               ${ev.value} = UTF8String.fromString($formatterName.format(
                 new java.util.Date(${t.value} * 1000L)));
             } catch (java.lang.IllegalArgumentException e) {
               ${ev.isNull} = true;
             }
-          """))
+          }""")
       }
     } else {
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
@@ -817,12 +815,13 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
         ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $tzClass.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
-            ${eval.code}
-            long ${ev.value} = 0;
-          """ +
-          ctx.nullSafeExec(left.nullable, eval.isNull)(s"""
-            ${ev.value} = $dtu.convertTz(${eval.value}, $utcTerm, $tzTerm);
-          """), isNull = eval.isNull)
+           |${eval.code}
+           |boolean ${ev.isNull} = ${eval.isNull};
+           |long ${ev.value} = 0;
+           |if (!${ev.isNull}) {
+           |  ${ev.value} = $dtu.convertTz(${eval.value}, $utcTerm, $tzTerm);
+           |}
+         """.stripMargin)
       }
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
@@ -975,12 +974,13 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
         ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $tzClass.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
-            ${eval.code}
-            long ${ev.value} = 0;
-          """ +
-          ctx.nullSafeExec(left.nullable, eval.isNull)(s"""
-            ${ev.value} = $dtu.convertTz(${eval.value}, $tzTerm, $utcTerm);
-          """), isNull = eval.isNull)
+           |${eval.code}
+           |boolean ${ev.isNull} = ${eval.isNull};
+           |long ${ev.value} = 0;
+           |if (!${ev.isNull}) {
+           |  ${ev.value} = $dtu.convertTz(${eval.value}, $tzTerm, $utcTerm);
+           |}
+         """.stripMargin)
       }
     } else {
       defineCodeGen(ctx, ev, (timestamp, format) => {
@@ -1075,11 +1075,11 @@ case class TruncDate(date: Expression, format: Expression)
         val d = date.genCode(ctx)
         ev.copy(code = s"""
           ${d.code}
+          boolean ${ev.isNull} = ${d.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        """ +
-          ctx.nullSafeExec(date.nullable, d.isNull)(s"""
+          if (!${ev.isNull}) {
             ${ev.value} = $dtu.truncDate(${d.value}, $truncLevel);
-          """), isNull = d.isNull)
+          }""")
       }
     } else {
       nullSafeCodeGen(ctx, ev, (dateVal, fmt) => {

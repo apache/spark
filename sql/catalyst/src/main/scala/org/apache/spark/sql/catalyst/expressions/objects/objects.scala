@@ -665,8 +665,7 @@ case class ExternalMapToCatalyst private(
       s"""
         ${inputMap.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      """ +
-        ctx.nullSafeExec(child.nullable, inputMap.isNull)(s"""
+        if (!${inputMap.isNull}) {
           final int $length = ${inputMap.value}.size();
           final Object[] $convertedKeys = new Object[$length];
           final Object[] $convertedValues = new Object[$length];
@@ -684,15 +683,18 @@ case class ExternalMapToCatalyst private(
             }
 
             ${genValueConverter.code}
-          """ +
-          ctx.nullSafeExec(valueConverter.nullable, genValueConverter.isNull)(s"""
-            $convertedValues[$index] = ($convertedValueType) ${genValueConverter.value};
-          """) + s"""
+            if (${genValueConverter.isNull}) {
+              $convertedValues[$index] = null;
+            } else {
+              $convertedValues[$index] = ($convertedValueType) ${genValueConverter.value};
+            }
+
             $index++;
           }
 
           ${ev.value} = new $mapCls(new $arrayCls($convertedKeys), new $arrayCls($convertedValues));
-        """)
+        }
+      """
     ev.copy(code = code, isNull = inputMap.isNull)
   }
 }
@@ -720,10 +722,13 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
 
     val childrenCodes = children.zipWithIndex.map { case (e, i) =>
       val eval = e.genCode(ctx)
-      eval.code +
-        ctx.nullSafeExec(e.nullable, eval.isNull)(s"""
-          $values[$i] = ${eval.value};
-        """)
+      eval.code + s"""
+          if (${eval.isNull}) {
+            $values[$i] = null;
+          } else {
+            $values[$i] = ${eval.value};
+          }
+         """
     }
 
     val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
@@ -765,10 +770,10 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
     val serializerInit = s"""
       if ($env == null) {
         $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-      } else {
-        $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-      }
-    """
+       } else {
+         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+       }
+     """
     ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
 
     // Code to serialize.
@@ -778,11 +783,8 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 
     val code = s"""
       ${input.code}
-      final $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-    """ +
-      ctx.nullSafeExec(child.nullable, input.isNull)(s"""
-          ${ev.value} = $serialize;
-        """)
+      final $javaType ${ev.value} = ${input.isNull} ? ${ctx.defaultValue(javaType)} : $serialize;
+     """
     ev.copy(code = code, isNull = input.isNull)
   }
 
@@ -814,10 +816,10 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
     val serializerInit = s"""
       if ($env == null) {
         $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-      } else {
-        $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-      }
-    """
+       } else {
+         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+       }
+     """
     ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
 
     // Code to deserialize.
@@ -828,11 +830,8 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 
     val code = s"""
       ${input.code}
-      final $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-    """ +
-      ctx.nullSafeExec(child.nullable, input.isNull)(s"""
-          ${ev.value} = $deserialize;
-        """)
+      final $javaType ${ev.value} = ${input.isNull} ? ${ctx.defaultValue(javaType)} : $deserialize;
+     """
     ev.copy(code = code, isNull = input.isNull)
   }
 
@@ -864,11 +863,12 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
          """
     }
 
-    val code =
-      instanceGen.code +
-        ctx.nullSafeExec(beanInstance.nullable, instanceGen.isNull)(s"""
-          ${initialize.mkString("\n")}
-        """)
+    val code = s"""
+      ${instanceGen.code}
+      if (!${instanceGen.isNull}) {
+        ${initialize.mkString("\n")}
+      }
+     """
     ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
   }
 }
@@ -1001,14 +1001,15 @@ case class ValidateExternalType(child: Expression, expected: DataType)
     val code = s"""
       ${input.code}
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-    """ +
-      ctx.nullSafeExec(child.nullable, input.isNull)(s"""
+      if (!${input.isNull}) {
         if ($typeCheck) {
           ${ev.value} = (${ctx.boxedType(dataType)}) $obj;
         } else {
           throw new RuntimeException($obj.getClass().getName() + $errMsgField);
         }
-      """)
+      }
+
+    """
     ev.copy(code = code, isNull = input.isNull)
   }
 }
