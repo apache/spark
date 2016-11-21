@@ -2495,6 +2495,10 @@
                   <name>tparam</name>
                   <placement>X</placement>
                 </tag>
+                <tag>
+                  <name>constructor</name>
+                  <placement>X</placement>
+                </tag>
               </tags>
             </configuration>
           </plugin>

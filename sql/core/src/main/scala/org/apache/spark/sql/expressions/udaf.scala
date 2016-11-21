@@ -121,7 +121,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   def evaluate(buffer: Row): Any
 
   /**
-   * Creates a [[Column]] for this UDAF using given [[Column]]s as input arguments.
+   * Creates a `Column` for this UDAF using given `Column`s as input arguments.
    *
    * @since 1.5.0
    */
@@ -136,8 +136,8 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   }
 
   /**
-   * Creates a [[Column]] for this UDAF using the distinct values of the given
-   * [[Column]]s as input arguments.
+   * Creates a `Column` for this UDAF using the distinct values of the given
+   * `Column`s as input arguments.
    *
    * @since 1.5.0
    */
@@ -153,7 +153,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
 }
 
 /**
- * A [[Row]] representing a mutable aggregation buffer.
+ * A `Row` representing a mutable aggregation buffer.
  *
  * This is not meant to be extended outside of Spark.
  *

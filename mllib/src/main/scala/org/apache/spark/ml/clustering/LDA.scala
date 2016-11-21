@@ -50,7 +50,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   with HasSeed with HasCheckpointInterval {
 
   /**
-   * Param for the number of topics (clusters) to infer. Must be > 1. Default: 10.
+   * Param for the number of topics (clusters) to infer. Must be &gt; 1. Default: 10.
    *
    * @group param
    */
@@ -78,13 +78,13 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - EM
    *     - Currently only supports symmetric distributions, so all values in the vector should be
    *       the same.
-   *     - Values should be > 1.0
+   *     - Values should be &gt; 1.0
    *     - default = uniformly (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
    *       from Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Values should be >= 0
+   *     - Values should be &gt;= 0
    *     - default = uniformly (1.0 / k), following the implementation from
-   *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *       `https://github.com/Blei-Lab/onlineldavb`.
    *
    * @group param
    */
@@ -293,8 +293,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * cause failures if a data partition is lost, so set this bit with care.
    * Note that checkpoints will be cleaned up via reference counting, regardless.
    *
-   * See [[DistributedLDAModel.getCheckpointFiles]] for getting remaining checkpoints and
-   * [[DistributedLDAModel.deleteCheckpointFiles]] for removing remaining checkpoints.
+   * See `DistributedLDAModel.getCheckpointFiles` for getting remaining checkpoints and
+   * `DistributedLDAModel.deleteCheckpointFiles` for removing remaining checkpoints.
    *
    * Default: true
    *
@@ -431,7 +431,7 @@ sealed abstract class LDAModel private[ml] (
   private[ml] def getEffectiveTopicConcentration: Double = getModel.topicConcentration
 
   /**
-   * The features for LDA should be a [[Vector]] representing the word counts in a document.
+   * The features for LDA should be a `Vector` representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).
    *
    * @group setParam
@@ -650,7 +650,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
  * for each training document.
  *
  * @param oldLocalModelOption  Used to implement [[oldLocalModel]] as a lazy val, but keeping
- *                             [[copy()]] cheap.
+ *                             `copy()` cheap.
  */
 @Since("1.6.0")
 @Experimental
@@ -701,7 +701,7 @@ class DistributedLDAModel private[ml] (
    *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
    *    hyperparameters.
    *  - This is computed from the topic distributions computed during training. If you call
-   *    [[logLikelihood()]] on the same training dataset, the topic distributions will be computed
+   *    `logLikelihood()` on the same training dataset, the topic distributions will be computed
    *    again, possibly giving different results.
    */
   @Since("1.6.0")
@@ -719,7 +719,7 @@ class DistributedLDAModel private[ml] (
   /**
    * :: DeveloperApi ::
    *
-   * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
+   * If using checkpointing and `LDA.keepLastCheckpoint` is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
    * Note that removing the checkpoints can cause failures if a partition is lost and is needed
@@ -804,13 +804,13 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
  *
  * Input data (featuresCol):
  *  LDA is given a collection of documents as input data, via the featuresCol parameter.
- *  Each document is specified as a [[Vector]] of length vocabSize, where each entry is the
+ *  Each document is specified as a `Vector` of length vocabSize, where each entry is the
  *  count for the corresponding term (word) in the document.  Feature transformers such as
  *  [[org.apache.spark.ml.feature.Tokenizer]] and [[org.apache.spark.ml.feature.CountVectorizer]]
  *  can be useful for converting text to word count vectors.
  *
- * @see [[http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
- *       (Wikipedia)]]
+ * @see `http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
+ *       (Wikipedia)`
  */
 @Since("1.6.0")
 @Experimental
@@ -826,7 +826,7 @@ class LDA @Since("1.6.0") (
     optimizeDocConcentration -> true, keepLastCheckpoint -> true)
 
   /**
-   * The features for LDA should be a [[Vector]] representing the word counts in a document.
+   * The features for LDA should be a `Vector` representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).
    *
    * @group setParam
