@@ -21,6 +21,7 @@ import java.util.Date
 import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.MediaType
 
+import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 import org.apache.spark.streaming.status.api.v1.AllOutputOperationsResource._
 
@@ -41,7 +42,7 @@ private[v1] object AllOutputOperationsResource {
 
     listener.synchronized {
       for {
-        batch <- listener.retainedBatches if batch.batchTime.milliseconds == batchId
+        batch <- listener.getBatchUIData(Time(batchId))
         (opId, op) <- batch.outputOperations
       } yield {
         val jobIds =
@@ -58,6 +59,6 @@ private[v1] object AllOutputOperationsResource {
           jobIds = jobIds
         )
       }
-    }
+    }.toSeq
   }
 }
