@@ -326,8 +326,7 @@ class ObjectHashAggregateSuite
             // Currently Spark SQL doesn't support evaluating distinct aggregate function together
             // with aggregate functions without partial aggregation support.
             if (!(aggs.contains(withoutPartial) && aggs.contains(withDistinct))) {
-              // TODO Re-enables them after fixing SPARK-18403
-              ignore(
+              test(
                 s"randomized aggregation test - " +
                   s"${names.mkString("[", ", ", "]")} - " +
                   s"${if (withGroupingKeys) "with" else "without"} grouping keys - " +
@@ -427,5 +426,37 @@ class ObjectHashAggregateSuite
 
   private def function(name: String, args: Column*): Column = {
     Column(UnresolvedFunction(FunctionIdentifier(name), args.map(_.expr), isDistinct = false))
+  }
+
+  test("SPARK-18403 Fix unsafe data false sharing issue in ObjectHashAggregateExec") {
+    // SPARK-18403: An unsafe data false sharing issue may trigger OOM / SIGSEGV when evaluating
+    // certain aggregate functions. To reproduce this issue, the following conditions must be
+    // met:
+    //
+    //  1. The aggregation must be evaluated using `ObjectHashAggregateExec`;
+    //  2. There must be an input column whose data type involves `ArrayType` or `MapType`;
+    //  3. Sort-based aggregation fallback must be triggered during evaluation.
+    withSQLConf(
+      SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
+      SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"
+    ) {
+      checkAnswer(
+        Seq
+          .fill(2)(Tuple1(Array.empty[Int]))
+          .toDF("c0")
+          .groupBy(lit(1))
+          .agg(typed_count($"c0"), max($"c0")),
+        Row(1, 2, Array.empty[Int])
+      )
+
+      checkAnswer(
+        Seq
+          .fill(2)(Tuple1(Map.empty[Int, Int]))
+          .toDF("c0")
+          .groupBy(lit(1))
+          .agg(typed_count($"c0"), first($"c0")),
+        Row(1, 2, Map.empty[Int, Int])
+      )
+    }
   }
 }
