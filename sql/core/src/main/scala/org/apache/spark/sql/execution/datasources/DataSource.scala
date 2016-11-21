@@ -108,7 +108,8 @@ case class DataSource(
    * Returns a pair of the data schema (excluding partition columns) and the schema of the partition
    * columns.
    *
-   * @param justPartitioning Whether to exit early and provide just the schema partitioning.
+   * @param justPartitioning Whether to exit early and provide just the schema partitioning. The
+   *                         data schema is incorrect in this case and should not be used.
    */
   private def getOrInferFileFormatSchema(
       format: FileFormat,
