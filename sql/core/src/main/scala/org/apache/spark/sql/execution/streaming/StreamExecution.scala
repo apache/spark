@@ -25,6 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -36,6 +38,26 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
+
+/**
+ * Contains metadata associated with a stream execution. This information is
+ * persisted to the offset log via the OffsetSeq metadata field. Current
+ * information contained in this object includes:
+ *
+ * 1. currentEventTimeWatermark: The current eventTime watermark, used to
+ * bound the lateness of data that will processed.
+ * 2. currentBatchTimestamp: The current batch processing timestamp
+ */
+case class StreamExecutionMetadata(
+    var currentEventTimeWatermark: Long = 0,
+    var currentBatchTimestamp: Long = 0) {
+  private implicit val formats = Serialization.formats(NoTypeHints)
+
+  /**
+   * JSON string representation of this object.
+   */
+  def json: String = Serialization.write(this)
+}
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
@@ -92,11 +114,8 @@ class StreamExecution(
   /** The current batchId or -1 if execution has not yet been initialized. */
   private var currentBatchId: Long = -1
 
-  /** The current eventTime watermark, used to bound the lateness of data that will processed. */
-  private var currentEventTimeWatermark: Long = 0
-
-  /** The current batch processing timestamp */
-  private var currentBatchTimestamp: Long = 0
+  /** stream execution metadata */
+  private var streamExecutionMetadata = StreamExecutionMetadata()
 
   /** All stream sources present in the query plan. */
   private val sources =
@@ -291,11 +310,11 @@ class StreamExecution(
         logInfo(s"Resuming streaming query, starting with batch $batchId")
         currentBatchId = batchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
-        currentBatchTimestamp = nextOffsets.metadata.getOrElse(
+        streamExecutionMetadata = StreamExecutionMetadata(nextOffsets.metadata.getOrElse(
           throw new IllegalStateException("OffsetLog does not contain current batch timestamp!")
-        ).toLong
+        ))
         logDebug(s"Found possibly uncommitted offsets $availableOffsets " +
-          s"at batch timestamp $currentBatchTimestamp")
+          s"at batch timestamp ${streamExecutionMetadata.currentBatchTimestamp}")
 
         offsetLog.get(batchId - 1).foreach {
           case lastOffsets =>
@@ -352,10 +371,10 @@ class StreamExecution(
     }
     if (hasNewData) {
       // Current batch timestamp in seconds
-      currentBatchTimestamp = triggerClock.getTimeMillis() / 1000L
+      streamExecutionMetadata.currentBatchTimestamp = triggerClock.getTimeMillis() / 1000L
       reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
         assert(offsetLog.add(currentBatchId,
-          availableOffsets.toOffsetSeq(sources, Some(currentBatchTimestamp.toString))),
+          availableOffsets.toOffsetSeq(sources, Some(streamExecutionMetadata.json))),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
         logInfo(s"Committed offsets for batch $currentBatchId.")
 
@@ -432,7 +451,8 @@ class StreamExecution(
     val replacementMap = AttributeMap(replacements)
     val triggerLogicalPlan = withNewSources transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) => replacementMap(a)
-      case t: CurrentTimestamp => CurrentBatchTimestamp(currentBatchTimestamp)
+      case t: CurrentTimestamp =>
+        CurrentBatchTimestamp(streamExecutionMetadata.currentBatchTimestamp)
     }
 
     val executedPlan = reportTimeTaken(OPTIMIZER_LATENCY) {
@@ -442,7 +462,7 @@ class StreamExecution(
         outputMode,
         checkpointFile("state"),
         currentBatchId,
-        currentEventTimeWatermark)
+        streamExecutionMetadata.currentEventTimeWatermark)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
@@ -458,11 +478,12 @@ class StreamExecution(
         logTrace(s"Maximum observed eventTime: ${e.maxEventTime.value}")
         (e.maxEventTime.value / 1000) - e.delay.milliseconds()
     }.headOption.foreach { newWatermark =>
-      if (newWatermark > currentEventTimeWatermark) {
+      if (newWatermark > streamExecutionMetadata.currentEventTimeWatermark) {
         logInfo(s"Updating eventTime watermark to: $newWatermark ms")
-        currentEventTimeWatermark = newWatermark
+        streamExecutionMetadata.currentEventTimeWatermark = newWatermark
       } else {
-        logTrace(s"Event time didn't move: $newWatermark < $currentEventTimeWatermark")
+        logTrace(s"Event time didn't move: $newWatermark < " +
+          s"$streamExecutionMetadata.currentEventTimeWatermark")
       }
 
       if (newWatermark != 0) {
@@ -743,6 +764,13 @@ class StreamExecution(
   case object INITIALIZED extends State
   case object ACTIVE extends State
   case object TERMINATED extends State
+}
+
+object StreamExecutionMetadata {
+  private implicit val formats = Serialization.formats(NoTypeHints)
+
+  def apply(json: String): StreamExecutionMetadata =
+    Serialization.read[StreamExecutionMetadata](json)
 }
 
 object StreamExecution {
