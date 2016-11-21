@@ -48,6 +48,7 @@ private[v1] object AllOutputOperationsResource {
           map { case (outputOpId, outputOpIdAndSparkJobIds) =>
             (outputOpId, outputOpIdAndSparkJobIds.map(_.sparkJobId).sorted)
           }
+        val jobIds = outputOpIdToSparkJobIds.getOrElse(opId, Seq.empty)
 
         new OutputOperationInfo(
           outputOpId = opId,
@@ -57,7 +58,7 @@ private[v1] object AllOutputOperationsResource {
           endTime = op.endTime.map(new Date(_)),
           duration = op.duration,
           failureReason = op.failureReason,
-          jobIds = outputOpIdToSparkJobIds.getOrElse(opId, Seq())
+          jobIds = jobIds
         )
       }
     }
