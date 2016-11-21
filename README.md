@@ -100,5 +100,5 @@ in the online documentation for an overview on how to configure Spark.
 
 ## Contributing
 
-Please review the [Contribution to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
-wiki for information on how to get started contributing to the project.
+Please review the [Contribution to Spark guide](http://spark.apache.org/contributing.html)
+for information on how to get started contributing to the project.
