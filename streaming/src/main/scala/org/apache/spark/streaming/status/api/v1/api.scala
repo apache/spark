@@ -21,11 +21,6 @@ import java.util.Date
 
 import org.apache.spark.streaming.ui.StreamingJobProgressListener._
 
-class StreamingInfo private[streaming](
-  val name: String,
-  val completedBatchCount: Long
-)
-
 class StreamingStatistics private[streaming](
   val startTime: Date,
   val batchDuration: Long,
