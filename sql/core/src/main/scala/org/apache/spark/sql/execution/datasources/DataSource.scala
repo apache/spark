@@ -107,6 +107,8 @@ case class DataSource(
           partitionField)
       }
       StructType(resolved)
+    } else if (catalogTable.nonEmpty) {
+      catalogTable.get.partitionSchema
     } else {
       // in streaming mode, we have already inferred and registered partition columns, we will
       // never have to re-use this
