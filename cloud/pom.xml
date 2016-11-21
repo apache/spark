@@ -65,32 +65,6 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- Some of the examples use code in these classes; as they
-    are only examples, they are scoped as "provided". -->
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sql_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-hive_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>provided</scope>
-    </dependency>
 
     <!-- Jets3t is needed for s3n and s3 classic to work-->
     <dependency>
@@ -166,6 +140,16 @@
             <scope>${hadoop.deps.scope}</scope>
           </dependency>
           -->
+          <!--Explicit declaration to force in Spark version into transitive dependencies -->
+          <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+          </dependency>
+          <!--Explicit declaration to force in Spark version into transitive dependencies -->
+          <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpcore</artifactId>
+          </dependency>
         </dependencies>
     </profile>
 
