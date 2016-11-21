@@ -44,11 +44,8 @@ private[v1] object AllOutputOperationsResource {
         batch <- listener.retainedBatches if batch.batchTime.milliseconds == batchId
         (opId, op) <- batch.outputOperations
       } yield {
-        val outputOpIdToSparkJobIds = batch.outputOpIdSparkJobIdPairs.groupBy(_.outputOpId).
-          map { case (outputOpId, outputOpIdAndSparkJobIds) =>
-            (outputOpId, outputOpIdAndSparkJobIds.map(_.sparkJobId).sorted)
-          }
-        val jobIds = outputOpIdToSparkJobIds.getOrElse(opId, Seq.empty)
+        val jobIds =
+          batch.outputOpIdSparkJobIdPairs.filter(_.outputOpId == opId).map(_.sparkJobId).sorted
 
         new OutputOperationInfo(
           outputOpId = opId,
