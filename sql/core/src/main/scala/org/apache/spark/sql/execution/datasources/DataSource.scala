@@ -153,7 +153,7 @@ case class DataSource(
       }
     }
     if (justPartitioning) {
-      partitionSchema -> partitionSchema.map(_.name)
+      return partitionSchema -> partitionSchema.map(_.name)
     }
     if (catalogTable.isDefined && userSpecifiedSchema.isDefined) {
       // backwards compatibility before SPARK-18510. Return the schema of catalog tables as is
