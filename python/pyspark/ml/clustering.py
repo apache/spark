@@ -17,7 +17,7 @@
 
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
 
@@ -56,8 +56,83 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("gaussiansDF")
 
+    @property
+    @since("2.0.0")
+    def summary(self):
+        """
+        Gets summary of model on training set. An exception is thrown if
+        `trainingSummary is None`.
+        """
+        java_gmt_summary = self._call_java("summary")
+        return GaussianMixtureSummary(java_gmt_summary)
 
-@inherit_doc
+    @property
+    @since("2.0.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model
+        instance.
+        """
+        return self._call_java("hasSummary")
+
+
+class GaussianMixtureSummary(JavaWrapper):
+    """
+    Abstraction for Gaussian Mixture Results for a given model.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def predictions(self):
+        """
+        Dataframe outputted by the model's `transform` method.
+        """
+        return self._call_java("predictions")
+
+    @property
+    @since("2.0.0")
+    def probabilityCol(self):
+        """
+        Field in "predictions" which gives the probability
+        of each class.
+        """
+        return self._call_java("probabilityCol")
+
+    @property
+    @since("2.0.0")
+    def featuresCol(self):
+        """
+        Field in "predictions" which gives the features of each instance.
+        """
+        return self._call_java("featuresCol")
+
+    @property
+    @since("2.0.0")
+    def cluster(self):
+        """
+        Cluster centers of the transformed data.
+        """
+        return self._call_java("cluster")
+
+    @property
+    @since("2.0.0")
+    def probability(self):
+        """
+        Probability of each cluster.
+        """
+        return self._call_java("probability")
+
+    @property
+    @since("2.0.0")
+    def clusterSizes(self):
+        """
+        Size of (number of data points in) each cluster.
+        """
+        return self._call_java("clusterSizes")
+
+
 class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
                       HasProbabilityCol, JavaMLWritable, JavaMLReadable):
     """

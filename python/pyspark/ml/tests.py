@@ -1097,6 +1097,21 @@ class TrainingSummaryTest(SparkSessionTestCase):
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
+    def test_gaussian_mixture_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        df = self.spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
+        gm = GaussianMixture(k=3, tol=0.0001, maxIter=10, seed=10)
+        model = gm.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.featuresCol, "features")
+        cluster_sizes = s.clusterSizes
+        self.assertTrue(isinstance(s.cluster, DataFrame))
+        self.assertTrue(isinstance(s.probability, DataFrame))
+        self.assertTrue(isinstance(cluster_sizes[0], int))
+
 
 class OneVsRestTests(SparkSessionTestCase):
 
