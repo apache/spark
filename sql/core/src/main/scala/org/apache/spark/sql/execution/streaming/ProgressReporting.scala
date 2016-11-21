@@ -214,9 +214,9 @@ trait ProgressReporting extends Logging {
     val result = body
     val endTime = triggerClock.getTimeMillis()
     val timeTaken = math.max(endTime - startTime, 0)
-    currentDurationsMs.put(
-      triggerDetailKey,
-      currentDurationsMs.getOrDefault(triggerDetailKey, 0) + timeTaken)
+
+    val previousTime = Option(currentDurationsMs.get(triggerDetailKey)).getOrElse(0L)
+    currentDurationsMs.put(triggerDetailKey, previousTime + timeTaken)
     logDebug(s"$triggerDetailKey took $timeTaken ms")
     result
   }
