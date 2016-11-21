@@ -47,21 +47,22 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
     // method supporting incremental planning. But in the long run, we should generally make newly
     // created Datasets use `IncrementalExecution` where necessary (which is SPARK-16264 tries to
     // resolve).
-
+    val incrementalExecution = data.queryExecution.asInstanceOf[IncrementalExecution]
     val datasetWithIncrementalExecution =
-      new Dataset(data.sparkSession, data.logicalPlan, implicitly[Encoder[T]]) {
+      new Dataset(data.sparkSession, incrementalExecution, implicitly[Encoder[T]]) {
         override lazy val rdd: RDD[T] = {
           val objectType = exprEnc.deserializer.dataType
           val deserialized = CatalystSerde.deserialize[T](logicalPlan)
 
           // was originally: sparkSession.sessionState.executePlan(deserialized) ...
-          val incrementalExecution = new IncrementalExecution(
+          val newIncrementalExecution = new IncrementalExecution(
             this.sparkSession,
             deserialized,
-            data.queryExecution.asInstanceOf[IncrementalExecution].outputMode,
-            data.queryExecution.asInstanceOf[IncrementalExecution].checkpointLocation,
-            data.queryExecution.asInstanceOf[IncrementalExecution].currentBatchId)
-          incrementalExecution.toRdd.mapPartitions { rows =>
+            incrementalExecution.outputMode,
+            incrementalExecution.checkpointLocation,
+            incrementalExecution.currentBatchId,
+            incrementalExecution.currentEventTimeWatermark)
+          newIncrementalExecution.toRdd.mapPartitions { rows =>
             rows.map(_.get(0, objectType))
           }.asInstanceOf[RDD[T]]
         }

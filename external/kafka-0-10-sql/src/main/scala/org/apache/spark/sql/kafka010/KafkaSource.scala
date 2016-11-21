@@ -18,6 +18,8 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -88,7 +90,10 @@ private[kafka010] case class KafkaSource(
 
   private val sc = sqlContext.sparkContext
 
-  private val pollTimeoutMs = sourceOptions.getOrElse("kafkaConsumer.pollTimeoutMs", "512").toLong
+  private val pollTimeoutMs = sourceOptions.getOrElse(
+    "kafkaConsumer.pollTimeoutMs",
+    sc.conf.getTimeAsMs("spark.network.timeout", "120s").toString
+  ).toLong
 
   private val maxOffsetFetchAttempts =
     sourceOptions.getOrElse("fetchOffset.numRetries", "3").toInt
@@ -111,7 +116,22 @@ private[kafka010] case class KafkaSource(
    * `KafkaConsumer.poll` may hang forever (KAFKA-1894).
    */
   private lazy val initialPartitionOffsets = {
-    val metadataLog = new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession, metadataPath)
+    val metadataLog =
+      new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession, metadataPath) {
+        override def serialize(metadata: KafkaSourceOffset, out: OutputStream): Unit = {
+          val bytes = metadata.json.getBytes(StandardCharsets.UTF_8)
+          out.write(bytes.length)
+          out.write(bytes)
+        }
+
+        override def deserialize(in: InputStream): KafkaSourceOffset = {
+          val length = in.read()
+          val bytes = new Array[Byte](length)
+          in.read(bytes)
+          KafkaSourceOffset(SerializedOffset(new String(bytes, StandardCharsets.UTF_8)))
+        }
+      }
+
     metadataLog.get(0).getOrElse {
       val offsets = startingOffsets match {
         case EarliestOffsets => KafkaSourceOffset(fetchEarliestOffsets())
@@ -259,7 +279,7 @@ private[kafka010] case class KafkaSource(
       }
     }.toArray
 
-    // Create a RDD that reads from Kafka and get the (key, value) pair as byte arrays.
+    // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
       sc, executorKafkaParams, offsetRanges, pollTimeoutMs).map { cr =>
       Row(cr.key, cr.value, cr.topic, cr.partition, cr.offset, cr.timestamp, cr.timestampType.id)

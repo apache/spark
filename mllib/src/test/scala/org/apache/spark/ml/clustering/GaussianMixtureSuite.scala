@@ -18,7 +18,8 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
 
@@ -43,6 +44,13 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(gm.getPredictionCol === "prediction")
     assert(gm.getMaxIter === 100)
     assert(gm.getTol === 0.01)
+    val model = gm.setMaxIter(1).fit(dataset)
+
+    // copied model must have the same parent
+    MLTestingUtils.checkCopy(model)
+    assert(model.hasSummary)
+    val copiedModel = model.copy(ParamMap.empty)
+    assert(copiedModel.hasSummary)
   }
 
   test("set parameters") {
@@ -103,6 +111,9 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
+
+    model.setSummary(None)
+    assert(!model.hasSummary)
   }
 
   test("read/write") {

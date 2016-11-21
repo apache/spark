@@ -97,7 +97,7 @@ private[hive] class HiveClientImpl(
   }
 
   // Create an internal session state for this HiveClientImpl.
-  val state = {
+  val state: SessionState = {
     val original = Thread.currentThread().getContextClassLoader
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
@@ -375,6 +375,10 @@ private[hive] class HiveClientImpl(
 
       if (!h.getBucketCols.isEmpty) {
         unsupportedFeatures += "bucketing"
+      }
+
+      if (h.getTableType == HiveTableType.VIRTUAL_VIEW && partCols.nonEmpty) {
+        unsupportedFeatures += "partitioned view"
       }
 
       val properties = Option(h.getParameters).map(_.asScala.toMap).orNull

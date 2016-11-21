@@ -35,18 +35,18 @@ private[r] class RandomForestRegressorWrapper private (
   val formula: String,
   val features: Array[String]) extends MLWritable {
 
-  private val DTModel: RandomForestRegressionModel =
+  private val rfrModel: RandomForestRegressionModel =
     pipeline.stages(1).asInstanceOf[RandomForestRegressionModel]
 
-  lazy val numFeatures: Int = DTModel.numFeatures
-  lazy val featureImportances: Vector = DTModel.featureImportances
-  lazy val numTrees: Int = DTModel.getNumTrees
-  lazy val treeWeights: Array[Double] = DTModel.treeWeights
+  lazy val numFeatures: Int = rfrModel.numFeatures
+  lazy val featureImportances: Vector = rfrModel.featureImportances
+  lazy val numTrees: Int = rfrModel.getNumTrees
+  lazy val treeWeights: Array[Double] = rfrModel.treeWeights
 
-  def summary: String = DTModel.toDebugString
+  def summary: String = rfrModel.toDebugString
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(DTModel.getFeaturesCol)
+    pipeline.transform(dataset).drop(rfrModel.getFeaturesCol)
   }
 
   override def write: MLWriter = new

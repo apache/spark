@@ -309,13 +309,16 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
     @since("2.0.0")
     def summary(self):
         """
-        Gets summary (e.g. residuals, mse, r-squared ) of model on
-        training set. An exception is thrown if
-        `trainingSummary is None`.
+        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
-        java_blrt_summary = self._call_java("summary")
-        # Note: Once multiclass is added, update this to return correct summary
-        return BinaryLogisticRegressionTrainingSummary(java_blrt_summary)
+        if self.hasSummary:
+            java_blrt_summary = self._call_java("summary")
+            # Note: Once multiclass is added, update this to return correct summary
+            return BinaryLogisticRegressionTrainingSummary(java_blrt_summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
     @property
     @since("2.0.0")
@@ -900,19 +903,19 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
-                 maxIter=20, stepSize=0.1, seed=None):
+                 maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 lossType="logistic", maxIter=20, stepSize=0.1, seed=None)
+                 lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0)
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         lossType="logistic", maxIter=20, stepSize=0.1)
+                         lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -921,12 +924,12 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None):
+                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None)
+                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0)
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self.setParams._input_kwargs

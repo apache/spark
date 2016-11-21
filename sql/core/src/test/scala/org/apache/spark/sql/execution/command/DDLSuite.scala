@@ -96,7 +96,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
-      partitionProviderIsHive = true)
+      tracksPartitionsInCatalog = true)
   }
 
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
@@ -125,17 +125,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert("file" === pathInCatalog.getScheme)
       val expectedPath = new Path(path).toUri
       assert(expectedPath.getPath === pathInCatalog.getPath)
-
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        sql(s"CREATE DATABASE db2")
-        val pathInCatalog2 = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
-        assert("file" === pathInCatalog2.getScheme)
-        val expectedPath2 = new Path(spark.sessionState.conf.warehousePath + "/" + "db2.db").toUri
-        assert(expectedPath2.getPath === pathInCatalog2.getPath)
-      }
-
       sql("DROP DATABASE db1")
-      sql("DROP DATABASE db2")
     }
   }
 
@@ -146,55 +136,22 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     fs.makeQualified(hadoopPath).toString
   }
 
-  test("Create/Drop Database") {
-    withTempDir { tmpDir =>
-      val path = tmpDir.getCanonicalPath
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = spark.sessionState.catalog
-        val databaseNames = Seq("db1", "`database`")
-
-        databaseNames.foreach { dbName =>
-          try {
-            val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-
-            sql(s"CREATE DATABASE $dbName")
-            val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
-            assert(db1 == CatalogDatabase(
-              dbNameWithoutBackTicks,
-              "",
-              expectedLocation,
-              Map.empty))
-            sql(s"DROP DATABASE $dbName CASCADE")
-            assert(!catalog.databaseExists(dbNameWithoutBackTicks))
-          } finally {
-            catalog.reset()
-          }
-        }
-      }
-    }
-  }
-
   test("Create Database using Default Warehouse Path") {
-    withSQLConf(SQLConf.WAREHOUSE_PATH.key -> "") {
-      // Will use the default location if and only if we unset the conf
-      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      val catalog = spark.sessionState.catalog
-      val dbName = "db1"
-      try {
-        sql(s"CREATE DATABASE $dbName")
-        val db1 = catalog.getDatabaseMetadata(dbName)
-        val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbName.db")
-        assert(db1 == CatalogDatabase(
-          dbName,
-          "",
-          expectedLocation,
-          Map.empty))
-        sql(s"DROP DATABASE $dbName CASCADE")
-        assert(!catalog.databaseExists(dbName))
-      } finally {
-        catalog.reset()
-      }
+    val catalog = spark.sessionState.catalog
+    val dbName = "db1"
+    try {
+      sql(s"CREATE DATABASE $dbName")
+      val db1 = catalog.getDatabaseMetadata(dbName)
+      val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbName.db")
+      assert(db1 == CatalogDatabase(
+        dbName,
+        "",
+        expectedLocation,
+        Map.empty))
+      sql(s"DROP DATABASE $dbName CASCADE")
+      assert(!catalog.databaseExists(dbName))
+    } finally {
+      catalog.reset()
     }
   }
 
@@ -224,31 +181,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("Create Database - database already exists") {
-    withTempDir { tmpDir =>
-      val path = tmpDir.getCanonicalPath
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = spark.sessionState.catalog
-        val databaseNames = Seq("db1", "`database`")
+    val catalog = spark.sessionState.catalog
+    val databaseNames = Seq("db1", "`database`")
 
-        databaseNames.foreach { dbName =>
-          try {
-            val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-            sql(s"CREATE DATABASE $dbName")
-            val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
-            assert(db1 == CatalogDatabase(
-              dbNameWithoutBackTicks,
-              "",
-              expectedLocation,
-              Map.empty))
+    databaseNames.foreach { dbName =>
+      try {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+        sql(s"CREATE DATABASE $dbName")
+        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+        val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")
+        assert(db1 == CatalogDatabase(
+          dbNameWithoutBackTicks,
+          "",
+          expectedLocation,
+          Map.empty))
 
-            intercept[DatabaseAlreadyExistsException] {
-              sql(s"CREATE DATABASE $dbName")
-            }
-          } finally {
-            catalog.reset()
-          }
+        intercept[DatabaseAlreadyExistsException] {
+          sql(s"CREATE DATABASE $dbName")
         }
+      } finally {
+        catalog.reset()
       }
     }
   }
@@ -473,47 +425,42 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("Alter/Describe Database") {
-    withTempDir { tmpDir =>
-      val path = tmpDir.getCanonicalPath
-      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = spark.sessionState.catalog
-        val databaseNames = Seq("db1", "`database`")
+    val catalog = spark.sessionState.catalog
+    val databaseNames = Seq("db1", "`database`")
 
-        databaseNames.foreach { dbName =>
-          try {
-            val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-            val location = makeQualifiedPath(s"$path/$dbNameWithoutBackTicks.db")
+    databaseNames.foreach { dbName =>
+      try {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+        val location = makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")
 
-            sql(s"CREATE DATABASE $dbName")
+        sql(s"CREATE DATABASE $dbName")
 
-            checkAnswer(
-              sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-              Row("Database Name", dbNameWithoutBackTicks) ::
-                Row("Description", "") ::
-                Row("Location", location) ::
-                Row("Properties", "") :: Nil)
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", location) ::
+            Row("Properties", "") :: Nil)
 
-            sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
-            checkAnswer(
-              sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-              Row("Database Name", dbNameWithoutBackTicks) ::
-                Row("Description", "") ::
-                Row("Location", location) ::
-                Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", location) ::
+            Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
 
-            sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
+        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
 
-            checkAnswer(
-              sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-              Row("Database Name", dbNameWithoutBackTicks) ::
-                Row("Description", "") ::
-                Row("Location", location) ::
-                Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
-          } finally {
-            catalog.reset()
-          }
-        }
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", location) ::
+            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
+      } finally {
+        catalog.reset()
       }
     }
   }
@@ -875,7 +822,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
 
     val part2 = Map("a" -> "2", "b" -> "6")
-    val root = new Path(catalog.getTableMetadata(tableIdent).storage.locationUri.get)
+    val root = new Path(catalog.getTableMetadata(tableIdent).location)
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
@@ -1133,7 +1080,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
     assert(catalog.getTableMetadata(tableIdent).storage.locationUri.isDefined)
     assert(catalog.getTableMetadata(tableIdent).storage.properties.isEmpty)
-    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isEmpty)
+    assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isDefined)
     assert(catalog.getPartition(tableIdent, partSpec).storage.properties.isEmpty)
     // Verify that the location is set to the expected string
     def verifyLocation(expected: String, spec: Option[TablePartitionSpec] = None): Unit = {
@@ -1145,7 +1092,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           assert(storageFormat.properties.isEmpty)
           assert(storageFormat.locationUri === Some(expected))
         } else {
-          assert(storageFormat.properties.get("path") === Some(expected))
           assert(storageFormat.locationUri === Some(expected))
         }
       } else {
@@ -1297,9 +1243,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("ALTER TABLE dbx.tab1 ADD IF NOT EXISTS " +
       "PARTITION (a='2', b='6') LOCATION 'paris' PARTITION (a='3', b='7')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
-    assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isEmpty)
+    assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isDefined)
     assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option("paris"))
-    assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isEmpty)
+    assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isDefined)
 
     // add partitions without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
@@ -1446,50 +1392,56 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("DESCRIBE FUNCTION log"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Logarithm") ::
         Row("Function: log") ::
-        Row("Usage: log(b, x) - Returns the logarithm of x with base b.") :: Nil
+        Row("Usage: log(base, expr) - Returns the logarithm of `expr` with `base`.") :: Nil
     )
     // predicate operator
     checkAnswer(
       sql("DESCRIBE FUNCTION or"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Or") ::
         Row("Function: or") ::
-        Row("Usage: a or b - Logical OR.") :: Nil
+        Row("Usage: expr1 or expr2 - Logical OR.") :: Nil
     )
     checkAnswer(
       sql("DESCRIBE FUNCTION !"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Not") ::
         Row("Function: !") ::
-        Row("Usage: ! a - Logical not") :: Nil
+        Row("Usage: ! expr - Logical not.") :: Nil
     )
     // arithmetic operators
     checkAnswer(
       sql("DESCRIBE FUNCTION +"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Add") ::
         Row("Function: +") ::
-        Row("Usage: a + b - Returns a+b.") :: Nil
+        Row("Usage: expr1 + expr2 - Returns `expr1`+`expr2`.") :: Nil
     )
     // comparison operators
     checkAnswer(
       sql("DESCRIBE FUNCTION <"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.LessThan") ::
         Row("Function: <") ::
-        Row("Usage: a < b - Returns TRUE if a is less than b.") :: Nil
+        Row("Usage: expr1 < expr2 - Returns true if `expr1` is less than `expr2`.") :: Nil
     )
     // STRING
     checkAnswer(
       sql("DESCRIBE FUNCTION 'concat'"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
         Row("Function: concat") ::
-        Row("Usage: concat(str1, str2, ..., strN) " +
-          "- Returns the concatenation of str1, str2, ..., strN") :: Nil
+        Row("Usage: concat(str1, str2, ..., strN) - " +
+            "Returns the concatenation of str1, str2, ..., strN.") :: Nil
     )
     // extended mode
     checkAnswer(
       sql("DESCRIBE FUNCTION EXTENDED ^"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
-        Row("Extended Usage:\n> SELECT 3 ^ 5; 2") ::
+        Row(
+          """Extended Usage:
+            |    Examples:
+            |      > SELECT 3 ^ 5;
+            |       2
+            |  """.stripMargin) ::
         Row("Function: ^") ::
-        Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
+        Row("Usage: expr1 ^ expr2 - Returns the result of " +
+          "bitwise exclusive OR of `expr1` and `expr2`.") :: Nil
     )
   }
 
@@ -1594,10 +1546,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   test("drop current database") {
     sql("CREATE DATABASE temp")
     sql("USE temp")
-    val m = intercept[AnalysisException] {
-      sql("DROP DATABASE temp")
-    }.getMessage
-    assert(m.contains("Can not drop current database `temp`"))
+    sql("DROP DATABASE temp")
+    val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t (a INT, b INT)")
+      }.getMessage
+    assert(e.contains("Database 'temp' not found"))
   }
 
   test("drop default database") {
@@ -1622,29 +1575,61 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("truncate table - datasource table") {
     import testImplicits._
-    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
 
+    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
     // Test both a Hive compatible and incompatible code path.
     Seq("json", "parquet").foreach { format =>
       withTable("rectangles") {
         data.write.format(format).saveAsTable("rectangles")
         assume(spark.table("rectangles").collect().nonEmpty,
           "bad test; table was empty to begin with")
+
         sql("TRUNCATE TABLE rectangles")
         assert(spark.table("rectangles").collect().isEmpty)
+
+        // not supported since the table is not partitioned
+        assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
       }
     }
+  }
 
-    withTable("rectangles", "rectangles2") {
-      data.write.saveAsTable("rectangles")
-      data.write.partitionBy("length").saveAsTable("rectangles2")
+  test("truncate partitioned table - datasource table") {
+    import testImplicits._
 
-      // not supported since the table is not partitioned
-      assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
+    val data = (1 to 10).map { i => (i % 3, i % 5, i) }.toDF("width", "length", "height")
 
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
       // supported since partitions are stored in the metastore
-      sql("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
-      assert(spark.table("rectangles2").collect().isEmpty)
+      sql("TRUNCATE TABLE partTable PARTITION (width=1, length=1)")
+      assert(spark.table("partTable").filter($"width" === 1).collect().nonEmpty)
+      assert(spark.table("partTable").filter($"width" === 1 && $"length" === 1).collect().isEmpty)
+    }
+
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
+      // support partial partition spec
+      sql("TRUNCATE TABLE partTable PARTITION (width=1)")
+      assert(spark.table("partTable").collect().nonEmpty)
+      assert(spark.table("partTable").filter($"width" === 1).collect().isEmpty)
+    }
+
+    withTable("partTable") {
+      data.write.partitionBy("width", "length").saveAsTable("partTable")
+      // do nothing if no partition is matched for the given partial partition spec
+      sql("TRUNCATE TABLE partTable PARTITION (width=100)")
+      assert(spark.table("partTable").count() == data.count())
+
+      // throw exception if no partition is matched for the given non-partial partition spec.
+      intercept[NoSuchPartitionException] {
+        sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
+      }
+
+      // throw exception if the column in partition spec is not a partition column.
+      val e = intercept[AnalysisException] {
+        sql("TRUNCATE TABLE partTable PARTITION (unknown=1)")
+      }
+      assert(e.message.contains("unknown is not a valid partition column"))
     }
   }
 

@@ -322,7 +322,7 @@ class LogisticRegression @Since("1.2.0") (
       LogisticRegressionModel = {
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
         case Row(label: Double, weight: Double, features: Vector) =>
           Instance(label, weight, features)
       }
@@ -438,18 +438,14 @@ class LogisticRegression @Since("1.2.0") (
           val standardizationParam = $(standardization)
           def regParamL1Fun = (index: Int) => {
             // Remove the L1 penalization on the intercept
-            val isIntercept = $(fitIntercept) && ((index + 1) % numFeaturesPlusIntercept == 0)
+            val isIntercept = $(fitIntercept) && index >= numFeatures * numCoefficientSets
             if (isIntercept) {
               0.0
             } else {
               if (standardizationParam) {
                 regParamL1
               } else {
-                val featureIndex = if ($(fitIntercept)) {
-                  index % numFeaturesPlusIntercept
-                } else {
-                  index % numFeatures
-                }
+                val featureIndex = index / numCoefficientSets
                 // If `standardization` is false, we still standardize the data
                 // to improve the rate of convergence; as a result, we have to
                 // perform this reverse standardization by penalizing each component
@@ -466,8 +462,12 @@ class LogisticRegression @Since("1.2.0") (
           new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
         }
 
-        val initialCoefficientsWithIntercept =
-          Vectors.zeros(numCoefficientSets * numFeaturesPlusIntercept)
+        /*
+          The coefficients are laid out in column major order during training. Here we initialize
+          a column major matrix of initial coefficients.
+         */
+        val initialCoefWithInterceptMatrix =
+          Matrices.zeros(numCoefficientSets, numFeaturesPlusIntercept)
 
         val initialModelIsValid = optInitialModel match {
           case Some(_initialModel) =>
@@ -486,17 +486,15 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         if (initialModelIsValid) {
-          val initialCoefWithInterceptArray = initialCoefficientsWithIntercept.toArray
           val providedCoef = optInitialModel.get.coefficientMatrix
-          providedCoef.foreachActive { (row, col, value) =>
-            val flatIndex = row * numFeaturesPlusIntercept + col
+          providedCoef.foreachActive { (classIndex, featureIndex, value) =>
             // We need to scale the coefficients since they will be trained in the scaled space
-            initialCoefWithInterceptArray(flatIndex) = value * featuresStd(col)
+            initialCoefWithInterceptMatrix.update(classIndex, featureIndex,
+              value * featuresStd(featureIndex))
           }
           if ($(fitIntercept)) {
-            optInitialModel.get.interceptVector.foreachActive { (index, value) =>
-              val coefIndex = (index + 1) * numFeaturesPlusIntercept - 1
-              initialCoefWithInterceptArray(coefIndex) = value
+            optInitialModel.get.interceptVector.foreachActive { (classIndex, value) =>
+              initialCoefWithInterceptMatrix.update(classIndex, numFeatures, value)
             }
           }
         } else if ($(fitIntercept) && isMultinomial) {
@@ -526,8 +524,7 @@ class LogisticRegression @Since("1.2.0") (
           val rawIntercepts = histogram.map(c => math.log(c + 1)) // add 1 for smoothing
           val rawMean = rawIntercepts.sum / rawIntercepts.length
           rawIntercepts.indices.foreach { i =>
-            initialCoefficientsWithIntercept.toArray(i * numFeaturesPlusIntercept + numFeatures) =
-              rawIntercepts(i) - rawMean
+            initialCoefWithInterceptMatrix.update(i, numFeatures, rawIntercepts(i) - rawMean)
           }
         } else if ($(fitIntercept)) {
           /*
@@ -543,12 +540,12 @@ class LogisticRegression @Since("1.2.0") (
                b = \log{P(1) / P(0)} = \log{count_1 / count_0}
              }}}
            */
-          initialCoefficientsWithIntercept.toArray(numFeatures) = math.log(
-            histogram(1) / histogram(0))
+          initialCoefWithInterceptMatrix.update(0, numFeatures,
+            math.log(histogram(1) / histogram(0)))
         }
 
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
-          initialCoefficientsWithIntercept.asBreeze.toDenseVector)
+          new BDV[Double](initialCoefWithInterceptMatrix.toArray))
 
         /*
            Note that in Logistic Regression, the objective history (loss + regularization)
@@ -572,19 +569,32 @@ class LogisticRegression @Since("1.2.0") (
         /*
            The coefficients are trained in the scaled space; we're converting them back to
            the original space.
+
+           Additionally, since the coefficients were laid out in column major order during training
+           to avoid extra computation, we convert them back to row major before passing them to the
+           model.
+
            Note that the intercept in scaled space and original space is the same;
            as a result, no scaling is needed.
          */
-        val rawCoefficients = state.x.toArray.clone()
-        val coefficientArray = Array.tabulate(numCoefficientSets * numFeatures) { i =>
-          // flatIndex will loop though rawCoefficients, and skip the intercept terms.
-          val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
-          val featureIndex = i % numFeatures
-          if (featuresStd(featureIndex) != 0.0) {
-            rawCoefficients(flatIndex) / featuresStd(featureIndex)
-          } else {
-            0.0
+        val allCoefficients = state.x.toArray.clone()
+        val allCoefMatrix = new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept,
+          allCoefficients)
+        val denseCoefficientMatrix = new DenseMatrix(numCoefficientSets, numFeatures,
+          new Array[Double](numCoefficientSets * numFeatures), isTransposed = true)
+        val interceptVec = if ($(fitIntercept) || !isMultinomial) {
+          Vectors.zeros(numCoefficientSets)
+        } else {
+          Vectors.sparse(numCoefficientSets, Seq())
+        }
+        // separate intercepts and coefficients from the combined matrix
+        allCoefMatrix.foreachActive { (classIndex, featureIndex, value) =>
+          val isIntercept = $(fitIntercept) && (featureIndex == numFeatures)
+          if (!isIntercept && featuresStd(featureIndex) != 0.0) {
+            denseCoefficientMatrix.update(classIndex, featureIndex,
+              value / featuresStd(featureIndex))
           }
+          if (isIntercept) interceptVec.toArray(classIndex) = value
         }
 
         if ($(regParam) == 0.0 && isMultinomial) {
@@ -597,17 +607,16 @@ class LogisticRegression @Since("1.2.0") (
             Friedman, et al. "Regularization Paths for Generalized Linear Models via
               Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
            */
-          val coefficientMean = coefficientArray.sum / coefficientArray.length
-          coefficientArray.indices.foreach { i => coefficientArray(i) -= coefficientMean}
+          val denseValues = denseCoefficientMatrix.values
+          val coefficientMean = denseValues.sum / denseValues.length
+          denseCoefficientMatrix.update(_ - coefficientMean)
         }
 
-        val denseCoefficientMatrix =
-          new DenseMatrix(numCoefficientSets, numFeatures, coefficientArray, isTransposed = true)
         // TODO: use `denseCoefficientMatrix.compressed` after SPARK-17471
         val compressedCoefficientMatrix = if (isMultinomial) {
           denseCoefficientMatrix
         } else {
-          val compressedVector = Vectors.dense(coefficientArray).compressed
+          val compressedVector = Vectors.dense(denseCoefficientMatrix.values).compressed
           compressedVector match {
             case dv: DenseVector => denseCoefficientMatrix
             case sv: SparseVector =>
@@ -616,25 +625,13 @@ class LogisticRegression @Since("1.2.0") (
           }
         }
 
-        val interceptsArray: Array[Double] = if ($(fitIntercept)) {
-          Array.tabulate(numCoefficientSets) { i =>
-            val coefIndex = (i + 1) * numFeaturesPlusIntercept - 1
-            rawCoefficients(coefIndex)
-          }
-        } else {
-          Array.empty[Double]
+        // center the intercepts when using multinomial algorithm
+        if ($(fitIntercept) && isMultinomial) {
+          val interceptArray = interceptVec.toArray
+          val interceptMean = interceptArray.sum / interceptArray.length
+          (0 until interceptVec.size).foreach { i => interceptArray(i) -= interceptMean }
         }
-        val interceptVector = if (interceptsArray.nonEmpty && isMultinomial) {
-          // The intercepts are never regularized, so we always center the mean.
-          val interceptMean = interceptsArray.sum / numClasses
-          interceptsArray.indices.foreach { i => interceptsArray(i) -= interceptMean }
-          Vectors.dense(interceptsArray)
-        } else if (interceptsArray.length == 1) {
-          Vectors.dense(interceptsArray)
-        } else {
-          Vectors.sparse(numCoefficientSets, Seq())
-        }
-        (compressedCoefficientMatrix, interceptVector.compressed, arrayBuilder.result())
+        (compressedCoefficientMatrix, interceptVec.compressed, arrayBuilder.result())
       }
     }
 
@@ -651,7 +648,7 @@ class LogisticRegression @Since("1.2.0") (
         $(labelCol),
         $(featuresCol),
         objectiveHistory)
-      model.setSummary(logRegSummary)
+      model.setSummary(Some(logRegSummary))
     } else {
       model
     }
@@ -697,6 +694,7 @@ class LogisticRegressionModel private[spark] (
   /**
    * A vector of model coefficients for "binomial" logistic regression. If this model was trained
    * using the "multinomial" family then an exception is thrown.
+   *
    * @return Vector
    */
   @Since("2.0.0")
@@ -720,6 +718,7 @@ class LogisticRegressionModel private[spark] (
   /**
    * The model intercept for "binomial" logistic regression. If this model was fit with the
    * "multinomial" family then an exception is thrown.
+   *
    * @return Double
    */
   @Since("1.3.0")
@@ -791,9 +790,9 @@ class LogisticRegressionModel private[spark] (
     }
   }
 
-  private[classification] def setSummary(
-      summary: LogisticRegressionTrainingSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[classification]
+  def setSummary(summary: Option[LogisticRegressionTrainingSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -888,8 +887,7 @@ class LogisticRegressionModel private[spark] (
   override def copy(extra: ParamMap): LogisticRegressionModel = {
     val newModel = copyValues(new LogisticRegressionModel(uid, coefficientMatrix, interceptVector,
       numClasses, isMultinomial), extra)
-    if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
-    newModel.setParent(parent)
+    newModel.setSummary(trainingSummary).setParent(parent)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {
@@ -1179,8 +1177,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
    * See http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
@@ -1188,8 +1186,8 @@ class BinaryLogisticRegressionSummary private[classification] (
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
@@ -1198,8 +1196,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Returns the precision-recall curve, which is a Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
@@ -1207,8 +1205,8 @@ class BinaryLogisticRegressionSummary private[classification] (
   /**
    * Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val fMeasureByThreshold: DataFrame = {
@@ -1220,8 +1218,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val precisionByThreshold: DataFrame = {
@@ -1233,8 +1231,8 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the recall.
    *
-   * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
-   *       This will change in later Spark versions.
+   * @note This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
+   * This will change in later Spark versions.
    */
   @Since("1.5.0")
   @transient lazy val recallByThreshold: DataFrame = {
@@ -1395,6 +1393,12 @@ class BinaryLogisticRegressionSummary private[classification] (
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
  * @param multinomial Whether to use multinomial (softmax) or binary loss
+ *
+ * @note In order to avoid unnecessary computation during calculation of the gradient updates
+ * we lay out the coefficients in column major order during training. This allows us to
+ * perform feature standardization once, while still retaining sequential memory access
+ * for speed. We convert back to row major order when we create the model,
+ * since this form is optimal for the matrix operations used for prediction.
  */
 private class LogisticAggregator(
     bcCoefficients: Broadcast[Vector],
@@ -1406,6 +1410,7 @@ private class LogisticAggregator(
   private val numFeatures = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   private val coefficientSize = bcCoefficients.value.size
+  private val numCoefficientSets = if (multinomial) numClasses else 1
   if (multinomial) {
     require(numClasses ==  coefficientSize / numFeaturesPlusIntercept, s"The number of " +
       s"coefficients should be ${numClasses * numFeaturesPlusIntercept} but was $coefficientSize")
@@ -1486,23 +1491,25 @@ private class LogisticAggregator(
     var marginOfLabel = 0.0
     var maxMargin = Double.NegativeInfinity
 
-    val margins = Array.tabulate(numClasses) { i =>
-      var margin = 0.0
-      features.foreachActive { (index, value) =>
-        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-          margin += localCoefficients(i * numFeaturesPlusIntercept + index) *
-            value / localFeaturesStd(index)
-        }
+    val margins = new Array[Double](numClasses)
+    features.foreachActive { (index, value) =>
+      val stdValue = value / localFeaturesStd(index)
+      var j = 0
+      while (j < numClasses) {
+        margins(j) += localCoefficients(index * numClasses + j) * stdValue
+        j += 1
       }
-
+    }
+    var i = 0
+    while (i < numClasses) {
       if (fitIntercept) {
-        margin += localCoefficients(i * numFeaturesPlusIntercept + numFeatures)
+        margins(i) += localCoefficients(numClasses * numFeatures + i)
       }
-      if (i == label.toInt) marginOfLabel = margin
-      if (margin > maxMargin) {
-        maxMargin = margin
+      if (i == label.toInt) marginOfLabel = margins(i)
+      if (margins(i) > maxMargin) {
+        maxMargin = margins(i)
       }
-      margin
+      i += 1
     }
 
     /**
@@ -1510,33 +1517,39 @@ private class LogisticAggregator(
      * We address this by subtracting maxMargin from all the margins, so it's guaranteed
      * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
      */
+    val multipliers = new Array[Double](numClasses)
     val sum = {
       var temp = 0.0
-      if (maxMargin > 0) {
-        for (i <- 0 until numClasses) {
-          margins(i) -= maxMargin
-          temp += math.exp(margins(i))
-        }
-      } else {
-        for (i <- 0 until numClasses) {
-          temp += math.exp(margins(i))
-        }
+      var i = 0
+      while (i < numClasses) {
+        if (maxMargin > 0) margins(i) -= maxMargin
+        val exp = math.exp(margins(i))
+        temp += exp
+        multipliers(i) = exp
+        i += 1
       }
       temp
     }
 
-    for (i <- 0 until numClasses) {
-      val multiplier = math.exp(margins(i)) / sum - {
-        if (label == i) 1.0 else 0.0
-      }
-      features.foreachActive { (index, value) =>
-        if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-          localGradientArray(i * numFeaturesPlusIntercept + index) +=
-            weight * multiplier * value / localFeaturesStd(index)
+    margins.indices.foreach { i =>
+      multipliers(i) = multipliers(i) / sum - (if (label == i) 1.0 else 0.0)
+    }
+    features.foreachActive { (index, value) =>
+      if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        val stdValue = value / localFeaturesStd(index)
+        var j = 0
+        while (j < numClasses) {
+          localGradientArray(index * numClasses + j) +=
+            weight * multipliers(j) * stdValue
+          j += 1
         }
       }
-      if (fitIntercept) {
-        localGradientArray(i * numFeaturesPlusIntercept + numFeatures) += weight * multiplier
+    }
+    if (fitIntercept) {
+      var i = 0
+      while (i < numClasses) {
+        localGradientArray(numFeatures * numClasses + i) += weight * multipliers(i)
+        i += 1
       }
     }
 
@@ -1607,12 +1620,12 @@ private class LogisticAggregator(
     lossSum / weightSum
   }
 
-  def gradient: Vector = {
+  def gradient: Matrix = {
     require(weightSum > 0.0, s"The effective number of instances should be " +
       s"greater than 0.0, but $weightSum.")
     val result = Vectors.dense(gradientSumArray.clone())
     scal(1.0 / weightSum, result)
-    result
+    new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept, result.toArray)
   }
 }
 
@@ -1637,6 +1650,8 @@ private class LogisticCostFun(
     val bcCoeffs = instances.context.broadcast(coeffs)
     val featuresStd = bcFeaturesStd.value
     val numFeatures = featuresStd.length
+    val numCoefficientSets = if (multinomial) numClasses else 1
+    val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
 
     val logisticAggregator = {
       val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
@@ -1648,28 +1663,25 @@ private class LogisticCostFun(
       )(seqOp, combOp, aggregationDepth)
     }
 
-    val totalGradientArray = logisticAggregator.gradient.toArray
+    val totalGradientMatrix = logisticAggregator.gradient
+    val coefMatrix = new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept, coeffs.toArray)
     // regVal is the sum of coefficients squares excluding intercept for L2 regularization.
     val regVal = if (regParamL2 == 0.0) {
       0.0
     } else {
       var sum = 0.0
-      coeffs.foreachActive { case (index, value) =>
+      coefMatrix.foreachActive { case (classIndex, featureIndex, value) =>
         // We do not apply regularization to the intercepts
-        val isIntercept = fitIntercept && ((index + 1) % (numFeatures + 1) == 0)
+        val isIntercept = fitIntercept && (featureIndex == numFeatures)
         if (!isIntercept) {
           // The following code will compute the loss of the regularization; also
           // the gradient of the regularization, and add back to totalGradientArray.
           sum += {
             if (standardization) {
-              totalGradientArray(index) += regParamL2 * value
+              val gradValue = totalGradientMatrix(classIndex, featureIndex)
+              totalGradientMatrix.update(classIndex, featureIndex, gradValue + regParamL2 * value)
               value * value
             } else {
-              val featureIndex = if (fitIntercept) {
-                index % (numFeatures + 1)
-              } else {
-                index % numFeatures
-              }
               if (featuresStd(featureIndex) != 0.0) {
                 // If `standardization` is false, we still standardize the data
                 // to improve the rate of convergence; as a result, we have to
@@ -1677,7 +1689,8 @@ private class LogisticCostFun(
                 // differently to get effectively the same objective function when
                 // the training dataset is not standardized.
                 val temp = value / (featuresStd(featureIndex) * featuresStd(featureIndex))
-                totalGradientArray(index) += regParamL2 * temp
+                val gradValue = totalGradientMatrix(classIndex, featureIndex)
+                totalGradientMatrix.update(classIndex, featureIndex, gradValue + regParamL2 * temp)
                 value * temp
               } else {
                 0.0
@@ -1690,6 +1703,6 @@ private class LogisticCostFun(
     }
     bcCoeffs.destroy(blocking = false)
 
-    (logisticAggregator.loss + regVal, new BDV(totalGradientArray))
+    (logisticAggregator.loss + regVal, new BDV(totalGradientMatrix.toArray))
   }
 }

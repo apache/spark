@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, NoSuchFileException, Paths}
 
+import scala.io.Source
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.Column
@@ -45,7 +46,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   // Used for generating new query answer files by saving
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
-  private val goldenSQLPath = getTestResourcePath("sqlgen")
+  private val goldenSQLPath = {
+    // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
+    // relative path. Otherwise, we use classloader's getResource to find the location.
+    if (regenerateGoldenFiles) {
+      java.nio.file.Paths.get("src", "test", "resources", "sqlgen").toFile.getCanonicalPath
+    } else {
+      getTestResourcePath("sqlgen")
+    }
+  }
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -109,12 +118,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         Files.write(path, answerText.getBytes(StandardCharsets.UTF_8))
       } else {
         val goldenFileName = s"sqlgen/$answerFile.sql"
-        val resourceFile = getClass.getClassLoader.getResource(goldenFileName)
-        if (resourceFile == null) {
+        val resourceStream = getClass.getClassLoader.getResourceAsStream(goldenFileName)
+        if (resourceStream == null) {
           throw new NoSuchFileException(goldenFileName)
         }
-        val path = resourceFile.getPath
-        val answerText = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8)
+        val answerText = try {
+          Source.fromInputStream(resourceStream).mkString
+        } finally {
+          resourceStream.close
+        }
         val sqls = answerText.split(separator)
         assert(sqls.length == 2, "Golden sql files should have a separator.")
         val expectedSQL = sqls(1).trim()
@@ -1158,6 +1170,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
           |from dates
         """.stripMargin,
         "interval_arithmetic"
+      )
+    }
+  }
+
+  test("SPARK-17982 - limit") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(id INT, name STRING)")
+      checkSQL(
+        "SELECT * FROM (SELECT id FROM tbl LIMIT 2)",
+        "limit"
       )
     }
   }

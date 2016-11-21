@@ -18,20 +18,23 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, SaveMode, Strategy}
+import org.apache.spark.sql.{SaveMode, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
-import org.apache.spark.sql.execution.streaming.{MemoryPlan, StreamingExecutionRelation, StreamingRelation, StreamingRelationExec}
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.StreamingQuery
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -224,6 +227,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object StatefulAggregationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case EventTimeWatermark(columnName, delay, child) =>
+        EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
+
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
@@ -415,7 +421,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTable(tableDesc, mode, None) if tableDesc.provider.get == "hive" =>
+      case CreateTable(tableDesc, mode, None)
+        if tableDesc.provider.get == DDLUtils.HIVE_PROVIDER =>
         val cmd = CreateTableCommand(tableDesc, ifNotExists = mode == SaveMode.Ignore)
         ExecutedCommandExec(cmd) :: Nil
 
@@ -427,7 +434,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // CREATE TABLE ... AS SELECT ... for hive serde table is handled in hive module, by rule
       // `CreateTables`
 
-      case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get != "hive" =>
+      case CreateTable(tableDesc, mode, Some(query))
+        if tableDesc.provider.get != DDLUtils.HIVE_PROVIDER =>
         val cmd =
           CreateDataSourceTableAsSelectCommand(
             tableDesc,
