@@ -69,7 +69,8 @@ trait DataSourceRegister {
 trait RelationProvider {
   /**
    * Returns a new base relation with the given parameters.
-   * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
+   *
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
    * by the Map that is passed to the function.
    */
   def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation
@@ -99,7 +100,8 @@ trait RelationProvider {
 trait SchemaRelationProvider {
   /**
    * Returns a new base relation with the given parameters and user defined schema.
-   * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
+   *
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
    * by the Map that is passed to the function.
    */
   def createRelation(
@@ -205,7 +207,7 @@ abstract class BaseRelation {
    * large to broadcast. This method will be called multiple times during query planning
    * and thus should not perform expensive operations for each invocation.
    *
-   * Note that it is always better to overestimate size than underestimate, because underestimation
+   * @note It is always better to overestimate size than underestimate, because underestimation
    * could lead to execution plans that are suboptimal (i.e. broadcasting a very large table).
    *
    * @since 1.3.0
@@ -219,7 +221,7 @@ abstract class BaseRelation {
    *
    * If `needConversion` is `false`, buildScan() should return an [[RDD]] of [[InternalRow]]
    *
-   * Note: The internal representation is not stable across releases and thus data sources outside
+   * @note The internal representation is not stable across releases and thus data sources outside
    * of Spark SQL should leave this as true.
    *
    * @since 1.4.0

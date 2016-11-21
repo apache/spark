@@ -1101,11 +1101,14 @@ case class TruncDate(date: Expression, format: Expression)
  * Returns the number of days from startDate to endDate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(date1, date2) - Returns the number of days between `date1` and `date2`.",
+  usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.",
   extended = """
     Examples:
-      > SELECT _FUNC_('2009-07-30', '2009-07-31');
+      > SELECT _FUNC_('2009-07-31', '2009-07-30');
        1
+
+      > SELECT _FUNC_('2009-07-30', '2009-07-31');
+       -1
   """)
 case class DateDiff(endDate: Expression, startDate: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
