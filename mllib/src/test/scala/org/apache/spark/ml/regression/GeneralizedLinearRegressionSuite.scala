@@ -197,6 +197,8 @@ class GeneralizedLinearRegressionSuite
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
+    model.setSummary(None)
+    assert(!model.hasSummary)
 
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")

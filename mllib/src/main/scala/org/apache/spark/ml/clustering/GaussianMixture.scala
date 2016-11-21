@@ -90,8 +90,7 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
     val copied = copyValues(new GaussianMixtureModel(uid, weights, gaussians), extra)
-    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
-    copied.setParent(this.parent)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   @Since("2.0.0")
@@ -150,8 +149,8 @@ class GaussianMixtureModel private[ml] (
 
   private var trainingSummary: Option[GaussianMixtureSummary] = None
 
-  private[clustering] def setSummary(summary: GaussianMixtureSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[clustering] def setSummary(summary: Option[GaussianMixtureSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -340,7 +339,7 @@ class GaussianMixture @Since("2.0.0") (
       .setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
-    model.setSummary(summary)
+    model.setSummary(Some(summary))
     instr.logNumFeatures(model.gaussians.head.mean.size)
     instr.logSuccess(model)
     model
