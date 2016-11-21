@@ -89,7 +89,7 @@ case class DataSource(
    * initializing this class. All other file based data sources will try to infer the partitioning,
    * and then cast the inferred types to user specified dataTypes if the partition columns exist
    * inside `userSpecifiedSchema`, otherwise we can hit data corruption bugs like SPARK-18510.
-   * This method will try to do the least amount of work given whether `userSpecifiedSchema` and
+   * This method will try to skip file scanning whether `userSpecifiedSchema` and
    * `partitionColumns` are provided. Here are some code paths that use this method:
    *   1. `spark.read` (no schema): Most amount of work. Infer both schema and partitioning columns
    *   2. `spark.read.schema(userSpecifiedSchema)`: Parse partitioning columns, cast them to the

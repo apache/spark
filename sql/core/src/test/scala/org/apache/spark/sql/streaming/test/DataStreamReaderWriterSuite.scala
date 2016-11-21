@@ -551,31 +551,28 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .add("id", StringType)
         .add("ex", ArrayType(StringType))
 
-      try {
-        val sdf = spark.readStream
-          .schema(schema)
-          .format("parquet")
-          .load(src.toString)
+      val sdf = spark.readStream
+        .schema(schema)
+        .format("parquet")
+        .load(src.toString)
 
-        assert(sdf.schema.toList === List(
-          StructField("ex", ArrayType(StringType)),
-          StructField("part", IntegerType), // inferred partitionColumn dataType
-          StructField("id", StringType))) // used user provided partitionColumn dataType
+      assert(sdf.schema.toList === List(
+        StructField("ex", ArrayType(StringType)),
+        StructField("part", IntegerType), // inferred partitionColumn dataType
+        StructField("id", StringType))) // used user provided partitionColumn dataType
 
-        val sq = sdf.writeStream
-          .queryName("corruption_test")
-          .format("memory")
-          .start()
-        sq.processAllAvailable()
-        checkAnswer(
-          spark.table("corruption_test"),
-          // notice how `part` is ordered before `id`
-          Row(Array("1"), 0, "0") :: Row(Array("1", "2"), 1, "1") ::
-            Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil
-        )
-      } finally {
-        spark.streams.active.foreach(_.stop())
-      }
+      val sq = sdf.writeStream
+        .queryName("corruption_test")
+        .format("memory")
+        .start()
+      sq.processAllAvailable()
+      checkAnswer(
+        spark.table("corruption_test"),
+        // notice how `part` is ordered before `id`
+        Row(Array("1"), 0, "0") :: Row(Array("1", "2"), 1, "1") ::
+          Row(Array("1", "2", "3"), 2, "2") :: Row(Array("1", "2", "3", "4"), 3, "3") :: Nil
+      )
+      sq.stop()
     }
   }
 }
