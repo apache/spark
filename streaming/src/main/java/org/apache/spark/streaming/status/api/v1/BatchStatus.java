@@ -15,22 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.status.api.v1
+package org.apache.spark.streaming.status.api.v1;
 
-import javax.ws.rs.{GET, Produces}
-import javax.ws.rs.core.MediaType
+import org.apache.spark.util.EnumUtil;
 
-import org.apache.spark.status.api.v1.UIRoot
-import org.apache.spark.streaming.ui.StreamingJobProgressListener
+public enum BatchStatus {
+  COMPLETED,
+  QUEUED,
+  PROCESSING;
 
-@Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class StreamingInfoResource(uiRoot: UIRoot, listener: StreamingJobProgressListener) {
-
-  @GET
-  def streamingInfo()
-  : Iterator[StreamingInfo] = {
-    val v = listener.numTotalCompletedBatches
-    Iterator(new StreamingInfo("testname", v))
-
+  public static BatchStatus fromString(String str) {
+    return EnumUtil.parseIgnoreCase(BatchStatus.class, str);
   }
 }
