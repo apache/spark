@@ -40,8 +40,9 @@ trait StreamingQuery {
   def name: String
 
   /**
-   * Returns the unique id of this query. This id an is automatically generated UUID.
-   * @since 2.0.0
+   * Returns the unique id of this query.  An id is tied to the checkpoint location and will
+   * be the same across restarts of a given streaming query.
+   * @since 2.1.0
    */
   def id: UUID
 
@@ -52,7 +53,7 @@ trait StreamingQuery {
   def sparkSession: SparkSession
 
   /**
-   * Whether the query is currently active or not
+   * Returns `true` if this query is actively running.
    * @since 2.0.0
    */
   def isActive: Boolean
@@ -64,16 +65,16 @@ trait StreamingQuery {
   def exception: Option[StreamingQueryException]
 
   /**
-   * Returns the current status of the query, such as a whether data is available to process as
-   * well as a human readable description of what is happening right now.
+   * Returns the current status of the query.
+   *
    * @since 2.0.2
    */
   def status: StreamingQueryStatus
 
   /**
-   * Returns an array of the most recent progress updates, which include information about
-   * timing as well as the amount of data being processed for each trigger.  The number of records
-   * retained for each stream is configured by `spark.sql.streaming.numProgressRecords`
+   * Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
+   * The number of records retained for each stream is configured by
+   * `spark.sql.streaming.numProgressRecords`.
    *
    *  @since 2.1.0
    */

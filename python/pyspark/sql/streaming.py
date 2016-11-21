@@ -197,6 +197,7 @@ class StreamingQueryManager(object):
         """
         self._jsqm.resetTerminated()
 
+
 class Trigger(object):
     """Used to indicate how often results should be produced by a :class:`StreamingQuery`.
 
