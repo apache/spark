@@ -45,7 +45,7 @@ class RowBasedHashMapGenerator(
 
   protected def initializeAggregateHashMap(): String = {
     val generatedKeySchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
+      "new org.apache.spark.sql.types.StructType()" +
         groupingKeySchema.map { key =>
           key.dataType match {
             case d: DecimalType =>
@@ -57,7 +57,7 @@ class RowBasedHashMapGenerator(
         }.mkString("\n").concat(";")
 
     val generatedValueSchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
+      "new org.apache.spark.sql.types.StructType()" +
         bufferSchema.map { key =>
           key.dataType match {
             case d: DecimalType =>

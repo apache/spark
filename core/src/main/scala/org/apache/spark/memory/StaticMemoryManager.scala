@@ -127,14 +127,14 @@ private[spark] object StaticMemoryManager {
     if (systemMaxMemory < MIN_MEMORY_BYTES) {
       throw new IllegalArgumentException(s"System memory $systemMaxMemory must " +
         s"be at least $MIN_MEMORY_BYTES. Please increase heap size using the --driver-memory " +
-        s"option or spark.driver.memory in Spark configuration.")
+        "option or spark.driver.memory in Spark configuration.")
     }
     if (conf.contains("spark.executor.memory")) {
       val executorMemory = conf.getSizeAsBytes("spark.executor.memory")
       if (executorMemory < MIN_MEMORY_BYTES) {
         throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
           s"$MIN_MEMORY_BYTES. Please increase executor memory using the " +
-          s"--executor-memory option or spark.executor.memory in Spark configuration.")
+          "--executor-memory option or spark.executor.memory in Spark configuration.")
       }
     }
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)

@@ -162,7 +162,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} " +
                 s"should be stored as $expectedFileFormat. However, we are getting " +
                 s"a ${relation.fileFormat} from the metastore cache. This cached " +
-                s"entry will be invalidated.")
+                "entry will be invalidated.")
             cachedDataSourceTables.invalidate(tableIdentifier)
             None
         }
@@ -170,7 +170,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         logWarning(
           s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} should be stored " +
             s"as $expectedFileFormat. However, we are getting a $other from the metastore cache. " +
-            s"This cached entry will be invalidated.")
+            "This cached entry will be invalidated.")
         cachedDataSourceTables.invalidate(tableIdentifier)
         None
     }

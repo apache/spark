@@ -179,8 +179,8 @@ private[ml] object TreeEnsembleModel {
       maxFeatureIndex + 1
     }
     if (d == 0) {
-      assert(totalImportances.size == 0, s"Unknown error in computing feature" +
-        s" importance: No splits found, but some non-zero importances.")
+      assert(totalImportances.size == 0, "Unknown error in computing feature" +
+        " importance: No splits found, but some non-zero importances.")
     }
     val (indices, values) = totalImportances.iterator.toSeq.sortBy(_._1).unzip
     Vectors.sparse(d, indices.toArray, values.toArray)
@@ -265,8 +265,8 @@ private[ml] object DecisionTreeModelReadWrite {
       if (numCategories != -1) {
         new CategoricalSplit(featureIndex, leftCategoriesOrThreshold, numCategories)
       } else {
-        assert(leftCategoriesOrThreshold.length == 1, s"DecisionTree split data expected" +
-          s" 1 threshold for ContinuousSplit, but found thresholds: " +
+        assert(leftCategoriesOrThreshold.length == 1, "DecisionTree split data expected" +
+          " 1 threshold for ContinuousSplit, but found thresholds: " +
           leftCategoriesOrThreshold.mkString(", "))
         new ContinuousSplit(featureIndex, leftCategoriesOrThreshold(0))
       }
@@ -357,9 +357,9 @@ private[ml] object DecisionTreeModelReadWrite {
     // Load all nodes, sorted by ID.
     val nodes = data.sortBy(_.id)
     // Sanity checks; could remove
-    assert(nodes.head.id == 0, s"Decision Tree load failed.  Expected smallest node ID to be 0," +
+    assert(nodes.head.id == 0, "Decision Tree load failed.  Expected smallest node ID to be 0," +
       s" but found ${nodes.head.id}")
-    assert(nodes.last.id == nodes.length - 1, s"Decision Tree load failed.  Expected largest" +
+    assert(nodes.last.id == nodes.length - 1, "Decision Tree load failed.  Expected largest" +
       s" node ID to be ${nodes.length - 1}, but found ${nodes.last.id}")
     // We fill `finalNodes` in reverse order.  Since node IDs are assigned via a pre-order
     // traversal, this guarantees that child nodes will be built before parent nodes.

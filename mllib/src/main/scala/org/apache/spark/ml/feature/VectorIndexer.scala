@@ -116,7 +116,7 @@ class VectorIndexer @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): VectorIndexerModel = {
     transformSchema(dataset.schema, logging = true)
     val firstRow = dataset.select($(inputCol)).take(1)
-    require(firstRow.length == 1, s"VectorIndexer cannot be fit on an empty dataset.")
+    require(firstRow.length == 1, "VectorIndexer cannot be fit on an empty dataset.")
     val numFeatures = firstRow(0).getAs[Vector](0).size
     val vectorDataset = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val maxCats = $(maxCategories)

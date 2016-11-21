@@ -529,10 +529,10 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"LEAST requires at least 2 arguments")
+      TypeCheckResult.TypeCheckFailure("LEAST requires at least 2 arguments")
     } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
-        s"The expressions should all have the same type," +
+        "The expressions should all have the same type," +
           s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
@@ -594,10 +594,10 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"GREATEST requires at least 2 arguments")
+      TypeCheckResult.TypeCheckFailure("GREATEST requires at least 2 arguments")
     } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
-        s"The expressions should all have the same type," +
+        "The expressions should all have the same type," +
           s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)

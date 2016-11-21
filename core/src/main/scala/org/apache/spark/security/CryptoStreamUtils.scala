@@ -102,7 +102,7 @@ private[spark] object CryptoStreamUtils extends Logging {
     val initialIVTime = initialIVFinish - initialIVStart
     if (initialIVTime > 2000) {
       logWarning(s"It costs ${initialIVTime} milliseconds to create the Initialization Vector " +
-        s"used by CryptoStream")
+        "used by CryptoStream")
     }
     iv
   }

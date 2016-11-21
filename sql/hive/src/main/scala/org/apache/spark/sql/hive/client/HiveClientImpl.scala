@@ -201,7 +201,7 @@ private[hive] class HiveClientImpl(
 
   // Log the default warehouse location.
   logInfo(
-    s"Warehouse location for Hive client " +
+    "Warehouse location for Hive client " +
       s"(version ${version.fullVersion}) is ${conf.get("hive.metastore.warehouse.dir")}")
 
   /** Returns the configuration for the current session. */

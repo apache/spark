@@ -165,13 +165,13 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
   }
 
   test("CTAS statement with a PARTITIONED BY clause is not allowed") {
-    assertUnsupported(s"CREATE TABLE ctas1 PARTITIONED BY (k int)" +
+    assertUnsupported("CREATE TABLE ctas1 PARTITIONED BY (k int)" +
       " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
   }
 
   test("CTAS statement with schema") {
-    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT * FROM src")
-    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'")
+    assertUnsupported("CREATE TABLE ctas1 (age INT, name STRING) AS SELECT * FROM src")
+    assertUnsupported("CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'")
   }
 
   test("unsupported operations") {

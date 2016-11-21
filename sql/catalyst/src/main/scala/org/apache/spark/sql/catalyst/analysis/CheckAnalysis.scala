@@ -52,7 +52,7 @@ trait CheckAnalysis extends PredicateHelper {
         "The limit expression must evaluate to a constant value, but got " +
           limitExpr.sql)
       case e if e.dataType != IntegerType => failAnalysis(
-        s"The limit expression must be integer type, but got " +
+        "The limit expression must be integer type, but got " +
           e.dataType.simpleString)
       case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
         "The limit expression must be equal to or greater than 0, but got " +
@@ -155,7 +155,7 @@ trait CheckAnalysis extends PredicateHelper {
               case _: TimestampType =>
               case _ =>
                 failAnalysis(
-                  s"Event time must be defined on a window or a timestamp, but " +
+                  "Event time must be defined on a window or a timestamp, but " +
                   s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.simpleString}")
             }
           case f: Filter if f.condition.dataType != BooleanType =>
@@ -167,7 +167,7 @@ trait CheckAnalysis extends PredicateHelper {
             splitConjunctivePredicates(condition).foreach {
               case _: PredicateSubquery | Not(_: PredicateSubquery) =>
               case e if PredicateSubquery.hasNullAwarePredicateWithinNot(e) =>
-                failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
+                failAnalysis("Null-aware predicate sub-queries cannot be used in nested" +
                   s" conditions: $e")
               case e =>
             }
@@ -205,16 +205,16 @@ trait CheckAnalysis extends PredicateHelper {
                   child.foreach {
                     case agg: AggregateExpression =>
                       failAnalysis(
-                        s"It is not allowed to use an aggregate function in the argument of " +
-                          s"another aggregate function. Please use the inner aggregate function " +
-                          s"in a sub-query.")
+                        "It is not allowed to use an aggregate function in the argument of " +
+                          "another aggregate function. Please use the inner aggregate function " +
+                          "in a sub-query.")
                     case other => // OK
                   }
 
                   if (!child.deterministic) {
                     failAnalysis(
                       s"nondeterministic expression ${expr.sql} should not " +
-                        s"appear in the arguments of an aggregate function.")
+                        "appear in the arguments of an aggregate function.")
                   }
                 }
               case e: Attribute if groupingExprs.isEmpty =>
@@ -223,16 +223,16 @@ trait CheckAnalysis extends PredicateHelper {
                   case a: AggregateExpression => a
                 }.nonEmpty)
                 failAnalysis(
-                  s"grouping expressions sequence is empty, " +
-                    s"and '${e.sql}' is not an aggregate function. " +
+                  "grouping expressions sequence is empty, " +
+                    "and '${e.sql}' is not an aggregate function. " +
                     s"Wrap '${aggExprs.map(_.sql).mkString("(", ", ", ")")}' in windowing " +
                     s"function(s) or wrap '${e.sql}' in first() (or first_value) " +
-                    s"if you don't care which value you get."
+                    "if you don't care which value you get."
                 )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.sql}' is neither present in the group by, " +
-                    s"nor is it an aggregate function. " +
+                    "nor is it an aggregate function. " +
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
@@ -245,7 +245,7 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
                     s"because its data type ${expr.dataType.simpleString} is not an orderable " +
-                    s"data type.")
+                    "data type.")
               }
 
               if (!expr.deterministic) {
@@ -253,7 +253,7 @@ trait CheckAnalysis extends PredicateHelper {
                 // already pull out those nondeterministic expressions and evaluate them in
                 // a Project node.
                 failAnalysis(s"nondeterministic expression ${expr.sql} should not " +
-                  s"appear in grouping expression.")
+                  "appear in grouping expression.")
               }
             }
 
@@ -379,7 +379,7 @@ trait CheckAnalysis extends PredicateHelper {
               t.isInstanceOf[Range] ||
               t == OneRowRelation ||
               t.isInstanceOf[LocalRelation] =>
-            failAnalysis(s"Inserting into an RDD-based table is not allowed.")
+            failAnalysis("Inserting into an RDD-based table is not allowed.")
 
           case i @ InsertIntoTable(table, partitions, query, _, _) =>
             val numStaticPartitions = partitions.values.count(_.isDefined)
@@ -387,7 +387,7 @@ trait CheckAnalysis extends PredicateHelper {
               failAnalysis(
                 s"$table requires that the data to be inserted have the same number of " +
                   s"columns as the target table: target table has ${table.output.size} " +
-                  s"column(s) but the inserted data has " +
+                  "column(s) but the inserted data has " +
                   s"${query.output.size + numStaticPartitions} column(s), including " +
                   s"$numStaticPartitions partition column(s) having constant value(s).")
             }

@@ -84,7 +84,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
    */
   protected val checkedCast = udf { (n: Double) =>
     if (n > Int.MaxValue || n < Int.MinValue) {
-      throw new IllegalArgumentException(s"ALS only supports values in Integer range for columns " +
+      throw new IllegalArgumentException("ALS only supports values in Integer range for columns " +
         s"${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
     } else {
       n.toInt

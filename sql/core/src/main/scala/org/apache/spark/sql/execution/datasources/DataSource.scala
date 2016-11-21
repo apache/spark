@@ -219,7 +219,7 @@ case class DataSource(
           res
         } catch {
           case NonFatal(e) =>
-            logWarning(s"Error while looking for metadata directory.")
+            logWarning("Error while looking for metadata directory.")
             false
         }
       case _ => false
@@ -539,7 +539,7 @@ object DataSource {
         // NoClassDefFoundError's class name uses "/" rather than "." for packages
         val className = e.getCause.getMessage.replaceAll("/", ".")
         if (spark2RemovedClasses.contains(className)) {
-          throw new ClassNotFoundException(s"Detected an incompatible DataSourceRegister. " +
+          throw new ClassNotFoundException("Detected an incompatible DataSourceRegister. " +
             "Please remove the incompatible library from classpath or upgrade it. " +
             s"Error: ${e.getMessage}", e)
         } else {

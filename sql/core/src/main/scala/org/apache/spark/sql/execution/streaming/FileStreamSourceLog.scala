@@ -95,7 +95,7 @@ class FileStreamSourceLog(
     // latest metadata log file.
     val searchKeys = removedBatches.map(_._1)
     val retrievedBatches = if (searchKeys.nonEmpty) {
-      logWarning(s"Get batches from removed files, this is unexpected in the current code path!!!")
+      logWarning("Get batches from removed files, this is unexpected in the current code path!!!")
       val latestBatchId = getLatest().map(_._1).getOrElse(-1L)
       if (latestBatchId < 0) {
         Map.empty[Long, Option[Array[FileEntry]]]

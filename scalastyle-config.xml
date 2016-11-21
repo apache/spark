@@ -263,6 +263,13 @@ This file is divided into 3 sections:
     <customMessage>override modifier should be used instead of @java.lang.Override.</customMessage>
   </check>
 
+  <check customId="NoRedundantStringInterpolator" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">(?&lt;=[\s(])s"[^\$\n"]*"(?![\w"])</parameter></parameters>
+    <customMessage><![CDATA[Do not use s string interpolator when no embed variable reference
+      is in the processed string literals.
+    ]]></customMessage>
+  </check>
+
   <check level="error" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="true"></check>
 
   <!-- ================================================================================ -->

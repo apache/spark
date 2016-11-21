@@ -54,7 +54,7 @@ case class CatalogStorageFormat(
   override def toString: String = {
     val serdePropsToString =
       if (properties.nonEmpty) {
-        s"Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+        "Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
       } else {
         ""
       }

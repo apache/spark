@@ -366,7 +366,7 @@ object FileFormatWriter extends Logging {
         val currentRow = iter.next()
         sorter.insertKV(getSortingKey(currentRow), getOutputRow(currentRow))
       }
-      logInfo(s"Sorting complete. Writing out partition files one at a time.")
+      logInfo("Sorting complete. Writing out partition files one at a time.")
 
       val getBucketingKey: InternalRow => InternalRow = if (sortColumns.isEmpty) {
         identity

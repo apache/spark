@@ -209,7 +209,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
         }
       }.getOrElse {
         if (useTempCheckpointLocation) {
-          Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+          Utils.createTempDir(namePrefix = "temporary").getCanonicalPath
         } else {
           throw new AnalysisException(
             "checkpointLocation must be specified either " +
@@ -224,7 +224,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
         val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
         if (fs.exists(checkpointPath)) {
           throw new AnalysisException(
-            s"This query does not support recovering from checkpoint location. " +
+            "This query does not support recovering from checkpoint location. " +
               s"Delete $checkpointPath to start over.")
         }
       }

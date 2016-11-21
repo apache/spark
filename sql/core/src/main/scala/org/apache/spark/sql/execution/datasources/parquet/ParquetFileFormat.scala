@@ -382,7 +382,7 @@ class ParquetFileFormat
         }
         vectorizedReader
       } else {
-        logDebug(s"Falling back to parquet-mr")
+        logDebug("Falling back to parquet-mr")
         // ParquetRecordReader returns UnsafeRow
         val reader = pushed match {
           case Some(filter) =>

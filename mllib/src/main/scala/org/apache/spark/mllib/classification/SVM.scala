@@ -115,7 +115,7 @@ object SVMModel extends Loader[SVMModel] {
         }
         model
       case _ => throw new Exception(
-        s"SVMModel.load did not recognize model with (className, format version):" +
+        "SVMModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }

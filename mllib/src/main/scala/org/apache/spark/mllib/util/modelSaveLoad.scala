@@ -111,7 +111,7 @@ private[mllib] object Loader {
     val loadedFields: Map[String, DataType] =
       loadedSchema.map(field => field.name -> field.dataType).toMap
     expectedFields.foreach { field =>
-      assert(loadedFields.contains(field.name), s"Unable to parse model data." +
+      assert(loadedFields.contains(field.name), "Unable to parse model data." +
         s"  Expected field with name ${field.name} was missing in loaded schema:" +
         s" ${loadedFields.mkString(", ")}")
       assert(loadedFields(field.name).sameType(field.dataType),

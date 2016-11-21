@@ -362,7 +362,7 @@ class LogisticRegression @Since("1.2.0") (
 
     val isMultinomial = $(family) match {
       case "binomial" =>
-        require(numClasses == 1 || numClasses == 2, s"Binomial family only supports 1 or 2 " +
+        require(numClasses == 1 || numClasses == 2, "Binomial family only supports 1 or 2 " +
         s"outcome classes but found $numClasses.")
         false
       case "multinomial" => true
@@ -391,8 +391,8 @@ class LogisticRegression @Since("1.2.0") (
       val isConstantLabel = histogram.count(_ != 0.0) == 1
 
       if ($(fitIntercept) && isConstantLabel) {
-        logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
-          s"will be zeros. Training is not needed.")
+        logWarning("All labels are the same value and fitIntercept=true, so the coefficients " +
+          "will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
         // TODO: use `compressed` after SPARK-17471
         val coefMatrix = if (numFeatures < numCoefficientSets) {
@@ -410,8 +410,8 @@ class LogisticRegression @Since("1.2.0") (
         (coefMatrix, interceptVec, Array.empty[Double])
       } else {
         if (!$(fitIntercept) && isConstantLabel) {
-          logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
-            s"dangerous ground, so the algorithm may not converge.")
+          logWarning("All labels belong to a single class and fitIntercept=false. It's a " +
+            "dangerous ground, so the algorithm may not converge.")
         }
 
         val featuresMean = summarizer.mean.toArray
@@ -477,7 +477,7 @@ class LogisticRegression @Since("1.2.0") (
               (_initialModel.interceptVector.size == numCoefficientSets) &&
               (_initialModel.getFitIntercept == $(fitIntercept))
             if (!modelIsValid) {
-              logWarning(s"Initial coefficients will be ignored! Its dimensions " +
+              logWarning("Initial coefficients will be ignored! Its dimensions " +
                 s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the " +
                 s"expected size ($numCoefficientSets, $numFeatures)")
             }
@@ -683,7 +683,7 @@ class LogisticRegressionModel private[spark] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams with MLWritable {
 
-  require(coefficientMatrix.numRows == interceptVector.size, s"Dimension mismatch! Expected " +
+  require(coefficientMatrix.numRows == interceptVector.size, "Dimension mismatch! Expected " +
     s"coefficientMatrix.numRows == interceptVector.size, but ${coefficientMatrix.numRows} != " +
     s"${interceptVector.size}")
 
@@ -1413,12 +1413,12 @@ private class LogisticAggregator(
   private val coefficientSize = bcCoefficients.value.size
   private val numCoefficientSets = if (multinomial) numClasses else 1
   if (multinomial) {
-    require(numClasses ==  coefficientSize / numFeaturesPlusIntercept, s"The number of " +
+    require(numClasses ==  coefficientSize / numFeaturesPlusIntercept, "The number of " +
       s"coefficients should be ${numClasses * numFeaturesPlusIntercept} but was $coefficientSize")
   } else {
     require(coefficientSize == numFeaturesPlusIntercept, s"Expected $numFeaturesPlusIntercept " +
       s"coefficients but got $coefficientSize")
-    require(numClasses == 1 || numClasses == 2, s"Binary logistic aggregator requires numClasses " +
+    require(numClasses == 1 || numClasses == 2, "Binary logistic aggregator requires numClasses " +
       s"in {1, 2} but found $numClasses.")
   }
 
@@ -1428,10 +1428,10 @@ private class LogisticAggregator(
   private val gradientSumArray = Array.ofDim[Double](coefficientSize)
 
   if (multinomial && numClasses <= 2) {
-    logInfo(s"Multinomial logistic regression for binary classification yields separate " +
-      s"coefficients for positive and negative classes. When no regularization is applied, the" +
-      s"result will be effectively the same as binary logistic regression. When regularization" +
-      s"is applied, multinomial loss will produce a result different from binary loss.")
+    logInfo("Multinomial logistic regression for binary classification yields separate " +
+      "coefficients for positive and negative classes. When no regularization is applied, the" +
+      "result will be effectively the same as binary logistic regression. When regularization" +
+      "is applied, multinomial loss will produce a result different from binary loss.")
   }
 
   /** Update gradient and loss using binary loss function. */
@@ -1571,7 +1571,7 @@ private class LogisticAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+      require(numFeatures == features.size, "Dimensions mismatch when adding new instance." +
         s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
@@ -1596,7 +1596,7 @@ private class LogisticAggregator(
    * @return This LogisticAggregator object.
    */
   def merge(other: LogisticAggregator): this.type = {
-    require(numFeatures == other.numFeatures, s"Dimensions mismatch when merging with another " +
+    require(numFeatures == other.numFeatures, "Dimensions mismatch when merging with another " +
       s"LeastSquaresAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
 
     if (other.weightSum != 0.0) {
@@ -1616,13 +1616,13 @@ private class LogisticAggregator(
   }
 
   def loss: Double = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
+    require(weightSum > 0.0, "The effective number of instances should be " +
       s"greater than 0.0, but $weightSum.")
     lossSum / weightSum
   }
 
   def gradient: Matrix = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
+    require(weightSum > 0.0, "The effective number of instances should be " +
       s"greater than 0.0, but $weightSum.")
     val result = Vectors.dense(gradientSumArray.clone())
     scal(1.0 / weightSum, result)

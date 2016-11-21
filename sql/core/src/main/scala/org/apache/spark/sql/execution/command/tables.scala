@@ -197,25 +197,25 @@ case class LoadDataCommand(
     if (targetTable.partitionColumnNames.nonEmpty) {
       if (partition.isEmpty) {
         throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
-          s"but no partition spec is provided")
+          "but no partition spec is provided")
       }
       if (targetTable.partitionColumnNames.size != partition.get.size) {
         throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
           s"but number of columns in provided partition spec (${partition.get.size}) " +
-          s"do not match number of partitioned columns in table " +
+          "do not match number of partitioned columns in table " +
           s"(s${targetTable.partitionColumnNames.size})")
       }
       partition.get.keys.foreach { colName =>
         if (!targetTable.partitionColumnNames.contains(colName)) {
           throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
-            s"but the specified partition spec refers to a column that is not partitioned: " +
+            "but the specified partition spec refers to a column that is not partitioned: " +
             s"'$colName'")
         }
       }
     } else {
       if (partition.nonEmpty) {
         throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is not " +
-          s"partitioned, but a partition spec was provided.")
+          "partitioned, but a partition spec was provided.")
       }
     }
 
@@ -336,7 +336,7 @@ case class TruncateTableCommand(
     }
     if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
       throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
+        "Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
         s"for tables that are not partitioned: $tableIdentWithDB")
     }
     if (partitionSpec.isDefined) {
@@ -960,7 +960,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     val builder = StringBuilder.newBuilder
 
     str.foreach {
-      case '\'' => builder ++= s"\\\'"
+      case '\'' => builder ++= "\\\'"
       case ch => builder += ch
     }
 

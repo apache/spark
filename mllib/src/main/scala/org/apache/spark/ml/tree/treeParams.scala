@@ -351,7 +351,7 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
     "The number of features to consider for splits at each tree node." +
       s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
-      s", (0.0-1.0], [1-n].",
+      ", (0.0-1.0], [1-n].",
     (value: String) =>
       RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
       || Try(value.toInt).filter(_ > 0).isSuccess

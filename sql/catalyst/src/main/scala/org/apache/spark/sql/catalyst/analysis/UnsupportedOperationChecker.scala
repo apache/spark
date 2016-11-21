@@ -68,13 +68,13 @@ object UnsupportedOperationChecker {
         if (watermarkAttributes.isEmpty) {
           throwError(
             s"$outputMode output mode not supported when there are streaming aggregations on " +
-                s"streaming DataFrames/DataSets")(plan)
+                "streaming DataFrames/DataSets")(plan)
         }
 
       case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
         throwError(
           s"$outputMode output mode not supported when there are no streaming aggregations on " +
-            s"streaming DataFrames/Datasets")(plan)
+            "streaming DataFrames/Datasets")(plan)
 
       case _ =>
     }

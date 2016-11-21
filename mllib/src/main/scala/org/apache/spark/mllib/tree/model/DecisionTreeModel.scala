@@ -277,7 +277,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
     def constructTree(data: Array[NodeData]): Node = {
       val dataMap: Map[Int, NodeData] = data.map(n => n.nodeId -> n).toMap
       assert(dataMap.contains(1),
-        s"DecisionTree missing root node (id = 1).")
+        "DecisionTree missing root node (id = 1).")
       constructNode(1, dataMap, mutable.Map.empty)
     }
 
@@ -325,7 +325,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       case (className, "1.0") if className == classNameV1_0 =>
         SaveLoadV1_0.load(sc, path, algo, numNodes)
       case _ => throw new Exception(
-        s"DecisionTreeModel.load did not recognize model with (className, format version):" +
+        "DecisionTreeModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }

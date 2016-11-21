@@ -30,6 +30,6 @@ package object encoders {
     case e: ExpressionEncoder[A] =>
       e.assertUnresolved()
       e
-    case _ => sys.error(s"Only expression encoders are supported today")
+    case _ => sys.error("Only expression encoders are supported today")
   }
 }

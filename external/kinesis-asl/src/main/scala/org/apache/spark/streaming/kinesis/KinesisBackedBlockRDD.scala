@@ -209,7 +209,7 @@ class KinesisSequenceRangeIterator(
     getRecordsRequest.setRequestCredentials(credentials)
     getRecordsRequest.setShardIterator(shardIterator)
     val getRecordsResult = retryOrTimeout[GetRecordsResult](
-      s"getting records using shard iterator") {
+      "getting records using shard iterator") {
         client.getRecords(getRecordsRequest)
       }
     // De-aggregate records, if KPL was used in producing the records. The KCL automatically

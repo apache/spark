@@ -222,7 +222,7 @@ object IsotonicRegressionModel extends Loader[IsotonicRegressionModel] {
         val (boundaries, predictions) = SaveLoadV1_0.load(sc, path)
         new IsotonicRegressionModel(boundaries, predictions, isotonic)
       case _ => throw new Exception(
-        s"IsotonicRegressionModel.load did not recognize model with (className, format version): " +
+        "IsotonicRegressionModel.load did not recognize model with (className, format version): " +
         s"($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)"
       )

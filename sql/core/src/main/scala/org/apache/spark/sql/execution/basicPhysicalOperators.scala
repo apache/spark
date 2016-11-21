@@ -143,7 +143,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       val nullCheck = if (bound.nullable) {
         s"${ev.isNull} || "
       } else {
-        s""
+        ""
       }
 
       s"""

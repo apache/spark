@@ -98,12 +98,12 @@ private[stat] object ChiSqTest extends Logging {
         iter.flatMap { case LabeledPoint(label, features) =>
           if (i % 1000 == 0) {
             if (distinctLabels.size > maxCategories) {
-              throw new SparkException(s"Chi-square test expect factors (categorical values) but "
+              throw new SparkException("Chi-square test expect factors (categorical values) but "
                 + s"found more than $maxCategories distinct label values.")
             }
             allDistinctFeatures.foreach { case (col, distinctFeatures) =>
               if (distinctFeatures.size > maxCategories) {
-                throw new SparkException(s"Chi-square test expect factors (categorical values) but "
+                throw new SparkException("Chi-square test expect factors (categorical values) but "
                   + s"found more than $maxCategories distinct values in column $col.")
               }
             }

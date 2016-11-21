@@ -280,7 +280,7 @@ class LogisticRegressionSuite
       .collect()
       .map { case Row(pred: Double, prob: Vector) => pred }
     assert(predAllZero.forall(_ === 0),
-      s"With threshold=1.0, expected predictions to be all 0, but only" +
+      "With threshold=1.0, expected predictions to be all 0, but only" +
       s" ${predAllZero.count(_ === 0)} of ${smallBinaryDataset.count()} were 0.")
     // Call transform with params, and check that the params worked.
     val predNotAllZero =

@@ -918,7 +918,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
         manager.handleFailedTask(task.taskId, TaskState.FAILED, endReason)
         sched.endedTasks(task.taskId) = endReason
         assert(!manager.isZombie)
-        val nextTask = manager.resourceOffer(s"exec2", s"host2", NO_PREF)
+        val nextTask = manager.resourceOffer("exec2", "host2", NO_PREF)
         assert(nextTask.isDefined, s"no offer for attempt $attempt of $index")
         tasks += nextTask.get
       }

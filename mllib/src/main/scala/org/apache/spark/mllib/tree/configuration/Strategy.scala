@@ -138,30 +138,30 @@ class Strategy @Since("1.3.0") (
     algo match {
       case Classification =>
         require(numClasses >= 2,
-          s"DecisionTree Strategy for Classification must have numClasses >= 2," +
+          "DecisionTree Strategy for Classification must have numClasses >= 2," +
           s" but numClasses = $numClasses.")
         require(Set(Gini, Entropy).contains(impurity),
           s"DecisionTree Strategy given invalid impurity for Classification: $impurity." +
-          s"  Valid settings: Gini, Entropy")
+          "  Valid settings: Gini, Entropy")
       case Regression =>
         require(impurity == Variance,
           s"DecisionTree Strategy given invalid impurity for Regression: $impurity." +
-          s"  Valid settings: Variance")
+          "  Valid settings: Variance")
       case _ =>
         throw new IllegalArgumentException(
           s"DecisionTree Strategy given invalid algo parameter: $algo." +
-          s"  Valid settings are: Classification, Regression.")
+          "  Valid settings are: Classification, Regression.")
     }
     require(maxDepth >= 0, s"DecisionTree Strategy given invalid maxDepth parameter: $maxDepth." +
-      s"  Valid values are integers >= 0.")
+      "  Valid values are integers >= 0.")
     require(maxBins >= 2, s"DecisionTree Strategy given invalid maxBins parameter: $maxBins." +
-      s"  Valid values are integers >= 2.")
+      "  Valid values are integers >= 2.")
     require(minInstancesPerNode >= 1,
       s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
     require(maxMemoryInMB <= 10240,
       s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
     require(subsamplingRate > 0 && subsamplingRate <= 1,
-      s"DecisionTree Strategy requires subsamplingRate <=1 and >0, but was given " +
+      "DecisionTree Strategy requires subsamplingRate <=1 and >0, but was given " +
       s"$subsamplingRate")
   }
 

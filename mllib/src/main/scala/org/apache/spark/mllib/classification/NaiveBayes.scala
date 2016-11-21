@@ -281,7 +281,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         val model = SaveLoadV2_0.load(sc, path)
         (model, numFeatures, numClasses)
       case _ => throw new Exception(
-        s"NaiveBayesModel.load did not recognize model with (className, format version):" +
+        "NaiveBayesModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }
@@ -293,7 +293,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         s" but class conditionals array theta had ${model.theta.length} elements")
     assert(model.theta.forall(_.length == numFeatures),
       s"NaiveBayesModel.load expected $numFeatures features," +
-        s" but class conditionals array theta had elements of size:" +
+        " but class conditionals array theta had elements of size:" +
         s" ${model.theta.map(_.length).mkString(",")}")
     model
   }

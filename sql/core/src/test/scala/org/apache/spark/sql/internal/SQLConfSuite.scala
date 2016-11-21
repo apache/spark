@@ -121,10 +121,10 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
-      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
-      sql(s"reset")
+      assert(sql("set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
+      sql("reset")
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
-      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
+      assert(sql("set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
     } finally {
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
     }
@@ -137,10 +137,10 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
       sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}=10")
       assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 10)
-      assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 1)
-      sql(s"reset")
+      assert(sql("set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 1)
+      sql("reset")
       assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
-      assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 0)
+      assert(sql("set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 0)
     } finally {
       sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS}=$original")
     }
@@ -153,8 +153,8 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       assert(spark.conf.getOption(userDefinedConf).isEmpty)
       sql(s"set $userDefinedConf=false")
       assert(spark.conf.get(userDefinedConf) === "false")
-      assert(sql(s"set").where(s"key = '$userDefinedConf'").count() == 1)
-      sql(s"reset")
+      assert(sql("set").where(s"key = '$userDefinedConf'").count() == 1)
+      sql("reset")
       assert(spark.conf.getOption(userDefinedConf).isEmpty)
     } finally {
       spark.conf.unset(userDefinedConf)

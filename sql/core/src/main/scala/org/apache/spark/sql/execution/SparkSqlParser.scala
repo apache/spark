@@ -224,7 +224,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (query.isDefined && tableIdent.database.isDefined) {
       val database = tableIdent.database.get
       throw new ParseException(s"It is not allowed to add database prefix `$database` to " +
-        s"the table name in CACHE TABLE AS SELECT", ctx)
+        "the table name in CACHE TABLE AS SELECT", ctx)
     }
     CacheTableCommand(tableIdent, query, ctx.LAZY != null)
   }
@@ -378,7 +378,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
         }
 
-        logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
+        logWarning("CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
         CreateTempViewUsing(table, schema, replace = true, global = false, provider, options)
       } else {
@@ -939,7 +939,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             }
           case other => operationNotAllowed(s"LIST with resource type '$other'", ctx)
         }
-      case _ => operationNotAllowed(s"Other types of operation on resources", ctx)
+      case _ => operationNotAllowed("Other types of operation on resources", ctx)
     }
   }
 

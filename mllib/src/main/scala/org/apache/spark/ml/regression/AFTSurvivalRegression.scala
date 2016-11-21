@@ -521,12 +521,12 @@ private class AFTAggregator(
 
   def count: Long = totalCnt
   def loss: Double = {
-    require(totalCnt > 0.0, s"The number of instances should be " +
+    require(totalCnt > 0.0, "The number of instances should be " +
       s"greater than 0.0, but got $totalCnt.")
     lossSum / totalCnt
   }
   def gradient: BDV[Double] = {
-    require(totalCnt > 0.0, s"The number of instances should be " +
+    require(totalCnt > 0.0, "The number of instances should be " +
       s"greater than 0.0, but got $totalCnt.")
     new BDV(gradientSumArray.map(_ / totalCnt.toDouble))
   }

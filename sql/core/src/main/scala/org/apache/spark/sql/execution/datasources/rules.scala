@@ -321,11 +321,11 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         val tblIdent = tableDesc.identifier
         if (!validNameFormat.matcher(tblIdent.table).matches()) {
           failAnalysis(s"Table name ${tblIdent.table} is not a valid name for " +
-            s"metastore. Metastore only accepts table name containing characters, numbers and _.")
+            "metastore. Metastore only accepts table name containing characters, numbers and _.")
         }
         if (tblIdent.database.exists(db => !validNameFormat.matcher(db).matches())) {
           failAnalysis(s"Database name ${tblIdent.database.get} is not a valid name for " +
-            s"metastore. Metastore only accepts table name containing characters, numbers and _.")
+            "metastore. Metastore only accepts table name containing characters, numbers and _.")
         }
         if (query.isDefined &&
           mode == SaveMode.Overwrite &&
@@ -373,9 +373,9 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         val existingPartitionColumns = r.partitionSchema.fieldNames.toSet
         val specifiedPartitionColumns = part.keySet
         if (existingPartitionColumns != specifiedPartitionColumns) {
-          failAnalysis(s"Specified partition columns " +
+          failAnalysis("Specified partition columns " +
             s"(${specifiedPartitionColumns.mkString(", ")}) " +
-            s"do not match the partition columns of the table. Please use " +
+            "do not match the partition columns of the table. Please use " +
             s"(${existingPartitionColumns.mkString(", ")}) as the partition columns.")
         } else {
           // OK

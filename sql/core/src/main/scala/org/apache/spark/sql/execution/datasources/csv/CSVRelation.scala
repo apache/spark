@@ -103,7 +103,7 @@ object CSVRelation extends Logging {
         }
         None
       } else if (params.failFast && schemaFields.length != tokens.length) {
-        throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
+        throw new RuntimeException("Malformed line in FAILFAST mode: " +
           s"${tokens.mkString(params.delimiter.toString)}")
       } else {
         val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.length) {

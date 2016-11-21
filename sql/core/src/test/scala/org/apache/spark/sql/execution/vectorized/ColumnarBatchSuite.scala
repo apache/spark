@@ -802,8 +802,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
         // Over-allocating beyond MAX_CAPACITY throws an exception
         column.appendBytes(10, 0.toByte)
       }
-      assert(ex.getMessage.contains(s"Cannot reserve additional contiguous bytes in the " +
-        s"vectorized reader"))
+      assert(ex.getMessage.contains("Cannot reserve additional contiguous bytes in the " +
+        "vectorized reader"))
     }
   }
 }

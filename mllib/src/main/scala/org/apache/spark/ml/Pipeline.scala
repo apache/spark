@@ -223,7 +223,7 @@ object Pipeline extends MLReadable[Pipeline] {
         case stage: MLWritable => // good
         case other =>
           throw new UnsupportedOperationException("Pipeline write will fail on this Pipeline" +
-            s" because it contains a stage which does not implement Writable. Non-Writable stage:" +
+            " because it contains a stage which does not implement Writable. Non-Writable stage:" +
             s" ${other.uid} of type ${other.getClass}")
       }
     }
@@ -341,7 +341,7 @@ object PipelineModel extends MLReadable[PipelineModel] {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)
       val transformers = stages map {
         case stage: Transformer => stage
-        case other => throw new RuntimeException(s"PipelineModel.read loaded a stage but found it" +
+        case other => throw new RuntimeException("PipelineModel.read loaded a stage but found it" +
           s" was not a Transformer.  Bad stage ${other.uid} of type ${other.getClass}")
       }
       new PipelineModel(uid, transformers)

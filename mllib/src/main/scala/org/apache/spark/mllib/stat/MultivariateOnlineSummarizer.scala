@@ -68,7 +68,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     if (weight == 0.0) return this
 
     if (n == 0) {
-      require(instance.size > 0, s"Vector should have dimension larger than zero.")
+      require(instance.size > 0, "Vector should have dimension larger than zero.")
       n = instance.size
 
       currMean = Array.ofDim[Double](n)
@@ -81,7 +81,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       currMin = Array.fill[Double](n)(Double.MaxValue)
     }
 
-    require(n == instance.size, s"Dimensions mismatch when adding new sample." +
+    require(n == instance.size, "Dimensions mismatch when adding new sample." +
       s" Expecting $n but got ${instance.size}.")
 
     val localCurrMean = currMean
@@ -129,7 +129,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   @Since("1.1.0")
   def merge(other: MultivariateOnlineSummarizer): this.type = {
     if (this.totalWeightSum != 0.0 && other.totalWeightSum != 0.0) {
-      require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
+      require(n == other.n, "Dimensions mismatch when merging with another summarizer. " +
         s"Expecting $n but got ${other.n}.")
       totalCnt += other.totalCnt
       totalWeightSum += other.totalWeightSum
@@ -181,7 +181,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def mean: Vector = {
-    require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
     val realMean = Array.ofDim[Double](n)
     var i = 0
@@ -198,7 +198,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def variance: Vector = {
-    require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
     val realVariance = Array.ofDim[Double](n)
 
@@ -231,7 +231,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def numNonzeros: Vector = {
-    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+    require(totalCnt > 0, "Nothing has been added to this summarizer.")
 
     Vectors.dense(nnz.map(_.toDouble))
   }
@@ -242,7 +242,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def max: Vector = {
-    require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
     var i = 0
     while (i < n) {
@@ -258,7 +258,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   override def min: Vector = {
-    require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
     var i = 0
     while (i < n) {
@@ -274,7 +274,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.2.0")
   override def normL2: Vector = {
-    require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
     val realMagnitude = Array.ofDim[Double](n)
 
@@ -293,7 +293,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.2.0")
   override def normL1: Vector = {
-    require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+    require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
     Vectors.dense(currL1)
   }

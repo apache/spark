@@ -134,7 +134,7 @@ class KryoSerializer(conf: SparkConf)
       // scalastyle:on classforname
     } catch {
       case e: Exception =>
-        throw new SparkException(s"Failed to register classes with Kryo", e)
+        throw new SparkException("Failed to register classes with Kryo", e)
     } finally {
       Thread.currentThread.setContextClassLoader(oldClassLoader)
     }

@@ -47,7 +47,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   if (precision > DecimalType.MAX_PRECISION) {
-    throw new AnalysisException(s"DecimalType can only support precision up to 38")
+    throw new AnalysisException("DecimalType can only support precision up to 38")
   }
 
   // default constructor for Java

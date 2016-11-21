@@ -172,8 +172,8 @@ class JoinBenchmark extends BenchmarkBase {
   ignore("sort merge join") {
     val N = 2 << 20
     runBenchmark("merge join", N) {
-      val df1 = sparkSession.range(N).selectExpr(s"id * 2 as k1")
-      val df2 = sparkSession.range(N).selectExpr(s"id * 3 as k2")
+      val df1 = sparkSession.range(N).selectExpr("id * 2 as k1")
+      val df2 = sparkSession.range(N).selectExpr("id * 3 as k2")
       df1.join(df2, col("k1") === col("k2")).count()
     }
 
@@ -211,8 +211,8 @@ class JoinBenchmark extends BenchmarkBase {
     sparkSession.conf.set("spark.sql.autoBroadcastJoinThreshold", "10000000")
     sparkSession.conf.set("spark.sql.join.preferSortMergeJoin", "false")
     runBenchmark("shuffle hash join", N) {
-      val df1 = sparkSession.range(N).selectExpr(s"id as k1")
-      val df2 = sparkSession.range(N / 5).selectExpr(s"id * 3 as k2")
+      val df1 = sparkSession.range(N).selectExpr("id as k1")
+      val df2 = sparkSession.range(N / 5).selectExpr("id * 3 as k2")
       df1.join(df2, col("k1") === col("k2")).count()
     }
 

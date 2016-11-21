@@ -255,12 +255,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         // Also, if yMean==0 and rawYStd==0, all the coefficients are zero regardless of
         // the fitIntercept
         if (yMean == 0.0) {
-          logWarning(s"Mean and standard deviation of the label are zero, so the coefficients " +
-            s"and the intercept will all be zero; as a result, training is not needed.")
+          logWarning("Mean and standard deviation of the label are zero, so the coefficients " +
+            "and the intercept will all be zero; as a result, training is not needed.")
         } else {
-          logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
-            s"zeros and the intercept will be the mean of the label; as a result, " +
-            s"training is not needed.")
+          logWarning("The standard deviation of the label is zero, so the coefficients will be " +
+            "zeros and the intercept will be the mean of the label; as a result, " +
+            "training is not needed.")
         }
         if (handlePersistence) instances.unpersist()
         val coefficients = Vectors.sparse(numFeatures, Seq())
@@ -282,7 +282,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
-        logWarning(s"The standard deviation of the label is zero. " +
+        logWarning("The standard deviation of the label is zero. " +
           "Consider setting fitIntercept=true.")
       }
     }
@@ -957,7 +957,7 @@ private class LeastSquaresAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(dim == features.size, s"Dimensions mismatch when adding new sample." +
+      require(dim == features.size, "Dimensions mismatch when adding new sample." +
         s" Expecting $dim but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
@@ -991,7 +991,7 @@ private class LeastSquaresAggregator(
    * @return This LeastSquaresAggregator object.
    */
   def merge(other: LeastSquaresAggregator): this.type = {
-    require(dim == other.dim, s"Dimensions mismatch when merging with another " +
+    require(dim == other.dim, "Dimensions mismatch when merging with another " +
       s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
 
     if (other.weightSum != 0) {
@@ -1013,13 +1013,13 @@ private class LeastSquaresAggregator(
   def count: Long = totalCnt
 
   def loss: Double = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
+    require(weightSum > 0.0, "The effective number of instances should be " +
       s"greater than 0.0, but $weightSum.")
     lossSum / weightSum
   }
 
   def gradient: Vector = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
+    require(weightSum > 0.0, "The effective number of instances should be " +
       s"greater than 0.0, but $weightSum.")
     val result = Vectors.dense(gradientSumArray.clone())
     scal(1.0 / weightSum, result)

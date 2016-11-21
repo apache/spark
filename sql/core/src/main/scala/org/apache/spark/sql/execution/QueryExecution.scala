@@ -120,7 +120,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
           case Row(name: String, dataType: String, comment) =>
             Seq(name, dataType,
               Option(comment.asInstanceOf[String]).getOrElse(""))
-              .map(s => String.format(s"%-20s", s))
+              .map(s => String.format("%-20s", s))
               .mkString("\t")
         }
       }

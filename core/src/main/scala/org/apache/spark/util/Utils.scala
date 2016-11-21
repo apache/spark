@@ -1314,7 +1314,7 @@ private[spark] object Utils extends Logging {
         case t: Throwable =>
           if (originalThrowable != null) {
             originalThrowable.addSuppressed(t)
-            logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
+            logWarning("Suppressing exception in finally: " + t.getMessage, t)
             throw originalThrowable
           } else {
             throw t
@@ -1351,7 +1351,7 @@ private[spark] object Utils extends Logging {
         } catch {
           case t: Throwable =>
             originalThrowable.addSuppressed(t)
-            logWarning(s"Suppressing exception in catch: " + t.getMessage, t)
+            logWarning("Suppressing exception in catch: " + t.getMessage, t)
         }
         throw originalThrowable
     } finally {
@@ -1361,7 +1361,7 @@ private[spark] object Utils extends Logging {
         case t: Throwable =>
           if (originalThrowable != null) {
             originalThrowable.addSuppressed(t)
-            logWarning(s"Suppressing exception in finally: " + t.getMessage, t)
+            logWarning("Suppressing exception in finally: " + t.getMessage, t)
             throw originalThrowable
           } else {
             throw t
@@ -2215,7 +2215,7 @@ private[spark] object Utils extends Logging {
             val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
               s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
               s"the appropriate port for the service$serviceString (for example spark.ui.port " +
-              s"for SparkUI) to an available port or increasing spark.port.maxRetries."
+              "for SparkUI) to an available port or increasing spark.port.maxRetries."
             val exception = new BindException(exceptionMessage)
             // restore original stack trace
             exception.setStackTrace(e.getStackTrace)

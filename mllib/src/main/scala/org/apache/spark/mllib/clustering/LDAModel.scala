@@ -508,7 +508,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       case (className, "1.0") if className == classNameV1_0 =>
         SaveLoadV1_0.load(sc, path, docConcentration, topicConcentration, gammaShape)
       case _ => throw new Exception(
-        s"LocalLDAModel.load did not recognize model with (className, format version):" +
+        "LocalLDAModel.load did not recognize model with (className, format version):" +
           s"($loadedClassName, $loadedVersion).  Supported:\n" +
           s"  ($classNameV1_0, 1.0)")
     }
@@ -945,7 +945,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
         DistributedLDAModel.SaveLoadV1_0.load(sc, path, vocabSize, docConcentration,
           topicConcentration, iterationTimes.toArray, gammaShape)
       case _ => throw new Exception(
-        s"DistributedLDAModel.load did not recognize model with (className, format version):" +
+        "DistributedLDAModel.load did not recognize model with (className, format version):" +
           s"($loadedClassName, $loadedVersion).  Supported: ($classNameV1_0, 1.0)")
     }
 

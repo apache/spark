@@ -92,7 +92,7 @@ object RandomForestModel extends Loader[RandomForestModel] {
         val trees =
           TreeEnsembleModel.SaveLoadV1_0.loadTrees(sc, path, metadata.treeAlgo)
         new RandomForestModel(Algo.fromString(metadata.algo), trees)
-      case _ => throw new Exception(s"RandomForestModel.load did not recognize model" +
+      case _ => throw new Exception("RandomForestModel.load did not recognize model" +
         s" with (className, format version): ($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }
@@ -253,7 +253,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
         val trees =
           TreeEnsembleModel.SaveLoadV1_0.loadTrees(sc, path, metadata.treeAlgo)
         new GradientBoostedTreesModel(Algo.fromString(metadata.algo), trees, metadata.treeWeights)
-      case _ => throw new Exception(s"GradientBoostedTreesModel.load did not recognize model" +
+      case _ => throw new Exception("GradientBoostedTreesModel.load did not recognize model" +
         s" with (className, format version): ($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }

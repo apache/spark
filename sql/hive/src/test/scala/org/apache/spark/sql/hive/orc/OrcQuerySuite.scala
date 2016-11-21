@@ -458,14 +458,14 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                 queryExecution.analyzed.collectFirst {
                   case _: LogicalRelation => ()
                 }.getOrElse {
-                  fail(s"Expecting the query plan to convert orc to data sources, " +
+                  fail("Expecting the query plan to convert orc to data sources, " +
                     s"but got:\n$queryExecution")
                 }
               } else {
                 queryExecution.analyzed.collectFirst {
                   case _: MetastoreRelation => ()
                 }.getOrElse {
-                  fail(s"Expecting no conversion from orc to data sources, " +
+                  fail("Expecting no conversion from orc to data sources, " +
                     s"but got:\n$queryExecution")
                 }
               }
@@ -491,7 +491,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
             |partitioned by (partitionValue int)
             |stored as orc
             |location "${dir.getAbsolutePath}"""".stripMargin)
-          spark.sql(s"msck repair table dummy_orc")
+          spark.sql("msck repair table dummy_orc")
           checkAnswer(spark.sql("select * from dummy_orc"), df)
         }
       }

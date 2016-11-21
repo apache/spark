@@ -186,7 +186,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
         assert(lr.getMaxIter === lr2.getMaxIter)
         assert(lr.getRegParam === lr2.getRegParam)
       case other =>
-        throw new AssertionError(s"Loaded OneVsRest expected classifier of type" +
+        throw new AssertionError("Loaded OneVsRest expected classifier of type" +
           s" LogisticRegression but found ${other.getClass.getName}")
     }
   }
@@ -206,7 +206,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
           assert(classifier.getMaxIter === lr2.getMaxIter)
           assert(classifier.getRegParam === lr2.getRegParam)
         case other =>
-          throw new AssertionError(s"Loaded OneVsRestModel expected classifier of type" +
+          throw new AssertionError("Loaded OneVsRestModel expected classifier of type" +
             s" LogisticRegression but found ${other.getClass.getName}")
       }
 
@@ -217,7 +217,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
           assert(lrModel1.coefficients === lrModel2.coefficients)
           assert(lrModel1.intercept === lrModel2.intercept)
         case other =>
-          throw new AssertionError(s"Loaded OneVsRestModel expected model of type" +
+          throw new AssertionError("Loaded OneVsRestModel expected model of type" +
             s" LogisticRegressionModel but found ${other.getClass.getName}")
       }
     }

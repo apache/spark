@@ -112,7 +112,7 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
    */
   def add(other: ImpurityCalculator): ImpurityCalculator = {
     require(stats.length == other.stats.length,
-      s"Two ImpurityCalculator instances cannot be added with different counts sizes." +
+      "Two ImpurityCalculator instances cannot be added with different counts sizes." +
         s"  Sizes are ${stats.length} and ${other.stats.length}.")
     var i = 0
     val len = other.stats.length
@@ -129,7 +129,7 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
    */
   def subtract(other: ImpurityCalculator): ImpurityCalculator = {
     require(stats.length == other.stats.length,
-      s"Two ImpurityCalculator instances cannot be subtracted with different counts sizes." +
+      "Two ImpurityCalculator instances cannot be subtracted with different counts sizes." +
       s"  Sizes are ${stats.length} and ${other.stats.length}.")
     var i = 0
     val len = other.stats.length

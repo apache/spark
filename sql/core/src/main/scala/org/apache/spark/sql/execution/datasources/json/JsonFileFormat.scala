@@ -145,7 +145,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
         case (x, ys) if ys.length > 1 => "\"" + x + "\""
       }.mkString(", ")
       throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
-          s"cannot save to JSON format")
+        "cannot save to JSON format")
     }
   }
 

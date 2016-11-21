@@ -34,7 +34,7 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
       val poolName = Option(request.getParameter("poolname")).map { poolname =>
         UIUtils.decodeURLParameter(poolname)
       }.getOrElse {
-        throw new IllegalArgumentException(s"Missing poolname parameter")
+        throw new IllegalArgumentException("Missing poolname parameter")
       }
 
       val poolToActiveStages = listener.poolToActiveStages

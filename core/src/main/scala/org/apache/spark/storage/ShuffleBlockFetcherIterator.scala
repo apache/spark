@@ -263,7 +263,7 @@ final class ShuffleBlockFetcherIterator(
       } catch {
         case e: Exception =>
           // If we see an exception, stop immediately.
-          logError(s"Error occurred while fetching local blocks", e)
+          logError("Error occurred while fetching local blocks", e)
           results.put(new FailureFetchResult(blockId, blockManager.blockManagerId, e))
           return
       }
