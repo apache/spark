@@ -101,21 +101,6 @@ case class ColumnStat(
     "avgLen" -> avgLen.toString,
     "maxLen" -> maxLen.toString
   )
-
-  /**
-   * Returns a new column stat data structure describing the statistics for this column when we
-   * only select a part of the values, assuming the values are uniformly distributed.
-   *
-   * @param selectivity fraction of values selected, in the range [0.0, 1.0].
-   */
-  def withSelectivity(selectivity: Double): ColumnStat = {
-    require(selectivity >= 0 && selectivity <= 1,
-      s"selectivity ($selectivity) should be in the range [0.0, 1.0]")
-    this.copy(
-      ndv = (ndv * selectivity).toLong,
-      numNulls = (numNulls * selectivity).toLong
-    )
-  }
 }
 
 
