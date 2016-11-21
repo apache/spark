@@ -521,8 +521,8 @@ object SimplifyCasts extends Rule[LogicalPlan] {
     case Cast(e, dataType) if e.dataType == dataType => e
     case c @ Cast(e, dataType) => (e.dataType, dataType) match {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
-      case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
-        if fromKey == toKey && fromValue == toValue => e
+      case (MapType(fromKey, fromValue, false, fromOrder), MapType(toKey, toValue, true, toOrder))
+        if fromKey == toKey && fromValue == toValue && (!toOrder || fromOrder) => e
       case _ => c
       }
   }

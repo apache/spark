@@ -229,7 +229,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
         new StructType()
           .add("col", et, containsNull)
       }
-    case MapType(kt, vt, valueContainsNull) =>
+    case MapType(kt, vt, valueContainsNull, _) =>
       if (position) {
         new StructType()
           .add("pos", IntegerType, nullable = false)
@@ -255,7 +255,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
           })
           rows
         }
-      case MapType(kt, vt, _) =>
+      case MapType(kt, vt, _, _) =>
         val inputMap = child.eval(input).asInstanceOf[MapData]
         if (inputMap == null) {
           Nil

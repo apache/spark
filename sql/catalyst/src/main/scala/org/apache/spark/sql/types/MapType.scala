@@ -35,7 +35,8 @@ import org.apache.spark.annotation.InterfaceStability
 case class MapType(
   keyType: DataType,
   valueType: DataType,
-  valueContainsNull: Boolean) extends DataType {
+  valueContainsNull: Boolean,
+  keyOrdered: Boolean = false) extends DataType {
 
   /** No-arg constructor for kryo. */
   def this() = this(null, null, false)
@@ -68,7 +69,7 @@ case class MapType(
   override def sql: String = s"MAP<${keyType.sql}, ${valueType.sql}>"
 
   override private[spark] def asNullable: MapType =
-    MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
+    MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true, keyOrdered)
 
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || keyType.existsRecursively(f) || valueType.existsRecursively(f)
@@ -94,5 +95,5 @@ object MapType extends AbstractDataType {
    * The `valueContainsNull` is true.
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
-    MapType(keyType: DataType, valueType: DataType, valueContainsNull = true)
+    new MapType(keyType, valueType, valueContainsNull = true, keyOrdered = false)
 }

@@ -141,7 +141,7 @@ public class DataTypes {
     if (valueType == null) {
       throw new IllegalArgumentException("valueType should not be null.");
     }
-    return new MapType(keyType, valueType, true);
+    return new MapType(keyType, valueType, true, false);
   }
 
   /**
@@ -159,7 +159,7 @@ public class DataTypes {
     if (valueType == null) {
       throw new IllegalArgumentException("valueType should not be null.");
     }
-    return new MapType(keyType, valueType, valueContainsNull);
+    return new MapType(keyType, valueType, valueContainsNull, false);
   }
 
   /**

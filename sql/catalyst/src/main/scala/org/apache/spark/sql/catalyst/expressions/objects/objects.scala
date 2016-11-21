@@ -539,7 +539,7 @@ case class MapObjects private(
     val genFunctionValue = lambdaFunction.dataType match {
       case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
       case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
-      case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
+      case MapType(_, _, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
       case _ => genFunction.value
     }
 

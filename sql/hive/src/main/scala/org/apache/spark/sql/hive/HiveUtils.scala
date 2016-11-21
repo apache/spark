@@ -414,7 +414,7 @@ private[spark] object HiveUtils extends Logging {
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_, _], MapType(kType, vType, _)) =>
+    case (map: Map[_, _], MapType(kType, vType, _, _)) =>
       map.map {
         case (key, value) =>
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
@@ -437,7 +437,7 @@ private[spark] object HiveUtils extends Logging {
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-    case (map: Map[_, _], MapType(kType, vType, _)) =>
+    case (map: Map[_, _], MapType(kType, vType, _, _)) =>
       map.map {
         case (key, value) =>
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))

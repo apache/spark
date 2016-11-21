@@ -67,7 +67,7 @@ object Cast {
       canCast(fromType, toType) &&
         resolvableNullability(fn || forceNullable(fromType, toType), tn)
 
-    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+    case (MapType(fromKey, fromValue, fn, _), MapType(toKey, toValue, tn, false)) =>
       canCast(fromKey, toKey) &&
         (!forceNullable(fromKey, toKey)) &&
         canCast(fromValue, toValue) &&

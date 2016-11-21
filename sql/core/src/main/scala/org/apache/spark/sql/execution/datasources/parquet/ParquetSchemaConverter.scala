@@ -477,7 +477,7 @@ private[parquet] class ParquetSchemaConverter(
 
       // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
       // MAP_KEY_VALUE.  This is covered by `convertGroupField(field: GroupType): DataType`.
-      case MapType(keyType, valueType, valueContainsNull) if writeLegacyParquetFormat =>
+      case MapType(keyType, valueType, valueContainsNull, _) if writeLegacyParquetFormat =>
         // <map-repetition> group <name> (MAP) {
         //   repeated group map (MAP_KEY_VALUE) {
         //     required <key-type> key;
@@ -508,7 +508,7 @@ private[parquet] class ParquetSchemaConverter(
               .named("list"))
           .named(field.name)
 
-      case MapType(keyType, valueType, valueContainsNull) =>
+      case MapType(keyType, valueType, valueContainsNull, _) =>
         // <map-repetition> group <name> (MAP) {
         //   repeated group key_value {
         //     required <key-type> key;
