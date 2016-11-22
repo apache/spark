@@ -29,6 +29,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -420,15 +421,15 @@ class KafkaSourceSuite extends KafkaSourceTest {
     testUtils.createTopic(newTopic(), partitions = 1)
     testUtils.sendMessages(topic, Array(1).map(_.toString))
 
-    val reader = spark
+    val kafka = spark
       .readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
       .option("startingOffsets", s"earliest")
       .option("subscribe", topic)
+      .load()
 
-    val kafka = reader.load()
     val query = kafka
       .writeStream
       .format("memory")
@@ -448,6 +449,47 @@ class KafkaSourceSuite extends KafkaSourceTest {
     // producer. So here we just use a low bound to make sure the internal conversion works.
     assert(row.getAs[java.sql.Timestamp]("timestamp").getTime >= now, s"Unexpected results: $row")
     assert(row.getAs[Int]("timestampType") === 0, s"Unexpected results: $row")
+    query.stop()
+  }
+
+  test("KafkaSource with watermark") {
+    val now = System.currentTimeMillis()
+    val topic = newTopic()
+    testUtils.createTopic(newTopic(), partitions = 1)
+    testUtils.sendMessages(topic, Array(1).map(_.toString))
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("startingOffsets", s"earliest")
+      .option("subscribe", topic)
+      .load()
+
+    val windowedAggregation = kafka
+      .withWatermark("timestamp", "10 seconds")
+      .groupBy(window($"timestamp", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start") as 'window, $"count")
+
+    val query = windowedAggregation
+      .writeStream
+      .format("memory")
+      .outputMode("complete")
+      .queryName("kafkaWatermark")
+      .start()
+    query.processAllAvailable()
+    val rows = spark.table("kafkaWatermark").collect()
+    assert(rows.length === 1, s"Unexpected results: ${rows.toList}")
+    val row = rows(0)
+    // We cannot check the exact window start time as it depands on the time that messages were
+    // inserted by the producer. So here we just use a low bound to make sure the internal
+    // conversion works.
+    assert(
+      row.getAs[java.sql.Timestamp]("window").getTime >= now - 5 * 1000,
+      s"Unexpected results: $row")
+    assert(row.getAs[Int]("count") === 1, s"Unexpected results: $row")
     query.stop()
   }
 
