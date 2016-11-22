@@ -58,8 +58,13 @@ private[ml] object LSHTest {
     val outputCol = model.getOutputCol
     val transformedData = model.transform(dataset)
 
+    // Check output column type
     SchemaUtils.checkColumnType(
       transformedData.schema, model.getOutputCol, DataTypes.createArrayType(new VectorUDT))
+
+    // Check output column dimensions
+    val headHashValue = transformedData.select(outputCol).head().get(0).asInstanceOf[Seq[Vector]]
+    assert(headHashValue.length == model.getNumHashTables)
 
     // Perform a cross join and label each pair of same_bucket and distance
     val pairs = transformedData.as("a").crossJoin(transformedData.as("b"))

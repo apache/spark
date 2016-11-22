@@ -80,7 +80,7 @@ class BucketedRandomProjectionLSHModel private[ml](
         randUnitVector => Math.floor(BLAS.dot(key, randUnitVector) / $(bucketLength))
       })
       // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-      hashValues.grouped(1).map(Vectors.dense).toArray
+      hashValues.map(Vectors.dense(_))
     }
   }
 

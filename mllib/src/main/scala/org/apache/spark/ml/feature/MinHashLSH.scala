@@ -62,7 +62,7 @@ class MinHashLSHModel private[ml](
         }.min.toDouble
       }
       // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-      hashValues.grouped(1).map(Vectors.dense).toArray
+      hashValues.map(Vectors.dense(_))
     }
   }
 
