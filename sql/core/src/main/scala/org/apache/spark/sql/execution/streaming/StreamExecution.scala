@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.types.{DateType, TimestampType}
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /**
@@ -116,7 +115,7 @@ class StreamExecution(
   /** The current batchId or -1 if execution has not yet been initialized. */
   private var currentBatchId: Long = -1
 
-  /** stream execution metadata */
+  /** Stream execution metadata */
   private var streamExecutionMetadata = StreamExecutionMetadata()
 
   /** All stream sources present in the query plan. */
