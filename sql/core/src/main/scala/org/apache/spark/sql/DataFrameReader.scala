@@ -159,7 +159,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
-    jdbc(url, table, JDBCRelation.columnPartition(null), properties)
+    // connectionProperties should override settings in extraOptions.
+    this.extraOptions = this.extraOptions ++ properties.asScala
+    // explicit url and dbtable should override all
+    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    format("jdbc").load()
   }
 
   /**
@@ -192,9 +196,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       upperBound: Long,
       numPartitions: Int,
       connectionProperties: Properties): DataFrame = {
-    val partitioning = JDBCPartitioningInfo(columnName, lowerBound, upperBound, numPartitions)
-    val parts = JDBCRelation.columnPartition(partitioning)
-    jdbc(url, table, parts, connectionProperties)
+    // columnName, lowerBound, upperBound and numPartitions override settings in extraOptions.
+    this.extraOptions ++= Map(
+      JDBCOptions.JDBC_PARTITION_COLUMN -> columnName,
+      JDBCOptions.JDBC_LOWER_BOUND -> lowerBound.toString,
+      JDBCOptions.JDBC_UPPER_BOUND -> upperBound.toString,
+      JDBCOptions.JDBC_NUM_PARTITIONS -> numPartitions.toString)
+    jdbc(url, table, connectionProperties)
   }
 
   /**
@@ -220,22 +228,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       predicates: Array[String],
       connectionProperties: Properties): DataFrame = {
+    // connectionProperties should override settings in extraOptions.
+    val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
+    val options = new JDBCOptions(url, table, params)
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
     }
-    jdbc(url, table, parts, connectionProperties)
-  }
-
-  private def jdbc(
-      url: String,
-      table: String,
-      parts: Array[Partition],
-      connectionProperties: Properties): DataFrame = {
-    // connectionProperties should override settings in extraOptions.
-    this.extraOptions = this.extraOptions ++ connectionProperties.asScala
-    // explicit url and dbtable should override all
-    this.extraOptions += ("url" -> url, "dbtable" -> table)
-    format("jdbc").load()
+    val relation = JDBCRelation(parts, options)(sparkSession)
+    sparkSession.baseRelationToDataFrame(relation)
   }
 
   /**
