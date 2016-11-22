@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import scala.reflect.ClassTag
@@ -26,7 +27,8 @@ import scala.util.Random
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, _}
+import org.apache.spark.sql.types.{Decimal, StringType, _}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
 
 class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
@@ -64,6 +66,17 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
     val (allTimestamps, sampledTSIndices, exactTSFreq) = generateTestData[Timestamp] { r =>
       DateTimeUtils.toJavaTimestamp(r.nextLong() % (endTS - startTS) + startTS)
     }
+    val (allFloats, sampledFloatIndices, exactFloatFreq) =
+      generateTestData[Float] { _.nextFloat() }
+    val (allDoubles, sampledDoubleIndices, exactDoubleFreq) =
+      generateTestData[Double] { _.nextDouble() }
+    val (allDeciamls, sampledDecimalIndices, exactDecimalFreq) =
+      generateTestData[Decimal] { r => Decimal(r.nextDouble()) }
+    val (allBooleans, sampledBooleanIndices, exactBooleanFreq) =
+      generateTestData[Boolean] { _.nextBoolean() }
+    val (allBinaries, sampledBinaryIndices, exactBinaryFreq) = generateTestData[Array[Byte]] { r =>
+      r.nextString(r.nextInt(20)).getBytes(StandardCharsets.UTF_8)
+    }
 
     val data = (0 until numSamples).map { i =>
       Row(allBytes(sampledByteIndices(i)),
@@ -72,7 +85,12 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
         allLongs(sampledLongIndices(i)),
         allStrings(sampledStringIndices(i)),
         allDates(sampledDateIndices(i)),
-        allTimestamps(sampledTSIndices(i)))
+        allTimestamps(sampledTSIndices(i)),
+        allFloats(sampledFloatIndices(i)),
+        allDoubles(sampledDoubleIndices(i)),
+        allDeciamls(sampledDecimalIndices(i)),
+        allBooleans(sampledBooleanIndices(i)),
+        allBinaries(sampledBinaryIndices(i)))
     }
 
     val schema = StructType(Seq(
@@ -82,18 +100,21 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
       StructField("c4", LongType),
       StructField("c5", StringType),
       StructField("c6", DateType),
-      StructField("c7", TimestampType)))
+      StructField("c7", TimestampType),
+      StructField("c8", FloatType),
+      StructField("c9", DoubleType),
+      StructField("c10", new DecimalType()),
+      StructField("c11", BooleanType),
+      StructField("c12", BinaryType)))
+
+    def cmsSql(col: String): String = s"count_min_sketch($col, $eps, $confidence, $seed)"
 
     val query =
       s"""
          |SELECT
-         |  count_min_sketch(c1, $eps, $confidence, $seed),
-         |  count_min_sketch(c2, $eps, $confidence, $seed),
-         |  count_min_sketch(c3, $eps, $confidence, $seed),
-         |  count_min_sketch(c4, $eps, $confidence, $seed),
-         |  count_min_sketch(c5, $eps, $confidence, $seed),
-         |  count_min_sketch(c6, $eps, $confidence, $seed),
-         |  count_min_sketch(c7, $eps, $confidence, $seed)
+         |  ${cmsSql("c1")}, ${cmsSql("c2")}, ${cmsSql("c3")}, ${cmsSql("c4")}, ${cmsSql("c5")},
+         |  ${cmsSql("c6")}, ${cmsSql("c7")}, ${cmsSql("c8")}, ${cmsSql("c9")}, ${cmsSql("c10")},
+         |  ${cmsSql("c11")}, ${cmsSql("c12")}
          |FROM $table
      """.stripMargin
 
@@ -114,11 +135,20 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
           case DateType =>
             checkResult(cms,
               allDates.map(DateTimeUtils.fromJavaDate),
-              exactDateFreq.map(e => (DateTimeUtils.fromJavaDate(e._1), e._2)))
+              exactDateFreq.map { e =>
+                (DateTimeUtils.fromJavaDate(e._1.asInstanceOf[Date]), e._2)
+              })
           case TimestampType =>
             checkResult(cms,
               allTimestamps.map(DateTimeUtils.fromJavaTimestamp),
-              exactTSFreq.map(e => (DateTimeUtils.fromJavaTimestamp(e._1), e._2)))
+              exactTSFreq.map { e =>
+                (DateTimeUtils.fromJavaTimestamp(e._1.asInstanceOf[Timestamp]), e._2)
+              })
+          case FloatType => checkResult(cms, allFloats, exactFloatFreq)
+          case DoubleType => checkResult(cms, allDoubles, exactDoubleFreq)
+          case DecimalType() => checkResult(cms, allDeciamls, exactDecimalFreq)
+          case BooleanType => checkResult(cms, allBooleans, exactBooleanFreq)
+          case BinaryType => checkResult(cms, allBinaries, exactBinaryFreq)
         }
       }
     }
@@ -127,11 +157,16 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
   private def checkResult[T: ClassTag](
       cms: CountMinSketch,
       data: Array[T],
-      exactFreq: Map[T, Long]): Unit = {
+      exactFreq: Map[Any, Long]): Unit = {
     val probCorrect = {
       val numErrors = data.map { i =>
-        val count = exactFreq.getOrElse(i, 0L)
-        val ratio = (cms.estimateCount(i) - count).toDouble / data.length
+        val count = exactFreq.getOrElse(getProbeItem(i), 0L)
+        val item = i match {
+          case dec: Decimal => dec.toJavaBigDecimal
+          case str: UTF8String => str.getBytes
+          case _ => i
+        }
+        val ratio = (cms.estimateCount(item) - count).toDouble / data.length
         if (ratio > eps) 1 else 0
       }.sum
 
@@ -144,13 +179,19 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  private def getProbeItem[T: ClassTag](item: T): Any = item match {
+    // Use a string to represent the content of an array of bytes
+    case bytes: Array[Byte] => new String(bytes, StandardCharsets.UTF_8)
+    case i => identity(i)
+  }
+
   private def generateTestData[T: ClassTag](
-      itemGenerator: Random => T): (Array[T], Array[Int], Map[T, Long]) = {
+      itemGenerator: Random => T): (Array[T], Array[Int], Map[Any, Long]) = {
     val allItems = Array.fill(numAllItems)(itemGenerator(r))
     val sampledItemIndices = Array.fill(numSamples)(r.nextInt(numAllItems))
     val exactFreq = {
       val sampledItems = sampledItemIndices.map(allItems)
-      sampledItems.groupBy(identity).mapValues(_.length.toLong)
+      sampledItems.groupBy(getProbeItem).mapValues(_.length.toLong)
     }
     (allItems, sampledItemIndices, exactFreq)
   }

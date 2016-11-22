@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
 
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -26,7 +27,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, GenericInternalRow, Literal}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{DecimalType, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
 
@@ -55,7 +56,7 @@ class CountMinSketchAggSuite extends SparkFunSuite {
       dataType: DataType,
       sampledItemIndices: Array[Int],
       allItems: Array[T],
-      exactFreq: Map[T, Long]): Any = {
+      exactFreq: Map[Any, Long]): Any = {
     test(s"high level interface, update, merge, eval... - $dataType") {
       val agg = new CountMinSketchAgg(BoundReference(0, dataType, nullable = true),
         Literal(epsOfTotalCount), Literal(confidence), Literal(seed))
@@ -97,7 +98,7 @@ class CountMinSketchAggSuite extends SparkFunSuite {
       dataType: DataType,
       sampledItemIndices: Array[Int],
       allItems: Array[T],
-      exactFreq: Map[T, Long]): Any = {
+      exactFreq: Map[Any, Long]): Any = {
     test(s"low level interface, update, merge, eval... - ${dataType.typeName}") {
       val inputAggregationBufferOffset = 1
       val mutableAggregationBufferOffset = 2
@@ -132,15 +133,19 @@ class CountMinSketchAggSuite extends SparkFunSuite {
   private def checkResult[T: ClassTag](
       result: Any,
       data: Array[T],
-      exactFreq: Map[T, Long]): Unit = {
+      exactFreq: Map[Any, Long]): Unit = {
     result match {
       case bytesData: Array[Byte] =>
         val in = new ByteArrayInputStream(bytesData)
         val cms = CountMinSketch.readFrom(in)
         val probCorrect = {
           val numErrors = data.map { i =>
-            val item = if (i.isInstanceOf[UTF8String]) i.toString else i
-            val count = exactFreq.getOrElse(i, 0L)
+            val count = exactFreq.getOrElse(getProbeItem(i), 0L)
+            val item = i match {
+              case dec: Decimal => dec.toJavaBigDecimal
+              case str: UTF8String => str.getBytes
+              case _ => i
+            }
             val ratio = (cms.estimateCount(item) - count).toDouble / data.length
             if (ratio > epsOfTotalCount) 1 else 0
           }.sum
@@ -156,6 +161,12 @@ class CountMinSketchAggSuite extends SparkFunSuite {
     }
   }
 
+  private def getProbeItem[T: ClassTag](item: T): Any = item match {
+    // Use a string to represent the content of an array of bytes
+    case bytes: Array[Byte] => new String(bytes, StandardCharsets.UTF_8)
+    case i => identity(i)
+  }
+
   def testItemType[T: ClassTag](dataType: DataType)(itemGenerator: Random => T): Unit = {
     // Uses fixed seed to ensure reproducible test execution
     val r = new Random(31)
@@ -168,7 +179,7 @@ class CountMinSketchAggSuite extends SparkFunSuite {
 
     val exactFreq = {
       val sampledItems = sampledItemIndices.map(allItems)
-      sampledItems.groupBy(identity).mapValues(_.length.toLong)
+      sampledItems.groupBy(getProbeItem).mapValues(_.length.toLong)
     }
 
     testLowLevelInterface[T](dataType, sampledItemIndices, allItems, exactFreq)
@@ -184,6 +195,18 @@ class CountMinSketchAggSuite extends SparkFunSuite {
   testItemType[Long](LongType) { _.nextLong() }
 
   testItemType[UTF8String](StringType) { r => UTF8String.fromString(r.nextString(r.nextInt(20))) }
+
+  testItemType[Float](FloatType) { _.nextFloat() }
+
+  testItemType[Double](DoubleType) { _.nextDouble() }
+
+  testItemType[Decimal](new DecimalType()) { r => Decimal(r.nextDouble()) }
+
+  testItemType[Boolean](BooleanType) { _.nextBoolean() }
+
+  testItemType[Array[Byte]](BinaryType) { r =>
+    r.nextString(r.nextInt(20)).getBytes(StandardCharsets.UTF_8)
+  }
 
 
   test("fails analysis if eps, confidence or seed provided is not a literal or constant foldable") {

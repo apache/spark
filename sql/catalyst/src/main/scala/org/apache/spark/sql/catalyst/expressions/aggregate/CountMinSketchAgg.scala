@@ -96,15 +96,13 @@ case class CountMinSketchAgg(
     // Ignore empty rows
     if (value != null) {
       child.dataType match {
+        // `Decimal` and `UTF8String` are internal types in spark sql, we need to convert them
+        // into acceptable types for `CountMinSketch`.
+        case DecimalType() => buffer.add(value.asInstanceOf[Decimal].toJavaBigDecimal)
         // For string type, we can get bytes of our `UTF8String` directly, and call the `addBinary`
         // instead of `addString` to avoid unnecessary conversion.
         case StringType => buffer.addBinary(value.asInstanceOf[UTF8String].getBytes)
-        case ByteType => buffer.addLong(value.asInstanceOf[Byte])
-        case ShortType => buffer.addLong(value.asInstanceOf[Short])
-        case IntegerType => buffer.addLong(value.asInstanceOf[Int])
-        case LongType => buffer.addLong(value.asInstanceOf[Long])
-        case DateType => buffer.addLong(value.asInstanceOf[Int])
-        case TimestampType => buffer.addLong(value.asInstanceOf[Long])
+        case _ => buffer.add(value)
       }
     }
   }
