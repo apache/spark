@@ -164,13 +164,9 @@ class BucketedRandomProjectionLSHSuite
   test("approxNearestNeighbors for numNeighbors <= 0") {
     val key = Vectors.dense(1.2, 3.4)
 
-    val brp = new BucketedRandomProjectionLSH()
-      .setInputCol("keys")
-      .setOutputCol("values")
-      .setBucketLength(1.0)
-      .setSeed(12345)
+    val model = new BucketedRandomProjectionLSHModel(
+      "brp", randUnitVectors = Array(Vectors.dense(1.0, 0.0)))
 
-    val model = brp.fit(dataset)
     intercept[IllegalArgumentException] {
       model.approxNearestNeighbors(dataset, key, 0)
     }

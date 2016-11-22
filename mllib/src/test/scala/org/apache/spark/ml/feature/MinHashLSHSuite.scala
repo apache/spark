@@ -124,16 +124,11 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   }
 
   test("approxNearestNeighbors for numNeighbors <= 0") {
-    val mh = new MinHashLSH()
-      .setNumHashTables(20)
-      .setInputCol("keys")
-      .setOutputCol("values")
-      .setSeed(12345)
+    val model = new MinHashLSHModel("mh", randCoefficients = Array((1, 0)))
 
     val key: Vector = Vectors.sparse(100,
       (0 until 100).filter(_.toString.contains("1")).map((_, 1.0)))
 
-    val model = mh.fit(dataset)
     intercept[IllegalArgumentException] {
       model.approxNearestNeighbors(dataset, key, 0)
     }
