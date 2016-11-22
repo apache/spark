@@ -459,17 +459,18 @@ private[kafka010] object KafkaSource {
 
   val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
     """
-      |There may have been some data loss because some data may have been aged out in Kafka or
-      | the topic has been deleted and is therefore unavailable for processing. If you want your
-      | streaming query to fail on such cases, set the source option "failOnDataLoss" to "true".
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you want your streaming query to fail on such cases, set the source
+      | option "failOnDataLoss" to "true".
     """.stripMargin
 
   val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
     """
-      |There may have been some data loss because some data may have been aged out in Kafka or
-      | the topic has been deleted and is therefore unavailable for processing. If you don't want
-      | your streaming query to fail on such cases, set the source option "failOnDataLoss" to
-      | "false".
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you don't want your streaming query to fail on such cases, set the
+      | source option "failOnDataLoss" to "false".
     """.stripMargin
 
   def kafkaSchema: StructType = StructType(Seq(

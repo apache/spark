@@ -451,7 +451,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
-  test("Delete a topic when a Spark job is running") {
+  test("delete a topic when a Spark job is running") {
     KafkaSourceSuite.collectedData.clear()
 
     val topic = newTopic()

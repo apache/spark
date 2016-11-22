@@ -59,7 +59,8 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   /**
    * Get the record for the given offset if available. Otherwise it will either throw error
-   * (if failOnDataLoss = true), or return the next available offset within [offset, untilOffset).
+   * (if failOnDataLoss = true), or return the next available offset within [offset, untilOffset),
+   * or null.
    *
    * @param offset the offset to fetch.
    * @param untilOffset the max offset to fetch. Exclusive.
@@ -90,7 +91,7 @@ private[kafka010] case class CachedKafkaConsumer private(
         case e: OffsetOutOfRangeException =>
           // When there is some error thrown, it's better to use a new consumer to drop all cached
           // states in the old consumer. We don't need to worry about the performance because this
-          // is not a normal path.
+          // is not a common path.
           resetConsumer()
           reportDataLoss(failOnDataLoss, s"Cannot fetch offset $toFetchOffset", e)
           toFetchOffset = getEarliestAvailableOffsetBetween(toFetchOffset, untilOffset)
