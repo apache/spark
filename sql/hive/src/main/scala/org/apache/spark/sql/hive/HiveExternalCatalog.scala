@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.command.{ColumnStatStruct, DDLUtils}
+import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, DDLUtils}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -634,7 +634,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         .map { case (k, v) => (k.drop(STATISTICS_COL_STATS_PREFIX.length), v) }
       val colStats: Map[String, ColumnStat] = tableWithSchema.schema.collect {
         case f if colStatsProps.contains(f.name) =>
-          val numFields = ColumnStatStruct.numStatFields(f.dataType)
+          val numFields = AnalyzeColumnCommand.numStatFields(f.dataType)
           (f.name, ColumnStat(numFields, colStatsProps(f.name)))
       }.toMap
       tableWithSchema.copy(

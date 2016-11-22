@@ -15,30 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
+package org.apache.spark.deploy.mesos
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.TestPrematureExit
 
-/**
- * The data type representing calendar time intervals. The calendar time interval is stored
- * internally in two components: number of months the number of microseconds.
- *
- * Please use the singleton [[DataTypes.CalendarIntervalType]].
- *
- * @note Calendar intervals are not comparable.
- *
- * @since 1.5.0
- */
-@InterfaceStability.Stable
-class CalendarIntervalType private() extends DataType {
+class MesosClusterDispatcherSuite extends SparkFunSuite
+  with TestPrematureExit{
 
-  override def defaultSize: Int = 16
+  test("prints usage on empty input") {
+    testPrematureExit(Array[String](),
+      "Usage: MesosClusterDispatcher", MesosClusterDispatcher)
+  }
 
-  private[spark] override def asNullable: CalendarIntervalType = this
+  test("prints usage with only --help") {
+    testPrematureExit(Array("--help"),
+      "Usage: MesosClusterDispatcher", MesosClusterDispatcher)
+  }
+
+  test("prints error with unrecognized options") {
+    testPrematureExit(Array("--blarg"), "Unrecognized option: '--blarg'", MesosClusterDispatcher)
+    testPrematureExit(Array("-bleg"), "Unrecognized option: '-bleg'", MesosClusterDispatcher)
+  }
 }
-
-/**
- * @since 1.5.0
- */
-@InterfaceStability.Stable
-case object CalendarIntervalType extends CalendarIntervalType

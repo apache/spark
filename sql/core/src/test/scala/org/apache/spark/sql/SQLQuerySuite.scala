@@ -2086,13 +2086,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-14986: Outer lateral view with empty generate expression") {
-    checkAnswer(
-      sql("select nil from (select 1 as x ) x lateral view outer explode(array()) n as nil"),
-      Row(null) :: Nil
-    )
-  }
-
   test("data source table created in InMemoryCatalog should be able to read/write") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
