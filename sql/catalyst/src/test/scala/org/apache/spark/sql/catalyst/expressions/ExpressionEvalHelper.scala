@@ -43,8 +43,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
   }
 
   protected def convertToCatalystUnsafe(a: Any): Any = a match {
+    case arr: Array[Byte] => arr
     case arr: Array[Boolean] => UnsafeArrayData.fromPrimitiveArray(arr)
-    case arr: Array[Byte] => UnsafeArrayData.fromPrimitiveArray(arr)
     case arr: Array[Short] => UnsafeArrayData.fromPrimitiveArray(arr)
     case arr: Array[Int] => UnsafeArrayData.fromPrimitiveArray(arr)
     case arr: Array[Long] => UnsafeArrayData.fromPrimitiveArray(arr)
@@ -60,10 +60,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     // No codegen version expects GenericArrayData
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     // Codegen version expects UnsafeArrayData for array expect Array(Binarytype)
-    val catalystValueForCodegen = expected match {
-       case arr: Array[Byte] if expression.dataType == BinaryType => arr
-       case _ => convertToCatalystUnsafe(expected)
-    }
+    val catalystValueForCodegen = convertToCatalystUnsafe(expected)
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, catalystValueForCodegen, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
