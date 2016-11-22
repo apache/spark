@@ -120,7 +120,8 @@ trait CheckAnalysis extends PredicateHelper {
           case s @ ScalarSubquery(query, conditions, _)
             // If no correlation, the output must be exactly one column
             if (conditions.isEmpty && query.output.size != 1) =>
-              failAnalysis(s"Scalar subquery must return only one column, but got ${query.output.size}")
+              failAnalysis(
+                s"Scalar subquery must return only one column, but got ${query.output.size}")
 
           case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
             def checkAggregate(agg: Aggregate): Unit = {
@@ -137,15 +138,14 @@ trait CheckAnalysis extends PredicateHelper {
 
               // SPARK-18504: block cases where GROUP BY columns
               // are not part of the correlated columns
-              val groupByColumns = ExpressionSet.apply(agg.groupingExpressions.flatMap(_.references))
-              val predicateColumns = ExpressionSet.apply(conditions.flatMap(_.references)
-              )
-              val invalidColumns = groupByColumns.diff(predicateColumns)
+              val groupByCols = ExpressionSet.apply(agg.groupingExpressions.flatMap(_.references))
+              val predicateCols = ExpressionSet.apply(conditions.flatMap(_.references))
+              val invalidCols = groupByCols.diff(predicateCols)
               // GROUP BY columns must be a subset of columns in the predicates
-              if (invalidColumns.nonEmpty) {
+              if (invalidCols.nonEmpty) {
                 failAnalysis(s"""
                   |GROUP BY column(s) in scalar subquery must exist in the WHERE clause:
-                  |${invalidColumns.toString}""".stripMargin.replaceAll("\n", " "))
+                  |${invalidCols.toString}""".stripMargin.replaceAll("\n", " "))
               }
             }
 
