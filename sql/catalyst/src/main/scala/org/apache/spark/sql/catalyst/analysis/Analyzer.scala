@@ -2348,12 +2348,36 @@ object SortMaps extends Rule[LogicalPlan] {
       cmp.withNewChildren(SortMap(left) :: right :: Nil)
     case cmp @ BinaryComparison(left, right) if cmp.resolved && hasUnorderedMap(right) =>
       cmp.withNewChildren(left :: SortMap(right) :: Nil)
+    case sort: SortOrder if sort.resolved && hasUnorderedMap(sort.child) =>
+      sort.copy(child = SortMap(sort.child))
   } transform {
     case a: Aggregate if a.resolved && a.groupingExpressions.exists(hasUnorderedMap) =>
-      a.transformExpressionsUp {
+      // Modify the top level grouping expressions
+      val replacements = a.groupingExpressions.collect {
         case a: Attribute if hasUnorderedMap(a) =>
-          Alias(SortMap(a), a.name)(exprId = a.exprId, qualifier = a.qualifier)
-        case e if hasUnorderedMap(e) => SortMap(e)
+          a -> Alias(SortMap(a), a.name)(exprId = a.exprId, qualifier = a.qualifier)
+        case e if hasUnorderedMap(e) =>
+          e -> SortMap(e)
       }
+
+      // Tranform the expression tree.
+      a.transformExpressionsUp {
+        case e =>
+          // TODO create an expression map!
+          replacements
+            .find(_._1.semanticEquals(e))
+            .map(_._2)
+            .getOrElse(e)
+      }
+
+    case Distinct(child) if child.resolved && child.output.exists(hasUnorderedMap) =>
+      val projectList = child.output.map { a =>
+        if (hasUnorderedMap(a)) {
+          Alias(SortMap(a), a.name)(exprId = a.exprId, qualifier = a.qualifier)
+        } else {
+          a
+        }
+      }
+      Distinct(Project(projectList, child))
   }
 }

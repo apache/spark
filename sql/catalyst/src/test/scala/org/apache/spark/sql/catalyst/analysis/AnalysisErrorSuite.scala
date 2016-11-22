@@ -439,12 +439,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       checkDataType(dataType, shouldSuccess = true)
     }
 
-    val unsupportedDataTypes = Seq(
-      MapType(StringType, LongType),
-      new StructType()
-        .add("f1", FloatType, nullable = true)
-        .add("f2", MapType(StringType, LongType), nullable = true),
-      new UngroupableUDT())
+    val unsupportedDataTypes = Seq(new UngroupableUDT())
     unsupportedDataTypes.foreach { dataType =>
       checkDataType(dataType, shouldSuccess = false)
     }
@@ -479,20 +474,6 @@ class AnalysisErrorSuite extends AnalysisTest {
           AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
 
     assertAnalysisError(plan, "binary type expression `a` cannot be used in join conditions" :: Nil)
-
-    val plan2 =
-      Join(
-        LocalRelation(
-          AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
-          AttributeReference("b", IntegerType)(exprId = ExprId(1))),
-        LocalRelation(
-          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)),
-          AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Cross,
-        Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
-          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
-
-    assertAnalysisError(plan2, "map type expression `a` cannot be used in join conditions" :: Nil)
   }
 
   test("PredicateSubQuery is used outside of a filter") {
