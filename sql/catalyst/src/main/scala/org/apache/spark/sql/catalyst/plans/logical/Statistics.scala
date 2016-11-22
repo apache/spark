@@ -70,20 +70,21 @@ case class Statistics(
  * corresponding Catalyst data type. For example, for DateType we store java.sql.Date, and for
  * TimestampType we store java.sql.Timestamp.
  * 3. For integral types, they are all upcasted to longs, i.e. shorts are stored as longs.
+ * 4. There is no guarantee that the statistics collected are accurate. Approximation algorithms
+ *    (sketches) might have been used, and the data collected can also be stale.
  *
- * @param ndv number of distinct values
+ * @param distinctCount number of distinct values
  * @param min minimum value
  * @param max maximum value
- * @param numNulls number of nulls
+ * @param nullCount number of nulls
  * @param avgLen average length of the values. For fixed-length types, this should be a constant.
  * @param maxLen maximum length of the values. For fixed-length types, this should be a constant.
  */
-// TODO: decide if we want to use bigint to represent ndv and numNulls.
 case class ColumnStat(
-    ndv: Long,
-    min: Any,
-    max: Any,
-    numNulls: Long,
+    distinctCount: BigInt,
+    min: Option[Any],
+    max: Option[Any],
+    nullCount: BigInt,
     avgLen: Long,
     maxLen: Long) {
 
@@ -93,13 +94,14 @@ case class ColumnStat(
    * representation for the value. The deserialization side is defined in [[ColumnStat.fromMap]].
    *
    * As part of the protocol, the returned map always contains a key called "version".
+   * In the case min/max values are null (None), they will be stored as "<null>".
    */
   def toMap: Map[String, String] = Map(
     "version" -> "1",
-    "ndv" -> ndv.toString,
-    "min" -> min.toString,
-    "max" -> max.toString,
-    "numNulls" -> numNulls.toString,
+    "distinctCount" -> distinctCount.toString,
+    "min" -> min.map(_.toString).getOrElse(ColumnStat.NULL_STRING),
+    "max" -> max.map(_.toString).getOrElse(ColumnStat.NULL_STRING),
+    "nullCount" -> nullCount.toString,
     "avgLen" -> avgLen.toString,
     "maxLen" -> maxLen.toString
   )
@@ -107,6 +109,9 @@ case class ColumnStat(
 
 
 object ColumnStat extends Logging {
+
+  /** String representation for null in serialization. */
+  private val NULL_STRING: String = "<null>"
 
   /** Returns true iff the we support gathering column statistics on column of the given type. */
   def supportsType(dataType: DataType): Boolean = dataType match {
@@ -119,55 +124,75 @@ object ColumnStat extends Logging {
    * Creates a [[ColumnStat]] object from the given map. This is used to deserialize column stats
    * from some external storage. The serialization side is defined in [[ColumnStat.toMap]].
    */
-  def fromMap(dataType: DataType, map: Map[String, String]): Option[ColumnStat] = {
-    val str2val: (String => Any) = dataType match {
+  def fromMap(table: String, field: StructField, map: Map[String, String])
+    : Option[ColumnStat] = {
+    val str2val: (String => Any) = field.dataType match {
       case _: IntegralType => _.toLong
       case _: DecimalType => Decimal(_)
       case DoubleType | FloatType => _.toDouble
       case BooleanType => _.toBoolean
-      case _ => identity
+      case _ => v: String => if (v == NULL_STRING) null else v
     }
 
     try {
       Some(ColumnStat(
-        ndv = map("ndv").toLong,
-        min = str2val(map.get("min").orNull),
-        max = str2val(map.get("max").orNull),
-        numNulls = map("numNulls").toLong,
-        avgLen = map.getOrElse("avgLen", "1").toLong,
-        maxLen = map.getOrElse("maxLen", "1").toLong
+        distinctCount = BigInt(map("distinctCount").toLong),
+        min = map.get("min").map(str2val),
+        max = map.get("max").map(str2val),
+        nullCount = BigInt(map("nullCount").toLong),
+        avgLen = map.getOrElse("avgLen", field.dataType.defaultSize.toString).toLong,
+        maxLen = map.getOrElse("maxLen", field.dataType.defaultSize.toString).toLong
       ))
     } catch {
       case NonFatal(e) =>
-        logWarning("Failed to parse column statistics", e)
+        logWarning(s"Failed to parse column statistics for column ${field.name} in table $table", e)
         None
     }
   }
 
   /**
+   * Constructs an expression to compute column statistics for a given column.
+   *
+   * The expression should create a single struct column with the following schema:
    * ndv: Long, min: T, max: T, numNulls: Long, avgLen: Long, maxLen: Long
+   *
+   * Together with [[rowToColumnStat]], this function is used to create [[ColumnStat]] and
+   * as a result should stay in sync with it.
    */
   def statExprs(col: Attribute, relativeSD: Double): CreateNamedStruct = {
     def struct(exprs: Expression*): CreateNamedStruct = CreateStruct(exprs.map { expr =>
       expr.transformUp { case af: AggregateFunction => af.toAggregateExpression() }
     })
-    val zero = Literal(0, LongType)
     val one = Literal(1, LongType)
 
     // the approximate ndv should never be larger than the number of rows
-    val ndv = Least(Seq(HyperLogLogPlusPlus(col, relativeSD), Count(one)))
-    val numNulls = if (col.nullable) Sum(If(IsNull(col), one, zero)) else zero
+    val numNonNulls = if (col.nullable) Count(col) else Count(one)
+    val ndv = Least(Seq(HyperLogLogPlusPlus(col, relativeSD), numNonNulls))
+    val numNulls = Subtract(Count(one), numNonNulls)
+
+    def fixedLenTypeStruct(castType: DataType) = {
+      // For fixed width types, avg size should be the same as max size.
+      val avgSize = Literal(col.dataType.defaultSize, LongType)
+      struct(ndv, Cast(Min(col), castType), Cast(Max(col), castType), numNulls, avgSize, avgSize)
+    }
 
     col.dataType match {
-      case _: NumericType | TimestampType | DateType | BooleanType =>
-        struct(ndv, Min(col), Max(col), numNulls, one, one)
+      case _: IntegralType => fixedLenTypeStruct(LongType)
+
+      case DoubleType | FloatType => fixedLenTypeStruct(DoubleType)
+
+      case _: DecimalType | TimestampType | DateType | BooleanType =>
+        fixedLenTypeStruct(col.dataType)
 
       case StringType | BinaryType =>
-        val emptyStr = Literal("")
-        struct(ndv, emptyStr, emptyStr, numNulls, Ceil(Average(Length(col))), Max(Length(col)))
+        // For string and binary type, we don't store min/max.
+        val nullLit = Literal(null, col.dataType)
+        struct(
+          ndv, nullLit, nullLit, numNulls,
+          Ceil(Average(Length(col))), Cast(Max(Length(col)), LongType))
 
       case _ =>
-        throw new AnalysisException("Analyzing columns is not supported for column " +
+        throw new AnalysisException("Analyzing column statistics is not supported for column " +
             s"${col.name} of data type: ${col.dataType}.")
     }
   }
@@ -175,10 +200,10 @@ object ColumnStat extends Logging {
   /** Convert a struct for column stats (defined in statExprs) into [[ColumnStat]]. */
   def rowToColumnStat(row: Row): ColumnStat = {
     ColumnStat(
-      ndv = row.getLong(0),
-      min = row.get(1),
-      max = row.get(2),
-      numNulls = row.getLong(3),
+      distinctCount = BigInt(row.getLong(0)),
+      min = Option(row.get(1)),  // for string/binary min/max, get should return null
+      max = Option(row.get(2)),
+      nullCount = BigInt(row.getLong(3)),
       avgLen = row.getLong(4),
       maxLen = row.getLong(5)
     )

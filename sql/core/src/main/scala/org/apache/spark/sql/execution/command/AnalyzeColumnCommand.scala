@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.types._
 
 
 /**
@@ -62,7 +61,7 @@ case class AnalyzeColumnCommand(
 
     // Compute stats for each column
     val (rowCount, newColStats) =
-      AnalyzeColumnCommand.computeColumnStats(sparkSession, relation, columnNames)
+      AnalyzeColumnCommand.computeColumnStats(sparkSession, tableIdent.table, relation, columnNames)
 
     // We also update table-level stats in order to keep them consistent with column-level stats.
     val statistics = Statistics(
@@ -90,6 +89,7 @@ object AnalyzeColumnCommand extends Logging {
    */
   def computeColumnStats(
       sparkSession: SparkSession,
+      tableName: String,
       relation: LogicalPlan,
       columnNames: Seq[String]): (Long, Map[String, ColumnStat]) = {
 
@@ -97,15 +97,15 @@ object AnalyzeColumnCommand extends Logging {
     val resolver = sparkSession.sessionState.conf.resolver
     val attributesToAnalyze = AttributeSet(columnNames.map { col =>
       val exprOption = relation.output.find(attr => resolver(attr.name, col))
-      exprOption.getOrElse(throw new AnalysisException(s"Invalid column name: $col."))
+      exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
     }).toSeq
 
     // Make sure the column types are supported for stats gathering.
     attributesToAnalyze.foreach { attr =>
       if (!ColumnStat.supportsType(attr.dataType)) {
         throw new AnalysisException(
-          s"Data type ${attr.dataType.simpleString} for column ${attr.name} is not supported " +
-          "in column statistics gathering.")
+          s"Column ${attr.name} in table $tableName is of type ${attr.dataType}, " +
+            "and Spark does not support statistics collection on this column type.")
       }
     }
 
