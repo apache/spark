@@ -209,8 +209,11 @@ class GetOnCreateStructSuite extends PlanTest with SharedSQLContext with ShouldM
 
   object LocalOptimizer extends
     Optimizer( sqlContext.sparkSession.sessionState.catalog, sqlContext.conf) {
-    override val batches =
-      super.batches :+ Batch( "experimental", FixedPoint(100), GetOnCreateStruct)
+    override val batches = super.batches map{
+      case b if b.name == "Operator Optimizations" =>
+        Batch( b.name, b.strategy, b.rules :+ GetOnCreateStruct : _*)
+      case b => b
+    }
   }
 
   def checkOptimizedPlan( plan : LogicalPlan, expected : LogicalPlan ): Unit = {
