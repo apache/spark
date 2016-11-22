@@ -742,8 +742,8 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
     For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
 
-    Note that since zero values will probably be transformed to non-zero values, output of the
-    transformer will be DenseVector even for sparse input.
+    .. note:: Since zero values will probably be transformed to non-zero values, output of the
+        transformer will be DenseVector even for sparse input.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
@@ -1014,9 +1014,9 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     :py:attr:`dropLast`) because it makes the vector entries sum up to
     one, and hence linearly dependent.
     So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
-    Note that this is different from scikit-learn's OneHotEncoder,
-    which keeps all categories.
-    The output vectors are sparse.
+
+    .. note:: This is different from scikit-learn's OneHotEncoder,
+        which keeps all categories. The output vectors are sparse.
 
     .. seealso::
 
@@ -1698,7 +1698,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
 class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that filters out stop words from input.
-    Note: null values from input array are preserved unless adding null to stopWords explicitly.
+
+    .. note:: null values from input array are preserved unless adding null to stopWords explicitly.
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["text"])
     >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])

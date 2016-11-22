@@ -457,7 +457,7 @@ class DataFrame(object):
     def cache(self):
         """Persists the :class:`DataFrame` with the default storage level (C{MEMORY_AND_DISK}).
 
-        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         self._jdf.cache()
@@ -470,7 +470,7 @@ class DataFrame(object):
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
         If no storage level is specified defaults to (C{MEMORY_AND_DISK}).
 
-        .. note:: the default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -597,10 +597,8 @@ class DataFrame(object):
     def sample(self, withReplacement, fraction, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
 
-        .. note::
-
-            This is not guaranteed to provide exactly the fraction specified of the total count
-            of the given :class:`DataFrame`.
+        .. note:: This is not guaranteed to provide exactly the fraction specified of the total
+            count of the given :class:`DataFrame`.
 
         >>> df.sample(False, 0.5, 42).count()
         2
@@ -866,8 +864,8 @@ class DataFrame(object):
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
 
-        .. note:: This function is meant for exploratory data analysis, as we make no \
-        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         >>> df.describe(['age']).show()
         +-------+------------------+
@@ -900,8 +898,8 @@ class DataFrame(object):
     def head(self, n=None):
         """Returns the first ``n`` rows.
 
-        Note that this method should only be used if the resulting array is expected
-        to be small, as all the data is loaded into the driver's memory.
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
@@ -1462,8 +1460,8 @@ class DataFrame(object):
         "http://dx.doi.org/10.1145/762471.762473, proposed by Karp, Schenker, and Papadimitriou".
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
-        .. note::  This function is meant for exploratory data analysis, as we make no \
-        guarantee about the backward compatibility of the schema of the resulting DataFrame.
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
         :param cols: Names of the columns to calculate frequent items for as a list or tuple of
             strings.
@@ -1564,10 +1562,10 @@ class DataFrame(object):
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
-        Note that this method should only be used if the resulting Pandas's DataFrame is expected
-        to be small, as all the data is loaded into the driver's memory.
-
         This is only available if Pandas is installed and available.
+
+        .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name

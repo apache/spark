@@ -520,8 +520,8 @@ class SparkContext(object):
           ...
           (a-hdfs-path/part-nnnnn, its content)
 
-        NOTE: Small files are preferred, as each file will be loaded
-        fully in memory.
+        .. note:: Small files are preferred, as each file will be loaded
+            fully in memory.
 
         >>> dirPath = os.path.join(tempdir, "files")
         >>> os.mkdir(dirPath)
@@ -547,8 +547,8 @@ class SparkContext(object):
         in a key-value pair, where the key is the path of each file, the
         value is the content of each file.
 
-        Note: Small files are preferred, large file is also allowable, but
-        may cause bad performance.
+        .. note:: Small files are preferred, large file is also allowable, but
+            may cause bad performance.
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.binaryFiles(path, minPartitions), self,
