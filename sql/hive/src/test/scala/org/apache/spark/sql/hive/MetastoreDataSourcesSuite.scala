@@ -413,6 +413,78 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("saveAsTable(CTAS) when the source DataFrame is built on a Hive table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName stored as SEQUENCEFILE as select 1 as key, 'abc' as value")
+
+      val df = sql(s"select key, value from $tableName")
+      df.write.mode(SaveMode.Append).saveAsTable(tableName)
+      checkAnswer(
+        sql(s"SELECT key, value FROM $tableName"),
+        Row(1, "abc") :: Row(1, "abc") :: Nil)
+
+      // out of order
+      val df1 = sql(s"select value, key from $tableName")
+      df1.write.mode(SaveMode.Append).saveAsTable(tableName)
+      checkAnswer(
+        sql(s"SELECT key, value FROM $tableName"),
+        Row(1, "abc") :: Row(1, "abc") :: Row(1, "abc") :: Row(1, "abc") :: Nil)
+
+      // super set
+      val df2 = sql(s"SELECT value, 'ccc' AS uselessColumn, key FROM $tableName LIMIT 1")
+      df2.write.mode(SaveMode.Append).saveAsTable(tableName)
+      checkAnswer(
+        sql(s"SELECT key, value FROM $tableName"),
+        Row(1, "abc") :: Row(1, "abc") :: Row(1, "abc") :: Row(1, "abc") :: Row(1, "abc") :: Nil)
+
+      // the schema of dataFrame is a subset of destination table schema
+      val df3 = sql(s"SELECT value, key AS non_existent FROM $tableName")
+      val e = intercept[AnalysisException] {
+        df3.write.mode(SaveMode.Append).saveAsTable(tableName)
+      }.getMessage
+      assert(e.contains("cannot resolve '`key`' given input columns: [value, non_existent]"))
+    }
+  }
+
+  test("saveAsTable(CTAS) and insertInto when the source DataFrame is built on Data Source") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      val schema = StructType(
+        StructField("key", IntegerType, nullable = false) ::
+          StructField("value", IntegerType, nullable = true) :: Nil)
+      val row = Row(3, 4)
+      val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+      df.write.format("json").mode(SaveMode.Overwrite).saveAsTable(tableName)
+      df.write.format("json").mode(SaveMode.Append).saveAsTable(tableName)
+      checkAnswer(
+        sql(s"SELECT key, value FROM $tableName"),
+        Row(3, 4) :: Row(3, 4) :: Nil
+      )
+
+      (1 to 2).map { i => (i, i) }.toDF("key", "value").write.insertInto(tableName)
+      checkAnswer(
+        sql(s"SELECT key, value FROM $tableName"),
+        Row(1, 1) :: Row(2, 2) :: Row(3, 4) :: Row(3, 4) :: Nil
+      )
+    }
+  }
+
+  test("insertInto when the source DataFrame is built on a Hive table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName stored as SEQUENCEFILE as select 1 as key, 'abc' as value")
+      val df = sql(s"SELECT key, value AS value FROM $tableName")
+
+      df.write.insertInto(tableName)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Row(1, "abc") :: Row(1, "abc") :: Nil
+      )
+    }
+  }
+
   test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
     withTable("savedJsonTable") {
       // Save the df as a managed table (by not specifying the path).
