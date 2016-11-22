@@ -232,6 +232,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> mlorModel.interceptVector
     DenseVector([2.0..., 0.8..., -2.8...])
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    >>> blorModel.setFeaturesCol("features")
+    >>> blorModel.setPredictionCol("prediction")
+    >>> blorModel.setProbabilityCol("probability")
+    >>> blorModel.setRawPredictionCol("rawPrediction")
     >>> result = blorModel.transform(test0).head()
     >>> result.prediction
     0.0
@@ -742,6 +746,10 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> print(model.toDebugString)
     DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.setFeaturesCol("features")
+    >>> model.setPredictionCol("prediction")
+    >>> model.setProbabilityCol("probability")
+    >>> model.setRawPredictionCol("rawPrediction")
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -870,6 +878,10 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.setFeaturesCol("features")
+    >>> model.setPredictionCol("prediction")
+    >>> model.setProbabilityCol("probability")
+    >>> model.setRawPredictionCol("rawPrediction")
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -877,6 +889,10 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     0
     >>> numpy.argmax(result.rawPrediction)
     0
+    >>> result.rawPrediction
+    DenseVector([3.0, 0.0])
+    >>> result.probability
+    DenseVector([1.0, 0.0])
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -1008,6 +1024,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.setFeaturesCol("features")
+    >>> model.setPredictionCol("prediction")
     >>> model.transform(test0).head().prediction
     0.0
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
@@ -1151,6 +1169,10 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     DenseMatrix(2, 2, [-0.91..., -0.51..., -0.40..., -1.09...], 1)
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> result = model.transform(test0).head()
+    >>> model.setFeaturesCol("features")
+    >>> model.setPredictionCol("prediction")
+    >>> model.setProbabilityCol("probability")
+    >>> model.setRawPredictionCol("rawPrediction")
     >>> result.prediction
     1.0
     >>> result.probability
@@ -1299,6 +1321,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     >>> testDF = spark.createDataFrame([
     ...     (Vectors.dense([1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
+    >>> model.setFeaturesCol("features")
+    >>> model.setPredictionCol("prediction")
     >>> model.transform(testDF).show()
     +---------+----------+
     | features|prediction|
