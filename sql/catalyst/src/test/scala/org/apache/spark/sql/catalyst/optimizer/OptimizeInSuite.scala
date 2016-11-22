@@ -172,4 +172,11 @@ class OptimizeInSuite extends PlanTest {
       case _ => fail("Unexpected result for OptimizedIn")
     }
   }
+
+  test("OptimizedIn test: Replace In(value, Seq.empty) with false literal.") {
+    val originalQuery = testRelation.where(In(UnresolvedAttribute("a"), Seq.empty))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation.where(false).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
