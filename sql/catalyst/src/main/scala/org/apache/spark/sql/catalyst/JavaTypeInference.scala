@@ -396,12 +396,15 @@ object JavaTypeInference {
 
         case _ if mapType.isAssignableFrom(typeToken) =>
           val (keyType, valueType) = mapKeyValueType(typeToken)
+          val (_, valueNullable) = inferDataType(valueType)
+
           ExternalMapToCatalyst(
             inputObject,
             ObjectType(keyType.getRawType),
             serializerFor(_, keyType),
             ObjectType(valueType.getRawType),
-            serializerFor(_, valueType)
+            serializerFor(_, valueType),
+            valueNullable
           )
 
         case other =>

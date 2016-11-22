@@ -498,7 +498,8 @@ object ScalaReflection extends ScalaReflection {
           dataTypeFor(keyType),
           serializerFor(_, keyType, keyPath),
           dataTypeFor(valueType),
-          serializerFor(_, valueType, valuePath))
+          serializerFor(_, valueType, valuePath),
+          !valueType.typeSymbol.asClass.isPrimitive)
 
       case t if t <:< localTypeOf[String] =>
         StaticInvoke(

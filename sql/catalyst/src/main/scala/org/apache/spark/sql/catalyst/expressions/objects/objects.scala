@@ -406,10 +406,11 @@ case class WrapOption(child: Expression, optType: DataType)
  * A place holder for the loop variable used in [[MapObjects]].  This should never be constructed
  * manually, but will instead be passed into the provided lambda function.
  */
-case class LambdaVariable(value: String, isNull: String, dataType: DataType) extends LeafExpression
+case class LambdaVariable(value: String, isNull: String, dataType: DataType,
+    valueNullable: Boolean = true) extends LeafExpression
   with Unevaluable with NonSQLExpression {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = valueNullable
 
   override def genCode(ctx: CodegenContext): ExprCode = {
     ExprCode(code = "", value = value, isNull = isNull)
@@ -593,7 +594,8 @@ object ExternalMapToCatalyst {
       keyType: DataType,
       keyConverter: Expression => Expression,
       valueType: DataType,
-      valueConverter: Expression => Expression): ExternalMapToCatalyst = {
+      valueConverter: Expression => Expression,
+      valueNullable: Boolean): ExternalMapToCatalyst = {
     val id = curId.getAndIncrement()
     val keyName = "ExternalMapToCatalyst_key" + id
     val valueName = "ExternalMapToCatalyst_value" + id
@@ -606,7 +608,7 @@ object ExternalMapToCatalyst {
       valueName,
       valueIsNull,
       valueType,
-      valueConverter(LambdaVariable(valueName, valueIsNull, valueType)),
+      valueConverter(LambdaVariable(valueName, valueIsNull, valueType, valueNullable)),
       inputMap
     )
   }
