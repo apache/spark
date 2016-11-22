@@ -79,8 +79,8 @@ private[kafka010] case class CachedKafkaConsumer private(
       s"offset must always be less than untilOffset [offset: $offset, untilOffset: $untilOffset]")
     logDebug(s"Get $groupId $topicPartition nextOffset $nextOffsetInFetchedData requested $offset")
     // The following loop is basically for `failOnDataLoss = false`. When `failOnDataLoss` is
-    // `false`, firstly, we will try to fetch the record at `offset`. If no such record, then we
-    // will move to the next available offset within `[offset, untilOffset)` and retry.
+    // `false`, first, we will try to fetch the record at `offset`. If no such record exists, then
+    // we will move to the next available offset within `[offset, untilOffset)` and retry.
     // If `failOnDataLoss` is `true`, the loop body will be executed only once.
     var toFetchOffset = offset
     while (toFetchOffset != UNKNOWN_OFFSET) {
