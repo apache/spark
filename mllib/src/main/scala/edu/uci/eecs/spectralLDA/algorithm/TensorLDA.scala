@@ -23,7 +23,7 @@ package edu.uci.eecs.spectralLDA.algorithm
  * Created by Furong Huang on 11/2/15.
  */
 
-import breeze.linalg.{argtopk, diag, max, min, DenseMatrix, DenseVector, SparseVector}
+import breeze.linalg.{argsort, diag, max, min, DenseMatrix, DenseVector, SparseVector}
 import breeze.numerics._
 import breeze.stats.distributions.{Rand, RandBasis}
 import edu.uci.eecs.spectralLDA.datamoments.DataCumulant
@@ -87,11 +87,11 @@ class TensorLDA(dimK: Int,
     // unwhitening matrix: $(W^T)^{-1}=U\Sigma^{1/2}$
     val unwhiteningMatrix = cumulant.eigenVectorsM2 * diag(sqrt(cumulant.eigenValuesM2))
 
-    val alphaUnordered: DenseVector[Double] = lambda.map(x => scala.math.pow(x, -2))
+    val alphaUnordered: DenseVector[Double] = pow(lambda, -2)
     val topicWordMatrixUnordered: DenseMatrix[Double] = unwhiteningMatrix * nu * diag(lambda)
 
     // re-arrange alpha and topicWordMatrix in descending order of alpha
-    val idx = argtopk(alphaUnordered, dimK)
+    val idx = argsort(alphaUnordered).reverse
     val alpha = alphaUnordered(idx).toDenseVector
     val topicWordMatrix = topicWordMatrixUnordered(::, idx).toDenseMatrix
 
