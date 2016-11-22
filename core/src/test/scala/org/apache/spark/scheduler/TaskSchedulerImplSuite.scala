@@ -415,16 +415,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
    * in nodes and executors should be on that list.
    */
   private def testBlacklistPerformance(
+      testName: String,
       nodeBlacklist: Seq[String],
       execBlacklist: Seq[String]): Unit = {
     // Because scheduling involves shuffling the order of offers around, we run this test a few
     // times to cover more possibilities.  There are only 3 offers, which means 6 permutations,
-    // so 10 iterations is pretty good.  To avoid polluting test reports with 10 different tests,
-    // we run all iterations inside one test, but we still need to do proper setup and cleanup
-    // between each iteration.
+    // so 10 iterations is pretty good.
     (0 until 10).foreach { testItr =>
-      beforeEach()
-      try {
+      test(s"$testName: iteration $testItr") {
         // When an executor or node is blacklisted, we want to make sure that we don't try
         // scheduling each pending task, one by one, to discover they are all blacklisted.  This is
         // important for performance -- if we did check each task one-by-one, then responding to a
@@ -508,24 +506,20 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
           verify(stageToMockTaskSetBlacklist(0), never)
             .isExecutorBlacklistedForTask(meq(exec), anyInt())
         }
-      } finally {
-        afterEach()
       }
     }
   }
 
-  test("Blacklisted node for entire task set prevents per-task blacklist checks") {
-    testBlacklistPerformance(
-      nodeBlacklist = Seq("host1"),
-      execBlacklist = Seq())
-  }
+  testBlacklistPerformance(
+    testName = "Blacklisted node for entire task set prevents per-task blacklist checks",
+    nodeBlacklist = Seq("host1"),
+    execBlacklist = Seq())
 
-  test("Blacklisted executor for entire task set prevents per-task blacklist checks") {
-    testBlacklistPerformance(
-      nodeBlacklist = Seq(),
-      execBlacklist = Seq("executor3")
-    )
-  }
+  testBlacklistPerformance(
+    testName = "Blacklisted executor for entire task set prevents per-task blacklist checks",
+    nodeBlacklist = Seq(),
+    execBlacklist = Seq("executor3")
+  )
 
   test("abort stage if executor loss results in unschedulability from previously failed tasks") {
     // Make sure we can detect when a taskset becomes unschedulable from a blacklisting.  This
