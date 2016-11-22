@@ -71,11 +71,7 @@ statement
     | createTableHeader ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?
         (PARTITIONED BY partitionColumnNames=identifierList)?
-        bucketSpec?                                                    #createTableUsing
-    | createTableHeader tableProvider
-        (OPTIONS tablePropertyList)?
-        (PARTITIONED BY partitionColumnNames=identifierList)?
-        bucketSpec? AS? query                                          #createTableUsing
+        bucketSpec? (AS? query)?                                       #createTableUsing
     | createTableHeader ('(' columns=colTypeList ')')?
         (COMMENT STRING)?
         (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
