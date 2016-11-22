@@ -218,7 +218,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Inserts the content of the [[DataFrame]] to the specified table. It requires that
    * the schema of the [[DataFrame]] is the same as the schema of the table.
    *
-   * Note: Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
+   * @note Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
    * resolution. For example:
    *
    * {{{
