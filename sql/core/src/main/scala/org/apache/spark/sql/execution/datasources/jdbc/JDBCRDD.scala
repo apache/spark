@@ -120,7 +120,13 @@ object JDBCRDD extends Logging {
       case StringStartsWith(attr, value) => s"${attr} LIKE '${value}%'"
       case StringEndsWith(attr, value) => s"${attr} LIKE '%${value}'"
       case StringContains(attr, value) => s"${attr} LIKE '%${value}%'"
-      case In(attr, value) => s"$attr IN (${compileValue(value)})"
+      case In(attr, value) =>
+        if (value.nonEmpty) {
+          s"$attr IN (${compileValue(value)})"
+        } else {
+          // Return false literal when value is empty.
+          s"false"
+        }
       case Not(f) => compileFilter(f).map(p => s"(NOT ($p))").getOrElse(null)
       case Or(f1, f2) =>
         // We can't compile Or filter unless both sub-filters are compiled successfully.
