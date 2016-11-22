@@ -155,8 +155,16 @@ class KafkaTestUtils extends Logging {
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
-  def createTopic(topic: String, partitions: Int): Unit = {
-    AdminUtils.createTopic(zkUtils, topic, partitions, 1)
+  def createTopic(topic: String, partitions: Int, overwrite: Boolean = false): Unit = {
+    var created = false
+    while (!created) {
+      try {
+        AdminUtils.createTopic(zkUtils, topic, partitions, 1)
+        created = true
+      } catch {
+        case e: kafka.common.TopicExistsException if overwrite => deleteTopic(topic)
+      }
+    }
     // wait until metadata is propagated
     (0 until partitions).foreach { p =>
       waitUntilMetadataIsPropagated(topic, p)
@@ -306,7 +314,7 @@ class KafkaTestUtils extends Logging {
       val deleted = !zkUtils.getAllTopics().contains(topic)
       deletePath && topicPath && replicaManager && logManager && cleaner && deleted
     }
-    eventually(timeout(30.seconds)) {
+    eventually(timeout(60.seconds)) {
       assert(isDeleted, s"$topic not deleted after timeout")
     }
   }

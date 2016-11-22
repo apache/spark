@@ -779,7 +779,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
 
       override def process(value: Int): Unit = {
         // Slow down the processing speed so that messages may be aged out.
-        Thread.sleep(Random.nextInt(100))
+        Thread.sleep(Random.nextInt(500))
       }
 
       override def close(errorOrNull: Throwable): Unit = {
@@ -793,11 +793,14 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
     // Track topics that have been deleted
     val deletedTopics = mutable.Set[String]()
     while (System.currentTimeMillis() - testTime.toMillis < startTime) {
-      Random.nextInt(6) match {
+      Random.nextInt(10) match {
         case 0 => // Create a new topic
           val topic = newTopic()
           topics += topic
-          testUtils.createTopic(topic, partitions = 1)
+          // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
+          // chance that a topic will be recreated after deletion due to the asynchronous update.
+          // Hence, always overwrite to handle this race condition.
+          testUtils.createTopic(topic, partitions = 1, overwrite = true)
           logInfo(s"Create topic $topic")
         case 1 if topics.nonEmpty => // Delete an existing topic
           val topic = topics.remove(Random.nextInt(topics.size))
@@ -808,10 +811,13 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
           val topic = deletedTopics.toSeq(Random.nextInt(deletedTopics.size))
           deletedTopics -= topic
           topics += topic
-          testUtils.createTopic(topic, partitions = 1)
+          // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
+          // chance that a topic will be recreated after deletion due to the asynchronous update.
+          // Hence, always overwrite to handle this race condition.
+          testUtils.createTopic(topic, partitions = 1, overwrite = true)
           logInfo(s"Create topic $topic")
         case 3 =>
-          Thread.sleep(100)
+          Thread.sleep(1000)
         case _ => // Push random messages
           for (topic <- topics) {
             val size = Random.nextInt(10)
