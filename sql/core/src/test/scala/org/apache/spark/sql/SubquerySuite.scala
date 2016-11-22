@@ -483,6 +483,18 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
   }
 
+  test("SPARK-18504 extra GROUP BY column in correlated scalar subquery is not permitted") {
+    withTempView("t") {
+      Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+
+      val errMsg = intercept[AnalysisException] {
+        sql("select (select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2) sum from t t1")
+      }
+      assert(errMsg.getMessage.contains(
+        "a GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns:"))
+    }
+  }
+
   test("non-aggregated correlated scalar subquery") {
     val msg1 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
