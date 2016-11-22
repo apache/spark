@@ -45,9 +45,9 @@ import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
  * persisted to the offset log via the OffsetSeq metadata field. Current
  * information contained in this object includes:
  *
- * 1. currentEventTimeWatermark: The current eventTime watermark, used to
+ * @param currentEventTimeWatermarkMillis: The current eventTime watermark, used to
  * bound the lateness of data that will processed. Time unit: milliseconds
- * 2. currentBatchTimestamp: The current batch processing timestamp.
+ * @param currentBatchTimestampMillis: The current batch processing timestamp.
  * Time unit: milliseconds
  */
 case class StreamExecutionMetadata(

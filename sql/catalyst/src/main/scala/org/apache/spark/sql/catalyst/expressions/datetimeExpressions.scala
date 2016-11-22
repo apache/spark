@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
@@ -86,10 +87,12 @@ case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType)
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {}
 
-  override protected def evalInternal(input: InternalRow): Any = timestampMs
+  override protected def evalInternal(input: InternalRow): Any =
+    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   def toLiteral: Literal = dataType match {
-    case _: TimestampType => Literal(timestampMs * 1000L, TimestampType)
+    case _: TimestampType =>
+      Literal(DateTimeUtils.fromJavaTimestamp(new Timestamp(timestampMs)), TimestampType)
     case _: DateType => Literal(DateTimeUtils.millisToDays(timestampMs), DateType)
   }
 }
