@@ -40,8 +40,8 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
   private val numAllItems = 500000
   private val numSamples = numAllItems / 10
 
-  private val eps = 0.0001
-  private val confidence = 0.95
+  private val eps = 0.0001D
+  private val confidence = 0.95D
   private val seed = 11
 
   val startDate = DateTimeUtils.fromJavaDate(Date.valueOf("1900-01-01"))
@@ -107,23 +107,14 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
       StructField("c11", BooleanType),
       StructField("c12", BinaryType)))
 
-    def cmsSql(col: String): String = s"count_min_sketch($col, $eps, $confidence, $seed)"
-
-    val query =
-      s"""
-         |SELECT
-         |  ${cmsSql("c1")}, ${cmsSql("c2")}, ${cmsSql("c3")}, ${cmsSql("c4")}, ${cmsSql("c5")},
-         |  ${cmsSql("c6")}, ${cmsSql("c7")}, ${cmsSql("c8")}, ${cmsSql("c9")}, ${cmsSql("c10")},
-         |  ${cmsSql("c11")}, ${cmsSql("c12")}
-         |FROM $table
-     """.stripMargin
-
     withTempView(table) {
       val rdd: RDD[Row] = spark.sparkContext.parallelize(data)
       spark.createDataFrame(rdd, schema).createOrReplaceTempView(table)
-      val result = sql(query).queryExecution.toRdd.collect().head
+      val cmsSql = schema.fieldNames.map(col => s"count_min_sketch($col, $eps, $confidence, $seed)")
+        .mkString(", ")
+      val result = sql(s"SELECT $cmsSql FROM $table").head()
       schema.indices.foreach { i =>
-        val binaryData = result.getBinary(i)
+        val binaryData = result.getAs[Array[Byte]](i)
         val in = new ByteArrayInputStream(binaryData)
         val cms = CountMinSketch.readFrom(in)
         schema.fields(i).dataType match {

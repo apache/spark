@@ -131,9 +131,7 @@ case class CountMinSketchAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Currently `CountMinSketch` supports integral (date/timestamp is represented as int/long
-    // internally) and string types.
-    Seq(TypeCollection(IntegralType, StringType, DateType, TimestampType),
+    Seq(TypeCollection(NumericType, StringType, DateType, TimestampType, BooleanType, BinaryType),
       DoubleType, DoubleType, IntegerType)
   }
 
