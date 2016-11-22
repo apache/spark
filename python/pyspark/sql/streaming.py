@@ -91,9 +91,6 @@ class StreamingQuery(object):
     def recentProgress(self):
         """Returns the most recent statistics on progress that has been made in this streaming
         query.
-        >>> sq = sdf.writeStream.format('memory').queryName('progress_query').start()
-        >>> sq.recentProgress()
-        >>> sq.stop()
         """
 
         return [json.loads(p.json()) for p in self._jsq.recentProgress()]
