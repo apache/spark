@@ -60,7 +60,6 @@ case class UncacheTableCommand(
       sparkSession.catalog.uncacheTable(tableId)
     } catch {
       case _: NoSuchTableException if ifExists => // don't throw
-        logInfo(s"Asked to uncache table $tableId which doesn't exist.")
     }
     Seq.empty[Row]
   }
