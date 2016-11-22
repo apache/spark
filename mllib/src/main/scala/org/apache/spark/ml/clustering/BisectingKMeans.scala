@@ -94,8 +94,8 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
-    val copied = new BisectingKMeansModel(uid, parentModel)
-    copyValues(copied, extra)
+    val copied = copyValues(new BisectingKMeansModel(uid, parentModel), extra)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   @Since("2.0.0")
@@ -131,8 +131,8 @@ class BisectingKMeansModel private[ml] (
 
   private var trainingSummary: Option[BisectingKMeansSummary] = None
 
-  private[clustering] def setSummary(summary: BisectingKMeansSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[clustering] def setSummary(summary: Option[BisectingKMeansSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -264,10 +264,9 @@ class BisectingKMeans @Since("2.0.0") (
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    model.setSummary(summary)
-    val m = model.setSummary(summary)
-    instr.logSuccess(m)
-    m
+    model.setSummary(Some(summary))
+    instr.logSuccess(model)
+    model
   }
 
   @Since("2.0.0")
@@ -289,35 +288,15 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  * :: Experimental ::
  * Summary of BisectingKMeans.
  *
- * @param predictions  [[DataFrame]] produced by [[BisectingKMeansModel.transform()]]
- * @param predictionCol  Name for column of predicted clusters in `predictions`
- * @param featuresCol  Name for column of features in `predictions`
- * @param k  Number of clusters
+ * @param predictions  [[DataFrame]] produced by [[BisectingKMeansModel.transform()]].
+ * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param featuresCol  Name for column of features in `predictions`.
+ * @param k  Number of clusters.
  */
 @Since("2.1.0")
 @Experimental
 class BisectingKMeansSummary private[clustering] (
-    @Since("2.1.0") @transient val predictions: DataFrame,
-    @Since("2.1.0") val predictionCol: String,
-    @Since("2.1.0") val featuresCol: String,
-    @Since("2.1.0") val k: Int) extends Serializable {
-
-  /**
-   * Cluster centers of the transformed data.
-   */
-  @Since("2.1.0")
-  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
-
-  /**
-   * Size of (number of data points in) each cluster.
-   */
-  @Since("2.1.0")
-  lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
-      case Row(cluster: Int, count: Long) => sizes(cluster) = count
-    }
-    sizes
-  }
-
-}
+    predictions: DataFrame,
+    predictionCol: String,
+    featuresCol: String,
+    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)

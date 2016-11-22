@@ -75,7 +75,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
    *  Use chi-squared calculator from Internet
    */
 
-  test("ChiSqSelector transform KBest test (sparse & dense vector)") {
+  test("ChiSqSelector transform by KBest test (sparse & dense vector)") {
     val labeledDiscreteData = sc.parallelize(
       Seq(LabeledPoint(0.0, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0)))),
         LabeledPoint(1.0, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0)))),
@@ -108,10 +108,10 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val filteredData2 = labeledDiscreteData.map { lp =>
       LabeledPoint(lp.label, model2.transform(lp.features))
     }.collect().toSet
-    assert(filteredData2 == preFilteredData2)
+    assert(filteredData2 === preFilteredData2)
   }
 
-  test("ChiSqSelector transform Percentile test (sparse & dense vector)") {
+  test("ChiSqSelector transform by Percentile test (sparse & dense vector)") {
     val labeledDiscreteData = sc.parallelize(
       Seq(LabeledPoint(0.0, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0)))),
         LabeledPoint(1.0, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0)))),
@@ -149,7 +149,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(filteredData2 == preFilteredData2)
   }
 
-  test("ChiSqSelector transform FPR test (sparse & dense vector)") {
+  test("ChiSqSelector transform by FPR test (sparse & dense vector)") {
     val labeledDiscreteData = sc.parallelize(
       Seq(LabeledPoint(0.0, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0)))),
         LabeledPoint(1.0, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0)))),
@@ -164,12 +164,12 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
         LabeledPoint(1.0, Vectors.dense(Array(0.0))),
         LabeledPoint(2.0, Vectors.dense(Array(8.0))),
         LabeledPoint(2.0, Vectors.dense(Array(8.0))))
-    val model = new ChiSqSelector().setSelectorType("fpr").setAlpha(0.02)
+    val model = new ChiSqSelector().setSelectorType("fpr").setFpr(0.02)
       .fit(labeledDiscreteData)
     val filteredData = labeledDiscreteData.map { lp =>
       LabeledPoint(lp.label, model.transform(lp.features))
     }.collect().toSet
-    assert(filteredData == preFilteredData)
+    assert(filteredData === preFilteredData)
 
     val preFilteredData2 =
       Set(LabeledPoint(0.0, Vectors.dense(Array(6.0, 7.0, 7.0))),
@@ -179,15 +179,15 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
         LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0, 5.0))),
         LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0, 4.0))))
 
-    val model2 = new ChiSqSelector().setSelectorType("fpr").setAlpha(0.15)
+    val model2 = new ChiSqSelector().setSelectorType("fpr").setFpr(0.15)
       .fit(labeledDiscreteData)
     val filteredData2 = labeledDiscreteData.map { lp =>
       LabeledPoint(lp.label, model2.transform(lp.features))
     }.collect().toSet
-    assert(filteredData2 == preFilteredData2)
+    assert(filteredData2 === preFilteredData2)
   }
 
-  test("ChiSqSelector transform FDR test (sparse & dense vector)") {
+  test("ChiSqSelector transform by FDR test (sparse & dense vector)") {
     val labeledDiscreteData = sc.parallelize(
       Seq(LabeledPoint(0.0, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0)))),
         LabeledPoint(1.0, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0)))),
@@ -202,12 +202,12 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
         LabeledPoint(1.0, Vectors.dense(Array(0.0))),
         LabeledPoint(2.0, Vectors.dense(Array(8.0))),
         LabeledPoint(2.0, Vectors.dense(Array(8.0))))
-    val model = new ChiSqSelector().setSelectorType("fdr").setAlpha(0.12)
+    val model = new ChiSqSelector().setSelectorType("fdr").setFdr(0.12)
       .fit(labeledDiscreteData)
     val filteredData = labeledDiscreteData.map { lp =>
       LabeledPoint(lp.label, model.transform(lp.features))
     }.collect().toSet
-    assert(filteredData == preFilteredData)
+    assert(filteredData === preFilteredData)
 
     val preFilteredData2 =
       Set(LabeledPoint(0.0, Vectors.dense(Array(6.0, 7.0))),
@@ -217,15 +217,15 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
         LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0))),
         LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0))))
 
-    val model2 = new ChiSqSelector().setSelectorType("fdr").setAlpha(0.15)
+    val model2 = new ChiSqSelector().setSelectorType("fdr").setFdr(0.15)
       .fit(labeledDiscreteData)
     val filteredData2 = labeledDiscreteData.map { lp =>
       LabeledPoint(lp.label, model2.transform(lp.features))
     }.collect().toSet
-    assert(filteredData2 == preFilteredData2)
+    assert(filteredData2 === preFilteredData2)
   }
 
-  test("ChiSqSelector transform FWE test (sparse & dense vector)") {
+  test("ChiSqSelector transform by FWE test (sparse & dense vector)") {
     val labeledDiscreteData = sc.parallelize(
       Seq(LabeledPoint(0.0, Vectors.sparse(6, Array((0, 6.0), (1, 7.0), (3, 7.0), (4, 6.0)))),
         LabeledPoint(1.0, Vectors.sparse(6, Array((1, 9.0), (2, 6.0), (4, 5.0), (5, 9.0)))),
@@ -240,12 +240,12 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
         LabeledPoint(1.0, Vectors.dense(Array(0.0))),
         LabeledPoint(2.0, Vectors.dense(Array(8.0))),
         LabeledPoint(2.0, Vectors.dense(Array(8.0))))
-    val model = new ChiSqSelector().setSelectorType("fwe").setAlpha(0.15)
+    val model = new ChiSqSelector().setSelectorType("fwe").setFwe(0.15)
       .fit(labeledDiscreteData)
     val filteredData = labeledDiscreteData.map { lp =>
       LabeledPoint(lp.label, model.transform(lp.features))
     }.collect().toSet
-    assert(filteredData == preFilteredData)
+    assert(filteredData === preFilteredData)
 
     val preFilteredData2 =
       Set(LabeledPoint(0.0, Vectors.dense(Array(6.0, 7.0))),
@@ -255,12 +255,12 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
         LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0))),
         LabeledPoint(2.0, Vectors.dense(Array(8.0, 9.0))))
 
-    val model2 = new ChiSqSelector().setSelectorType("fwe").setAlpha(0.3)
+    val model2 = new ChiSqSelector().setSelectorType("fwe").setFwe(0.3)
       .fit(labeledDiscreteData)
     val filteredData2 = labeledDiscreteData.map { lp =>
       LabeledPoint(lp.label, model2.transform(lp.features))
     }.collect().toSet
-    assert(filteredData2 == preFilteredData2)
+    assert(filteredData2 === preFilteredData2)
   }
 
   test("model load / save") {

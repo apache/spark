@@ -61,7 +61,8 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
    * @group param
    */
   final val featureIndex: IntParam = new IntParam(this, "featureIndex",
-    "The index of the feature if featuresCol is a vector column, no effect otherwise.")
+    "The index of the feature if featuresCol is a vector column, no effect otherwise (>= 0)",
+    ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getFeatureIndex: Int = $(featureIndex)
