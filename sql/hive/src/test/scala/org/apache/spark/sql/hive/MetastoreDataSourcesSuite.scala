@@ -433,20 +433,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  test("saveAsTable(CTAS) using overwrite when the target table is Hive serde") {
-    val tableName = "tab1"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName STORED AS SEQUENCEFILE AS SELECT 1 AS key, 'abc' AS value")
-      val df = sql(s"SELECT key, value FROM $tableName")
-      df.write.mode(SaveMode.Overwrite).saveAsTable(tableName)
-      val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-      // When the mode is OVERWRITE, we drop the Hive serde tables and create a data source table
-      // TODO: Based on the definition of OVERWRITE, no change should be made on the table
-      // definition. When recreate the table, we need to create a Hive serde table.
-      assert(tableMeta.provider == Some(spark.sessionState.conf.defaultDataSourceName))
-    }
-  }
-
   test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
     withTable("savedJsonTable") {
       // Save the df as a managed table (by not specifying the path).
