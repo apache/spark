@@ -31,9 +31,10 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.streaming._
@@ -45,12 +46,13 @@ import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
  * information contained in this object includes:
  *
  * 1. currentEventTimeWatermark: The current eventTime watermark, used to
- * bound the lateness of data that will processed.
- * 2. currentBatchTimestamp: The current batch processing timestamp
+ * bound the lateness of data that will processed. Time unit: milliseconds
+ * 2. currentBatchTimestamp: The current batch processing timestamp.
+ * Time unit: microseconds
  */
 case class StreamExecutionMetadata(
-    var currentEventTimeWatermark: Long = 0,
-    var currentBatchTimestamp: Long = 0) {
+    var currentEventTimeWatermarkMillis: Long = 0,
+    var currentBatchTimestamp: SQLTimestamp = 0) {
   private implicit val formats = StreamExecutionMetadata.formats
 
   /**
@@ -310,9 +312,7 @@ class StreamExecution(
         logInfo(s"Resuming streaming query, starting with batch $batchId")
         currentBatchId = batchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
-        streamExecutionMetadata = StreamExecutionMetadata(nextOffsets.metadata.getOrElse(
-          throw new IllegalStateException("OffsetLog does not contain current batch timestamp!")
-        ))
+        streamExecutionMetadata = StreamExecutionMetadata(nextOffsets.metadata.getOrElse("{}"))
         logDebug(s"Found possibly uncommitted offsets $availableOffsets " +
           s"at batch timestamp ${streamExecutionMetadata.currentBatchTimestamp}")
 
@@ -371,7 +371,7 @@ class StreamExecution(
     }
     if (hasNewData) {
       // Current batch timestamp in seconds
-      streamExecutionMetadata.currentBatchTimestamp = triggerClock.getTimeMillis() / 1000L
+      streamExecutionMetadata.currentBatchTimestamp = triggerClock.getTimeMillis() * 1000L
       reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
         assert(offsetLog.add(currentBatchId,
           availableOffsets.toOffsetSeq(sources, Some(streamExecutionMetadata.json))),
@@ -451,8 +451,8 @@ class StreamExecution(
     val replacementMap = AttributeMap(replacements)
     val triggerLogicalPlan = withNewSources transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) => replacementMap(a)
-      case t: CurrentTimestamp =>
-        CurrentBatchTimestamp(streamExecutionMetadata.currentBatchTimestamp)
+      case _: CurrentTimestamp | _: CurrentDate =>
+        CurrentBatchTimestamp(streamExecutionMetadata.currentBatchTimestamp / 1000000L)
     }
 
     val executedPlan = reportTimeTaken(OPTIMIZER_LATENCY) {
@@ -462,7 +462,7 @@ class StreamExecution(
         outputMode,
         checkpointFile("state"),
         currentBatchId,
-        streamExecutionMetadata.currentEventTimeWatermark)
+        streamExecutionMetadata.currentEventTimeWatermarkMillis)
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
@@ -478,9 +478,9 @@ class StreamExecution(
         logTrace(s"Maximum observed eventTime: ${e.maxEventTime.value}")
         (e.maxEventTime.value / 1000) - e.delay.milliseconds()
     }.headOption.foreach { newWatermark =>
-      if (newWatermark > streamExecutionMetadata.currentEventTimeWatermark) {
+      if (newWatermark > streamExecutionMetadata.currentEventTimeWatermarkMillis) {
         logInfo(s"Updating eventTime watermark to: $newWatermark ms")
-        streamExecutionMetadata.currentEventTimeWatermark = newWatermark
+        streamExecutionMetadata.currentEventTimeWatermarkMillis = newWatermark
       } else {
         logTrace(s"Event time didn't move: $newWatermark < " +
           s"$streamExecutionMetadata.currentEventTimeWatermark")

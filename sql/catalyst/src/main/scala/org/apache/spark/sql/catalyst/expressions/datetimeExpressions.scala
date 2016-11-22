@@ -23,9 +23,9 @@ import java.util.{Calendar, Locale, TimeZone}
 import scala.util.Try
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback,
-  ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -78,9 +78,7 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
  *
  * There is no code generation since this expression should be replaced with a literal.
  */
-@ExpressionDescription(
-  usage = "_FUNC_() - Returns the current timestamp at the start of batch evaluation.")
-case class CurrentBatchTimestamp(timestamp: Long) extends LeafExpression
+case class CurrentBatchTimestamp(timestamp: SQLTimestamp) extends LeafExpression
   with CodegenFallback with Nondeterministic {
   override def nullable: Boolean = false
 
