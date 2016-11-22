@@ -85,7 +85,7 @@ case class DataSource(
 
   /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
-   * it. In the read path, only Hive managed tables provide the partition columns properly when
+   * it. In the read path, only managed tables by Hive provide the partition columns properly when
    * initializing this class. All other file based data sources will try to infer the partitioning,
    * and then cast the inferred types to user specified dataTypes if the partition columns exist
    * inside `userSpecifiedSchema`, otherwise we can hit data corruption bugs like SPARK-18510.
@@ -105,11 +105,11 @@ case class DataSource(
    *     `userSpecifiedSchema`. For this case, we add the boolean `justPartitioning` for an early
    *     exit, if we don't care about the schema of the original table.
    *
-   * Returns a pair of the data schema (excluding partition columns) and the schema of the partition
-   * columns.
-   *
-   * @param justPartitioning Whether to exit early and provide just the schema partitioning. The
-   *                         data schema is incorrect in this case and should not be used.
+   * @param format the file format object for this DataSource
+   * @param justPartitioning Whether to exit early and provide just the schema partitioning.
+   * @return A pair of the data schema (excluding partition columns) and the schema of the partition
+   *         columns. If `justPartitioning` is `true`, then the dataSchema will be provided as
+   *         `null`.
    */
   private def getOrInferFileFormatSchema(
       format: FileFormat,
@@ -117,9 +117,10 @@ case class DataSource(
     // the operations below are expensive therefore try not to do them if we don't need to
     lazy val tempFileCatalog = {
       val allPaths = caseInsensitiveOptions.get("path") ++ paths
+      val hadoopConf = sparkSession.sessionState.newHadoopConf()
       val globbedPaths = allPaths.toSeq.flatMap { path =>
         val hdfsPath = new Path(path)
-        val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+        val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
@@ -137,7 +138,7 @@ case class DataSource(
       StructType(resolved)
     } else {
       // in streaming mode, we have already inferred and registered partition columns, we will
-      // never have to re-use this
+      // never have to materialize the lazy val below
       lazy val inferredPartitions = tempFileCatalog.partitionSchema
       // maintain old behavior before SPARK-18510. If userSpecifiedSchema is empty used inferred
       // partitioning
@@ -146,19 +147,29 @@ case class DataSource(
       } else {
         val partitionFields = partitionColumns.map { partitionColumn =>
           userSpecifiedSchema.flatMap(_.find(_.name == partitionColumn)).orElse {
-            logDebug(s"Schema of partition column: $partitionColumn not found in specified " +
-              "schema. Falling back to inferred dataType if it exists.")
+            val inferredOpt = inferredPartitions.find(_.name == partitionColumn)
+            if (inferredOpt.isDefined) {
+              logDebug(
+                s"""Type of partition column: $partitionColumn not found in specified schema
+                   |for $format.
+                   |User Specified Schema
+                   |=====================
+                   |${userSpecifiedSchema.orNull}
+                   |
+                   |Falling back to inferred dataType if it exists.
+                 """.stripMargin)
+            }
             inferredPartitions.find(_.name == partitionColumn)
           }.getOrElse {
-            throw new AnalysisException("Failed to resolve the schema for the partition column: " +
-              s"$partitionColumn. It must be specified manually.")
+            throw new AnalysisException(s"Failed to resolve the schema for $format for " +
+              s"the partition column: $partitionColumn. It must be specified manually.")
           }
         }
         StructType(partitionFields)
       }
     }
     if (justPartitioning) {
-      return new StructType() -> partitionSchema
+      return null -> partitionSchema
     }
     val dataSchema = userSpecifiedSchema.map { schema =>
       val equality = sparkSession.sessionState.conf.resolver
