@@ -169,7 +169,7 @@ case class DataSource(
       }
     }
     if (justPartitioning) {
-      return null -> partitionSchema
+      return (null, partitionSchema)
     }
     val dataSchema = userSpecifiedSchema.map { schema =>
       val equality = sparkSession.sessionState.conf.resolver
@@ -183,7 +183,7 @@ case class DataSource(
       throw new AnalysisException(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
-    dataSchema -> partitionSchema
+    (dataSchema, partitionSchema)
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
