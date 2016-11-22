@@ -144,8 +144,9 @@ trait CheckAnalysis extends PredicateHelper {
               // GROUP BY columns must be a subset of columns in the predicates
               if (invalidCols.nonEmpty) {
                 failAnalysis(
-                  "GROUP BY column(s) in scalar subquery must exist in the WHERE clause: " +
-                  s"${invalidCols.toString}")
+                  "a GROUP BY clause in a scalar correlated subquery " +
+                    "cannot contain non-correlated columns: " +
+                    s"${invalidCols.toString}")
               }
             }
 
