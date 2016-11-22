@@ -369,8 +369,13 @@ sparkR.session <- function(
     overrideEnvs(sparkConfigMap, paramMap)
   }
 
+  deployMode <- ""
+  if (exists("spark.submit.deployMode", envir = sparkConfigMap)) {
+    deployMode <- sparkConfigMap[["spark.submit.deployMode"]]
+  }
+
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
-    retHome <- sparkCheckInstall(sparkHome, master)
+    retHome <- sparkCheckInstall(sparkHome, master, deployMode)
     if (!is.null(retHome)) sparkHome <- retHome
     sparkExecutorEnvMap <- new.env()
     sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
@@ -546,24 +551,27 @@ processSparkPackages <- function(packages) {
 #
 # @param sparkHome directory to find Spark package.
 # @param master the Spark master URL, used to check local or remote mode.
+# @param deployMode whether to deploy your driver on the worker nodes (cluster)
+#        or locally as an external client (client).
 # @return NULL if no need to update sparkHome, and new sparkHome otherwise.
-sparkCheckInstall <- function(sparkHome, master) {
+sparkCheckInstall <- function(sparkHome, master, deployMode) {
   if (!isSparkRShell()) {
     if (!is.na(file.info(sparkHome)$isdir)) {
       msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
       message(msg)
       NULL
     } else {
-      if (!nzchar(master) || isMasterLocal(master)) {
-        msg <- paste0("Spark not found in SPARK_HOME: ",
-                      sparkHome)
+      if (isMasterLocal(master)) {
+        msg <- paste0("Spark not found in SPARK_HOME: ", sparkHome)
         message(msg)
         packageLocalDir <- install.spark()
         packageLocalDir
-      } else {
+      } else if (isClientMode(master) || deployMode == "client") {
         msg <- paste0("Spark not found in SPARK_HOME: ",
                       sparkHome, "\n", installInstruction("remote"))
         stop(msg)
+      } else {
+        NULL
       }
     }
   } else {
