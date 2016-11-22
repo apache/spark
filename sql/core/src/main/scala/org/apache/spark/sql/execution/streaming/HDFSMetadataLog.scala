@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{FileNotFoundException, InputStream, IOException, OutputStream}
+import java.io._
+import java.nio.charset.StandardCharsets
 import java.util.{ConcurrentModificationException, EnumSet, UUID}
 
 import scala.reflect.ClassTag
@@ -26,9 +27,10 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.UninterruptibleThread
 
@@ -44,8 +46,13 @@ import org.apache.spark.util.UninterruptibleThread
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
  */
-class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
+class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: String)
   extends MetadataLog[T] with Logging {
+
+  private implicit val formats = Serialization.formats(NoTypeHints)
+
+  /** Needed to serialize type T into JSON when using Jackson */
+  private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
   // Avoid serializing generic sequences, see SPARK-17372
   require(implicitly[ClassTag[T]].runtimeClass != classOf[Seq[_]],
@@ -63,11 +70,9 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   /**
    * A `PathFilter` to filter only batch files
    */
-  private val batchFilesFilter = new PathFilter {
+  protected val batchFilesFilter = new PathFilter {
     override def accept(path: Path): Boolean = isBatchFile(path)
   }
-
-  private val serializer = new JavaSerializer(sparkSession.sparkContext.conf).newInstance()
 
   protected def batchIdToPath(batchId: Long): Path = {
     new Path(metadataPath, batchId.toString)
@@ -88,38 +93,46 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
 
   protected def serialize(metadata: T, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    val outStream = serializer.serializeStream(out)
-    outStream.writeObject(metadata)
+    Serialization.write(metadata, out)
   }
 
   protected def deserialize(in: InputStream): T = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    val inStream = serializer.deserializeStream(in)
-    inStream.readObject[T]()
+    val reader = new InputStreamReader(in, StandardCharsets.UTF_8)
+    Serialization.read[T](reader)
   }
 
   /**
    * Store the metadata for the specified batchId and return `true` if successful. If the batchId's
    * metadata has already been stored, this method will return `false`.
-   *
-   * Note that this method must be called on a [[org.apache.spark.util.UninterruptibleThread]]
-   * so that interrupts can be disabled while writing the batch file. This is because there is a
-   * potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If the thread
-   * running "Shell.runCommand" is interrupted, then the thread can get deadlocked. In our
-   * case, `writeBatch` creates a file using HDFS API and calls "Shell.runCommand" to set the
-   * file permissions, and can get deadlocked if the stream execution thread is stopped by
-   * interrupt. Hence, we make sure that this method is called on [[UninterruptibleThread]] which
-   * allows us to disable interrupts here. Also see SPARK-14131.
    */
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written
-      Thread.currentThread match {
-        case ut: UninterruptibleThread =>
-          ut.runUninterruptibly { writeBatch(batchId, metadata, serialize) }
-        case _ =>
-          throw new IllegalStateException(
-            "HDFSMetadataLog.add() must be executed on a o.a.spark.util.UninterruptibleThread")
+      if (fileManager.isLocalFileSystem) {
+        Thread.currentThread match {
+          case ut: UninterruptibleThread =>
+            // When using a local file system, "writeBatch" must be called on a
+            // [[org.apache.spark.util.UninterruptibleThread]] so that interrupts can be disabled
+            // while writing the batch file. This is because there is a potential dead-lock in
+            // Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If the thread running
+            // "Shell.runCommand" is interrupted, then the thread can get deadlocked. In our case,
+            // `writeBatch` creates a file using HDFS API and will call "Shell.runCommand" to set
+            // the file permission if using the local file system, and can get deadlocked if the
+            // stream execution thread is stopped by interrupt. Hence, we make sure that
+            // "writeBatch" is called on [[UninterruptibleThread]] which allows us to disable
+            // interrupts here. Also see SPARK-14131.
+            ut.runUninterruptibly { writeBatch(batchId, metadata, serialize) }
+          case _ =>
+            throw new IllegalStateException(
+              "HDFSMetadataLog.add() on a local file system must be executed on " +
+                "a o.a.spark.util.UninterruptibleThread")
+        }
+      } else {
+        // For a distributed file system, such as HDFS or S3, if the network is broken, write
+        // operations may just hang until timeout. We should enable interrupts to allow stopping
+        // the query fast.
+        writeBatch(batchId, metadata, serialize)
       }
       true
     }
@@ -294,6 +307,9 @@ object HDFSMetadataLog {
 
     /** Recursively delete a path if it exists. Should not throw exception if file doesn't exist. */
     def delete(path: Path): Unit
+
+    /** Whether the file systme is a local FS. */
+    def isLocalFileSystem: Boolean
   }
 
   /**
@@ -337,6 +353,13 @@ object HDFSMetadataLog {
         case e: FileNotFoundException =>
         // ignore if file has already been deleted
       }
+    }
+
+    override def isLocalFileSystem: Boolean = fc.getDefaultFileSystem match {
+      case _: local.LocalFs | _: local.RawLocalFs =>
+        // LocalFs = RawLocalFs + ChecksumFs
+        true
+      case _ => false
     }
   }
 
@@ -393,6 +416,13 @@ object HDFSMetadataLog {
         case e: FileNotFoundException =>
           // ignore if file has already been deleted
       }
+    }
+
+    override def isLocalFileSystem: Boolean = fs match {
+      case _: LocalFileSystem | _: RawLocalFileSystem =>
+        // LocalFileSystem = RawLocalFileSystem + ChecksumFileSystem
+        true
+      case _ => false
     }
   }
 }

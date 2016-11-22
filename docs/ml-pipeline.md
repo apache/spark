@@ -38,26 +38,26 @@ algorithms into a single pipeline, or workflow.
 This section covers the key concepts introduced by the Pipelines API, where the pipeline concept is
 mostly inspired by the [scikit-learn](http://scikit-learn.org/) project.
 
-* **[`DataFrame`](ml-guide.html#dataframe)**: This ML API uses `DataFrame` from Spark SQL as an ML
+* **[`DataFrame`](ml-pipeline.html#dataframe)**: This ML API uses `DataFrame` from Spark SQL as an ML
   dataset, which can hold a variety of data types.
   E.g., a `DataFrame` could have different columns storing text, feature vectors, true labels, and predictions.
 
-* **[`Transformer`](ml-guide.html#transformers)**: A `Transformer` is an algorithm which can transform one `DataFrame` into another `DataFrame`.
+* **[`Transformer`](ml-pipeline.html#transformers)**: A `Transformer` is an algorithm which can transform one `DataFrame` into another `DataFrame`.
 E.g., an ML model is a `Transformer` which transforms a `DataFrame` with features into a `DataFrame` with predictions.
 
-* **[`Estimator`](ml-guide.html#estimators)**: An `Estimator` is an algorithm which can be fit on a `DataFrame` to produce a `Transformer`.
+* **[`Estimator`](ml-pipeline.html#estimators)**: An `Estimator` is an algorithm which can be fit on a `DataFrame` to produce a `Transformer`.
 E.g., a learning algorithm is an `Estimator` which trains on a `DataFrame` and produces a model.
 
-* **[`Pipeline`](ml-guide.html#pipeline)**: A `Pipeline` chains multiple `Transformer`s and `Estimator`s together to specify an ML workflow.
+* **[`Pipeline`](ml-pipeline.html#pipeline)**: A `Pipeline` chains multiple `Transformer`s and `Estimator`s together to specify an ML workflow.
 
-* **[`Parameter`](ml-guide.html#parameters)**: All `Transformer`s and `Estimator`s now share a common API for specifying parameters.
+* **[`Parameter`](ml-pipeline.html#parameters)**: All `Transformer`s and `Estimator`s now share a common API for specifying parameters.
 
 ## DataFrame
 
 Machine learning can be applied to a wide variety of data types, such as vectors, text, images, and structured data.
 This API adopts the `DataFrame` from Spark SQL in order to support a variety of data types.
 
-`DataFrame` supports many basic and structured types; see the [Spark SQL datatype reference](sql-programming-guide.html#spark-sql-datatype-reference) for a list of supported types.
+`DataFrame` supports many basic and structured types; see the [Spark SQL datatype reference](sql-programming-guide.html#data-types) for a list of supported types.
 In addition to the types listed in the Spark SQL guide, `DataFrame` can use ML [`Vector`](mllib-data-types.html#local-vector) types.
 
 A `DataFrame` can be created either implicitly or explicitly from a regular `RDD`.  See the code examples below and the [Spark SQL programming guide](sql-programming-guide.html) for examples.
@@ -207,14 +207,29 @@ This example covers the concepts of `Estimator`, `Transformer`, and `Param`.
 <div class="codetabs">
 
 <div data-lang="scala">
+
+Refer to the [`Estimator` Scala docs](api/scala/index.html#org.apache.spark.ml.Estimator),
+the [`Transformer` Scala docs](api/scala/index.html#org.apache.spark.ml.Transformer) and
+the [`Params` Scala docs](api/scala/index.html#org.apache.spark.ml.param.Params) for details on the API.
+
 {% include_example scala/org/apache/spark/examples/ml/EstimatorTransformerParamExample.scala %}
 </div>
 
 <div data-lang="java">
+
+Refer to the [`Estimator` Java docs](api/java/org/apache/spark/ml/Estimator.html),
+the [`Transformer` Java docs](api/java/org/apache/spark/ml/Transformer.html) and
+the [`Params` Java docs](api/java/org/apache/spark/ml/param/Params.html) for details on the API.
+
 {% include_example java/org/apache/spark/examples/ml/JavaEstimatorTransformerParamExample.java %}
 </div>
 
 <div data-lang="python">
+
+Refer to the [`Estimator` Python docs](api/python/pyspark.ml.html#pyspark.ml.Estimator),
+the [`Transformer` Python docs](api/python/pyspark.ml.html#pyspark.ml.Transformer) and
+the [`Params` Python docs](api/python/pyspark.ml.html#pyspark.ml.param.Params) for more details on the API.
+
 {% include_example python/ml/estimator_transformer_param_example.py %}
 </div>
 
@@ -227,14 +242,24 @@ This example follows the simple text document `Pipeline` illustrated in the figu
 <div class="codetabs">
 
 <div data-lang="scala">
+
+Refer to the [`Pipeline` Scala docs](api/scala/index.html#org.apache.spark.ml.Pipeline) for details on the API.
+
 {% include_example scala/org/apache/spark/examples/ml/PipelineExample.scala %}
 </div>
 
 <div data-lang="java">
+
+
+Refer to the [`Pipeline` Java docs](api/java/org/apache/spark/ml/Pipeline.html) for details on the API.
+
 {% include_example java/org/apache/spark/examples/ml/JavaPipelineExample.java %}
 </div>
 
 <div data-lang="python">
+
+Refer to the [`Pipeline` Python docs](api/python/pyspark.ml.html#pyspark.ml.Pipeline) for more details on the API.
+
 {% include_example python/ml/pipeline_example.py %}
 </div>
 

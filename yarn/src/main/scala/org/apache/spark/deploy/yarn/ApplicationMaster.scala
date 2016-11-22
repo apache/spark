@@ -202,7 +202,8 @@ private[spark] class ApplicationMaster(
         attemptID = Option(appAttemptId.getAttemptId.toString)
       }
 
-      new CallerContext("APPMASTER",
+      new CallerContext(
+        "APPMASTER", sparkConf.get(APP_CALLER_CONTEXT),
         Option(appAttemptId.getApplicationId.toString), attemptID).setCurrentContext()
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
@@ -428,7 +429,7 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    val port = sparkConf.getInt("spark.yarn.am.port", 0)
+    val port = sparkConf.get(AM_PORT)
     rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr,
       clientMode = true)
     val driverRef = waitForSparkDriver()

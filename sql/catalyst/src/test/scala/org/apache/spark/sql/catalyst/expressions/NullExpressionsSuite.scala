@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types._
 
-class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def testAllTypes(testFunc: (Any, DataType) => Unit): Unit = {
     testFunc(false, BooleanType)

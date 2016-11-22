@@ -83,14 +83,7 @@ class SessionCatalog(
   // check whether the temporary table or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb = {
-    val defaultName = DEFAULT_DATABASE
-    val defaultDbDefinition =
-      CatalogDatabase(defaultName, "default database", conf.warehousePath, Map())
-    // Initialize default database if it doesn't already exist
-    createDatabase(defaultDbDefinition, ignoreIfExists = true)
-    formatDatabaseName(defaultName)
-  }
+  protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
 
   /**
    * Format table name, taking into account case sensitivity.
@@ -921,6 +914,24 @@ class SessionCatalog(
     if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
       throw new NoSuchTempFunctionException(name)
     }
+  }
+
+  /**
+   * Returns whether it is a temporary function. If not existed, returns false.
+   */
+  def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
+    // copied from HiveSessionCatalog
+    val hiveFunctions = Seq(
+      "hash",
+      "histogram_numeric",
+      "percentile")
+
+    // A temporary function is a function that has been registered in functionRegistry
+    // without a database name, and is neither a built-in function nor a Hive function
+    name.database.isEmpty &&
+      functionRegistry.functionExists(name.funcName) &&
+      !FunctionRegistry.builtin.functionExists(name.funcName) &&
+      !hiveFunctions.contains(name.funcName.toLowerCase)
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
