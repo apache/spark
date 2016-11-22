@@ -2541,7 +2541,8 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #'
 #' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
 #' and another SparkDataFrame. This is equivalent to \code{UNION ALL} in SQL.
-#' Note that this does not remove duplicate rows across the two SparkDataFrames.
+#'
+#' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
@@ -2584,7 +2585,8 @@ setMethod("unionAll",
 #' Union two or more SparkDataFrames
 #'
 #' Union two or more SparkDataFrames. This is equivalent to \code{UNION ALL} in SQL.
-#' Note that this does not remove duplicate rows across the two SparkDataFrames.
+#'
+#' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
 #' @param x a SparkDataFrame.
 #' @param ... additional SparkDataFrame(s).
