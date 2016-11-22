@@ -995,7 +995,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   test("don't update blacklist for shuffle-fetch failures, preemption, denied commits, " +
-    "or killed tasks") {
+      "or killed tasks") {
     // Setup a taskset, and fail some tasks for a fetch failure, preemption, denied commit,
     // and killed task.
     val conf = new SparkConf().

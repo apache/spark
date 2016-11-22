@@ -467,13 +467,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         val nodesForBlacklistedExecutors = offers.filter { offer =>
           execBlacklist.contains(offer.executorId)
         }.map(_.host).toSet.toSeq
-        val nodesWithAnyBlacklisting = nodeBlacklist ++ nodesForBlacklistedExecutors
+        val nodesWithAnyBlacklisting = (nodeBlacklist ++ nodesForBlacklistedExecutors).toSet
         // Similarly, figure out which executors have any blacklisting.  This means all executors
         // that are explicitly blacklisted, plus all executors on nodes that are blacklisted.
         val execsForBlacklistedNodes = offers.filter { offer =>
           nodeBlacklist.contains(offer.host)
         }.map(_.executorId).toSeq
-        val executorsWithAnyBlacklisting = execBlacklist ++ execsForBlacklistedNodes
+        val executorsWithAnyBlacklisting = (execBlacklist ++ execsForBlacklistedNodes).toSet
 
         // Schedule a taskset, and make sure our test setup is correct -- we are able to schedule
         // a task on all executors that aren't blacklisted (whether that executor is a explicitly
