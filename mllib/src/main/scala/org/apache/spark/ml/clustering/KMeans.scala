@@ -305,11 +305,12 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("2.2.0")
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     fit(dataset, handlePersistence)
-}
+  }
+  
   @Since("2.2.0")
   protected def fit(dataset: Dataset[_], handlePersistence: Boolean): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
