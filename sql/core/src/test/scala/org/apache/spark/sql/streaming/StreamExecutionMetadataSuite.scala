@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.streaming.StreamExecutionMetadata
 
-class StreamExecutionSuite extends SparkFunSuite {
+class StreamExecutionMetadataSuite extends SparkFunSuite {
 
   test("stream execution metadata") {
     assert(StreamExecutionMetadata(0, 0) ===
@@ -28,9 +28,9 @@ class StreamExecutionSuite extends SparkFunSuite {
     assert(StreamExecutionMetadata(1, 0) ===
       StreamExecutionMetadata("""{"currentEventTimeWatermarkMillis":1}"""))
     assert(StreamExecutionMetadata(0, 2) ===
-      StreamExecutionMetadata("""{"currentBatchTimestamp":2}"""))
+      StreamExecutionMetadata("""{"currentBatchTimestampMillis":2}"""))
     assert(StreamExecutionMetadata(1, 2) ===
       StreamExecutionMetadata(
-        """{"currentEventTimeWatermarkMillis":1,"currentBatchTimestamp":2}"""))
+        """{"currentEventTimeWatermarkMillis":1,"currentBatchTimestampMillis":2}"""))
   }
 }

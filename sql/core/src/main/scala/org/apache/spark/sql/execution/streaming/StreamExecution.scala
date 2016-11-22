@@ -34,10 +34,10 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.types.{DateType, TimestampType}
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /**
@@ -48,11 +48,11 @@ import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
  * 1. currentEventTimeWatermark: The current eventTime watermark, used to
  * bound the lateness of data that will processed. Time unit: milliseconds
  * 2. currentBatchTimestamp: The current batch processing timestamp.
- * Time unit: microseconds
+ * Time unit: milliseconds
  */
 case class StreamExecutionMetadata(
     var currentEventTimeWatermarkMillis: Long = 0,
-    var currentBatchTimestamp: SQLTimestamp = 0) {
+    var currentBatchTimestampMillis: Long = 0) {
   private implicit val formats = StreamExecutionMetadata.formats
 
   /**
@@ -314,7 +314,7 @@ class StreamExecution(
         availableOffsets = nextOffsets.toStreamProgress(sources)
         streamExecutionMetadata = StreamExecutionMetadata(nextOffsets.metadata.getOrElse("{}"))
         logDebug(s"Found possibly uncommitted offsets $availableOffsets " +
-          s"at batch timestamp ${streamExecutionMetadata.currentBatchTimestamp}")
+          s"at batch timestamp ${streamExecutionMetadata.currentBatchTimestampMillis}")
 
         offsetLog.get(batchId - 1).foreach {
           case lastOffsets =>
@@ -370,8 +370,8 @@ class StreamExecution(
       }
     }
     if (hasNewData) {
-      // Current batch timestamp in seconds
-      streamExecutionMetadata.currentBatchTimestamp = triggerClock.getTimeMillis() * 1000L
+      // Current batch timestamp in milliseconds
+      streamExecutionMetadata.currentBatchTimestampMillis = triggerClock.getTimeMillis()
       reportTimeTaken(OFFSET_WAL_WRITE_LATENCY) {
         assert(offsetLog.add(currentBatchId,
           availableOffsets.toOffsetSeq(sources, Some(streamExecutionMetadata.json))),
@@ -451,8 +451,12 @@ class StreamExecution(
     val replacementMap = AttributeMap(replacements)
     val triggerLogicalPlan = withNewSources transformAllExpressions {
       case a: Attribute if replacementMap.contains(a) => replacementMap(a)
-      case _: CurrentTimestamp | _: CurrentDate =>
-        CurrentBatchTimestamp(streamExecutionMetadata.currentBatchTimestamp / 1000000L)
+      case ct: CurrentTimestamp =>
+        CurrentBatchTimestamp(streamExecutionMetadata.currentBatchTimestampMillis,
+          ct.dataType)
+      case cd: CurrentDate =>
+        CurrentBatchTimestamp(streamExecutionMetadata.currentBatchTimestampMillis,
+          cd.dataType)
     }
 
     val executedPlan = reportTimeTaken(OPTIMIZER_LATENCY) {

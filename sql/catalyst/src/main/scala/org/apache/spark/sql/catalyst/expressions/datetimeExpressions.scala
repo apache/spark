@@ -25,7 +25,6 @@ import scala.util.Try
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -78,17 +77,21 @@ case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
  *
  * There is no code generation since this expression should be replaced with a literal.
  */
-case class CurrentBatchTimestamp(timestamp: SQLTimestamp) extends LeafExpression
-  with CodegenFallback with Nondeterministic {
-  override def nullable: Boolean = false
+case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType)
+  extends LeafExpression with Nondeterministic with CodegenFallback {
 
-  override def dataType: DataType = TimestampType
+  override def nullable: Boolean = false
 
   override def prettyName: String = "current_batch_timestamp"
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {}
 
-  override protected def evalInternal(input: InternalRow): Any = timestamp
+  override protected def evalInternal(input: InternalRow): Any = timestampMs
+
+  def toLiteral: Literal = dataType match {
+    case _: TimestampType => Literal(timestampMs * 1000L, TimestampType)
+    case _: DateType => Literal(DateTimeUtils.millisToDays(timestampMs), DateType)
+  }
 }
 
 /**
