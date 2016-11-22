@@ -31,15 +31,16 @@ import org.apache.spark.sql.types.StructType
 /**
  * :: Experimental ::
  *
- * Model produced by [[MinHashLSH]], where multiple hash functions are stored. Each hash function is
- * picked from a hash family for a specific set `S` with cardinality equal to `numEntries`:
- *    `h_i(x) = ((x \cdot a_i + b_i) \mod prime) \mod numEntries`
+ * Model produced by [[MinHashLSH]], where multiple hash functions are stored. Each hash function
+ * is picked from the following family of hash functions, where a_i and b_i are randomly chosen
+ * integers less than prime:
+ *    `h_i(x) = ((x \cdot a_i + b_i) \mod prime)`
  *
  * This hash family is approximately min-wise independent according to the reference.
  *
  * Reference:
- * [[http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.121.8215&rep=rep1&type=pdf Min-wise
- * independent permutations]]
+ * Tom Bohman, Colin Cooper, and Alan Frieze. "Min-wise independent linear permutations."
+ * Electronic Journal of Combinatorics 7 (2000): R26.
  *
  * @param randCoefficients Pairs of random coefficients. Each pair is used by one hash function.
  */
@@ -55,11 +56,11 @@ class MinHashLSHModel private[ml](
     elems: Vector => {
       require(elems.numNonzeros > 0, "Must have at least 1 non zero entry.")
       val elemsList = elems.toSparse.indices.toList
-      val hashValues = randCoefficients.map({ case (a: Int, b: Int) =>
+      val hashValues = randCoefficients.map { case (a, b) =>
         elemsList.map { elem: Int =>
           ((1 + elem) * a + b) % MinHashLSH.HASH_PRIME
         }.min.toDouble
-      })
+      }
       // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
       hashValues.grouped(1).map(Vectors.dense).toArray
     }
@@ -132,7 +133,7 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
     require(inputDim <= MinHashLSH.HASH_PRIME,
       s"The input vector dimension $inputDim exceeds the threshold ${MinHashLSH.HASH_PRIME}.")
     val rand = new Random($(seed))
-    val randCoefs: Array[(Int, Int)] = Array.fill(2 * $(numHashTables)) {
+    val randCoefs: Array[(Int, Int)] = Array.fill($(numHashTables)) {
         (1 + rand.nextInt(MinHashLSH.HASH_PRIME - 1), rand.nextInt(MinHashLSH.HASH_PRIME - 1))
       }
     new MinHashLSHModel(uid, randCoefs)

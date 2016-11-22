@@ -50,8 +50,8 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
 
   /**
    * Transform the Schema for LSH
-   * @param schema The schema of the input dataset without [[outputCol]]
-   * @return A derived schema with [[outputCol]] added
+   * @param schema The schema of the input dataset without [[outputCol]].
+   * @return A derived schema with [[outputCol]] added.
    */
   protected[this] final def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.appendColumn(schema, $(outputCol), DataTypes.createArrayType(new VectorUDT))
@@ -73,19 +73,19 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
 
   /**
    * Calculate the distance between two different keys using the distance metric corresponding
-   * to the hashFunction
-   * @param x One input vector in the metric space
-   * @param y One input vector in the metric space
-   * @return The distance between x and y
+   * to the hashFunction.
+   * @param x One input vector in the metric space.
+   * @param y One input vector in the metric space.
+   * @return The distance between x and y.
    */
   protected[ml] def keyDistance(x: Vector, y: Vector): Double
 
   /**
    * Calculate the distance between two different hash Vectors.
    *
-   * @param x One of the hash vector
-   * @param y Another hash vector
-   * @return The distance between hash vectors x and y
+   * @param x One of the hash vector.
+   * @param y Another hash vector.
+   * @return The distance between hash vectors x and y.
    */
   protected[ml] def hashDistance(x: Seq[Vector], y: Seq[Vector]): Double
 
@@ -153,14 +153,14 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    * the [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the
    * transformed data when necessary.
    *
-   * NOTE: This method is experimental and will likely change behavior in the next release.
+   * @note This method is experimental and will likely change behavior in the next release.
    *
-   * @param dataset the dataset to search for nearest neighbors of the key
-   * @param key Feature vector representing the item to search for
-   * @param numNearestNeighbors The maximum number of nearest neighbors
-   * @param distCol Output column for storing the distance between each result row and the key
-   * @return A dataset containing at most k items closest to the key. A distCol is added to show
-   *         the distance between each row and the key.
+   * @param dataset The dataset to search for nearest neighbors of the key.
+   * @param key Feature vector representing the item to search for.
+   * @param numNearestNeighbors The maximum number of nearest neighbors.
+   * @param distCol Output column for storing the distance between each result row and the key.
+   * @return A dataset containing at most k items closest to the key. A column "distCol" is added
+   *         to show the distance between each row and the key.
    */
   def approxNearestNeighbors(
     dataset: Dataset[_],
@@ -187,7 +187,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    *
    * @param dataset The dataset to transform and explode.
    * @param explodeCols The alias for the exploded columns, must be a seq of two strings.
-   * @return A dataset containing idCol, inputCol and explodeCols
+   * @return A dataset containing idCol, inputCol and explodeCols.
    */
   private[this] def processDataset(
       dataset: Dataset[_],
@@ -206,9 +206,9 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
   /**
    * Recreate a column using the same column name but different attribute id. Used in approximate
    * similarity join.
-   * @param dataset The dataset where a column need to recreate
-   * @param colName The name of the column to recreate
-   * @param tmpColName A temporary column name which does not conflict with existing columns
+   * @param dataset The dataset where a column need to recreate.
+   * @param colName The name of the column to recreate.
+   * @param tmpColName A temporary column name which does not conflict with existing columns.
    * @return
    */
   private[this] def recreateCol(
@@ -227,12 +227,12 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    * [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the transformed
    * data when necessary.
    *
-   * @param datasetA One of the datasets to join
-   * @param datasetB Another dataset to join
-   * @param threshold The threshold for the distance of row pairs
-   * @param distCol Output column for storing the distance between each result row and the key
+   * @param datasetA One of the datasets to join.
+   * @param datasetB Another dataset to join.
+   * @param threshold The threshold for the distance of row pairs.
+   * @param distCol Output column for storing the distance between each result row and the key.
    * @return A joined dataset containing pairs of rows. The original rows are in columns
-   *         "datasetA" and "datasetB", and a distCol is added to show the distance of each pair
+   *         "datasetA" and "datasetB", and a distCol is added to show the distance of each pair.
    */
   def approxSimilarityJoin(
       datasetA: Dataset[_],

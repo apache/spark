@@ -57,8 +57,7 @@ class BucketedRandomProjectionLSHSuite
   test("read/write") {
     def checkModelData(
       model: BucketedRandomProjectionLSHModel,
-      model2: BucketedRandomProjectionLSHModel
-    ): Unit = {
+      model2: BucketedRandomProjectionLSHModel): Unit = {
       model.randUnitVectors.zip(model2.randUnitVectors)
         .foreach(pair => assert(pair._1 === pair._2))
     }
