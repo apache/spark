@@ -20,10 +20,9 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 
 /**
- * :: DeveloperApi ::
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
  *
  * Please use [[DataTypes.createMapType()]] to create a specific instance.
@@ -32,7 +31,7 @@ import org.apache.spark.annotation.DeveloperApi
  * @param valueType The data type of map values.
  * @param valueContainsNull Indicates if map values have `null` values.
  */
-@DeveloperApi
+@InterfaceStability.Stable
 case class MapType(
   keyType: DataType,
   valueType: DataType,
@@ -76,7 +75,10 @@ case class MapType(
   }
 }
 
-
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object MapType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = apply(NullType, NullType)

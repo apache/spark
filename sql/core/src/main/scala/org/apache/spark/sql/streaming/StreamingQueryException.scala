@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.{Offset, StreamExecution}
+import org.apache.spark.sql.execution.streaming.{Offset, OffsetSeq, StreamExecution}
 
 /**
  * :: Experimental ::
@@ -36,8 +36,8 @@ class StreamingQueryException private[sql](
     @transient val query: StreamingQuery,
     val message: String,
     val cause: Throwable,
-    val startOffset: Option[Offset] = None,
-    val endOffset: Option[Offset] = None)
+    val startOffset: Option[OffsetSeq] = None,
+    val endOffset: Option[OffsetSeq] = None)
   extends Exception(message, cause) {
 
   /** Time when the exception occurred */

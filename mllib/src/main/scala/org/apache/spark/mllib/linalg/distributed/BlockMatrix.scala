@@ -429,14 +429,14 @@ class BlockMatrix @Since("1.3.0") (
 
     val rightCounterpartsHelper = rightMatrix.groupBy(_._1).mapValues(_.map(_._2))
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
-      val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array())
+      val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array.empty[Int])
       val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b)))
       ((rowIndex, colIndex), partitions.toSet)
     }.toMap
 
     val leftCounterpartsHelper = leftMatrix.groupBy(_._2).mapValues(_.map(_._1))
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
-      val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array())
+      val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array.empty[Int])
       val partitions = leftCounterparts.map(b => partitioner.getPartition((b, colIndex)))
       ((rowIndex, colIndex), partitions.toSet)
     }.toMap
@@ -451,7 +451,7 @@ class BlockMatrix @Since("1.3.0") (
    * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
    * some performance issues until support for multiplying two sparse matrices is added.
    *
-   * Note: The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
+   * @note The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when
    * there were blocks with duplicate indices. Now, the blocks with duplicate indices will be added
    * with each other.
    */

@@ -24,7 +24,7 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
@@ -55,6 +55,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
+@InterfaceStability.Stable
 class SQLContext private[sql](val sparkSession: SparkSession)
   extends Logging with Serializable {
 
@@ -95,6 +96,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * that listen for execution metrics.
    */
   @Experimental
+  @InterfaceStability.Evolving
   def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
 
   /**
@@ -166,6 +168,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   @Experimental
   @transient
+  @InterfaceStability.Unstable
   def experimental: ExperimentalMethods = sparkSession.experimental
 
   /**
@@ -178,9 +181,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
-   * Note that the user-defined functions must be deterministic. Due to optimization,
-   * duplicate invocations may be eliminated or the function may even be invoked more times than
-   * it is present in the query.
    *
    * The following example registers a Scala closure as UDF:
    * {{{
@@ -204,6 +204,10 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    *       (Integer arg1, String arg2) -> arg2 + arg1,
    *       DataTypes.StringType);
    * }}}
+   *
+   * @note The user-defined functions must be deterministic. Due to optimization,
+   * duplicate invocations may be eliminated or the function may even be invoked more times than
+   * it is present in the query.
    *
    * @group basic
    * @since 1.3.0
@@ -261,6 +265,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   object implicits extends SQLImplicits with Serializable {
     protected override def _sqlContext: SQLContext = self
   }
@@ -274,6 +279,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     sparkSession.createDataFrame(rdd)
   }
@@ -286,6 +292,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
     sparkSession.createDataFrame(data)
   }
@@ -333,6 +340,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
+  @InterfaceStability.Evolving
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
   }
@@ -376,6 +384,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataset
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -413,6 +422,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataset
    */
   @Experimental
+  @InterfaceStability.Evolving
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -436,6 +446,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
+  @InterfaceStability.Evolving
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
   }
@@ -450,6 +461,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.6.0
    */
   @DeveloperApi
+  @InterfaceStability.Evolving
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rows, schema)
   }
@@ -515,6 +527,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def readStream: DataStreamReader = sparkSession.readStream
 
 
@@ -632,6 +645,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(end: Long): DataFrame = sparkSession.range(end).toDF()
 
   /**
@@ -643,6 +657,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
 
   /**
@@ -654,6 +669,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(start: Long, end: Long, step: Long): DataFrame = {
     sparkSession.range(start, end, step).toDF()
   }
@@ -668,6 +684,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group dataframe
    */
   @Experimental
+  @InterfaceStability.Evolving
   def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
     sparkSession.range(start, end, step, numPartitions).toDF()
   }

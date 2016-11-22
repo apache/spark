@@ -19,23 +19,27 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for the Parquet data source.
  */
 private[parquet] class ParquetOptions(
-    @transient private val parameters: Map[String, String],
+    @transient private val parameters: CaseInsensitiveMap,
     @transient private val sqlConf: SQLConf)
   extends Serializable {
 
   import ParquetOptions._
 
+  def this(parameters: Map[String, String], sqlConf: SQLConf) =
+    this(new CaseInsensitiveMap(parameters), sqlConf)
+
   /**
    * Compression codec to use. By default use the value specified in SQLConf.
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
    */
-  val compressionCodec: String = {
+  val compressionCodecClassName: String = {
     val codecName = parameters.getOrElse("compression", sqlConf.parquetCompressionCodec).toLowerCase
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)

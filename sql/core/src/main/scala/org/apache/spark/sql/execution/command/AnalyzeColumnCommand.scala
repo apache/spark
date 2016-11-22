@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import scala.collection.mutable
-
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -44,55 +43,62 @@ case class AnalyzeColumnCommand(
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB))
 
-    relation match {
+    // Compute total size
+    val (catalogTable: CatalogTable, sizeInBytes: Long) = relation match {
       case catalogRel: CatalogRelation =>
-        updateStats(catalogRel.catalogTable,
+        // This is a Hive serde format table
+        (catalogRel.catalogTable,
           AnalyzeTableCommand.calculateTotalSize(sessionState, catalogRel.catalogTable))
 
       case logicalRel: LogicalRelation if logicalRel.catalogTable.isDefined =>
-        updateStats(logicalRel.catalogTable.get, logicalRel.relation.sizeInBytes)
+        // This is a data source format table
+        (logicalRel.catalogTable.get,
+          AnalyzeTableCommand.calculateTotalSize(sessionState, logicalRel.catalogTable.get))
 
       case otherRelation =>
         throw new AnalysisException("ANALYZE TABLE is not supported for " +
           s"${otherRelation.nodeName}.")
     }
 
-    def updateStats(catalogTable: CatalogTable, newTotalSize: Long): Unit = {
-      val (rowCount, columnStats) = computeColStats(sparkSession, relation)
-      val statistics = Statistics(
-        sizeInBytes = newTotalSize,
-        rowCount = Some(rowCount),
-        colStats = columnStats ++ catalogTable.stats.map(_.colStats).getOrElse(Map()))
-      sessionState.catalog.alterTable(catalogTable.copy(stats = Some(statistics)))
-      // Refresh the cached data source table in the catalog.
-      sessionState.catalog.refreshTable(tableIdentWithDB)
-    }
+    // Compute stats for each column
+    val (rowCount, newColStats) =
+      AnalyzeColumnCommand.computeColStats(sparkSession, relation, columnNames)
+
+    // We also update table-level stats in order to keep them consistent with column-level stats.
+    val statistics = Statistics(
+      sizeInBytes = sizeInBytes,
+      rowCount = Some(rowCount),
+      // Newly computed column stats should override the existing ones.
+      colStats = catalogTable.stats.map(_.colStats).getOrElse(Map.empty) ++ newColStats)
+
+    sessionState.catalog.alterTable(catalogTable.copy(stats = Some(statistics)))
+
+    // Refresh the cached data source table in the catalog.
+    sessionState.catalog.refreshTable(tableIdentWithDB)
 
     Seq.empty[Row]
   }
+}
 
+object AnalyzeColumnCommand extends Logging {
+
+  /**
+   * Compute stats for the given columns.
+   * @return (row count, map from column name to ColumnStats)
+   *
+   * This is visible for testing.
+   */
   def computeColStats(
       sparkSession: SparkSession,
-      relation: LogicalPlan): (Long, Map[String, ColumnStat]) = {
+      relation: LogicalPlan,
+      columnNames: Seq[String]): (Long, Map[String, ColumnStat]) = {
 
-    // check correctness of column names
-    val attributesToAnalyze = mutable.MutableList[Attribute]()
-    val duplicatedColumns = mutable.MutableList[String]()
+    // Resolve the column names and dedup using AttributeSet
     val resolver = sparkSession.sessionState.conf.resolver
-    columnNames.foreach { col =>
+    val attributesToAnalyze = AttributeSet(columnNames.map { col =>
       val exprOption = relation.output.find(attr => resolver(attr.name, col))
-      val expr = exprOption.getOrElse(throw new AnalysisException(s"Invalid column name: $col."))
-      // do deduplication
-      if (!attributesToAnalyze.contains(expr)) {
-        attributesToAnalyze += expr
-      } else {
-        duplicatedColumns += col
-      }
-    }
-    if (duplicatedColumns.nonEmpty) {
-      logWarning(s"Duplicated columns ${duplicatedColumns.mkString("(", ", ", ")")} detected " +
-        s"when analyzing columns ${columnNames.mkString("(", ", ", ")")}, ignoring them.")
-    }
+      exprOption.getOrElse(throw new AnalysisException(s"Invalid column name: $col."))
+    }).toSeq
 
     // Collect statistics per column.
     // The first element in the result will be the overall row count, the following elements
@@ -100,38 +106,43 @@ case class AnalyzeColumnCommand(
     // The layout of each struct follows the layout of the ColumnStats.
     val ndvMaxErr = sparkSession.sessionState.conf.ndvMaxError
     val expressions = Count(Literal(1)).toAggregateExpression() +:
-      attributesToAnalyze.map(ColumnStatStruct(_, ndvMaxErr))
+      attributesToAnalyze.map(AnalyzeColumnCommand.createColumnStatStruct(_, ndvMaxErr))
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
     val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation))
       .queryExecution.toRdd.collect().head
 
     // unwrap the result
+    // TODO: Get rid of numFields by using the public Dataset API.
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (expr, i) =>
-      val numFields = ColumnStatStruct.numStatFields(expr.dataType)
+      val numFields = AnalyzeColumnCommand.numStatFields(expr.dataType)
       (expr.name, ColumnStat(statsRow.getStruct(i + 1, numFields)))
     }.toMap
     (rowCount, columnStats)
   }
-}
 
-object ColumnStatStruct {
-  val zero = Literal(0, LongType)
-  val one = Literal(1, LongType)
+  private val zero = Literal(0, LongType)
+  private val one = Literal(1, LongType)
 
-  def numNulls(e: Expression): Expression = if (e.nullable) Sum(If(IsNull(e), one, zero)) else zero
-  def max(e: Expression): Expression = Max(e)
-  def min(e: Expression): Expression = Min(e)
-  def ndv(e: Expression, relativeSD: Double): Expression = {
+  private def numNulls(e: Expression): Expression = {
+    if (e.nullable) Sum(If(IsNull(e), one, zero)) else zero
+  }
+  private def max(e: Expression): Expression = Max(e)
+  private def min(e: Expression): Expression = Min(e)
+  private def ndv(e: Expression, relativeSD: Double): Expression = {
     // the approximate ndv should never be larger than the number of rows
     Least(Seq(HyperLogLogPlusPlus(e, relativeSD), Count(one)))
   }
-  def avgLength(e: Expression): Expression = Average(Length(e))
-  def maxLength(e: Expression): Expression = Max(Length(e))
-  def numTrues(e: Expression): Expression = Sum(If(e, one, zero))
-  def numFalses(e: Expression): Expression = Sum(If(Not(e), one, zero))
+  private def avgLength(e: Expression): Expression = Average(Length(e))
+  private def maxLength(e: Expression): Expression = Max(Length(e))
+  private def numTrues(e: Expression): Expression = Sum(If(e, one, zero))
+  private def numFalses(e: Expression): Expression = Sum(If(Not(e), one, zero))
 
-  def getStruct(exprs: Seq[Expression]): CreateStruct = {
+  /**
+   * Creates a struct that groups the sequence of expressions together. This is used to create
+   * one top level struct per column.
+   */
+  private def createStruct(exprs: Seq[Expression]): CreateNamedStruct = {
     CreateStruct(exprs.map { expr: Expression =>
       expr.transformUp {
         case af: AggregateFunction => af.toAggregateExpression()
@@ -139,22 +150,23 @@ object ColumnStatStruct {
     })
   }
 
-  def numericColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
+  private def numericColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
     Seq(numNulls(e), max(e), min(e), ndv(e, relativeSD))
   }
 
-  def stringColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
+  private def stringColumnStat(e: Expression, relativeSD: Double): Seq[Expression] = {
     Seq(numNulls(e), avgLength(e), maxLength(e), ndv(e, relativeSD))
   }
 
-  def binaryColumnStat(e: Expression): Seq[Expression] = {
+  private def binaryColumnStat(e: Expression): Seq[Expression] = {
     Seq(numNulls(e), avgLength(e), maxLength(e))
   }
 
-  def booleanColumnStat(e: Expression): Seq[Expression] = {
+  private def booleanColumnStat(e: Expression): Seq[Expression] = {
     Seq(numNulls(e), numTrues(e), numFalses(e))
   }
 
+  // TODO(rxin): Get rid of this function.
   def numStatFields(dataType: DataType): Int = {
     dataType match {
       case BinaryType | BooleanType => 3
@@ -162,14 +174,25 @@ object ColumnStatStruct {
     }
   }
 
-  def apply(e: Attribute, relativeSD: Double): CreateStruct = e.dataType match {
-    // Use aggregate functions to compute statistics we need.
-    case _: NumericType | TimestampType | DateType => getStruct(numericColumnStat(e, relativeSD))
-    case StringType => getStruct(stringColumnStat(e, relativeSD))
-    case BinaryType => getStruct(binaryColumnStat(e))
-    case BooleanType => getStruct(booleanColumnStat(e))
-    case otherType =>
-      throw new AnalysisException("Analyzing columns is not supported for column " +
-        s"${e.name} of data type: ${e.dataType}.")
+  /**
+   * Creates a struct expression that contains the statistics to collect for a column.
+   *
+   * @param attr column to collect statistics
+   * @param relativeSD relative error for approximate number of distinct values.
+   */
+  def createColumnStatStruct(attr: Attribute, relativeSD: Double): CreateNamedStruct = {
+    attr.dataType match {
+      case _: NumericType | TimestampType | DateType =>
+        createStruct(numericColumnStat(attr, relativeSD))
+      case StringType =>
+        createStruct(stringColumnStat(attr, relativeSD))
+      case BinaryType =>
+        createStruct(binaryColumnStat(attr))
+      case BooleanType =>
+        createStruct(booleanColumnStat(attr))
+      case otherType =>
+        throw new AnalysisException("Analyzing columns is not supported for column " +
+            s"${attr.name} of data type: ${attr.dataType}.")
+    }
   }
 }

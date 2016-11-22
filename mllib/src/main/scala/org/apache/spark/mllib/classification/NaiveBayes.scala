@@ -365,16 +365,11 @@ class NaiveBayes private (
       .setModelType(modelType)
       .setSmoothing(lambda)
 
-    val labels = data.map(_.label).distinct().collect().sorted
+    val dataset = data.map { case LabeledPoint(label, features) => (label, features.asML) }
+      .toDF("label", "features")
 
-    // Input labels for [[org.apache.spark.ml.classification.NaiveBayes]] must be
-    // in range [0, numClasses).
-    val dataset = data.map {
-      case LabeledPoint(label, features) =>
-        (labels.indexOf(label).toDouble, features.asML)
-    }.toDF("label", "features")
-
-    val newModel = nb.fit(dataset)
+    // mllib NaiveBayes allows input labels like {-1, +1}, so set `positiveLabel` as false.
+    val newModel = nb.trainWithLabelCheck(dataset, positiveLabel = false)
 
     val pi = newModel.pi.toArray
     val theta = Array.fill[Double](newModel.numClasses, newModel.numFeatures)(0.0)
@@ -383,7 +378,9 @@ class NaiveBayes private (
         theta(i)(j) = v
     }
 
-    new NaiveBayesModel(labels, pi, theta, modelType)
+    assert(newModel.oldLabels != null,
+      "The underlying ML NaiveBayes training does not produce labels.")
+    new NaiveBayesModel(newModel.oldLabels, pi, theta, modelType)
   }
 }
 

@@ -112,6 +112,11 @@ private[kafka010] class KafkaSourceRDD(
     buf.toArray
   }
 
+  override def getPreferredLocations(split: Partition): Seq[String] = {
+    val part = split.asInstanceOf[KafkaSourceRDDPartition]
+    part.offsetRange.preferredLoc.map(Seq(_)).getOrElse(Seq.empty)
+  }
+
   override def compute(
       thePart: Partition,
       context: TaskContext): Iterator[ConsumerRecord[Array[Byte], Array[Byte]]] = {

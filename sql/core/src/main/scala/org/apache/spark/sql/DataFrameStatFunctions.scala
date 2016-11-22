@@ -21,19 +21,18 @@ import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
- * :: Experimental ::
  * Statistic functions for [[DataFrame]]s.
  *
  * @since 1.4.0
  */
-@Experimental
+@InterfaceStability.Stable
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
@@ -52,7 +51,6 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
    * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
    *
-   * Note that NaN values will be removed from the numerical column before calculation
    * @param col the name of the numerical column
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
@@ -61,6 +59,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities
+   *
+   * @note NaN values will be removed from the numerical column before calculation
    *
    * @since 2.0.0
    */

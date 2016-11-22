@@ -79,7 +79,7 @@ class StatisticsColumnSuite extends StatisticsTest {
         val tableIdent = TableIdentifier(table, Some("default"))
         val relation = spark.sessionState.catalog.lookupRelation(tableIdent)
         val (_, columnStats) =
-          AnalyzeColumnCommand(tableIdent, columnsToAnalyze).computeColStats(spark, relation)
+          AnalyzeColumnCommand.computeColStats(spark, relation, columnsToAnalyze)
         assert(columnStats.contains(colName1))
         assert(columnStats.contains(colName2))
         // check deduplication
@@ -150,7 +150,7 @@ class StatisticsColumnSuite extends StatisticsTest {
       val colStat = ColumnStat(InternalRow(
         values.count(_.isEmpty).toLong,
         nonNullValues.map(_.length).sum / nonNullValues.length.toDouble,
-        nonNullValues.map(_.length).max.toLong,
+        nonNullValues.map(_.length).max.toInt,
         nonNullValues.distinct.length.toLong))
       (f, colStat)
     }
@@ -165,7 +165,7 @@ class StatisticsColumnSuite extends StatisticsTest {
       val colStat = ColumnStat(InternalRow(
         values.count(_.isEmpty).toLong,
         nonNullValues.map(_.length).sum / nonNullValues.length.toDouble,
-        nonNullValues.map(_.length).max.toLong))
+        nonNullValues.map(_.length).max.toInt))
       (f, colStat)
     }
     checkColStats(df, expectedColStatsSeq)
@@ -255,10 +255,10 @@ class StatisticsColumnSuite extends StatisticsTest {
               doubleSeq.distinct.length.toLong))
         case StringType =>
           ColumnStat(InternalRow(0L, stringSeq.map(_.length).sum / stringSeq.length.toDouble,
-                stringSeq.map(_.length).max.toLong, stringSeq.distinct.length.toLong))
+                stringSeq.map(_.length).max.toInt, stringSeq.distinct.length.toLong))
         case BinaryType =>
           ColumnStat(InternalRow(0L, binarySeq.map(_.length).sum / binarySeq.length.toDouble,
-                binarySeq.map(_.length).max.toLong))
+                binarySeq.map(_.length).max.toInt))
         case BooleanType =>
           ColumnStat(InternalRow(0L, booleanSeq.count(_.equals(true)).toLong,
               booleanSeq.count(_.equals(false)).toLong))
