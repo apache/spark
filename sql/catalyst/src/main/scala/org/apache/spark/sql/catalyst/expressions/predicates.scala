@@ -417,7 +417,7 @@ case class EqualTo(left: Expression, right: Expression)
       case TypeCheckResult.TypeCheckSuccess =>
         // TODO: although map type is not orderable, technically map type should be able to be used
         // in equality comparison, remove this type check once we support it.
-        if (hasMapType(left.dataType)) {
+        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
           TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualTo, but the actual " +
             s"input type is ${left.dataType.catalogString}.")
         } else {
@@ -425,14 +425,6 @@ case class EqualTo(left: Expression, right: Expression)
         }
       case failure => failure
     }
-  }
-
-  private def hasMapType(dt: DataType): Boolean = dt match {
-    case _: MapType => true
-    case st: StructType => st.map(_.dataType).exists(hasMapType)
-    case a: ArrayType => hasMapType(a.elementType)
-    case udt: UserDefinedType[_] => hasMapType(udt.sqlType)
-    case _ => false
   }
 
   override def symbol: String = "="
@@ -468,7 +460,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
       case TypeCheckResult.TypeCheckSuccess =>
         // TODO: although map type is not orderable, technically map type should be able to be used
         // in equality comparison, remove this type check once we support it.
-        if (hasMapType(left.dataType)) {
+        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
           TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualNullSafe, but the actual " +
             s"input type is ${left.dataType.catalogString}.")
         } else {
@@ -476,14 +468,6 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
         }
       case failure => failure
     }
-  }
-
-  private def hasMapType(dt: DataType): Boolean = dt match {
-    case _: MapType => true
-    case st: StructType => st.map(_.dataType).exists(hasMapType)
-    case a: ArrayType => hasMapType(a.elementType)
-    case udt: UserDefinedType[_] => hasMapType(udt.sqlType)
-    case _ => false
   }
 
   override def symbol: String = "<=>"
