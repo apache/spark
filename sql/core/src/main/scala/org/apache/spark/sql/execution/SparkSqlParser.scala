@@ -881,17 +881,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *
    * For example:
    * {{{
-   *   ALTER TABLE table CHANGE COLUMN `col` `col` dataType "comment" (FIRST | AFTER `otherCol`)
-   *   [, `col2` `col2` dataType "comment" (FIRST | AFTER `otherCol`), ...]
+   *   ALTER TABLE table [PARTITION partition_spec]
+   *   CHANGE [COLUMN] `col` `col` dataType [COMMENT "comment"] [FIRST | AFTER `otherCol`]
+   *   [, `col2` `col2` dataType [COMMENT "comment"] [FIRST | AFTER `otherCol`], ...]
    * }}}
    */
   override def visitChangeColumns(ctx: ChangeColumnsContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.partitionSpec != null) {
+      operationNotAllowed(s"ALTER TABLE PARTITION partition_spec CHANGE COLUMN, can not change " +
+        "the columns in partition spec", ctx)
+    }
+
     val tableName = visitTableIdentifier(ctx.tableIdentifier)
 
     val columns = ctx.expandColTypeList.expandColType.asScala.map { col =>
       if (col.colPosition != null) {
-        throw new AnalysisException(
-          s"Specifying column position in ALTER TABLE CHANGE COLUMN is not supported yet.")
+        operationNotAllowed(
+          s"ALTER TABLE [PARTITION] CHANGE COLUMN ... FIRST | AFTER otherCol", ctx)
       }
       col.identifier.getText -> visitColType(col.colType)
     }.toMap

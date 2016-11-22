@@ -32,5 +32,10 @@ ALTER TABLE temp_view CHANGE a a Int COMMENT 'this is column a';
 CREATE GLOBAL TEMPORARY VIEW global_temp_view(a, b) AS SELECT 1, "one";
 ALTER TABLE global_temp.global_temp_view CHANGE a a Int COMMENT 'this is column a';
 
+-- Change column in partition spec (not supported yet)
+CREATE TABLE partition_table(a Int, b String) PARTITIONED BY (c Int, d String);
+ALTER TABLE partition_table PARTITION (c = 1) CHANGE COLUMN a new_a Int;
+
 -- DROP TEST TABLE
 DROP TABLE test_change;
+DROP TABLE partition_table;
