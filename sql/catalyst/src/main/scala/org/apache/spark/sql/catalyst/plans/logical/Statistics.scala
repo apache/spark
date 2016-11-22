@@ -137,17 +137,20 @@ object ColumnStat extends Logging {
     : Option[ColumnStat] = {
     val str2val: (String => Any) = field.dataType match {
       case _: IntegralType => _.toLong
-      case _: DecimalType => Decimal(_)
+      case _: DecimalType => new java.math.BigDecimal(_)
       case DoubleType | FloatType => _.toDouble
       case BooleanType => _.toBoolean
-      case _ => v: String => if (v == NULL_STRING) null else v
+      case DateType => java.sql.Date.valueOf
+      case TimestampType => java.sql.Timestamp.valueOf
+      case _ => (v: String) => if (v == NULL_STRING) null else v
     }
 
     try {
       Some(ColumnStat(
         distinctCount = BigInt(map(KEY_DISTINCT_COUNT).toLong),
-        min = map.get(KEY_MIN_VALUE).map(str2val),
-        max = map.get(KEY_MAX_VALUE).map(str2val),
+        // Note Option(..).flatMap(Option.apply) replaces Option(null) with None
+        min = map.get(KEY_MIN_VALUE).map(str2val).flatMap(Option.apply),
+        max = map.get(KEY_MAX_VALUE).map(str2val).flatMap(Option.apply),
         nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
         avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
         maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong

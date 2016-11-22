@@ -116,7 +116,6 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-
   test("analyze column command - parsing") {
     val tableName = "column_stats_test0"
 
@@ -150,49 +149,61 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  private val dec1 = new java.math.BigDecimal("1.000000000000000000")
+  private val dec2 = new java.math.BigDecimal("8.000000000000000000")
+  private val d1 = Date.valueOf("2016-05-08")
+  private val d2 = Date.valueOf("2016-05-09")
+  private val t1 = Timestamp.valueOf("2016-05-08 00:00:01")
+  private val t2 = Timestamp.valueOf("2016-05-09 00:00:02")
+
+  /**
+   * Define a very simple 3 row table used for testing column serialization.
+   * Note: last column is seq[int] which doesn't support stats collection.
+   */
+  private val data = Seq[
+    (jl.Boolean, jl.Byte, jl.Short, jl.Integer, jl.Long,
+      jl.Double, jl.Float, java.math.BigDecimal,
+      String, Array[Byte], Date, Timestamp,
+      Seq[Int])](
+    (false, 1.toByte, 1.toShort, 1, 1L, 1.0, 1.0f, dec1, "s1", "b1".getBytes, d1, t1, null),
+    (true, 2.toByte, 3.toShort, 4, 5L, 6.0, 7.0f, dec2, "ss9", "bb0".getBytes, d2, t2, null),
+    (null, null, null, null, null, null, null, null, null, null, null, null, null)
+  )
+
+  /** A mapping from column to the stats collected. */
+  private val stats = mutable.LinkedHashMap(
+    "cbool" -> ColumnStat(2, Some(false), Some(true), 1, 1, 1),
+    "cbyte" -> ColumnStat(2, Some(1L), Some(2L), 1, 1, 1),
+    "cshort" -> ColumnStat(2, Some(1L), Some(3L), 1, 2, 2),
+    "cint" -> ColumnStat(2, Some(1L), Some(4L), 1, 4, 4),
+    "clong" -> ColumnStat(2, Some(1L), Some(5L), 1, 8, 8),
+    "cdouble" -> ColumnStat(2, Some(1.0), Some(6.0), 1, 8, 8),
+    "cfloat" -> ColumnStat(2, Some(1.0), Some(7.0), 1, 4, 4),
+    "cdecimal" -> ColumnStat(2, Some(dec1), Some(dec2), 1, 16, 16),
+    "cstring" -> ColumnStat(2, None, None, 1, 3, 3),
+    "cbinary" -> ColumnStat(2, None, None, 1, 3, 3),
+    "cdate" -> ColumnStat(2, Some(d1), Some(d2), 1, 4, 4),
+    "ctimestamp" -> ColumnStat(2, Some(t1), Some(t2), 1, 8, 8)
+  )
+
+  test("column stats round trip serialization") {
+    // Make sure we serialize and then deserialize and we will get the result data
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    stats.zip(df.schema).foreach { case ((k, v), field) =>
+      withClue(s"column $k with type ${field.dataType}") {
+        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap)
+        assert(roundtrip == Some(v))
+      }
+    }
+  }
+
   test("analyze column command - result verification") {
     val tableName = "column_stats_test2"
-
-    val dec1 = new java.math.BigDecimal("1.000000000000000000")
-    val dec2 = new java.math.BigDecimal("8.000000000000000000")
-    val d1 = Date.valueOf("2016-05-08")
-    val d2 = Date.valueOf("2016-05-09")
-    val t1 = Timestamp.valueOf("2016-05-08 00:00:01")
-    val t2 = Timestamp.valueOf("2016-05-09 00:00:02")
-
-    // Define a very simple 3 row table.
-    // Note: last column is seq[int] which doesn't support stats collection.
-    val data = Seq[
-      (jl.Boolean, jl.Byte, jl.Short, jl.Integer, jl.Long,
-        jl.Double, jl.Float, java.math.BigDecimal,
-        String, Array[Byte], Date, Timestamp,
-        Seq[Int])](
-      (false, 1.toByte, 1.toShort, 1, 1L, 1.0, 1.0f, dec1, "s1", "b1".getBytes, d1, t1, null),
-      (true, 2.toByte, 3.toShort, 4, 5L, 6.0, 7.0f, dec2, "ss9", "bb0".getBytes, d2, t2, null),
-      (null, null, null, null, null, null, null, null, null, null, null, null, null)
-    )
-
-    // A mapping from column to the stats collected
-    val stats = mutable.LinkedHashMap(
-      "cbool" -> ColumnStat(2, Some(false), Some(true), 1, 1, 1),
-      "cbyte" -> ColumnStat(2, Some(1L), Some(2L), 1, 1, 1),
-      "cshort" -> ColumnStat(2, Some(1L), Some(3L), 1, 2, 2),
-      "cint" -> ColumnStat(2, Some(1L), Some(4L), 1, 4, 4),
-      "clong" -> ColumnStat(2, Some(1L), Some(5L), 1, 8, 8),
-      "cdouble" -> ColumnStat(2, Some(1.0), Some(6.0), 1, 8, 8),
-      "cfloat" -> ColumnStat(2, Some(1.0), Some(7.0), 1, 4, 4),
-      "cdecimal" -> ColumnStat(2, Some(dec1), Some(dec2), 1, 16, 16),
-      "cstring" -> ColumnStat(2, None, None, 1, 3, 3),
-      "cbinary" -> ColumnStat(2, None, None, 1, 3, 3),
-      "cdate" -> ColumnStat(2, Some(d1), Some(d2), 1, 4, 4),
-      "ctimestamp" -> ColumnStat(2, Some(t1), Some(t2), 1, 8, 8)
-    )
-
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
 
     withTable(tableName) {
-      val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
       df.write.saveAsTable(tableName)
 
       // Collect statistics
