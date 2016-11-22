@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.streaming
 import java.io._
 import java.nio.charset.StandardCharsets._
 
-import scala.language.implicitConversions
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.SparkSession
