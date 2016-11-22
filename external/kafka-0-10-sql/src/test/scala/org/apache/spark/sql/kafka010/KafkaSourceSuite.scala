@@ -18,8 +18,11 @@
 package org.apache.spark.sql.kafka010
 
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.Properties
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
@@ -28,6 +31,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
@@ -204,7 +208,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
 
   test("cannot stop Kafka stream") {
     val topic = newTopic()
-    testUtils.createTopic(newTopic(), partitions = 5)
+    testUtils.createTopic(topic, partitions = 5)
     testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)
 
     val reader = spark
@@ -225,52 +229,85 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
-  test("assign from latest offsets") {
-    val topic = newTopic()
-    testFromLatestOffsets(topic, false, "assign" -> assignString(topic, 0 to 4))
-  }
+  for (failOnDataLoss <- Seq(true, false)) {
+    test(s"assign from latest offsets (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromLatestOffsets(
+        topic,
+        addPartitions = false,
+        failOnDataLoss = failOnDataLoss,
+        "assign" -> assignString(topic, 0 to 4))
+    }
 
-  test("assign from earliest offsets") {
-    val topic = newTopic()
-    testFromEarliestOffsets(topic, false, "assign" -> assignString(topic, 0 to 4))
-  }
+    test(s"assign from earliest offsets (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromEarliestOffsets(
+        topic,
+        addPartitions = false,
+        failOnDataLoss = failOnDataLoss,
+        "assign" -> assignString(topic, 0 to 4))
+    }
 
-  test("assign from specific offsets") {
-    val topic = newTopic()
-    testFromSpecificOffsets(topic, "assign" -> assignString(topic, 0 to 4))
-  }
+    test(s"assign from specific offsets (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromSpecificOffsets(
+        topic,
+        failOnDataLoss = failOnDataLoss,
+        "assign" -> assignString(topic, 0 to 4),
+        "failOnDataLoss" -> failOnDataLoss.toString)
+    }
 
-  test("subscribing topic by name from latest offsets") {
-    val topic = newTopic()
-    testFromLatestOffsets(topic, true, "subscribe" -> topic)
-  }
+    test(s"subscribing topic by name from latest offsets (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromLatestOffsets(
+        topic,
+        addPartitions = true,
+        failOnDataLoss = failOnDataLoss,
+        "subscribe" -> topic)
+    }
 
-  test("subscribing topic by name from earliest offsets") {
-    val topic = newTopic()
-    testFromEarliestOffsets(topic, true, "subscribe" -> topic)
-  }
+    test(s"subscribing topic by name from earliest offsets (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromEarliestOffsets(
+        topic,
+        addPartitions = true,
+        failOnDataLoss = failOnDataLoss,
+        "subscribe" -> topic)
+    }
 
-  test("subscribing topic by name from specific offsets") {
-    val topic = newTopic()
-    testFromSpecificOffsets(topic, "subscribe" -> topic)
-  }
+    test(s"subscribing topic by name from specific offsets (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromSpecificOffsets(topic, failOnDataLoss = failOnDataLoss, "subscribe" -> topic)
+    }
 
-  test("subscribing topic by pattern from latest offsets") {
-    val topicPrefix = newTopic()
-    val topic = topicPrefix + "-suffix"
-    testFromLatestOffsets(topic, true, "subscribePattern" -> s"$topicPrefix-.*")
-  }
+    test(s"subscribing topic by pattern from latest offsets (failOnDataLoss: $failOnDataLoss)") {
+      val topicPrefix = newTopic()
+      val topic = topicPrefix + "-suffix"
+      testFromLatestOffsets(
+        topic,
+        addPartitions = true,
+        failOnDataLoss = failOnDataLoss,
+        "subscribePattern" -> s"$topicPrefix-.*")
+    }
 
-  test("subscribing topic by pattern from earliest offsets") {
-    val topicPrefix = newTopic()
-    val topic = topicPrefix + "-suffix"
-    testFromEarliestOffsets(topic, true, "subscribePattern" -> s"$topicPrefix-.*")
-  }
+    test(s"subscribing topic by pattern from earliest offsets (failOnDataLoss: $failOnDataLoss)") {
+      val topicPrefix = newTopic()
+      val topic = topicPrefix + "-suffix"
+      testFromEarliestOffsets(
+        topic,
+        addPartitions = true,
+        failOnDataLoss = failOnDataLoss,
+        "subscribePattern" -> s"$topicPrefix-.*")
+    }
 
-  test("subscribing topic by pattern from specific offsets") {
-    val topicPrefix = newTopic()
-    val topic = topicPrefix + "-suffix"
-    testFromSpecificOffsets(topic, "subscribePattern" -> s"$topicPrefix-.*")
+    test(s"subscribing topic by pattern from specific offsets (failOnDataLoss: $failOnDataLoss)") {
+      val topicPrefix = newTopic()
+      val topic = topicPrefix + "-suffix"
+      testFromSpecificOffsets(
+        topic,
+        failOnDataLoss = failOnDataLoss,
+        "subscribePattern" -> s"$topicPrefix-.*")
+    }
   }
 
   test("subscribing topic by pattern with topic deletions") {
@@ -415,6 +452,106 @@ class KafkaSourceSuite extends KafkaSourceTest {
     )
   }
 
+  test("delete a topic when a Spark job is running") {
+    KafkaSourceSuite.collectedData.clear()
+
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribe", topic)
+      // If a topic is deleted and we try to poll data starting from offset 0,
+      // the Kafka consumer will just block until timeout and return an empty result.
+      // So set the timeout to 1 second to make this test fast.
+      .option("kafkaConsumer.pollTimeoutMs", "1000")
+      .option("startingOffsets", "earliest")
+      .option("failOnDataLoss", "false")
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    KafkaSourceSuite.globalTestUtils = testUtils
+    // The following ForeachWriter will delete the topic before fetching data from Kafka
+    // in executors.
+    val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
+      override def open(partitionId: Long, version: Long): Boolean = {
+        KafkaSourceSuite.globalTestUtils.deleteTopic(topic)
+        true
+      }
+
+      override def process(value: Int): Unit = {
+        KafkaSourceSuite.collectedData.add(value)
+      }
+
+      override def close(errorOrNull: Throwable): Unit = {}
+    }).start()
+    query.processAllAvailable()
+    query.stop()
+    // `failOnDataLoss` is `false`, we should not fail the query
+    assert(query.exception.isEmpty)
+  }
+
+  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
+
+  private def assignString(topic: String, partitions: Iterable[Int]): String = {
+    JsonUtils.partitions(partitions.map(p => new TopicPartition(topic, p)))
+  }
+
+  private def testFromSpecificOffsets(
+      topic: String,
+      failOnDataLoss: Boolean,
+      options: (String, String)*): Unit = {
+    val partitionOffsets = Map(
+      new TopicPartition(topic, 0) -> -2L,
+      new TopicPartition(topic, 1) -> -1L,
+      new TopicPartition(topic, 2) -> 0L,
+      new TopicPartition(topic, 3) -> 1L,
+      new TopicPartition(topic, 4) -> 2L
+    )
+    val startingOffsets = JsonUtils.partitionOffsets(partitionOffsets)
+
+    testUtils.createTopic(topic, partitions = 5)
+    // part 0 starts at earliest, these should all be seen
+    testUtils.sendMessages(topic, Array(-20, -21, -22).map(_.toString), Some(0))
+    // part 1 starts at latest, these should all be skipped
+    testUtils.sendMessages(topic, Array(-10, -11, -12).map(_.toString), Some(1))
+    // part 2 starts at 0, these should all be seen
+    testUtils.sendMessages(topic, Array(0, 1, 2).map(_.toString), Some(2))
+    // part 3 starts at 1, first should be skipped
+    testUtils.sendMessages(topic, Array(10, 11, 12).map(_.toString), Some(3))
+    // part 4 starts at 2, first and second should be skipped
+    testUtils.sendMessages(topic, Array(20, 21, 22).map(_.toString), Some(4))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("startingOffsets", startingOffsets)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("failOnDataLoss", failOnDataLoss.toString)
+    options.foreach { case (k, v) => reader.option(k, v) }
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22),
+      StopStream,
+      StartStream(),
+      CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22), // Should get the data back on recovery
+      AddKafkaData(Set(topic), 30, 31, 32, 33, 34)(ensureDataInMultiplePartition = true),
+      CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22, 30, 31, 32, 33, 34),
+      StopStream
+    )
+  }
+
   test("Kafka column types") {
     val now = System.currentTimeMillis()
     val topic = newTopic()
@@ -493,62 +630,10 @@ class KafkaSourceSuite extends KafkaSourceTest {
     query.stop()
   }
 
-  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
-
-  private def assignString(topic: String, partitions: Iterable[Int]): String = {
-    JsonUtils.partitions(partitions.map(p => new TopicPartition(topic, p)))
-  }
-
-  private def testFromSpecificOffsets(topic: String, options: (String, String)*): Unit = {
-    val partitionOffsets = Map(
-      new TopicPartition(topic, 0) -> -2L,
-      new TopicPartition(topic, 1) -> -1L,
-      new TopicPartition(topic, 2) -> 0L,
-      new TopicPartition(topic, 3) -> 1L,
-      new TopicPartition(topic, 4) -> 2L
-    )
-    val startingOffsets = JsonUtils.partitionOffsets(partitionOffsets)
-
-    testUtils.createTopic(topic, partitions = 5)
-    // part 0 starts at earliest, these should all be seen
-    testUtils.sendMessages(topic, Array(-20, -21, -22).map(_.toString), Some(0))
-    // part 1 starts at latest, these should all be skipped
-    testUtils.sendMessages(topic, Array(-10, -11, -12).map(_.toString), Some(1))
-    // part 2 starts at 0, these should all be seen
-    testUtils.sendMessages(topic, Array(0, 1, 2).map(_.toString), Some(2))
-    // part 3 starts at 1, first should be skipped
-    testUtils.sendMessages(topic, Array(10, 11, 12).map(_.toString), Some(3))
-    // part 4 starts at 2, first and second should be skipped
-    testUtils.sendMessages(topic, Array(20, 21, 22).map(_.toString), Some(4))
-    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
-
-    val reader = spark
-      .readStream
-      .format("kafka")
-      .option("startingOffsets", startingOffsets)
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("kafka.metadata.max.age.ms", "1")
-    options.foreach { case (k, v) => reader.option(k, v) }
-    val kafka = reader.load()
-      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-      .as[(String, String)]
-    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
-
-    testStream(mapped)(
-      makeSureGetOffsetCalled,
-      CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22),
-      StopStream,
-      StartStream(),
-      CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22), // Should get the data back on recovery
-      AddKafkaData(Set(topic), 30, 31, 32, 33, 34)(ensureDataInMultiplePartition = true),
-      CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22, 30, 31, 32, 33, 34),
-      StopStream
-    )
-  }
-
   private def testFromLatestOffsets(
       topic: String,
       addPartitions: Boolean,
+      failOnDataLoss: Boolean,
       options: (String, String)*): Unit = {
     testUtils.createTopic(topic, partitions = 5)
     testUtils.sendMessages(topic, Array("-1"))
@@ -560,6 +645,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .option("startingOffsets", s"latest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("failOnDataLoss", failOnDataLoss.toString)
     options.foreach { case (k, v) => reader.option(k, v) }
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -593,6 +679,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
   private def testFromEarliestOffsets(
       topic: String,
       addPartitions: Boolean,
+      failOnDataLoss: Boolean,
       options: (String, String)*): Unit = {
     testUtils.createTopic(topic, partitions = 5)
     testUtils.sendMessages(topic, (1 to 3).map { _.toString }.toArray)
@@ -604,6 +691,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       .option("startingOffsets", s"earliest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("failOnDataLoss", failOnDataLoss.toString)
     options.foreach { case (k, v) => reader.option(k, v) }
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -630,6 +718,11 @@ class KafkaSourceSuite extends KafkaSourceTest {
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
     )
   }
+}
+
+object KafkaSourceSuite {
+  @volatile var globalTestUtils: KafkaTestUtils = _
+  val collectedData = new ConcurrentLinkedQueue[Any]()
 }
 
 
@@ -695,7 +788,7 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
                 }
               })
           case 2 => // Add new partitions
-            AddKafkaData(topics.toSet, d: _*)(message = "Add partitiosn",
+            AddKafkaData(topics.toSet, d: _*)(message = "Add partition",
               topicAction = (topic, partition) => {
                 testUtils.addPartitions(topic, partition.get + nextInt(1, 6))
               })
@@ -704,5 +797,124 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
         }
       },
       iterations = 50)
+  }
+}
+
+class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with SharedSQLContext {
+
+  import testImplicits._
+
+  private var testUtils: KafkaTestUtils = _
+
+  private val topicId = new AtomicInteger(0)
+
+  private def newTopic(): String = s"failOnDataLoss-${topicId.getAndIncrement()}"
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    testUtils = new KafkaTestUtils {
+      override def brokerConfiguration: Properties = {
+        val props = super.brokerConfiguration
+        // Try to make Kafka clean up messages as fast as possible. However, there is a hard-code
+        // 30 seconds delay (kafka.log.LogManager.InitialTaskDelayMs) so this test should run at
+        // least 30 seconds.
+        props.put("log.cleaner.backoff.ms", "100")
+        props.put("log.segment.bytes", "40")
+        props.put("log.retention.bytes", "40")
+        props.put("log.retention.check.interval.ms", "100")
+        props.put("delete.retention.ms", "10")
+        props.put("log.flush.scheduler.interval.ms", "10")
+        props
+      }
+    }
+    testUtils.setup()
+  }
+
+  override def afterAll(): Unit = {
+    if (testUtils != null) {
+      testUtils.teardown()
+      testUtils = null
+      super.afterAll()
+    }
+  }
+
+  test("stress test for failOnDataLoss=false") {
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", "failOnDataLoss.*")
+      .option("startingOffsets", "earliest")
+      .option("failOnDataLoss", "false")
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
+
+      override def open(partitionId: Long, version: Long): Boolean = {
+        true
+      }
+
+      override def process(value: Int): Unit = {
+        // Slow down the processing speed so that messages may be aged out.
+        Thread.sleep(Random.nextInt(500))
+      }
+
+      override def close(errorOrNull: Throwable): Unit = {
+      }
+    }).start()
+
+    val testTime = 1.minutes
+    val startTime = System.currentTimeMillis()
+    // Track the current existing topics
+    val topics = mutable.ArrayBuffer[String]()
+    // Track topics that have been deleted
+    val deletedTopics = mutable.Set[String]()
+    while (System.currentTimeMillis() - testTime.toMillis < startTime) {
+      Random.nextInt(10) match {
+        case 0 => // Create a new topic
+          val topic = newTopic()
+          topics += topic
+          // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
+          // chance that a topic will be recreated after deletion due to the asynchronous update.
+          // Hence, always overwrite to handle this race condition.
+          testUtils.createTopic(topic, partitions = 1, overwrite = true)
+          logInfo(s"Create topic $topic")
+        case 1 if topics.nonEmpty => // Delete an existing topic
+          val topic = topics.remove(Random.nextInt(topics.size))
+          testUtils.deleteTopic(topic)
+          logInfo(s"Delete topic $topic")
+          deletedTopics += topic
+        case 2 if deletedTopics.nonEmpty => // Recreate a topic that was deleted.
+          val topic = deletedTopics.toSeq(Random.nextInt(deletedTopics.size))
+          deletedTopics -= topic
+          topics += topic
+          // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
+          // chance that a topic will be recreated after deletion due to the asynchronous update.
+          // Hence, always overwrite to handle this race condition.
+          testUtils.createTopic(topic, partitions = 1, overwrite = true)
+          logInfo(s"Create topic $topic")
+        case 3 =>
+          Thread.sleep(1000)
+        case _ => // Push random messages
+          for (topic <- topics) {
+            val size = Random.nextInt(10)
+            for (_ <- 0 until size) {
+              testUtils.sendMessages(topic, Array(Random.nextInt(10).toString))
+            }
+          }
+      }
+      // `failOnDataLoss` is `false`, we should not fail the query
+      if (query.exception.nonEmpty) {
+        throw query.exception.get
+      }
+    }
+
+    query.stop()
+    // `failOnDataLoss` is `false`, we should not fail the query
+    if (query.exception.nonEmpty) {
+      throw query.exception.get
+    }
   }
 }

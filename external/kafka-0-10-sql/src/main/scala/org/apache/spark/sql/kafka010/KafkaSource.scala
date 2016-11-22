@@ -284,7 +284,7 @@ private[kafka010] case class KafkaSource(
 
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
-      sc, executorKafkaParams, offsetRanges, pollTimeoutMs).map { cr =>
+      sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss).map { cr =>
       InternalRow(
         cr.key,
         cr.value,
@@ -473,10 +473,9 @@ private[kafka010] case class KafkaSource(
    */
   private def reportDataLoss(message: String): Unit = {
     if (failOnDataLoss) {
-      throw new IllegalStateException(message +
-        ". Set the source option 'failOnDataLoss' to 'false' if you want to ignore these checks.")
+      throw new IllegalStateException(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE")
     } else {
-      logWarning(message)
+      logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
   }
 }
@@ -484,6 +483,22 @@ private[kafka010] case class KafkaSource(
 
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
+
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you want your streaming query to fail on such cases, set the source
+      | option "failOnDataLoss" to "true".
+    """.stripMargin
+
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you don't want your streaming query to fail on such cases, set the
+      | source option "failOnDataLoss" to "false".
+    """.stripMargin
 
   def kafkaSchema: StructType = StructType(Seq(
     StructField("key", BinaryType),

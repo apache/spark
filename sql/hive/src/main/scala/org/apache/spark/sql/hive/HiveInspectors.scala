@@ -246,6 +246,9 @@ private[hive] trait HiveInspectors {
    * Wraps with Hive types based on object inspector.
    */
   protected def wrapperFor(oi: ObjectInspector, dataType: DataType): Any => Any = oi match {
+    case _ if dataType.isInstanceOf[UserDefinedType[_]] =>
+      val sqlType = dataType.asInstanceOf[UserDefinedType[_]].sqlType
+      wrapperFor(oi, sqlType)
     case x: ConstantObjectInspector =>
       (o: Any) =>
         x.getWritableConstantValue
