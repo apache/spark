@@ -322,13 +322,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a table, returning a [[CreateTable]] logical plan.
-   *
-   * This is used to create data source tables, which is handled through
-   * "CREATE TABLE ... USING ...".
-   *
-   * Note: several features are currently not supported - temporary tables, bucketing,
-   * skewed columns and storage handlers (STORED BY).
+   * Create a data source table, returning a [[CreateTable]] logical plan.
    *
    * Expected format:
    * {{{
