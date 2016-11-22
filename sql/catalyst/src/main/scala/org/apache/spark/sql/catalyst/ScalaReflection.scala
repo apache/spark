@@ -606,6 +606,18 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
+   * Returns true if the given type is option of non flat type, e.g. `Option[Tuple2]`.
+   */
+  def optionOfNonFlatType(tpe: `Type`): Boolean = ScalaReflectionLock.synchronized {
+    tpe match {
+      case t if t <:< localTypeOf[Option[_]] =>
+        val TypeRef(_, _, Seq(optType)) = t
+        definedByConstructorParams(optType)
+      case _ => false
+    }
+  }
+
+  /**
    * Returns the parameter names and types for the primary constructor of this class.
    *
    * Note that it only works for scala classes with primary constructor, and currently doesn't

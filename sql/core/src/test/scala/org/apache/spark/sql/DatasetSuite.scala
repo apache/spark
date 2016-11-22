@@ -1051,6 +1051,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(dsDouble, arrayDouble)
     checkDataset(dsString, arrayString)
   }
+
+  test("SPARK-18251: the type of Dataset can't be Option of non-flat type") {
+    checkDataset(Seq(Some(1), None).toDS(), Some(1), None)
+
+    val e = intercept[UnsupportedOperationException] {
+      Seq(Some(1 -> "a"), None).toDS()
+    }
+    assert(e.getMessage.contains("Cannot create encoder for Option of non-flat type"))
+  }
 }
 
 case class Generic[T](id: T, value: Double)

@@ -47,6 +47,14 @@ object ExpressionEncoder {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = typeTag[T].mirror
     val tpe = typeTag[T].tpe
+
+    if (ScalaReflection.optionOfNonFlatType(tpe)) {
+      throw new UnsupportedOperationException(
+        "Cannot create encoder for Option of non-flat type, as non-flat type is represented " +
+          "as a row, and the entire row can not be null in Spark SQL like normal databases. " +
+          "You can wrap your type with Tuple1 if you do want top level null objects.")
+    }
+
     val cls = mirror.runtimeClass(tpe)
     val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
