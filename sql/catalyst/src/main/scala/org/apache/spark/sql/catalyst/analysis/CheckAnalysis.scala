@@ -146,7 +146,7 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(
                   "a GROUP BY clause in a scalar correlated subquery " +
                     "cannot contain non-correlated columns: " +
-                    s"${invalidCols.toString}")
+                    s"[${invalidCols.mkString(",")}]")
               }
             }
 
