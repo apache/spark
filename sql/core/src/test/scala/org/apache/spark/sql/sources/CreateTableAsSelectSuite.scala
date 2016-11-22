@@ -252,7 +252,7 @@ class CreateTableAsSelectSuite
 
   test("specifying the column list for CTAS") {
     withTable("t") {
-      val e = intercept[AnalysisException] {
+      val e = intercept[ParseException] {
         sql("CREATE TABLE t (a int, b int) USING parquet AS SELECT 1, 2")
       }.getMessage
       assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
