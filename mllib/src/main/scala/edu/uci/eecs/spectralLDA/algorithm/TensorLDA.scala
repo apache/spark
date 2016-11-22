@@ -56,6 +56,8 @@ class TensorLDA(dimK: Int,
                 numIterationsKrylovMethod: Int = 1) extends Serializable {
   assert(dimK > 0, "The number of topics dimK must be positive.")
   assert(alpha0 > 0, "The topic concentration alpha0 must be positive.")
+  assert(numIterationsKrylovMethod >= 0,
+    "No of iterations for the Krylov method must be non-negative.")
   assert(maxIterations > 0, "The number of iterations for ALS must be positive.")
   assert(tol > 0.0, "tol must be positive and probably close to 0.")
 
