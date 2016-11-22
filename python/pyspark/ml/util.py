@@ -279,3 +279,19 @@ class JavaPredictionModel():
         Returns the number of features the model was trained on. If unknown, returns -1
         """
         return self._call_java("numFeatures")
+
+    @since("2.1.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of featuresCol.
+        """
+        self._call_java("setFeaturesCol", value)
+        return self
+
+    @since("2.1.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of predictionCol.
+        """
+        self._call_java("setPredictionCol", value)
+        return self

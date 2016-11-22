@@ -59,6 +59,31 @@ class JavaClassificationModel(JavaPredictionModel):
         """
         return self._call_java("numClasses")
 
+    @since("2.1.0")
+    def setRawPredictionCol(self, value):
+        """
+        Sets the value of rawPredictionCol.
+        """
+        self._call_java("setRawPredictionCol", value)
+        return self
+
+
+@inherit_doc
+class JavaProbabilisticClassificationModel(JavaClassificationModel):
+    """
+    (Private) Java Model produced by a ``ProbabilisticClassifier``.
+    Classes are indexed {0, 1, ..., numClasses - 1}.
+    To be mixed in with class:`pyspark.ml.JavaModel`
+    """
+
+    @since("2.1.0")
+    def setProbabilityCol(self, value):
+        """
+        Sets the value of probabilityCol.
+        """
+        self._call_java("setProbabilityCol", value)
+        return self
+
 
 @inherit_doc
 class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
@@ -378,7 +403,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.family)
 
 
-class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class LogisticRegressionModel(JavaModel, JavaProbabilisticClassificationModel,
+                              JavaMLWritable, JavaMLReadable):
     """
     Model fitted by LogisticRegression.
 
@@ -786,8 +812,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(DecisionTreeModel, JavaClassificationModel, JavaMLWritable,
-                                      JavaMLReadable):
+class DecisionTreeClassificationModel(DecisionTreeModel, JavaProbabilisticClassificationModel,
+                                      JavaMLWritable, JavaMLReadable):
     """
     Model fitted by DecisionTreeClassifier.
 
@@ -915,8 +941,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return RandomForestClassificationModel(java_model)
 
 
-class RandomForestClassificationModel(TreeEnsembleModel, JavaClassificationModel, JavaMLWritable,
-                                      JavaMLReadable):
+class RandomForestClassificationModel(TreeEnsembleModel, JavaProbabilisticClassificationModel,
+                                      JavaMLWritable, JavaMLReadable):
     """
     Model fitted by RandomForestClassifier.
 
@@ -1223,7 +1249,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class NaiveBayesModel(JavaModel, JavaProbabilisticClassificationModel,
+                      JavaMLWritable, JavaMLReadable):
     """
     Model fitted by NaiveBayes.
 
