@@ -20,6 +20,7 @@ package org.apache.spark.examples.streaming;
 import com.google.common.io.Closeables;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
@@ -103,7 +104,7 @@ public class JavaCustomReceiver extends Receiver<String> {
   int port = -1;
 
   public JavaCustomReceiver(String host_ , int port_) {
-    super(StorageLevel.MEMORY_AND_DISK_2());
+    super(String.class, StorageLevel.MEMORY_AND_DISK_2());
     host = host_;
     port = port_;
   }

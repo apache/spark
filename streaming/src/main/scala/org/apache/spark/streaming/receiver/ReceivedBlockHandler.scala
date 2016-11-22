@@ -20,6 +20,7 @@ package org.apache.spark.streaming.receiver
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.{existentials, postfixOps}
+import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -42,10 +43,10 @@ private[streaming] trait ReceivedBlockStoreResult {
 }
 
 /** Trait that represents a class that handles the storage of blocks received by receiver */
-private[streaming] trait ReceivedBlockHandler {
+private[streaming] abstract class ReceivedBlockHandler[T: ClassTag] {
 
   /** Store a received block with the given block id and return related metadata */
-  def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): ReceivedBlockStoreResult
+  def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock[T]): ReceivedBlockStoreResult
 
   /** Cleanup old blocks older than the given threshold time */
   def cleanupOldBlocks(threshTime: Long): Unit
@@ -66,11 +67,11 @@ private[streaming] case class BlockManagerBasedStoreResult(
  * Implementation of a [[org.apache.spark.streaming.receiver.ReceivedBlockHandler]] which
  * stores the received blocks into a block manager with the specified storage level.
  */
-private[streaming] class BlockManagerBasedBlockHandler(
+private[streaming] class BlockManagerBasedBlockHandler[T: ClassTag](
     blockManager: BlockManager, storageLevel: StorageLevel)
-  extends ReceivedBlockHandler with Logging {
+  extends ReceivedBlockHandler[T] with Logging {
 
-  def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
+  def storeBlock(blockId: StreamBlockId, block: ReceivedBlock[T]): ReceivedBlockStoreResult = {
 
     var numRecords: Option[Long] = None
 
@@ -122,7 +123,7 @@ private[streaming] case class WriteAheadLogBasedStoreResult(
  * Implementation of a [[org.apache.spark.streaming.receiver.ReceivedBlockHandler]] which
  * stores the received blocks in both, a write ahead log and a block manager.
  */
-private[streaming] class WriteAheadLogBasedBlockHandler(
+private[streaming] class WriteAheadLogBasedBlockHandler[T: ClassTag](
     blockManager: BlockManager,
     serializerManager: SerializerManager,
     streamId: Int,
@@ -131,7 +132,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
     hadoopConf: Configuration,
     checkpointDir: String,
     clock: Clock = new SystemClock
-  ) extends ReceivedBlockHandler with Logging {
+  ) extends ReceivedBlockHandler[T] with Logging {
 
   private val blockStoreTimeout = conf.getInt(
     "spark.streaming.receiver.blockStoreTimeout", 30).seconds
@@ -168,7 +169,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
    * It does this in parallel, using Scala Futures, and returns only after the block has
    * been stored in both places.
    */
-  def storeBlock(blockId: StreamBlockId, block: ReceivedBlock): ReceivedBlockStoreResult = {
+  def storeBlock(blockId: StreamBlockId, block: ReceivedBlock[T]): ReceivedBlockStoreResult = {
 
     var numRecords = Option.empty[Long]
     // Serialize the block so that it can be inserted into both

@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConverters._
+import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.StorageLevel
@@ -83,7 +84,12 @@ import org.apache.spark.storage.StorageLevel
  * }}}
  */
 @DeveloperApi
-abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable {
+abstract class Receiver[T](val storageLevel: StorageLevel)(implicit t: ClassTag[T])
+  extends Serializable {
+
+  def this(clz: Class[T], storageLevel: StorageLevel) {
+    this(storageLevel)(ClassTag.AnyRef.asInstanceOf[ClassTag[T]])
+  }
 
   /**
    * This method is called by the system when the receiver is started. This function
@@ -257,7 +263,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   private var id: Int = -1
 
   /** Handler object that runs the receiver. This is instantiated lazily in the worker. */
-  @transient private var _supervisor: ReceiverSupervisor = null
+  @transient private var _supervisor: ReceiverSupervisor[T] = null
 
   /** Set the ID of the DStream that this receiver is associated with. */
   private[streaming] def setReceiverId(_id: Int) {
@@ -265,17 +271,19 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   }
 
   /** Attach Network Receiver executor to this receiver. */
-  private[streaming] def attachSupervisor(exec: ReceiverSupervisor) {
+  private[streaming] def attachSupervisor(exec: ReceiverSupervisor[T]) {
     assert(_supervisor == null)
     _supervisor = exec
   }
 
   /** Get the attached supervisor. */
-  private[streaming] def supervisor: ReceiverSupervisor = {
+  private[streaming] def supervisor: ReceiverSupervisor[T] = {
     assert(_supervisor != null,
       "A ReceiverSupervisor has not been attached to the receiver yet. Maybe you are starting " +
         "some computation in the receiver before the Receiver.onStart() has been called.")
     _supervisor
   }
+
+  def getClassTag: ClassTag[T] = t
 }
 

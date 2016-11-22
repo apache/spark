@@ -21,6 +21,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, DefaultAWSCredentialsProviderChain}
@@ -81,7 +83,7 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  * @param awsCredentialsOption Optional AWS credentials, used when user directly specifies
  *                             the credentials
  */
-private[kinesis] class KinesisReceiver[T](
+private[kinesis] class KinesisReceiver[T: ClassTag](
     val streamName: String,
     endpointUrl: String,
     regionName: String,
@@ -116,7 +118,7 @@ private[kinesis] class KinesisReceiver[T](
   @volatile private var workerThread: Thread = null
 
   /** BlockGenerator used to generates blocks out of Kinesis data */
-  @volatile private var blockGenerator: BlockGenerator = null
+  @volatile private var blockGenerator: BlockGenerator[T] = null
 
   /**
    * Sequence number ranges added to the current block being generated.
@@ -327,14 +329,23 @@ private[kinesis] class KinesisReceiver[T](
    * - When the currently active block is ready to sealed (not more records), this handler
    *   keep track of the list of ranges added into this block in another H
    */
-  private class GeneratedBlockHandler extends BlockGeneratorListener {
+  private class GeneratedBlockHandler extends BlockGeneratorListener[T] {
 
     /**
      * Callback method called after a data item is added into the BlockGenerator.
      * The data addition, block generation, and calls to onAddData and onGenerateBlock
      * are all synchronized through the same lock.
      */
-    def onAddData(data: Any, metadata: Any): Unit = {
+    def onAddData(data: T, metadata: Any): Unit = {
+      rememberAddedRange(metadata.asInstanceOf[SequenceNumberRange])
+    }
+
+    /**
+     * Callback method called after a data item is added into the BlockGenerator.
+     * The data addition, block generation, and calls to onAddData and onGenerateBlock
+     * are all synchronized through the same lock.
+     */
+    override def onAddData(data: ArrayBuffer[T], metadata: Any): Unit = {
       rememberAddedRange(metadata.asInstanceOf[SequenceNumberRange])
     }
 
@@ -348,7 +359,7 @@ private[kinesis] class KinesisReceiver[T](
     }
 
     /** Callback method called when a block is ready to be pushed / stored. */
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[T]): Unit = {
       storeBlockWithRanges(blockId,
         arrayBuffer.asInstanceOf[mutable.ArrayBuffer[T]])
     }

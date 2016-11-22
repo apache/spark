@@ -22,7 +22,10 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.collection.mutable.HashMap
 import scala.concurrent.ExecutionContext
 import scala.language.existentials
+import scala.reflect.ClassTag
 import scala.util.{Failure, Success}
+
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -33,7 +36,6 @@ import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils, Utils}
-
 
 /** Enumeration to identify current state of a Receiver */
 private[streaming] object ReceiverState extends Enumeration {
@@ -595,6 +597,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Function to start the receiver on the worker node
       val startReceiverFunc: Iterator[Receiver[_]] => Unit =
         (iterator: Iterator[Receiver[_]]) => {
+          def getReceiverSupervisor[T: ClassTag](
+              receiver: Receiver[_],
+              env: SparkEnv,
+              hadoopConf: Configuration,
+              checkpointDirOption: Option[String]): ReceiverSupervisorImpl[T] = {
+            val r = receiver.asInstanceOf[Receiver[T]]
+            new ReceiverSupervisorImpl[T](r, env, hadoopConf, checkpointDirOption)
+          }
+
           if (!iterator.hasNext) {
             throw new SparkException(
               "Could not start receiver as object not found.")
@@ -602,8 +613,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           if (TaskContext.get().attemptNumber() == 0) {
             val receiver = iterator.next()
             assert(iterator.hasNext == false)
-            val supervisor = new ReceiverSupervisorImpl(
-              receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+            val supervisor = getReceiverSupervisor(receiver, SparkEnv.get,
+              serializableHadoopConf.value, checkpointDirOption)(receiver.getClassTag)
             supervisor.start()
             supervisor.awaitTermination()
           } else {
@@ -669,5 +680,4 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       logInfo("Sent stop signal to all " + receiverTrackingInfos.size + " receivers")
     }
   }
-
 }
