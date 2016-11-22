@@ -97,13 +97,13 @@ case class ColumnStat(
    * In the case min/max values are null (None), they will be stored as "<null>".
    */
   def toMap: Map[String, String] = Map(
-    "version" -> "1",
-    "distinctCount" -> distinctCount.toString,
-    "min" -> min.map(_.toString).getOrElse(ColumnStat.NULL_STRING),
-    "max" -> max.map(_.toString).getOrElse(ColumnStat.NULL_STRING),
-    "nullCount" -> nullCount.toString,
-    "avgLen" -> avgLen.toString,
-    "maxLen" -> maxLen.toString
+    ColumnStat.KEY_VERSION -> "1",
+    ColumnStat.KEY_DISTINCT_COUNT -> distinctCount.toString,
+    ColumnStat.KEY_MIN_VALUE -> min.map(_.toString).getOrElse(ColumnStat.NULL_STRING),
+    ColumnStat.KEY_MAX_VALUE -> max.map(_.toString).getOrElse(ColumnStat.NULL_STRING),
+    ColumnStat.KEY_NULL_COUNT -> nullCount.toString,
+    ColumnStat.KEY_AVG_LEN -> avgLen.toString,
+    ColumnStat.KEY_MAX_LEN -> maxLen.toString
   )
 }
 
@@ -112,6 +112,15 @@ object ColumnStat extends Logging {
 
   /** String representation for null in serialization. */
   private val NULL_STRING: String = "<null>"
+
+  // List of string keys used to serialize ColumnStat
+  val KEY_VERSION = "version"
+  private val KEY_DISTINCT_COUNT = "distinctCount"
+  private val KEY_MIN_VALUE = "min"
+  private val KEY_MAX_VALUE = "max"
+  private val KEY_NULL_COUNT = "nullCount"
+  private val KEY_AVG_LEN = "avgLen"
+  private val KEY_MAX_LEN = "maxLen"
 
   /** Returns true iff the we support gathering column statistics on column of the given type. */
   def supportsType(dataType: DataType): Boolean = dataType match {
@@ -136,12 +145,12 @@ object ColumnStat extends Logging {
 
     try {
       Some(ColumnStat(
-        distinctCount = BigInt(map("distinctCount").toLong),
-        min = map.get("min").map(str2val),
-        max = map.get("max").map(str2val),
-        nullCount = BigInt(map("nullCount").toLong),
-        avgLen = map.getOrElse("avgLen", field.dataType.defaultSize.toString).toLong,
-        maxLen = map.getOrElse("maxLen", field.dataType.defaultSize.toString).toLong
+        distinctCount = BigInt(map(KEY_DISTINCT_COUNT).toLong),
+        min = map.get(KEY_MIN_VALUE).map(str2val),
+        max = map.get(KEY_MAX_VALUE).map(str2val),
+        nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
+        avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
+        maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong
       ))
     } catch {
       case NonFatal(e) =>

@@ -644,7 +644,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // If we want to map this a linear operation, we'd need a stronger contract between the
       // naming convention used for serialization.
       tableWithSchema.schema.foreach { field =>
-        if (statsProps.contains(columnStatKeyPropName(field.name, "version"))) {
+        if (statsProps.contains(columnStatKeyPropName(field.name, ColumnStat.KEY_VERSION))) {
           // If "version" field is defined, then the column stat is defined.
           val keyPrefix = columnStatKeyPropName(field.name, "")
           val colStatMap = statsProps.filterKeys(_.startsWith(keyPrefix)).map { case (k, v) =>
