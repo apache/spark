@@ -290,5 +290,15 @@ public class VectorizedSparkOrcNewRecordReader
     public InternalRow copy() {
       throw new NotImplementedException();
     }
+
+    @Override
+    public void setNullAt(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public void update(int ordinal, Object value) {
+      throw new NotImplementedException();
+    }
   }
 }
