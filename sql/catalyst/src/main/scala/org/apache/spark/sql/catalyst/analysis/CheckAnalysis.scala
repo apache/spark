@@ -117,18 +117,35 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(s"Window specification $s is not valid because $m")
               case None => w
             }
+          case s @ ScalarSubquery(query, conditions, _)
+            // If no correlation, the output must be exactly one column
+            if (conditions.isEmpty && query.output.size != 1) =>
+              failAnalysis(s"Scalar subquery must return only one column, but got ${query.output.size}")
 
           case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
-            // Make sure correlated scalar subqueries contain one row for every outer row by
-            // enforcing that they are aggregates which contain exactly one aggregate expressions.
-            // The analyzer has already checked that subquery contained only one output column, and
-            // added all the grouping expressions to the aggregate.
-            def checkAggregate(a: Aggregate): Unit = {
-              val aggregates = a.expressions.flatMap(_.collect {
+            def checkAggregate(agg: Aggregate): Unit = {
+              // Make sure correlated scalar subqueries contain one row for every outer row by
+              // enforcing that they are aggregates which contain exactly one aggregate expressions.
+              // The analyzer has already checked that subquery contained only one output column,
+              // and added all the grouping expressions to the aggregate.
+              val aggregates = agg.expressions.flatMap(_.collect {
                 case a: AggregateExpression => a
               })
               if (aggregates.isEmpty) {
                 failAnalysis("The output of a correlated scalar subquery must be aggregated")
+              }
+
+              // SPARK-18504: block cases where GROUP BY columns
+              // are not part of the correlated columns
+              val groupByColumns = ExpressionSet.apply(agg.groupingExpressions.flatMap(_.references))
+              val predicateColumns = ExpressionSet.apply(conditions.flatMap(_.references)
+              )
+              val invalidColumns = groupByColumns.diff(predicateColumns)
+              // GROUP BY columns must be a subset of columns in the predicates
+              if (invalidColumns.nonEmpty) {
+                failAnalysis(s"""
+                  |GROUP BY column(s) in scalar subquery must exist in the WHERE clause:
+                  |${invalidColumns.toString}""".stripMargin.replaceAll("\n", " "))
               }
             }
 
