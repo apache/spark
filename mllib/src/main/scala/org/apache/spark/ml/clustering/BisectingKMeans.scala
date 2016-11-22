@@ -94,8 +94,8 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
-    val copied = new BisectingKMeansModel(uid, parentModel)
-    copyValues(copied, extra)
+    val copied = copyValues(new BisectingKMeansModel(uid, parentModel), extra)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   @Since("2.0.0")
@@ -131,8 +131,8 @@ class BisectingKMeansModel private[ml] (
 
   private var trainingSummary: Option[BisectingKMeansSummary] = None
 
-  private[clustering] def setSummary(summary: BisectingKMeansSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[clustering] def setSummary(summary: Option[BisectingKMeansSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -264,7 +264,7 @@ class BisectingKMeans @Since("2.0.0") (
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    model.setSummary(summary)
+    model.setSummary(Some(summary))
     instr.logSuccess(model)
     model
   }

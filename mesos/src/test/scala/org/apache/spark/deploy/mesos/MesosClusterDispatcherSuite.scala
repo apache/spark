@@ -15,28 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.deploy.mesos
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types._
+import org.apache.spark.deploy.TestPrematureExit
 
-class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+class MesosClusterDispatcherSuite extends SparkFunSuite
+  with TestPrematureExit{
 
-  test("assert_true") {
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(false, BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Cast(Literal(0), BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
-    }
-    checkEvaluation(AssertTrue(Literal.create(true, BooleanType)), null)
-    checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
+  test("prints usage on empty input") {
+    testPrematureExit(Array[String](),
+      "Usage: MesosClusterDispatcher", MesosClusterDispatcher)
   }
 
+  test("prints usage with only --help") {
+    testPrematureExit(Array("--help"),
+      "Usage: MesosClusterDispatcher", MesosClusterDispatcher)
+  }
+
+  test("prints error with unrecognized options") {
+    testPrematureExit(Array("--blarg"), "Unrecognized option: '--blarg'", MesosClusterDispatcher)
+    testPrematureExit(Array("-bleg"), "Unrecognized option: '-bleg'", MesosClusterDispatcher)
+  }
 }

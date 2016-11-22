@@ -741,7 +741,11 @@ object Unidoc {
     javacOptions in (JavaUnidoc, unidoc) := Seq(
       "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
       "-public",
-      "-noqualifier", "java.lang"
+      "-noqualifier", "java.lang",
+      "-tag", """example:a:Example\:""",
+      "-tag", """note:a:Note\:""",
+      "-tag", "group:X",
+      "-tag", "tparam:X"
     ),
 
     // Use GitHub repository for Scaladoc source links

@@ -552,7 +552,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.41.Final</version>
+        <version>4.0.42.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -1428,6 +1428,11 @@
           <exclusion>
             <groupId>jline</groupId>
             <artifactId>jline</artifactId>
+          </exclusion>
+          <!-- Cat X license now; see SPARK-18262 -->
+          <exclusion>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2471,6 +2476,26 @@
             <artifactId>maven-javadoc-plugin</artifactId>
             <configuration>
               <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
+              <tags>
+                <tag>
+                  <name>example</name>
+                  <placement>a</placement>
+                  <head>Example:</head>
+                </tag>
+                <tag>
+                  <name>note</name>
+                  <placement>a</placement>
+                  <head>Note:</head>
+                </tag>
+                <tag>
+                  <name>group</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>tparam</name>
+                  <placement>X</placement>
+                </tag>
+              </tags>
             </configuration>
           </plugin>
         </plugins>

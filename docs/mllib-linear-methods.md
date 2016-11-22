@@ -139,7 +139,7 @@ and logistic regression.
 Linear SVMs supports only binary classification, while logistic regression supports both binary and
 multiclass classification problems.
 For both methods, `spark.mllib` supports L1 and L2 regularized variants.
-The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib,
+The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html#labeled-point) in MLlib,
 where labels are class indices starting from zero: $0, 1, 2, \ldots$.
 
 ### Linear Support Vector Machines (SVMs)
@@ -491,5 +491,3 @@ Algorithms are all implemented in Scala:
 * [RidgeRegressionWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
 * [LassoWithSGD](api/scala/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
 
-Python calls the Scala implementation via
-[PythonMLLibAPI](api/scala/index.html#org.apache.spark.mllib.api.python.PythonMLLibAPI).
