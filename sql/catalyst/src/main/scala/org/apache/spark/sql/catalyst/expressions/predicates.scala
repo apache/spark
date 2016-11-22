@@ -403,6 +403,11 @@ object Equality {
     case EqualNullSafe(l, r) => Some((l, r))
     case _ => None
   }
+
+  def canEquals(dataType: DataType): Boolean = dataType.existsRecursively {
+    case m: MapType => m.ordered
+    case _ => true
+  }
 }
 
 @ExpressionDescription(
@@ -417,7 +422,7 @@ case class EqualTo(left: Expression, right: Expression)
       case TypeCheckResult.TypeCheckSuccess =>
         // TODO: although map type is not orderable, technically map type should be able to be used
         // in equality comparison, remove this type check once we support it.
-        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+        if (!Equality.canEquals(left.dataType)) {
           TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualTo, but the actual " +
             s"input type is ${left.dataType.catalogString}.")
         } else {
@@ -460,7 +465,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
       case TypeCheckResult.TypeCheckSuccess =>
         // TODO: although map type is not orderable, technically map type should be able to be used
         // in equality comparison, remove this type check once we support it.
-        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+        if (!Equality.canEquals(left.dataType)) {
           TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualNullSafe, but the actual " +
             s"input type is ${left.dataType.catalogString}.")
         } else {
