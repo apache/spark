@@ -143,9 +143,9 @@ trait CheckAnalysis extends PredicateHelper {
               val invalidCols = groupByCols.diff(predicateCols)
               // GROUP BY columns must be a subset of columns in the predicates
               if (invalidCols.nonEmpty) {
-                failAnalysis(s"""
-                  |GROUP BY column(s) in scalar subquery must exist in the WHERE clause:
-                  |${invalidCols.toString}""".stripMargin.replaceAll("\n", " "))
+                failAnalysis(
+                  "GROUP BY column(s) in scalar subquery must exist in the WHERE clause: " +
+                  s"${invalidCols.toString}")
               }
             }
 
