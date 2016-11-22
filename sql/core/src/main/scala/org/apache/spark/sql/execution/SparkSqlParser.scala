@@ -233,7 +233,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create an [[UncacheTableCommand]] logical plan.
    */
   override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    UncacheTableCommand(visitTableIdentifier(ctx.tableIdentifier))
+    UncacheTableCommand(visitTableIdentifier(ctx.tableIdentifier), ctx.EXISTS != null)
   }
 
   /**
