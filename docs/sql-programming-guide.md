@@ -1076,11 +1076,10 @@ the following case-sensitive options:
   <tr>
      <td><code>numPartitions</code></td>
      <td>
-       The number of partitions that can be used, if set. It works by limiting both read and write
-       operations' parallelism. In other words, this determines the maximum number of concurrent
-       JDBC connections. For reading, it will make partitions less than or equal to this maximum.
-       For writing, if the number of partitions to write exceeds this limit, the operation will
-       coalesce the data set with this maximum before writing.
+       The maximum number of partitions that can be used for parallelism in table reading and
+       writing. This also determines the maximum number of concurrent JDBC connections.
+       If the number of partitions to write exceeds this limit, we decrease it to this limit by
+       calling <code>coalesce(numPartitions)</code> before writing.
      </td>
   </tr>
 
