@@ -461,14 +461,15 @@ case class MapObjects private(
     lambdaFunction: Expression,
     inputData: Expression) extends Expression with NonSQLExpression {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = inputData.nullable
 
   override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override def dataType: DataType = ArrayType(lambdaFunction.dataType)
+  override def dataType: DataType =
+    ArrayType(lambdaFunction.dataType, containsNull = lambdaFunction.nullable)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = ctx.javaType(loopVarDataType)
@@ -642,7 +643,8 @@ case class ExternalMapToCatalyst private(
 
   override def foldable: Boolean = false
 
-  override def dataType: MapType = MapType(keyConverter.dataType, valueConverter.dataType)
+  override def dataType: MapType = MapType(
+    keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")

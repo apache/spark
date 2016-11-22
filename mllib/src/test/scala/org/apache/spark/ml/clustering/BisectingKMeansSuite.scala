@@ -109,6 +109,9 @@ class BisectingKMeansSuite
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
+
+    model.setSummary(None)
+    assert(!model.hasSummary)
   }
 
   test("read/write") {

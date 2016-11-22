@@ -122,6 +122,11 @@ class JDBCOptions(
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
     }
+  // the maximum number of connections
+  val maxConnections = parameters.get(JDBC_MAX_CONNECTIONS).map(_.toInt)
+  require(maxConnections.isEmpty || maxConnections.get > 0,
+    s"Invalid value `${maxConnections.get}` for parameter `$JDBC_MAX_CONNECTIONS`. " +
+      "The minimum value is 1.")
 }
 
 object JDBCOptions {
@@ -144,4 +149,5 @@ object JDBCOptions {
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
+  val JDBC_MAX_CONNECTIONS = newOption("maxConnections")
 }
