@@ -319,7 +319,8 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
           TableIdentifier(parquetTable))
         assert(DDLUtils.isDatasourceTable(catalogTable))
 
-        sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+        // Add a filter to avoid creating too many partitions
+        sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src WHERE key < 10")
         checkTableStats(
           parquetTable, isDataSourceTable = true, hasSizeInBytes = false, expectedRowCounts = None)
 
@@ -328,7 +329,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
         val fetchedStats1 = checkTableStats(
           parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
 
-        sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src")
+        sql(s"INSERT INTO TABLE $parquetTable SELECT * FROM src WHERE key < 10")
         sql(s"ANALYZE TABLE $parquetTable COMPUTE STATISTICS noscan")
         val fetchedStats2 = checkTableStats(
           parquetTable, isDataSourceTable = true, hasSizeInBytes = true, expectedRowCounts = None)
@@ -340,7 +341,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
           parquetTable,
           isDataSourceTable = true,
           hasSizeInBytes = true,
-          expectedRowCounts = Some(1000))
+          expectedRowCounts = Some(20))
         assert(fetchedStats3.get.sizeInBytes == fetchedStats2.get.sizeInBytes)
       }
     }

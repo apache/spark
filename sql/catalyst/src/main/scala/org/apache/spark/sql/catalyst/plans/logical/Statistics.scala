@@ -124,8 +124,13 @@ object ColumnStat extends Logging {
 
   /** Returns true iff the we support gathering column statistics on column of the given type. */
   def supportsType(dataType: DataType): Boolean = dataType match {
-    case _: NumericType | TimestampType | DateType | BooleanType => true
-    case StringType | BinaryType => true
+    case _: IntegralType => true
+    case _: DecimalType => true
+    case DoubleType | FloatType => true
+    case BooleanType => true
+    case DateType => true
+    case TimestampType => true
+    case BinaryType | StringType => true
     case _ => false
   }
 
@@ -142,7 +147,10 @@ object ColumnStat extends Logging {
       case BooleanType => _.toBoolean
       case DateType => java.sql.Date.valueOf
       case TimestampType => java.sql.Timestamp.valueOf
-      case _ => (v: String) => if (v == NULL_STRING) null else v
+      case BinaryType | StringType => (v: String) => if (v == NULL_STRING) null else v
+      case _ =>
+        throw new AnalysisException("Column statistics deserialization is not supported for " +
+          s"column ${field.name} of data type: ${field.dataType}.")
     }
 
     try {
@@ -190,19 +198,17 @@ object ColumnStat extends Logging {
 
     col.dataType match {
       case _: IntegralType => fixedLenTypeStruct(LongType)
-
+      case _: DecimalType => fixedLenTypeStruct(col.dataType)
       case DoubleType | FloatType => fixedLenTypeStruct(DoubleType)
-
-      case _: DecimalType | TimestampType | DateType | BooleanType =>
-        fixedLenTypeStruct(col.dataType)
-
-      case StringType | BinaryType =>
+      case BooleanType => fixedLenTypeStruct(col.dataType)
+      case DateType => fixedLenTypeStruct(col.dataType)
+      case TimestampType => fixedLenTypeStruct(col.dataType)
+      case BinaryType | StringType =>
         // For string and binary type, we don't store min/max.
         val nullLit = Literal(null, col.dataType)
         struct(
           ndv, nullLit, nullLit, numNulls,
           Ceil(Average(Length(col))), Cast(Max(Length(col)), LongType))
-
       case _ =>
         throw new AnalysisException("Analyzing column statistics is not supported for column " +
             s"${col.name} of data type: ${col.dataType}.")

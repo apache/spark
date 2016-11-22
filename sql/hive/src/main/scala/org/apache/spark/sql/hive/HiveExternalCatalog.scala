@@ -607,34 +607,33 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * It reads table schema, provider, partition column names and bucket specification from table
    * properties, and filter out these special entries from table properties.
    */
-  private def restoreTableMetadata(table: CatalogTable): CatalogTable = {
+  private def restoreTableMetadata(inputTable: CatalogTable): CatalogTable = {
     if (conf.get(DEBUG_MODE)) {
-      return table
+      return inputTable
     }
 
-    val tableWithSchema = if (table.tableType == VIEW) {
-      table
-    } else {
+    var table = inputTable
+
+    if (table.tableType != VIEW) {
       table.properties.get(DATASOURCE_PROVIDER) match {
         // No provider in table properties, which means this table is created by Spark prior to 2.1,
         // or is created at Hive side.
         case None =>
-          table.copy(provider = Some(DDLUtils.HIVE_PROVIDER), tracksPartitionsInCatalog = true)
+          table = table.copy(
+            provider = Some(DDLUtils.HIVE_PROVIDER), tracksPartitionsInCatalog = true)
 
         // This is a Hive serde table created by Spark 2.1 or higher versions.
-        case Some(DDLUtils.HIVE_PROVIDER) => restoreHiveSerdeTable(table)
+        case Some(DDLUtils.HIVE_PROVIDER) =>
+          table = restoreHiveSerdeTable(table)
 
         // This is a regular data source table.
-        case Some(provider) => restoreDataSourceTable(table, provider)
+        case Some(provider) =>
+          table = restoreDataSourceTable(table, provider)
       }
     }
 
-    // Get the original table properties as defined by Hive.
-    val tableWithProps = tableWithSchema.copy(
-      properties = table.properties.filterNot { case (key, _) => key.startsWith(SPARK_SQL_PREFIX) })
-
     // construct Spark's statistics from information in Hive metastore
-    val statsProps = tableWithSchema.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
+    val statsProps = table.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
 
     if (statsProps.nonEmpty) {
       val colStats = new scala.collection.mutable.HashMap[String, ColumnStat]
@@ -643,7 +642,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // but given the number of columns it usually not enormous, this is probably OK as a start.
       // If we want to map this a linear operation, we'd need a stronger contract between the
       // naming convention used for serialization.
-      tableWithSchema.schema.foreach { field =>
+      table.schema.foreach { field =>
         if (statsProps.contains(columnStatKeyPropName(field.name, ColumnStat.KEY_VERSION))) {
           // If "version" field is defined, then the column stat is defined.
           val keyPrefix = columnStatKeyPropName(field.name, "")
@@ -657,14 +656,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         }
       }
 
-      tableWithSchema.copy(
+      table = table.copy(
         stats = Some(Statistics(
-          sizeInBytes = BigInt(tableWithSchema.properties(STATISTICS_TOTAL_SIZE)),
-          rowCount = tableWithSchema.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
+          sizeInBytes = BigInt(table.properties(STATISTICS_TOTAL_SIZE)),
+          rowCount = table.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
           colStats = colStats.toMap)))
-    } else {
-      tableWithProps
     }
+
+    // Get the original table properties as defined by the user.
+    table.copy(
+      properties = table.properties.filterNot { case (key, _) => key.startsWith(SPARK_SQL_PREFIX) })
   }
 
   private def restoreHiveSerdeTable(table: CatalogTable): CatalogTable = {
