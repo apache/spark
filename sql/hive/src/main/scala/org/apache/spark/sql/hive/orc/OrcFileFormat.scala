@@ -152,7 +152,6 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
 
         if (enableVectorizedReader) {
-          val conf = job.getConfiguration.asInstanceOf[JobConf]
           val columnIDs =
             requiredSchema.map(a => physicalSchema.fieldIndex(a.name): Integer).sorted.asJava
           val orcRecordReader =

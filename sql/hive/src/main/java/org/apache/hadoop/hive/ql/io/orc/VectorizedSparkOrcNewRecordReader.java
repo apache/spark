@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
@@ -65,7 +64,7 @@ public class VectorizedSparkOrcNewRecordReader
 
   public VectorizedSparkOrcNewRecordReader(
       Reader file,
-      JobConf conf,
+      Configuration conf,
       FileSplit fileSplit,
       List<Integer> columnIDs) throws IOException {
     List<OrcProto.Type> types = file.getTypes();
@@ -85,14 +84,12 @@ public class VectorizedSparkOrcNewRecordReader
   }
 
   @Override
-  public NullWritable getCurrentKey() throws IOException,
-      InterruptedException {
+  public NullWritable getCurrentKey() throws IOException, InterruptedException {
     return NullWritable.get();
   }
 
   @Override
-  public InternalRow getCurrentValue() throws IOException,
-      InterruptedException {
+  public InternalRow getCurrentValue() throws IOException, InterruptedException {
     if (indexOfRow >= numRowsOfBatch) {
       return null;
     }
@@ -160,9 +157,10 @@ public class VectorizedSparkOrcNewRecordReader
     public boolean anyNull() {
       for (int i = 0; i < columns.length; i++) {
         if (columnIDs.contains(i)) {
-          if (columns[i].isRepeating && columns[i].isNull[0]) {
+          boolean isRepeating = columns[i].isRepeating;
+          if (isRepeating && columns[i].isNull[0]) {
             return true;
-          } else if (!columns[i].isRepeating && columns[i].isNull[rowId]) {
+          } else if (!isRepeating && columns[i].isNull[rowId]) {
             return true;
           }
         }
@@ -170,136 +168,114 @@ public class VectorizedSparkOrcNewRecordReader
       return false;
     }
 
+    private int getColIndex(ColumnVector col) {
+      return col.isRepeating ? 0 : rowId;
+    }
+
     @Override
     public boolean isNullAt(int ordinal) {
       ColumnVector col = columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        return col.isNull[0];
-      } else {
-        return col.isNull[rowId];
-      }
+      return col.isNull[getColIndex(col)];
     }
 
     @Override
     public boolean getBoolean(int ordinal) {
-      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        return col.vector[0] > 0;
-      } else {
-        return col.vector[rowId] > 0;
-      }
+      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
+      return col.vector[getColIndex(col)] > 0;
     }
 
     @Override
     public byte getByte(int ordinal) {
-      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        return (byte)col.vector[0];
-      } else {
-        return (byte)col.vector[rowId];
-      }
+      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
+      return (byte)col.vector[getColIndex(col)];
     }
 
     @Override
     public short getShort(int ordinal) {
-      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        return (short)col.vector[0];
-      } else {
-        return (short)col.vector[rowId];
-      }
+      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
+      return (short)col.vector[getColIndex(col)];
     }
 
     @Override
     public int getInt(int ordinal) {
-      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        return (int)col.vector[0];
-      } else {
-        return (int)col.vector[rowId];
-      }
+      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
+      return (int)col.vector[getColIndex(col)];
     }
 
     @Override
     public long getLong(int ordinal) {
-      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        return (long)col.vector[0];
-      } else {
-        return (long)col.vector[rowId];
-      }
+      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
+      return (long)col.vector[getColIndex(col)];
     }
 
     @Override
     public float getFloat(int ordinal) {
-      DoubleColumnVector col = (DoubleColumnVector)columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        return (float)col.vector[0];
-      } else {
-        return (float)col.vector[rowId];
-      }
+      DoubleColumnVector col = (DoubleColumnVector) columns[columnIDs.get(ordinal)];
+      return (float)col.vector[getColIndex(col)];
     }
 
     @Override
     public double getDouble(int ordinal) {
-      DoubleColumnVector col = (DoubleColumnVector)columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        return (double)col.vector[0];
-      } else {
-        return (double)col.vector[rowId];
-      }
+      DoubleColumnVector col = (DoubleColumnVector) columns[columnIDs.get(ordinal)];
+      return (double)col.vector[getColIndex(col)];
     }
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
-      DecimalColumnVector col = (DecimalColumnVector)columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        return Decimal.apply(col.vector[0].getHiveDecimal().bigDecimalValue(), precision, scale);
-      } else {
-        return Decimal.apply(col.vector[rowId].getHiveDecimal().bigDecimalValue(),
-          precision, scale);
-      }
+      DecimalColumnVector col = (DecimalColumnVector) columns[columnIDs.get(ordinal)];
+      int index = getColIndex(col);
+      return Decimal.apply(col.vector[index].getHiveDecimal().bigDecimalValue(), precision, scale);
     }
 
     @Override
     public UTF8String getUTF8String(int ordinal) {
-      BytesColumnVector bv = ((BytesColumnVector)columns[columnIDs.get(ordinal)]);
-      if (bv.isRepeating) {
-        return UTF8String.fromBytes(bv.vector[0], bv.start[0], bv.length[0]);
-      } else {
-        return UTF8String.fromBytes(bv.vector[rowId], bv.start[rowId], bv.length[rowId]);
-      }
+      BytesColumnVector col = ((BytesColumnVector) columns[columnIDs.get(ordinal)]);
+      int index = getColIndex(col);
+      return UTF8String.fromBytes(col.vector[index], col.start[index], col.length[index]);
     }
 
     @Override
     public byte[] getBinary(int ordinal) {
-      BytesColumnVector col = (BytesColumnVector)columns[columnIDs.get(ordinal)];
-      if (col.isRepeating) {
-        byte[] binary = new byte[col.length[0]];
-        System.arraycopy(col.vector[0], col.start[0], binary, 0, binary.length);
-        return binary;
-      } else {
-        byte[] binary = new byte[col.length[rowId]];
-        System.arraycopy(col.vector[rowId], col.start[rowId], binary, 0, binary.length);
-        return binary;
-      }
+      BytesColumnVector col = (BytesColumnVector) columns[columnIDs.get(ordinal)];
+      int index = getColIndex(col);
+      byte[] binary = new byte[col.length[index]];
+      System.arraycopy(col.vector[index], col.start[index], binary, 0, binary.length);
+      return binary;
     }
 
+    /**
+     * The data type CalendarInterval is not suppported due to the Hive version used by Spark
+     * internally. When we upgrade to newer Hive versions in the future, this is possibly to
+     * support.
+     */
     @Override
     public CalendarInterval getInterval(int ordinal) {
       throw new NotImplementedException();
     }
 
+    /**
+     * The data type CalendarInterval is not suppported due to the Hive version used by Spark
+     * internally. When we upgrade to newer Hive versions in the future, this is possibly to
+     * be supported.
+     */
     @Override
     public InternalRow getStruct(int ordinal, int numFields) {
       throw new NotImplementedException();
     }
 
+    /**
+     * The data type Array is not suppported due to the Hive version used by Spark internally.
+     * When we upgrade to newer Hive versions in the future, this is possibly to be supported.
+     */
     @Override
     public ArrayData getArray(int ordinal) {
       throw new NotImplementedException();
     }
 
+    /**
+     * The data type Map is not suppported due to the Hive version used by Spark internally.
+     * When we upgrade to newer Hive versions in the future, this is possibly to be supported.
+     */
     @Override
     public MapData getMap(int ordinal) {
       throw new NotImplementedException();

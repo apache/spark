@@ -110,40 +110,18 @@ public class SparkVectorizedOrcRecordReader
     }
 
     /**
-     * Walk through the object inspector and add column vectors
-     *
-     * @param oi StructObjectInspector
-     * @param cvList ColumnVectors are populated in this list
-     */
-    private void allocateColumnVector(StructObjectInspector oi,
-        List<ColumnVector> cvList) {
-      if (cvList == null) {
-        throw new RuntimeException("Null columnvector list");
-      }
-      if (oi == null) {
-        return;
-      }
-      final List<? extends StructField> fields = oi.getAllStructFieldRefs();
-      for(StructField field : fields) {
-        ObjectInspector fieldObjectInspector = field.getFieldObjectInspector();
-        cvList.add(createColumnVector(fieldObjectInspector));
-      }
-    }
-
-    /**
      * Create VectorizedRowBatch from ObjectInspector
      *
      * @param oi StructObjectInspector
      * @return VectorizedRowBatch
      */
-    private VectorizedRowBatch constructVectorizedRowBatch(
-        StructObjectInspector oi) {
-      final List<ColumnVector> cvList = new LinkedList<ColumnVector>();
-      allocateColumnVector(oi, cvList);
-      final VectorizedRowBatch result = new VectorizedRowBatch(cvList.size());
+    private VectorizedRowBatch constructVectorizedRowBatch(StructObjectInspector oi) {
+      List<? extends StructField> fields = oi.getAllStructFieldRefs();
+      VectorizedRowBatch result = new VectorizedRowBatch(fields.size());
       int i = 0;
-      for(ColumnVector cv : cvList) {
-        result.cols[i++] = cv;
+      for (StructField field : fields) {
+        ObjectInspector fieldObjectInspector = field.getFieldObjectInspector();
+        result.cols[i++] = createColumnVector(fieldObjectInspector);
       }
       return result;
     }
@@ -153,17 +131,13 @@ public class SparkVectorizedOrcRecordReader
       if (reader.hasNext()) {
         try {
           reader.nextBatch(value);
-          if (value == null || value.endOfFile || value.size == 0) {
-            return false;
-          }
+          progress = reader.getProgress();
+          return (value != null && !value.endOfFile && value.size > 0);
         } catch (Exception e) {
           throw new RuntimeException(e);
         }
-        progress = reader.getProgress();
-        return true;
-      } else {
-        return false;
       }
+      return false;
     }
 
     @Override
@@ -173,7 +147,7 @@ public class SparkVectorizedOrcRecordReader
 
     @Override
     public VectorizedRowBatch createValue() {
-      return constructVectorizedRowBatch((StructObjectInspector)this.objectInspector);
+      return constructVectorizedRowBatch((StructObjectInspector) this.objectInspector);
     }
 
     @Override
