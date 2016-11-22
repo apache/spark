@@ -160,8 +160,12 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, Java
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
-        java_lrt_summary = self._call_java("summary")
-        return LinearRegressionTrainingSummary(java_lrt_summary)
+        if self.hasSummary:
+            java_lrt_summary = self._call_java("summary")
+            return LinearRegressionTrainingSummary(java_lrt_summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
     @property
     @since("2.0.0")
@@ -1459,8 +1463,12 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWri
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
-        java_glrt_summary = self._call_java("summary")
-        return GeneralizedLinearRegressionTrainingSummary(java_glrt_summary)
+        if self.hasSummary:
+            java_glrt_summary = self._call_java("summary")
+            return GeneralizedLinearRegressionTrainingSummary(java_glrt_summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
     @property
     @since("2.0.0")
