@@ -1064,44 +1064,74 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   import GeneralizedLinearRegression._
 
   /**
+   * Whether the underlying [[WeightedLeastSquares]] using the "normal" solver.
+   */
+  private[ml] val isNormalSolver: Boolean = {
+    diagInvAtWA.length != 1 || diagInvAtWA(0) != 0
+  }
+
+  /**
    * Standard error of estimated coefficients and intercept.
+   * This value is only available when the underlying [[WeightedLeastSquares]]
+   * using the "normal" solver.
    *
    * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
    * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
   lazy val coefficientStandardErrors: Array[Double] = {
-    diagInvAtWA.map(_ * dispersion).map(math.sqrt)
+    if (isNormalSolver) {
+      diagInvAtWA.map(_ * dispersion).map(math.sqrt)
+    } else {
+      throw new UnsupportedOperationException(
+        "No Std. Error of coefficients available for this GeneralizedLinearRegressionModel")
+    }
   }
 
   /**
    * T-statistic of estimated coefficients and intercept.
+   * This value is only available when the underlying [[WeightedLeastSquares]]
+   * using the "normal" solver.
    *
    * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
    * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
   lazy val tValues: Array[Double] = {
-    val estimate = if (model.getFitIntercept) {
-      Array.concat(model.coefficients.toArray, Array(model.intercept))
+    if (isNormalSolver) {
+      val estimate = if (model.getFitIntercept) {
+        Array.concat(model.coefficients.toArray, Array(model.intercept))
+      } else {
+        model.coefficients.toArray
+      }
+      estimate.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
     } else {
-      model.coefficients.toArray
+      throw new UnsupportedOperationException(
+        "No t-statistic available for this GeneralizedLinearRegressionModel")
     }
-    estimate.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
   }
 
   /**
    * Two-sided p-value of estimated coefficients and intercept.
+   * This value is only available when the underlying [[WeightedLeastSquares]]
+   * using the "normal" solver.
    *
    * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
    * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
   lazy val pValues: Array[Double] = {
-    if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
-      tValues.map { x => 2.0 * (1.0 - dist.Gaussian(0.0, 1.0).cdf(math.abs(x))) }
+    if (isNormalSolver) {
+      if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+        tValues.map { x => 2.0 * (1.0 - dist.Gaussian(0.0, 1.0).cdf(math.abs(x))) }
+      } else {
+        tValues.map { x =>
+          2.0 * (1.0 - dist.StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x)))
+        }
+      }
     } else {
-      tValues.map { x => 2.0 * (1.0 - dist.StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
+      throw new UnsupportedOperationException(
+        "No p-value available for this GeneralizedLinearRegressionModel")
     }
   }
 }
