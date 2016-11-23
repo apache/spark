@@ -278,8 +278,10 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 
 #' @param object a fitted generalized linear model.
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
-#'         including at least the coefficients, null/residual deviance, null/residual degrees
-#'         of freedom, AIC and number of iterations IRLS takes.
+#'         including at least the coefficients matrix (which includes coefficients, standard error
+#'         of coefficients, t value and p value), null/residual deviance, null/residual degrees of
+#'         freedom, AIC and number of iterations IRLS takes. If there are collinear columns
+#'         in you data, the coefficients matrix only provides coefficients.
 #'
 #' @rdname spark.glm
 #' @export
@@ -303,9 +305,18 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             } else {
               dataFrame(callJMethod(jobj, "rDevianceResiduals"))
             }
-            coefficients <- matrix(coefficients, ncol = 4)
-            colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
-            rownames(coefficients) <- unlist(features)
+            # If the underlying WeightedLeastSquares using "normal" solver, we can provide
+            # coefficients, standard error of coefficients, t value and p value. Otherwise,
+            # it will be fitted by local "l-bfgs", we can only provide coefficients.
+            if (length(features) == length(coefficients)) {
+              coefficients <- matrix(coefficients, ncol = 1)
+              colnames(coefficients) <- c("Estimate")
+              rownames(coefficients) <- unlist(features)
+            } else {
+              coefficients <- matrix(coefficients, ncol = 4)
+              colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
+              rownames(coefficients) <- unlist(features)
+            }
             ans <- list(deviance.resid = deviance.resid, coefficients = coefficients,
                         dispersion = dispersion, null.deviance = null.deviance,
                         deviance = deviance, df.null = df.null, df.residual = df.residual,

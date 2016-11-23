@@ -169,6 +169,15 @@ test_that("spark.glm summary", {
   df <- suppressWarnings(createDataFrame(data))
   regStats <- summary(spark.glm(df, b ~ a1 + a2, regParam = 1.0))
   expect_equal(regStats$aic, 14.00976, tolerance = 1e-4) # 14.00976 is from summary() result
+
+  # Test spark.glm works on collinear data
+  A <- matrix(c(1, 2, 3, 4, 2, 4, 6, 8), 4, 2)
+  b <- c(1, 2, 3, 4)
+  data <- as.data.frame(cbind(A, b))
+  df <- createDataFrame(data)
+  stats <- summary(spark.glm(df, b ~ . - 1))
+  coefs <- unlist(stats$coefficients)
+  expect_true(all(abs(c(0.5, 0.25) - coefs) < 1e-4))
 })
 
 test_that("spark.glm save/load", {

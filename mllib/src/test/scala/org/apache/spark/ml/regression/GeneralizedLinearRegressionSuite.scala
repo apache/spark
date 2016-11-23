@@ -1048,6 +1048,27 @@ class GeneralizedLinearRegressionSuite
     assert(summary.solver === "irls")
   }
 
+  test("glm handle collinear features") {
+    val collinearInstances = Seq(
+      Instance(1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      Instance(2.0, 1.0, Vectors.dense(2.0, 4.0)),
+      Instance(3.0, 1.0, Vectors.dense(3.0, 6.0)),
+      Instance(4.0, 1.0, Vectors.dense(4.0, 8.0))
+    ).toDF()
+    val trainer = new GeneralizedLinearRegression()
+    val model = trainer.fit(collinearInstances)
+    // to make it clear that underlying WLS did not solve analytically
+    intercept[UnsupportedOperationException] {
+      model.summary.coefficientStandardErrors
+    }
+    intercept[UnsupportedOperationException] {
+      model.summary.pValues
+    }
+    intercept[UnsupportedOperationException] {
+      model.summary.tValues
+    }
+  }
+
   test("read/write") {
     def checkModelData(
         model: GeneralizedLinearRegressionModel,
