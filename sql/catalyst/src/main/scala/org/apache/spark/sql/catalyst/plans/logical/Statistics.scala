@@ -90,28 +90,27 @@ case class ColumnStat(
 
   /**
    * Returns a map from string to string that can be used to serialize the column stats.
-   * The key is the name of the field (e.g. "ndv" or "min"), and the value is the string
+   * The key is the name of the field (e.g. "distinctCount" or "min"), and the value is the string
    * representation for the value. The deserialization side is defined in [[ColumnStat.fromMap]].
    *
    * As part of the protocol, the returned map always contains a key called "version".
-   * In the case min/max values are null (None), they will be stored as "<null>".
+   * In the case min/max values are null (None), they won't appear in the map.
    */
-  def toMap: Map[String, String] = Map(
-    ColumnStat.KEY_VERSION -> "1",
-    ColumnStat.KEY_DISTINCT_COUNT -> distinctCount.toString,
-    ColumnStat.KEY_MIN_VALUE -> min.map(_.toString).getOrElse(ColumnStat.NULL_STRING),
-    ColumnStat.KEY_MAX_VALUE -> max.map(_.toString).getOrElse(ColumnStat.NULL_STRING),
-    ColumnStat.KEY_NULL_COUNT -> nullCount.toString,
-    ColumnStat.KEY_AVG_LEN -> avgLen.toString,
-    ColumnStat.KEY_MAX_LEN -> maxLen.toString
-  )
+  def toMap: Map[String, String] = {
+    val map = new scala.collection.mutable.HashMap[String, String]
+    map.put(ColumnStat.KEY_VERSION, "1")
+    map.put(ColumnStat.KEY_DISTINCT_COUNT, distinctCount.toString)
+    map.put(ColumnStat.KEY_NULL_COUNT, nullCount.toString)
+    map.put(ColumnStat.KEY_AVG_LEN, avgLen.toString)
+    map.put(ColumnStat.KEY_MAX_LEN, maxLen.toString)
+    min.foreach { v => map.put(ColumnStat.KEY_MIN_VALUE, v.toString) }
+    max.foreach { v => map.put(ColumnStat.KEY_MAX_VALUE, v.toString) }
+    map.toMap
+  }
 }
 
 
 object ColumnStat extends Logging {
-
-  /** String representation for null in serialization. */
-  private val NULL_STRING: String = "<null>"
 
   // List of string keys used to serialize ColumnStat
   val KEY_VERSION = "version"
@@ -147,7 +146,7 @@ object ColumnStat extends Logging {
       case BooleanType => _.toBoolean
       case DateType => java.sql.Date.valueOf
       case TimestampType => java.sql.Timestamp.valueOf
-      case BinaryType | StringType => (v: String) => if (v == NULL_STRING) null else v
+      case BinaryType | StringType => identity
       case _ =>
         throw new AnalysisException("Column statistics deserialization is not supported for " +
           s"column ${field.name} of data type: ${field.dataType}.")
@@ -156,9 +155,8 @@ object ColumnStat extends Logging {
     try {
       Some(ColumnStat(
         distinctCount = BigInt(map(KEY_DISTINCT_COUNT).toLong),
-        // Note Option(..).flatMap(Option.apply) replaces Option(null) with None
-        min = map.get(KEY_MIN_VALUE).map(str2val).flatMap(Option.apply),
-        max = map.get(KEY_MAX_VALUE).map(str2val).flatMap(Option.apply),
+        min = map.get(KEY_MIN_VALUE).map(str2val),
+        max = map.get(KEY_MAX_VALUE).map(str2val),
         nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
         avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
         maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong
@@ -174,7 +172,7 @@ object ColumnStat extends Logging {
    * Constructs an expression to compute column statistics for a given column.
    *
    * The expression should create a single struct column with the following schema:
-   * ndv: Long, min: T, max: T, numNulls: Long, avgLen: Long, maxLen: Long
+   * distinctCount: Long, min: T, max: T, nullCount: Long, avgLen: Long, maxLen: Long
    *
    * Together with [[rowToColumnStat]], this function is used to create [[ColumnStat]] and
    * as a result should stay in sync with it.
@@ -185,7 +183,7 @@ object ColumnStat extends Logging {
     })
     val one = Literal(1, LongType)
 
-    // the approximate ndv should never be larger than the number of rows
+    // the approximate ndv (num distinct value) should never be larger than the number of rows
     val numNonNulls = if (col.nullable) Count(col) else Count(one)
     val ndv = Least(Seq(HyperLogLogPlusPlus(col, relativeSD), numNonNulls))
     val numNulls = Subtract(Count(one), numNonNulls)
