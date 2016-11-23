@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Properties
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
@@ -33,6 +33,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -549,6 +550,84 @@ class KafkaSourceSuite extends KafkaSourceTest {
       CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22, 30, 31, 32, 33, 34),
       StopStream
     )
+  }
+
+  test("Kafka column types") {
+    val now = System.currentTimeMillis()
+    val topic = newTopic()
+    testUtils.createTopic(newTopic(), partitions = 1)
+    testUtils.sendMessages(topic, Array(1).map(_.toString))
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("startingOffsets", s"earliest")
+      .option("subscribe", topic)
+      .load()
+
+    val query = kafka
+      .writeStream
+      .format("memory")
+      .outputMode("append")
+      .queryName("kafkaColumnTypes")
+      .start()
+    query.processAllAvailable()
+    val rows = spark.table("kafkaColumnTypes").collect()
+    assert(rows.length === 1, s"Unexpected results: ${rows.toList}")
+    val row = rows(0)
+    assert(row.getAs[Array[Byte]]("key") === null, s"Unexpected results: $row")
+    assert(row.getAs[Array[Byte]]("value") === "1".getBytes(UTF_8), s"Unexpected results: $row")
+    assert(row.getAs[String]("topic") === topic, s"Unexpected results: $row")
+    assert(row.getAs[Int]("partition") === 0, s"Unexpected results: $row")
+    assert(row.getAs[Long]("offset") === 0L, s"Unexpected results: $row")
+    // We cannot check the exact timestamp as it's the time that messages were inserted by the
+    // producer. So here we just use a low bound to make sure the internal conversion works.
+    assert(row.getAs[java.sql.Timestamp]("timestamp").getTime >= now, s"Unexpected results: $row")
+    assert(row.getAs[Int]("timestampType") === 0, s"Unexpected results: $row")
+    query.stop()
+  }
+
+  test("KafkaSource with watermark") {
+    val now = System.currentTimeMillis()
+    val topic = newTopic()
+    testUtils.createTopic(newTopic(), partitions = 1)
+    testUtils.sendMessages(topic, Array(1).map(_.toString))
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("startingOffsets", s"earliest")
+      .option("subscribe", topic)
+      .load()
+
+    val windowedAggregation = kafka
+      .withWatermark("timestamp", "10 seconds")
+      .groupBy(window($"timestamp", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start") as 'window, $"count")
+
+    val query = windowedAggregation
+      .writeStream
+      .format("memory")
+      .outputMode("complete")
+      .queryName("kafkaWatermark")
+      .start()
+    query.processAllAvailable()
+    val rows = spark.table("kafkaWatermark").collect()
+    assert(rows.length === 1, s"Unexpected results: ${rows.toList}")
+    val row = rows(0)
+    // We cannot check the exact window start time as it depands on the time that messages were
+    // inserted by the producer. So here we just use a low bound to make sure the internal
+    // conversion works.
+    assert(
+      row.getAs[java.sql.Timestamp]("window").getTime >= now - 5 * 1000,
+      s"Unexpected results: $row")
+    assert(row.getAs[Int]("count") === 1, s"Unexpected results: $row")
+    query.stop()
   }
 
   private def testFromLatestOffsets(

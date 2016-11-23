@@ -32,9 +32,12 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSource._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.UninterruptibleThread
 
 /**
@@ -282,7 +285,14 @@ private[kafka010] case class KafkaSource(
     // Create an RDD that reads from Kafka and get the (key, value) pair as byte arrays.
     val rdd = new KafkaSourceRDD(
       sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss).map { cr =>
-      Row(cr.key, cr.value, cr.topic, cr.partition, cr.offset, cr.timestamp, cr.timestampType.id)
+      InternalRow(
+        cr.key,
+        cr.value,
+        UTF8String.fromString(cr.topic),
+        cr.partition,
+        cr.offset,
+        DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)),
+        cr.timestampType.id)
     }
 
     logInfo("GetBatch generating RDD of offset range: " +
@@ -293,7 +303,7 @@ private[kafka010] case class KafkaSource(
       currentPartitionOffsets = Some(untilPartitionOffsets)
     }
 
-    sqlContext.createDataFrame(rdd, schema)
+    sqlContext.internalCreateDataFrame(rdd, schema)
   }
 
   /** Stop this source and free any resources it has allocated. */
@@ -496,7 +506,7 @@ private[kafka010] object KafkaSource {
     StructField("topic", StringType),
     StructField("partition", IntegerType),
     StructField("offset", LongType),
-    StructField("timestamp", LongType),
+    StructField("timestamp", TimestampType),
     StructField("timestampType", IntegerType)
   ))
 
