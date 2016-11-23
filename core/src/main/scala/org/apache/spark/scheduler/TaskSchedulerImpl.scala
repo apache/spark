@@ -353,7 +353,9 @@ private[spark] class TaskSchedulerImpl(
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetManager.remove(tid)
               taskIdToExecutorId.remove(tid).foreach { execId =>
-                executorIdToRunningTaskIds.remove(execId)
+                if (executorIdToRunningTaskIds.contains(execId)) {
+                  executorIdToRunningTaskIds(execId).remove(tid)
+                }
               }
             }
             if (state == TaskState.FINISHED) {
