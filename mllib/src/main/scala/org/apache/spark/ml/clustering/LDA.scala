@@ -120,13 +120,13 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Value should be > 1.0
+   *     - Value should be &gt; 1.0
    *     - default = 0.1 + 1, where 0.1 gives a small amount of smoothing and +1 follows
    *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be >= 0
+   *     - Value should be &gt;= 0
    *     - default = (1.0 / k), following the implementation from
-   *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *       `https://github.com/Blei-Lab/onlineldavb`.
    *
    * @group param
    */
@@ -162,11 +162,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - Online LDA:
    *     Hoffman, Blei and Bach.  "Online Learning for Latent Dirichlet Allocation."
    *     Neural Information Processing Systems, 2010.
-   *     [[http://www.cs.columbia.edu/~blei/papers/HoffmanBleiBach2010b.pdf]]
+   *     `http://www.cs.columbia.edu/~blei/papers/HoffmanBleiBach2010b.pdf`
    *  - EM:
    *     Asuncion et al.  "On Smoothing and Inference for Topic Models."
    *     Uncertainty in Artificial Intelligence, 2009.
-   *     [[http://arxiv.org/pdf/1205.2662.pdf]]
+   *     `http://arxiv.org/pdf/1205.2662.pdf`
    *
    * @group param
    */
@@ -245,9 +245,9 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent,
    * in range (0, 1].
    *
-   * Note that this should be adjusted in synch with [[LDA.maxIter]]
+   * Note that this should be adjusted in synch with `LDA.maxIter`
    * so the entire corpus is used.  Specifically, set both so that
-   * maxIterations * miniBatchFraction >= 1.
+   * maxIterations * miniBatchFraction &gt;= 1.
    *
    * Note: This is the same as the `miniBatchFraction` parameter in
    *       [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].

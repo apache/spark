@@ -32,9 +32,9 @@ import org.apache.spark.sql.types._
 abstract class UserDefinedAggregateFunction extends Serializable {
 
   /**
-   * A [[StructType]] represents data types of input arguments of this aggregate function.
+   * A `StructType` represents data types of input arguments of this aggregate function.
    * For example, if a [[UserDefinedAggregateFunction]] expects two input arguments
-   * with type of [[DoubleType]] and [[LongType]], the returned [[StructType]] will look like
+   * with type of `DoubleType` and `LongType`, the returned `StructType` will look like
    *
    * ```
    *   new StructType()
@@ -42,7 +42,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    *    .add("longInput", LongType)
    * ```
    *
-   * The name of a field of this [[StructType]] is only used to identify the corresponding
+   * The name of a field of this `StructType` is only used to identify the corresponding
    * input argument. Users can choose names to identify the input arguments.
    *
    * @since 1.5.0
@@ -50,10 +50,10 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   def inputSchema: StructType
 
   /**
-   * A [[StructType]] represents data types of values in the aggregation buffer.
+   * A `StructType` represents data types of values in the aggregation buffer.
    * For example, if a [[UserDefinedAggregateFunction]]'s buffer has two values
-   * (i.e. two intermediate values) with type of [[DoubleType]] and [[LongType]],
-   * the returned [[StructType]] will look like
+   * (i.e. two intermediate values) with type of `DoubleType` and `LongType`,
+   * the returned `StructType` will look like
    *
    * ```
    *   new StructType()
@@ -61,7 +61,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    *    .add("longInput", LongType)
    * ```
    *
-   * The name of a field of this [[StructType]] is only used to identify the corresponding
+   * The name of a field of this `StructType` is only used to identify the corresponding
    * buffer value. Users can choose names to identify the input arguments.
    *
    * @since 1.5.0
@@ -69,7 +69,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   def bufferSchema: StructType
 
   /**
-   * The [[DataType]] of the returned value of this [[UserDefinedAggregateFunction]].
+   * The `DataType` of the returned value of this [[UserDefinedAggregateFunction]].
    *
    * @since 1.5.0
    */

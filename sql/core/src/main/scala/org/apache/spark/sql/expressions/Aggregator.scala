@@ -92,7 +92,7 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def outputEncoder: Encoder[OUT]
 
   /**
-   * Returns this `Aggregator` as a [[TypedColumn]] that can be used in `Dataset`.
+   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset`.
    * operations.
    * @since 1.6.0
    */

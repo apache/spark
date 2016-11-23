@@ -113,20 +113,20 @@ class LDA private (
    *
    * If set to a singleton vector Vector(-1), then docConcentration is set automatically. If set to
    * singleton vector Vector(t) where t != -1, then t is replicated to a vector of length k during
-   * [[LDAOptimizer.initialize()]]. Otherwise, the [[docConcentration]] vector must be length k.
+   * `LDAOptimizer.initialize()`. Otherwise, the [[docConcentration]] vector must be length k.
    * (default = Vector(-1) = automatic)
    *
    * Optimizer-specific parameter settings:
    *  - EM
    *     - Currently only supports symmetric distributions, so all values in the vector should be
    *       the same.
-   *     - Values should be > 1.0
+   *     - Values should be &gt; 1.0
    *     - default = uniformly (50 / k) + 1, where 50/k is common in LDA libraries and +1 follows
    *       from Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Values should be >= 0
+   *     - Values should be &gt;= 0
    *     - default = uniformly (1.0 / k), following the implementation from
-   *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *       `https://github.com/Blei-Lab/onlineldavb`.
    */
   @Since("1.5.0")
   def setDocConcentration(docConcentration: Vector): this.type = {
@@ -158,13 +158,13 @@ class LDA private (
   def getAlpha: Double = getDocConcentration
 
   /**
-   * Alias for [[setDocConcentration()]]
+   * Alias for `setDocConcentration()`
    */
   @Since("1.5.0")
   def setAlpha(alpha: Vector): this.type = setDocConcentration(alpha)
 
   /**
-   * Alias for [[setDocConcentration()]]
+   * Alias for `setDocConcentration()`
    */
   @Since("1.3.0")
   def setAlpha(alpha: Double): this.type = setDocConcentration(alpha)

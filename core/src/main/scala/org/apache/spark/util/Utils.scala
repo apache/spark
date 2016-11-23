@@ -2356,6 +2356,7 @@ private[spark] object Utils extends Logging {
    *
    * @throws SparkException if sparkUrl is invalid.
    */
+  @throws[SparkException]
   def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
     try {
       val uri = new java.net.URI(sparkUrl)

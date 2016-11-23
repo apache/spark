@@ -198,7 +198,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
  *
  * @param bestModel The best model selected from k-fold cross validation.
  * @param avgMetrics Average cross-validation metrics for each paramMap in
- *                   [[CrossValidator.estimatorParamMaps]], in the corresponding order.
+ *                   `CrossValidator.estimatorParamMaps`, in the corresponding order.
  */
 @Since("1.2.0")
 class CrossValidatorModel private[ml] (
