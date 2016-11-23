@@ -126,6 +126,7 @@ case class CreateDataSourceTableAsSelectCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
+    assert(table.schema.isEmpty)
 
     val provider = table.provider.get
     val sessionState = sparkSession.sessionState

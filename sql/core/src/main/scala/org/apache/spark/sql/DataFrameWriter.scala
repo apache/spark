@@ -372,14 +372,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case (true, SaveMode.ErrorIfExists) =>
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
-      case (true, _) =>
-        val tableDesc = df.sparkSession.sessionState.catalog.getTableMetadata(tableIdent)
-        df.sparkSession.sessionState.executePlan(
-          CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
-
       case _ =>
-        val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
-        val tableType = if (storage.locationUri.isDefined) {
+        val existingTable = if (tableExists) {
+          Some(df.sparkSession.sessionState.catalog.getTableMetadata(tableIdent))
+        } else {
+          None
+        }
+        val storage = if (tableExists) {
+          existingTable.get.storage
+        } else {
+          DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+        }
+        val tableType = if (tableExists) {
+          existingTable.get.tableType
+        } else if (storage.locationUri.isDefined) {
           CatalogTableType.EXTERNAL
         } else {
           CatalogTableType.MANAGED
