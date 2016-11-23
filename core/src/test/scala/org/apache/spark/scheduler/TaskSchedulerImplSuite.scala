@@ -274,4 +274,30 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     assert("executor1" === taskDescriptions3(0).executorId)
   }
 
+  test("if an executor is lost then state for tasks running on that executor is cleaned up") {
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    new DAGScheduler(sc, taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
+      override def executorAdded(execId: String, host: String) {}
+    }
+
+    val e0Offers = Seq(new WorkerOffer("executor0", "host0", 1))
+    val attempt1 = FakeTask.createTaskSet(1)
+
+    // submit attempt 1, offer resources, task gets scheduled
+    taskScheduler.submitTasks(attempt1)
+    val taskDescriptions = taskScheduler.resourceOffers(e0Offers).flatten
+    assert(1 === taskDescriptions.length)
+
+    // mark executor0 as dead
+    taskScheduler.executorLost("executor0", SlaveLost())
+
+    // Check that state associated with the lost task attempt is cleaned up:
+    assert(taskScheduler.taskIdToExecutorId.isEmpty)
+    assert(taskScheduler.taskIdToTaskSetManager.isEmpty)
+    assert(taskScheduler.runningTasksByExecutors().get("executor0").isEmpty)
+  }
 }
