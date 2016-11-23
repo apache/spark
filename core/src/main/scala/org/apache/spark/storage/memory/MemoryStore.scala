@@ -99,6 +99,8 @@ private[spark] class MemoryStore(
   // Initial memory to request before unrolling any block
   private val unrollMemoryThreshold: Long =
     conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024)
+  // Size of each chunk, in bytes.
+  private val chunkSize = conf.getInt("spark.io.chunkSize", 4 * 1024 * 1024)
 
   /** Total amount of memory available for storage, in bytes. */
   private def maxMemory: Long = {
@@ -331,11 +333,6 @@ private[spark] class MemoryStore(
     var unrollMemoryUsedByThisBlock = 0L
     // Underlying buffer for unrolling the block
     val redirectableStream = new RedirectableOutputStream
-    val chunkSize = if (initialMemoryThreshold >= Integer.MAX_VALUE) {
-      Integer.MAX_VALUE
-    } else {
-      initialMemoryThreshold.toInt
-    }
     val bbos = new ChunkedByteBufferOutputStream(chunkSize, allocator)
     redirectableStream.setOutputStream(bbos)
     val serializationStream: SerializationStream = {

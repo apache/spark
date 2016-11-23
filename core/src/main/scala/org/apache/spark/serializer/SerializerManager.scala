@@ -73,6 +73,9 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
 
+  // Size of each chunk, in bytes.
+  private val chunkSize: Int = conf.getInt("spark.io.chunkSize", 4 * 1024 * 1024)
+
   def canUseKryo(ct: ClassTag[_]): Boolean = {
     primitiveAndPrimitiveArrayClassTags.contains(ct) || ct == stringClassTag
   }
@@ -169,7 +172,7 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       blockId: BlockId,
       values: Iterator[_],
       classTag: ClassTag[_]): ChunkedByteBuffer = {
-    val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * 4, ByteBuffer.allocate)
+    val bbos = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate)
     val byteStream = new BufferedOutputStream(bbos)
     val ser = getSerializer(classTag).newInstance()
     ser.serializeStream(wrapStream(blockId, byteStream)).writeAll(values).close()
