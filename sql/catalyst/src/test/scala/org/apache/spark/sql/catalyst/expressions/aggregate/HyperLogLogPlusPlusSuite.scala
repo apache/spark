@@ -51,10 +51,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
   }
 
   test("test invalid parameter relativeSD") {
-    // `relativeSD` should be in the range [0.22%, 39%].
-    intercept[IllegalArgumentException] {
-      new HyperLogLogPlusPlus(new BoundReference(0, IntegerType, true), relativeSD = 0.0021)
-    }
+    // `relativeSD` should be at most 39%.
     intercept[IllegalArgumentException] {
       new HyperLogLogPlusPlus(new BoundReference(0, IntegerType, true), relativeSD = 0.4)
     }
@@ -93,7 +90,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
   test("deterministic cardinality estimation") {
     val repeats = 10
     testCardinalityEstimates(
-      Seq(0.1, 0.05, 0.025, 0.01),
+      Seq(0.1, 0.05, 0.025, 0.01, 0.001),
       Seq(100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000).map(_ * repeats),
       i => i / repeats,
       i => i / repeats)

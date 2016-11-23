@@ -92,11 +92,8 @@ case class HyperLogLogPlusPlus(
    */
   private[this] val p = Math.ceil(2.0d * Math.log(1.106d / relativeSD) / Math.log(2.0d)).toInt
 
-  // THRESHOLDS, RAW_ESTIMATE_DATA and BIAS_DATA all have the same length 15, and we probe these
-  // arrays by (p - 4), so we need to guarantee 0 <= p - 4 <= 14.
-  require(p >= 4 && p <= HyperLogLogPlusPlus.THRESHOLDS.length + 3,
-    s"HLL++ requires at least 4 bits and at most ${HyperLogLogPlusPlus.THRESHOLDS.length + 3} " +
-    "bits for addressing. The error should be in the range [0.22%, 39%].")
+  require(p >= 4, "HLL++ requires at least 4 bits for addressing. " +
+    "Use a lower error, at most 39%.")
 
   /**
    * Shift used to extract the index of the register from the hashed value.
@@ -299,8 +296,9 @@ case class HyperLogLogPlusPlus(
     // We integrate two steps from the paper:
     // val Z = 1.0d / zInverse
     // val E = alphaM2 * Z
+    val E = alphaM2 / zInverse
     @inline
-    def EBiasCorrected = alphaM2 / zInverse match {
+    def EBiasCorrected = E match {
       case e if p < 19 && e < 5.0d * m => e - estimateBias(e)
       case e => e
     }
@@ -309,7 +307,7 @@ case class HyperLogLogPlusPlus(
     val estimate = if (V > 0) {
       // Use linear counting for small cardinality estimates.
       val H = m * Math.log(m / V)
-      if (H <= THRESHOLDS(p - 4)) {
+      if ((p < 19 && H <= THRESHOLDS(p - 4)) || E <= 2.5 * m) {
         H
       } else {
         EBiasCorrected
