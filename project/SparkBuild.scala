@@ -746,7 +746,8 @@ object Unidoc {
       "-tag", """note:a:Note\:""",
       "-tag", "group:X",
       "-tag", "tparam:X",
-      "-tag", "constructor:X"
+      "-tag", "constructor:X",
+      "-tag", "todo:X"
     ),
 
     // Use GitHub repository for Scaladoc source links

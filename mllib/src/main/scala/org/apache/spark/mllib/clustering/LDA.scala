@@ -39,8 +39,8 @@ import org.apache.spark.util.Utils
  *  - Original LDA paper (journal version):
  *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
  *
- * @see [[http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
- *       (Wikipedia)]]
+ * @see `http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
+ *       (Wikipedia)`
  */
 @Since("1.3.0")
 class LDA private (
@@ -195,11 +195,11 @@ class LDA private (
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Value should be > 1.0
+   *     - Value should be &gt; 1.0
    *     - default = 0.1 + 1, where 0.1 gives a small amount of smoothing and +1 follows
    *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be >= 0
+   *     - Value should be &gt;= 0
    *     - default = (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
    */
@@ -321,7 +321,7 @@ class LDA private (
    * @param documents  RDD of documents, which are term (word) count vectors paired with IDs.
    *                   The term count vectors are "bags of words" with a fixed-size vocabulary
    *                   (where the vocabulary size is the length of the vector).
-   *                   Document IDs must be unique and >= 0.
+   *                   Document IDs must be unique and &gt;= 0.
    * @return  Inferred LDA model
    */
   @Since("1.3.0")

@@ -36,7 +36,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * Model produced by [[PowerIterationClustering]].
  *
  * @param k number of clusters
- * @param assignments an RDD of clustering [[PowerIterationClustering#Assignment]]s
+ * @param assignments an RDD of clustering `PowerIterationClustering#Assignment`s
  */
 @Since("1.3.0")
 class PowerIterationClusteringModel @Since("1.3.0") (
@@ -103,7 +103,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
 /**
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
- * [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]]. From the abstract: PIC finds a very
+ * `http://www.icml2010.org/papers/387.pdf Lin and Cohen`. From the abstract: PIC finds a very
  * low-dimensional embedding of a dataset using truncated power iteration on a normalized pair-wise
  * similarity matrix of the data.
  *
@@ -113,7 +113,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
  *                 as vertex properties, or "degree" to use normalized sum similarities.
  *                 Default: random.
  *
- * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
+ * @see `http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)`
  */
 @Since("1.3.0")
 class PowerIterationClustering private[clustering] (
@@ -210,7 +210,7 @@ class PowerIterationClustering private[clustering] (
   }
 
   /**
-   * A Java-friendly version of [[PowerIterationClustering.run]].
+   * A Java-friendly version of `PowerIterationClustering.run`.
    */
   @Since("1.3.0")
   def run(similarities: JavaRDD[(java.lang.Long, java.lang.Long, java.lang.Double)])

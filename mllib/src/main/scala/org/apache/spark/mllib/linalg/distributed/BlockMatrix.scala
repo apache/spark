@@ -385,10 +385,10 @@ class BlockMatrix @Since("1.3.0") (
   /**
    * Adds the given block matrix `other` to `this` block matrix: `this + other`.
    * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock`
-   * values. If one of the blocks that are being added are instances of [[SparseMatrix]],
-   * the resulting sub matrix will also be a [[SparseMatrix]], even if it is being added
-   * to a [[DenseMatrix]]. If two dense matrices are added, the output will also be a
-   * [[DenseMatrix]].
+   * values. If one of the blocks that are being added are instances of `SparseMatrix`,
+   * the resulting sub matrix will also be a `SparseMatrix`, even if it is being added
+   * to a `DenseMatrix`. If two dense matrices are added, the output will also be a
+   * `DenseMatrix`.
    */
   @Since("1.3.0")
   def add(other: BlockMatrix): BlockMatrix =
@@ -397,10 +397,10 @@ class BlockMatrix @Since("1.3.0") (
   /**
    * Subtracts the given block matrix `other` from `this` block matrix: `this - other`.
    * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock`
-   * values. If one of the blocks that are being subtracted are instances of [[SparseMatrix]],
-   * the resulting sub matrix will also be a [[SparseMatrix]], even if it is being subtracted
-   * from a [[DenseMatrix]]. If two dense matrices are subtracted, the output will also be a
-   * [[DenseMatrix]].
+   * values. If one of the blocks that are being subtracted are instances of `SparseMatrix`,
+   * the resulting sub matrix will also be a `SparseMatrix`, even if it is being subtracted
+   * from a `DenseMatrix`. If two dense matrices are subtracted, the output will also be a
+   * `DenseMatrix`.
    */
   @Since("2.0.0")
   def subtract(other: BlockMatrix): BlockMatrix =
@@ -447,8 +447,8 @@ class BlockMatrix @Since("1.3.0") (
   /**
    * Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
    * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
-   * [[SparseMatrix]], they will have to be converted to a [[DenseMatrix]]. The output
-   * [[BlockMatrix]] will only consist of blocks of [[DenseMatrix]]. This may cause
+   * `SparseMatrix`, they will have to be converted to a `DenseMatrix`. The output
+   * [[BlockMatrix]] will only consist of blocks of `DenseMatrix`. This may cause
    * some performance issues until support for multiplying two sparse matrices is added.
    *
    * @note The behavior of multiply has changed in 1.6.0. `multiply` used to throw an error when

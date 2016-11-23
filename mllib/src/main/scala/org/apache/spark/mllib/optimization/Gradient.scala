@@ -118,9 +118,9 @@ abstract class Gradient extends Serializable {
  * If any of margins is larger than 709.78, the numerical computation of multiplier and loss
  * function will be suffered from arithmetic overflow. This issue occurs when there are outliers
  * in data which are far away from hyperplane, and this will cause the failing of training once
- * infinity / infinity is introduced. Note that this is only a concern when max(margins) > 0.
+ * infinity / infinity is introduced. Note that this is only a concern when max(margins) &gt; 0.
  *
- * Fortunately, when max(margins) = maxMargin > 0, the loss function and the multiplier can be
+ * Fortunately, when max(margins) = maxMargin &gt; 0, the loss function and the multiplier can be
  * easily rewritten into the following equivalent numerically stable formula.
  *
  * <blockquote>
