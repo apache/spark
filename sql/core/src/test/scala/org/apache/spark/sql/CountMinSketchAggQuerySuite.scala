@@ -37,10 +37,10 @@ class CountMinSketchAggQuerySuite extends QueryTest with SharedSQLContext {
 
   /** Uses fixed seed to ensure reproducible test execution */
   private val r = new Random(42)
-  private val numAllItems = 500000
+  private val numAllItems = 1000
   private val numSamples = numAllItems / 10
 
-  private val eps = 0.0001D
+  private val eps = 0.1D
   private val confidence = 0.95D
   private val seed = 11
 
