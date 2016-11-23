@@ -85,6 +85,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitAnyTermination(): Unit = {
     awaitTerminationLock.synchronized {
       while (lastTerminatedQuery == null) {
@@ -117,6 +118,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitAnyTermination(timeoutMs: Long): Boolean = {
 
     val startTime = System.currentTimeMillis

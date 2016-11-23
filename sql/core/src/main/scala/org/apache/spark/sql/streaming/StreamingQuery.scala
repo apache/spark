@@ -94,6 +94,7 @@ trait StreamingQuery {
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitTermination(): Unit
 
   /**
@@ -110,6 +111,7 @@ trait StreamingQuery {
    *
    * @since 2.0.0
    */
+  @throws[StreamingQueryException]
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**
