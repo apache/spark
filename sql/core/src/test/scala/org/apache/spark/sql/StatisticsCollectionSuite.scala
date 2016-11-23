@@ -23,19 +23,17 @@ import java.sql.{Date, Timestamp}
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.command.AnalyzeColumnCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
 
+
 /**
- * End-to-end suite testing statistics collection and use
- * on both entire table and individual columns.
+ * End-to-end suite testing statistics collection and use on both entire table and columns.
  */
-class StatisticsSuite extends QueryTest with SharedSQLContext {
+class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSQLContext {
   import testImplicits._
 
   private def checkTableStats(tableName: String, expectedRowCount: Option[Int])
@@ -47,6 +45,59 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
     }
     assert(stats.size == 1)
     stats.head
+  }
+
+  test("estimates the size of a limit 0 on outer join") {
+    withTempView("test") {
+      Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
+        .createOrReplaceTempView("test")
+      val df1 = spark.table("test")
+      val df2 = spark.table("test").limit(0)
+      val df = df1.join(df2, Seq("k"), "left")
+
+      val sizes = df.queryExecution.analyzed.collect { case g: Join =>
+        g.statistics.sizeInBytes
+      }
+
+      assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
+      assert(sizes.head === BigInt(96),
+        s"expected exact size 96 for table 'test', got: ${sizes.head}")
+    }
+  }
+
+  test("analyze column command - unsupported types and invalid columns") {
+    val tableName = "column_stats_test1"
+    withTable(tableName) {
+      Seq(ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3)))).toDF().write.saveAsTable(tableName)
+
+      // Test unsupported data types
+      val err1 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
+      }
+      assert(err1.message.contains("does not support statistics collection"))
+
+      // Test invalid columns
+      val err2 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
+      }
+      assert(err2.message.contains("does not exist"))
+    }
+  }
+
+  test("test table-level statistics for data source table") {
+    val tableName = "tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
+      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto(tableName)
+
+      // noscan won't count the number of rows
+      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
+      checkTableStats(tableName, expectedRowCount = None)
+
+      // without noscan, we count the number of rows
+      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
+      checkTableStats(tableName, expectedRowCount = Some(2))
+    }
   }
 
   test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
@@ -82,72 +133,15 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("estimates the size of a limit 0 on outer join") {
-    withTempView("test") {
-      Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
-        .createOrReplaceTempView("test")
-      val df1 = spark.table("test")
-      val df2 = spark.table("test").limit(0)
-      val df = df1.join(df2, Seq("k"), "left")
+}
 
-      val sizes = df.queryExecution.analyzed.collect { case g: Join =>
-        g.statistics.sizeInBytes
-      }
 
-      assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
-      assert(sizes.head === BigInt(96),
-        s"expected exact size 96 for table 'test', got: ${sizes.head}")
-    }
-  }
-
-  test("test table-level statistics for data source table created in InMemoryCatalog") {
-    val tableName = "tbl"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName(i INT, j STRING) USING parquet")
-      Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto(tableName)
-
-      // noscan won't count the number of rows
-      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
-      checkTableStats(tableName, expectedRowCount = None)
-
-      // without noscan, we count the number of rows
-      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS")
-      checkTableStats(tableName, expectedRowCount = Some(2))
-    }
-  }
-
-  test("analyze column command - parsing") {
-    val tableName = "column_stats_test0"
-
-    // we need to specify column names
-    intercept[ParseException] {
-      sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS")
-    }
-
-    val analyzeSql = s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS key, value"
-    val parsed = spark.sessionState.sqlParser.parsePlan(analyzeSql)
-    val expected = AnalyzeColumnCommand(TableIdentifier(tableName), Seq("key", "value"))
-    comparePlans(parsed, expected)
-  }
-
-  test("analyze column command - unsupported types and invalid columns") {
-    val tableName = "column_stats_test1"
-    withTable(tableName) {
-      Seq(ArrayData(Seq(1, 2, 3), Seq(Seq(1, 2, 3)))).toDF().write.saveAsTable(tableName)
-
-      // Test unsupported data types
-      val err1 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS data")
-      }
-      assert(err1.message.contains("does not support statistics collection"))
-
-      // Test invalid columns
-      val err2 = intercept[AnalysisException] {
-        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS some_random_column")
-      }
-      assert(err2.message.contains("does not exist"))
-    }
-  }
+/**
+ * The base for test cases that we want to include in both the hive module (for verifying behavior
+ * when using the Hive external catalog) as well as in the sql/core module.
+ */
+abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils {
+  import testImplicits._
 
   private val dec1 = new java.math.BigDecimal("1.000000000000000000")
   private val dec2 = new java.math.BigDecimal("8.000000000000000000")

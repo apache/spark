@@ -24,54 +24,14 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.execution.command.{AnalyzeTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
-class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
-
-  test("parse analyze commands") {
-    def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
-      val parsed = spark.sessionState.sqlParser.parsePlan(analyzeCommand)
-      val operators = parsed.collect {
-        case a: AnalyzeTableCommand => a
-        case o => o
-      }
-
-      assert(operators.size === 1)
-      if (operators(0).getClass() != c) {
-        fail(
-          s"""$analyzeCommand expected command: $c, but got ${operators(0)}
-             |parsed command:
-             |$parsed
-           """.stripMargin)
-      }
-    }
-
-    assertAnalyzeCommand(
-      "ANALYZE TABLE Table1 COMPUTE STATISTICS",
-      classOf[AnalyzeTableCommand])
-    assertAnalyzeCommand(
-      "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      classOf[AnalyzeTableCommand])
-    assertAnalyzeCommand(
-      "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      classOf[AnalyzeTableCommand])
-    assertAnalyzeCommand(
-      "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS",
-      classOf[AnalyzeTableCommand])
-    assertAnalyzeCommand(
-      "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      classOf[AnalyzeTableCommand])
-
-    assertAnalyzeCommand(
-      "ANALYZE TABLE Table1 COMPUTE STATISTICS nOscAn",
-      classOf[AnalyzeTableCommand])
-  }
+class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
 
   test("MetastoreRelations fallback to HDFS for size estimation") {
     val enableFallBackToHdfsForStats = spark.sessionState.conf.fallBackToHdfsForStatsEnabled
@@ -370,6 +330,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     }
   }
 
+  /** Used to test refreshing cached metadata once table stats are updated. */
   private def getStatsBeforeAfterUpdate(isAnalyzeColumns: Boolean): (Statistics, Statistics) = {
     val tableName = "tbl"
     var statsBeforeUpdate: Statistics = null
