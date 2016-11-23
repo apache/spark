@@ -2562,9 +2562,9 @@ private[spark] object Utils extends Logging {
     val redactionPattern = conf.get(SECRET_REDACTION_PATTERN).r
     kvs.map { kv =>
       redactionPattern.findFirstIn(kv._1)
-        .map{ ignore => (kv._1, REDACTION_REPLACEMENT_TEXT) }
+        .map { ignore => (kv._1, REDACTION_REPLACEMENT_TEXT) }
         .getOrElse(kv)
-      }
+    }
   }
 
 }
