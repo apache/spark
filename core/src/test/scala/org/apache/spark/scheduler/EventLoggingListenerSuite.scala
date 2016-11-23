@@ -116,7 +116,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val regex = """"spark.executorEnv.HADOOP_CREDSTORE_PASSWORD":"([^"]*)"""".r
     val matches = regex.findAllIn(eventLog)
     assert(matches.nonEmpty)
-    matches.foreach(matched => assert(matched.equals(expected)))
+    matches.foreach{ matched => assert(matched.equals(expected)) }
   }
 
   test("Log overwriting") {
