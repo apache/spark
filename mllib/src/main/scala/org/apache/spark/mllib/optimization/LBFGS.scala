@@ -31,7 +31,8 @@ import org.apache.spark.rdd.RDD
 /**
  * :: DeveloperApi ::
  * Class used to solve an optimization problem using Limited-memory BFGS.
- * Reference: `http://en.wikipedia.org/wiki/Limited-memory_BFGS`
+ * Reference: <a href="http://en.wikipedia.org/wiki/Limited-memory_BFGS">
+ * Wikipedia on Limited-memory BFGS</a>
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */

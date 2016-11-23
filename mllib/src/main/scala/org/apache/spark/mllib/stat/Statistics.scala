@@ -186,7 +186,7 @@ object Statistics {
    * distribution of the sample data and the theoretical distribution we can provide a test for the
    * the null hypothesis that the sample data comes from that theoretical distribution.
    * For more information on KS Test:
-   * @see `https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test`
+   * @see <a href="https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test">here</a>
    *
    * @param data an `RDD[Double]` containing the sample of data to test
    * @param cdf a `Double => Double` function to calculate the theoretical CDF at a given value

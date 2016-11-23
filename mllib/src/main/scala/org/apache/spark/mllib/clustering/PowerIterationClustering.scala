@@ -103,9 +103,9 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
 
 /**
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
- * `http://www.icml2010.org/papers/387.pdf Lin and Cohen`. From the abstract: PIC finds a very
- * low-dimensional embedding of a dataset using truncated power iteration on a normalized pair-wise
- * similarity matrix of the data.
+ * <a href="http://www.icml2010.org/papers/387.pdf">Lin and Cohen</a>. From the abstract: PIC finds
+ * a very low-dimensional embedding of a dataset using truncated power iteration on a normalized
+ * pair-wise similarity matrix of the data.
  *
  * @param k Number of clusters.
  * @param maxIterations Maximum number of iterations of the PIC algorithm.
@@ -113,7 +113,8 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
  *                 as vertex properties, or "degree" to use normalized sum similarities.
  *                 Default: random.
  *
- * @see `http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)`
+ * @see <a href="http://en.wikipedia.org/wiki/Spectral_clustering">
+ * Spectral clustering (Wikipedia)</a>
  */
 @Since("1.3.0")
 class PowerIterationClustering private[clustering] (

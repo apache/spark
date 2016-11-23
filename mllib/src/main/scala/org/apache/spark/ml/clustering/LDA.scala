@@ -84,7 +84,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - Online
    *     - Values should be &gt;= 0
    *     - default = uniformly (1.0 / k), following the implementation from
-   *       `https://github.com/Blei-Lab/onlineldavb`.
+   *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    *
    * @group param
    */
@@ -126,7 +126,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - Online
    *     - Value should be &gt;= 0
    *     - default = (1.0 / k), following the implementation from
-   *       `https://github.com/Blei-Lab/onlineldavb`.
+   *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    *
    * @group param
    */
@@ -162,11 +162,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - Online LDA:
    *     Hoffman, Blei and Bach.  "Online Learning for Latent Dirichlet Allocation."
    *     Neural Information Processing Systems, 2010.
-   *     `http://www.cs.columbia.edu/~blei/papers/HoffmanBleiBach2010b.pdf`
+   *     See <a href="http://www.cs.columbia.edu/~blei/papers/HoffmanBleiBach2010b.pdf">here</a>
    *  - EM:
    *     Asuncion et al.  "On Smoothing and Inference for Topic Models."
    *     Uncertainty in Artificial Intelligence, 2009.
-   *     `http://arxiv.org/pdf/1205.2662.pdf`
+   *     See <a href="http://arxiv.org/pdf/1205.2662.pdf">here</a>
    *
    * @group param
    */
@@ -809,8 +809,8 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
  *  [[org.apache.spark.ml.feature.Tokenizer]] and [[org.apache.spark.ml.feature.CountVectorizer]]
  *  can be useful for converting text to word count vectors.
  *
- * @see `http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
- *       (Wikipedia)`
+ * @see <a href="http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation">
+ * Latent Dirichlet allocation (Wikipedia)</a>
  */
 @Since("1.6.0")
 @Experimental

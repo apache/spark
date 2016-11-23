@@ -39,8 +39,8 @@ import org.apache.spark.util.Utils
  *  - Original LDA paper (journal version):
  *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
  *
- * @see `http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
- *       (Wikipedia)`
+ * @see <a href="http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation">
+ * Latent Dirichlet allocation (Wikipedia)</a>
  */
 @Since("1.3.0")
 class LDA private (
@@ -126,7 +126,7 @@ class LDA private (
    *  - Online
    *     - Values should be &gt;= 0
    *     - default = uniformly (1.0 / k), following the implementation from
-   *       `https://github.com/Blei-Lab/onlineldavb`.
+   *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    */
   @Since("1.5.0")
   def setDocConcentration(docConcentration: Vector): this.type = {
@@ -201,7 +201,7 @@ class LDA private (
    *  - Online
    *     - Value should be &gt;= 0
    *     - default = (1.0 / k), following the implementation from
-   *       `https://github.com/Blei-Lab/onlineldavb`.
+   *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    */
   @Since("1.3.0")
   def setTopicConcentration(topicConcentration: Double): this.type = {

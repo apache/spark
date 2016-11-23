@@ -119,7 +119,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 /**
  * :: Experimental ::
  * Fit a parametric survival regression model named accelerated failure time (AFT) model
- * (`https://en.wikipedia.org/wiki/Accelerated_failure_time_model`)
+ * (see <a href="https://en.wikipedia.org/wiki/Accelerated_failure_time_model">here</a>)
  * based on the Weibull distribution of the survival time.
  */
 @Experimental

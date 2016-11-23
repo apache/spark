@@ -2503,6 +2503,10 @@
                   <name>todo</name>
                   <placement>X</placement>
                 </tag>
+                <tag>
+                  <name>groupname</name>
+                  <placement>X</placement>
+                </tag>
               </tags>
             </configuration>
           </plugin>

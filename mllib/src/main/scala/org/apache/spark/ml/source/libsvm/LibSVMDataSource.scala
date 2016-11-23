@@ -48,6 +48,6 @@ package org.apache.spark.ml.source.libsvm
  * @note This class is public for documentation purpose. Please don't use this class directly.
  * Rather, use the data source API as illustrated above.
  *
- * @see `https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets`
+ * @see <a href="https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/">LIBSVM datasets</a>
  */
 class LibSVMDataSource private() {}

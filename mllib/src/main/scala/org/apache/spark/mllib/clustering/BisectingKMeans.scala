@@ -48,9 +48,9 @@ import org.apache.spark.storage.StorageLevel
  *                                (default: 1)
  * @param seed a random seed (default: hash value of the class name)
  *
- * @see `http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
- *     Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
- *     KDD Workshop on Text Mining, 2000.`
+ * @see <a href="http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf">
+ * Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
+ * KDD Workshop on Text Mining, 2000.</a>
  */
 @Since("1.6.0")
 class BisectingKMeans private (
