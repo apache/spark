@@ -528,6 +528,8 @@ private[spark] class TaskSchedulerImpl(
    */
   private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
     executorIdToRunningTaskIds.remove(executorId).foreach { taskIds =>
+      logDebug("Cleaning up TaskScheduler state for tasks " +
+        s"${taskIds.mkString("[", ",", "]")} on failed executor $executorId")
       taskIds.foreach { tid =>
         taskIdToExecutorId.remove(tid)
         taskIdToTaskSetManager.remove(tid)
