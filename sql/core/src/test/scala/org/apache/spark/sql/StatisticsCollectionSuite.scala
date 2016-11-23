@@ -154,7 +154,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
    * Define a very simple 3 row table used for testing column serialization.
    * Note: last column is seq[int] which doesn't support stats collection.
    */
-  private val data = Seq[
+  protected val data = Seq[
     (jl.Boolean, jl.Byte, jl.Short, jl.Integer, jl.Long,
       jl.Double, jl.Float, java.math.BigDecimal,
       String, Array[Byte], Date, Timestamp,
@@ -165,7 +165,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   )
 
   /** A mapping from column to the stats collected. */
-  private val stats = mutable.LinkedHashMap(
+  protected val stats = mutable.LinkedHashMap(
     "cbool" -> ColumnStat(2, Some(false), Some(true), 1, 1, 1),
     "cbyte" -> ColumnStat(2, Some(1L), Some(2L), 1, 1, 1),
     "cshort" -> ColumnStat(2, Some(1L), Some(3L), 1, 2, 2),
