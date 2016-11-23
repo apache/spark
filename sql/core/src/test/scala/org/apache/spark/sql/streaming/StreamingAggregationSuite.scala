@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.InternalOutputModes._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
@@ -237,7 +238,7 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("prune results by time, complete mode") {
+  test("prune results by current_time, complete mode") {
     import testImplicits._
     import StreamingAggregationSuite._
     clock = new StreamManualClock
@@ -257,22 +258,59 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       // advance clock to 10 seconds
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(10 * 1000),
-      AssertOnQuery { _ => clock.getTimeMillis() === 10 * 1000 },
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
 
-      // advance clock to 20 seconds
+      // advance clock to 20 seconds, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
       AdvanceManualClock(10 * 1000),
       CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
 
-      // advance clock to 30 seconds
+      // advance clock to 30 seconds, should retain keys >= 20
       AddData(inputData, 0L),
       AdvanceManualClock(10 * 1000),
       CheckLastBatch((20L, 1)),
 
-      // advance clock to 40 seconds
+      // advance clock to 40 seconds, should retain keys >= 30
       AddData(inputData, 25L, 30L, 40L, 45L),
       AdvanceManualClock(10 * 1000),
+      CheckLastBatch((30L, 1), (40L, 1), (45L, 1))
+    )
+  }
+
+  test("prune results by date_time, complete mode") {
+    import testImplicits._
+    import StreamingAggregationSuite._
+    clock = new StreamManualClock
+
+    val inputData = MemoryStream[Long]
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Long, Long)]
+        .where(from_unixtime('value + 10L) >= current_date())
+
+    testStream(aggregated, Complete)(
+      StartStream(ProcessingTime("10 days"), triggerClock = clock),
+
+      // advance clock to 10 seconds, should retain all keys
+      AddData(inputData, 0L, 5L, 5L, 10L),
+      AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
+      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+
+      // advance clock to 20 seconds, should retain keys >= 10
+      AddData(inputData, 15L, 15L, 20L),
+      AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
+      CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
+
+      // advance clock to 30 seconds, should retain keys >= 20
+      AddData(inputData, 0L),
+      AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
+      CheckLastBatch((20L, 1)),
+
+      // advance clock to 40 seconds, should retain keys >= 30
+      AddData(inputData, 25L, 30L, 40L, 45L),
+      AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
       CheckLastBatch((30L, 1), (40L, 1), (45L, 1))
     )
   }

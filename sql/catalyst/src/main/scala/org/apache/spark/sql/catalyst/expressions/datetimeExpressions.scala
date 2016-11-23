@@ -87,8 +87,11 @@ case class CurrentBatchTimestamp(timestampMs: Long, dataType: DataType)
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {}
 
-  override protected def evalInternal(input: InternalRow): Any =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+  /**
+   * Need to return literal value in order to support compile time expression evaluation
+   * e.g., select(current_date())
+   */
+  override protected def evalInternal(input: InternalRow): Any = toLiteral.value
 
   def toLiteral: Literal = dataType match {
     case _: TimestampType =>
