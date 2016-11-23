@@ -551,6 +551,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               logError(s"IOException in cleaning ${attempt.logPath}", t)
           }
         }
+      case None => logError(s"Can't delete, no application ${appId} found")
     }
   }
 
