@@ -89,9 +89,11 @@ private[spark] class TaskSchedulerImpl(
   val nextTaskId = new AtomicLong(0)
 
   // Number of tasks running on each executor
-  private val executorIdToTaskCount = new HashMap[String, Int]
+  private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
 
-  def runningTasksByExecutors(): Map[String, Int] = executorIdToTaskCount.toMap
+  def runningTasksByExecutors(): Map[String, Int] = synchronized {
+    executorIdToRunningTaskIds.toMap.mapValues(_.size)
+  }
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
@@ -259,7 +261,7 @@ private[spark] class TaskSchedulerImpl(
             val tid = task.taskId
             taskIdToTaskSetManager(tid) = taskSet
             taskIdToExecutorId(tid) = execId
-            executorIdToTaskCount(execId) += 1
+            executorIdToRunningTaskIds(execId).add(tid)
             executorsByHost(host) += execId
             availableCpus(i) -= CPUS_PER_TASK
             assert(availableCpus(i) >= 0)
@@ -288,7 +290,7 @@ private[spark] class TaskSchedulerImpl(
     var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
-      executorIdToTaskCount.getOrElseUpdate(o.executorId, 0)
+      executorIdToRunningTaskIds.getOrElseUpdate(o.executorId, HashSet[Long]())
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
@@ -339,7 +341,7 @@ private[spark] class TaskSchedulerImpl(
           // We lost this entire executor, so remember that it's gone
           val execId = taskIdToExecutorId(tid)
 
-          if (executorIdToTaskCount.contains(execId)) {
+          if (executorIdToRunningTaskIds.contains(execId)) {
             reason = Some(
               SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
             removeExecutor(execId, reason.get)
@@ -351,9 +353,7 @@ private[spark] class TaskSchedulerImpl(
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetManager.remove(tid)
               taskIdToExecutorId.remove(tid).foreach { execId =>
-                if (executorIdToTaskCount.contains(execId)) {
-                  executorIdToTaskCount(execId) -= 1
-                }
+                executorIdToRunningTaskIds.remove(execId)
               }
             }
             if (state == TaskState.FINISHED) {
@@ -477,7 +477,7 @@ private[spark] class TaskSchedulerImpl(
     var failedExecutor: Option[String] = None
 
     synchronized {
-      if (executorIdToTaskCount.contains(executorId)) {
+      if (executorIdToRunningTaskIds.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
         logExecutorLoss(executorId, hostPort, reason)
         removeExecutor(executorId, reason)
@@ -525,7 +525,12 @@ private[spark] class TaskSchedulerImpl(
    * of any running tasks, since the loss reason defines whether we'll fail those tasks.
    */
   private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
-    executorIdToTaskCount -= executorId
+    executorIdToRunningTaskIds.remove(executorId).foreach { taskIds =>
+      taskIds.foreach { tid =>
+        taskIdToExecutorId.remove(tid)
+        taskIdToTaskSetManager.remove(tid)
+      }
+    }
 
     val host = executorIdToHost(executorId)
     val execs = executorsByHost.getOrElse(host, new HashSet)
@@ -563,11 +568,11 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def isExecutorAlive(execId: String): Boolean = synchronized {
-    executorIdToTaskCount.contains(execId)
+    executorIdToRunningTaskIds.contains(execId)
   }
 
   def isExecutorBusy(execId: String): Boolean = synchronized {
-    executorIdToTaskCount.getOrElse(execId, -1) > 0
+    executorIdToRunningTaskIds.get(execId).exists(_.nonEmpty)
   }
 
   // By default, rack is unknown
