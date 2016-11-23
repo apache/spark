@@ -201,7 +201,7 @@ class LDA private (
    *  - Online
    *     - Value should be &gt;= 0
    *     - default = (1.0 / k), following the implementation from
-   *       [[https://github.com/Blei-Lab/onlineldavb]].
+   *       `https://github.com/Blei-Lab/onlineldavb`.
    */
   @Since("1.3.0")
   def setTopicConcentration(topicConcentration: Double): this.type = {

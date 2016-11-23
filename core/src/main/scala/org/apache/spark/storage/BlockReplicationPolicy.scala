@@ -92,8 +92,8 @@ class RandomBlockReplicationPolicy
   /**
    * Uses sampling algorithm by Robert Floyd. Finds a random sample in O(n) while
    * minimizing space usage
-   * [[http://math.stackexchange.com/questions/178690/
-   * whats-the-proof-of-correctness-for-robert-floyds-algorithm-for-selecting-a-sin]]
+   * `http://math.stackexchange.com/questions/178690/
+   * whats-the-proof-of-correctness-for-robert-floyds-algorithm-for-selecting-a-sin`
    *
    * @param n total number of indices
    * @param m number of samples needed

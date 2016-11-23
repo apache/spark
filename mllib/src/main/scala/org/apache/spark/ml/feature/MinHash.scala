@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.StructType
  * where `k_i` is the i-th coefficient, and both `x` and `k_i` are from `Z_prime^*`
  *
  * Reference:
- * [[https://en.wikipedia.org/wiki/Perfect_hash_function Wikipedia on Perfect Hash Function]]
+ * `https://en.wikipedia.org/wiki/Perfect_hash_function Wikipedia on Perfect Hash Function`
  *
  * @param numEntries The number of entries of the hash functions.
  * @param randCoefficients An array of random coefficients, each used by one hash function.
@@ -98,7 +98,7 @@ class MinHashModel private[ml] (
  * as binary "1" values.
  *
  * References:
- * [[https://en.wikipedia.org/wiki/MinHash Wikipedia on MinHash]]
+ * `https://en.wikipedia.org/wiki/MinHash Wikipedia on MinHash`
  */
 @Experimental
 @Since("2.1.0")

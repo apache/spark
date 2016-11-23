@@ -302,10 +302,10 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 /**
  * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
  *
- * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
+ * This is the Multinomial NB (`http://tinyurl.com/lsdw6p`) which can handle all kinds of
  * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
  * document classification.  By making every vector a 0-1 vector, it can also be used as
- * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The input feature values must be nonnegative.
+ * Bernoulli NB (`http://tinyurl.com/p7c96j6`). The input feature values must be nonnegative.
  */
 @Since("0.9.0")
 class NaiveBayes private (
@@ -402,7 +402,7 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all
+   * This is the default Multinomial NB (`http://tinyurl.com/lsdw6p`) which can handle all
    * kinds of discrete data.  For example, by converting documents into TF-IDF vectors, it
    * can be used for document classification.
    *
@@ -419,7 +419,7 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * This is the default Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all
+   * This is the default Multinomial NB (`http://tinyurl.com/lsdw6p`) which can handle all
    * kinds of discrete data.  For example, by converting documents into TF-IDF vectors, it
    * can be used for document classification.
    *
@@ -435,8 +435,8 @@ object NaiveBayes {
   /**
    * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
    *
-   * The model type can be set to either Multinomial NB ([[http://tinyurl.com/lsdw6p]])
-   * or Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The Multinomial NB can handle
+   * The model type can be set to either Multinomial NB (`http://tinyurl.com/lsdw6p`)
+   * or Bernoulli NB (`http://tinyurl.com/p7c96j6`). The Multinomial NB can handle
    * discrete count data and can be called by setting the model type to "multinomial".
    * For example, it can be used with word counts or TF_IDF vectors of documents.
    * The Bernoulli model fits presence or absence (0-1) counts. By making every vector a

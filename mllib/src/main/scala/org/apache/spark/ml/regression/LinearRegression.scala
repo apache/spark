@@ -624,7 +624,7 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the explained variance regression score.
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-   * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
+   * Reference: `http://en.wikipedia.org/wiki/Explained_variation`
    *
    * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
    * This will change in later Spark versions.
@@ -664,7 +664,7 @@ class LinearRegressionSummary private[regression] (
 
   /**
    * Returns R^2^, the coefficient of determination.
-   * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   * Reference: `http://en.wikipedia.org/wiki/Coefficient_of_determination`
    *
    * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
    * This will change in later Spark versions.

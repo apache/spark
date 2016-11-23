@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * Perform feature expansion in a polynomial space. As said in wikipedia of Polynomial Expansion,
- * which is available at [[http://en.wikipedia.org/wiki/Polynomial_expansion]], "In mathematics, an
+ * which is available at `http://en.wikipedia.org/wiki/Polynomial_expansion`, "In mathematics, an
  * expansion of a product of sums expresses it as a sum of products by using the fact that
  * multiplication distributes over addition". Take a 2-variable feature vector as an example:
  * `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.

@@ -38,7 +38,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
- * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
  *
@@ -151,7 +151,7 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 }
 
 /**
- * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
+ * `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
  * model for regression.
  * It supports both continuous and categorical features.
  * @param _trees  Decision trees in the ensemble.

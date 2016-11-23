@@ -113,8 +113,8 @@ class RandomProjectionModel private[ml] (
  *
  * References:
  *
- * 1. [[https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions
- * Wikipedia on Stable Distributions]]
+ * 1. `https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions
+ * Wikipedia on Stable Distributions`
  *
  * 2. Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
  * arXiv:1408.2927 (2014).

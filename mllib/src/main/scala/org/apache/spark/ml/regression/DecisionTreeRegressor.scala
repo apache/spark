@@ -38,7 +38,7 @@ import org.apache.spark.sql.functions._
 
 
 /**
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
+ * `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree` learning algorithm
  * for regression.
  * It supports both continuous and categorical features.
  */

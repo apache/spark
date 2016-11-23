@@ -123,7 +123,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
 /**
  * :: Experimental ::
  *
- * Fit a Generalized Linear Model ([[https://en.wikipedia.org/wiki/Generalized_linear_model]])
+ * Fit a Generalized Linear Model (`https://en.wikipedia.org/wiki/Generalized_linear_model`)
  * specified by giving a symbolic description of the linear predictor (link function) and
  * a description of the error distribution (family).
  * It supports "gaussian", "binomial", "poisson" and "gamma" as family.
