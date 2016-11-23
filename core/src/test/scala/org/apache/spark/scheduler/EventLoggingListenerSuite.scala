@@ -96,27 +96,15 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Event logging with password redaction") {
+    val key = "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD"
     val secretPassword = "secret_password"
-    val conf = getLoggingConf(testDirPath, None).set("spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
-      secretPassword)
-    sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
-    assert(sc.eventLogger.isDefined)
-    val eventLogger = sc.eventLogger.get
-
-    sc.parallelize(1 to 10000).count()
-    sc.stop()
-
-    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
-    val eventLog = Source.fromInputStream(logData).mkString
-    // Make sure nothing secret shows up anywhere
-    assert(!eventLog.contains(secretPassword), s"Secret password ($secretPassword) not redacted " +
-      s"from event logs:\n $eventLog")
-    val expected = """"spark.executorEnv.HADOOP_CREDSTORE_PASSWORD":"*********(redacted)""""
-    // Make sure every occurrence of the property is accompanied by a redaction text.
-    val regex = """"spark.executorEnv.HADOOP_CREDSTORE_PASSWORD":"([^"]*)"""".r
-    val matches = regex.findAllIn(eventLog)
-    assert(matches.nonEmpty)
-    matches.foreach{ matched => assert(matched.equals(expected)) }
+    val conf = getLoggingConf(testDirPath, None)
+      .set(key, secretPassword)
+    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    val envDetails = SparkEnv.environmentDetails(conf, "FIFO", Seq.empty, Seq.empty)
+    val event = SparkListenerEnvironmentUpdate(envDetails)
+    val redactedProps = eventLogger.redactEvent(event).environmentDetails("Spark Properties").toMap
+    assert(redactedProps(key) == "*********(redacted)")
   }
 
   test("Log overwriting") {
