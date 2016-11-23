@@ -258,6 +258,7 @@ class PartitionedTablePerfStatsSuite
 
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test where partCol1 = 1").count() == 1)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() > 0)
           assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
 
           HiveCatalogMetrics.reset()
@@ -280,6 +281,7 @@ class PartitionedTablePerfStatsSuite
 
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test where partCol1 = 1").count() == 1)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() > 0)
           assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
 
           HiveCatalogMetrics.reset()
