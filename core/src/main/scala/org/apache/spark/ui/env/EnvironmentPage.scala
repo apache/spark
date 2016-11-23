@@ -30,8 +30,9 @@ private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") 
   def render(request: HttpServletRequest): Seq[Node] = {
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, listener.jvmInformation, fixedWidth = true)
-    val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow, listener
-      .sparkProperties.map(Utils.redact(parent.conf)), fixedWidth = true)
+    val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(parent.conf, listener.sparkProperties), fixedWidth = true)
+
     val systemPropertiesTable = UIUtils.listingTable(
       propertyHeader, propertyRow, listener.systemProperties, fixedWidth = true)
     val classpathEntriesTable = UIUtils.listingTable(

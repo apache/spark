@@ -2558,11 +2558,14 @@ private[spark] object Utils extends Logging {
 
   private[util] val REDACTION_REPLACEMENT_TEXT = "*********(redacted)"
 
-  def redact(conf: SparkConf)(kv: (String, String)): (String, String) = {
+  def redact(conf: SparkConf, kvs: Seq[(String, String)]): Seq[(String, String)] = {
     val redactionPattern = conf.get(SECRET_REDACTION_PATTERN).r
-    if (redactionPattern.findFirstIn(kv._1).isDefined) {
-      (kv._1, REDACTION_REPLACEMENT_TEXT)
-    } else kv
+    kvs.map { kv =>
+      if (redactionPattern.findFirstIn(kv._1).isDefined) {
+        (kv._1, REDACTION_REPLACEMENT_TEXT)
+      }
+      else kv
+    }
   }
 
 }

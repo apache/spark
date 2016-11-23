@@ -236,11 +236,11 @@ private[spark] class EventLoggingListener(
 
   private def redactEvent(event: SparkListenerEnvironmentUpdate): SparkListenerEnvironmentUpdate = {
     // "Spark Properties" entry will always exist because the map is always populated with it.
-    val redactedProps = event
+    val props = event
       .environmentDetails
       .get("Spark Properties")
       .get
-      .map(Utils.redact(sparkConf))
+    val redactedProps = Utils.redact(sparkConf, props)
     val redactedEnvironmentDetails = event.environmentDetails +
       ("Spark Properties" -> redactedProps)
     SparkListenerEnvironmentUpdate(redactedEnvironmentDetails)
