@@ -228,8 +228,8 @@ package object config {
     ConfigBuilder("spark.redaction.regex")
       .doc("Regex to decide which Spark configuration properties and environment variables in " +
         "driver and executor environments contain sensitive information. When this regex matches " +
-        "a property , its value is redacted from the environment UI and various logs like YARN " +
-        "and event logs")
+        "a property, its value is redacted from the environment UI and various logs like YARN " +
+        "and event logs.")
       .stringConf
       .createWithDefault("(?i)secret|password")
 }
