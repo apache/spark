@@ -88,10 +88,10 @@ case class ColumnStat(
     avgLen: Long,
     maxLen: Long) {
 
-  // We currently don't store min/max for byte arrays. This can change in the future and then
-  // we need to remove this require.
-  require(min.isEmpty || !min.get.isInstanceOf[Array[Byte]])
-  require(max.isEmpty || !max.get.isInstanceOf[Array[Byte]])
+  // We currently don't store min/max for binary/string type. This can change in the future and
+  // then we need to remove this require.
+  require(min.isEmpty || (!min.get.isInstanceOf[Array[Byte]] && !min.get.isInstanceOf[String]))
+  require(max.isEmpty || (!max.get.isInstanceOf[Array[Byte]] && !max.get.isInstanceOf[String]))
 
   /**
    * Returns a map from string to string that can be used to serialize the column stats.
@@ -151,9 +151,8 @@ object ColumnStat extends Logging {
       case BooleanType => _.toBoolean
       case DateType => java.sql.Date.valueOf
       case TimestampType => java.sql.Timestamp.valueOf
-      case StringType => identity
-      // This version of Spark does not use min/max for binary columns so we ignore it.
-      case BinaryType => _ => null
+      // This version of Spark does not use min/max for binary/string types so we ignore it.
+      case BinaryType | StringType => _ => null
       case _ =>
         throw new AnalysisException("Column statistics deserialization is not supported for " +
           s"column ${field.name} of data type: ${field.dataType}.")
