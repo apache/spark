@@ -17,20 +17,80 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.streaming.StreamExecutionMetadata
+import java.io.File
 
-class StreamExecutionMetadataSuite extends SparkFunSuite {
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecutionMetadata}
+import org.apache.spark.sql.functions._
+import org.apache.spark.util.{SystemClock, Utils}
+
+class StreamExecutionMetadataSuite extends StreamTest {
+
+  private def newMetadataDir =
+    Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
   test("stream execution metadata") {
     assert(StreamExecutionMetadata(0, 0) ===
       StreamExecutionMetadata("""{}"""))
     assert(StreamExecutionMetadata(1, 0) ===
-      StreamExecutionMetadata("""{"currentEventTimeWatermarkMillis":1}"""))
+      StreamExecutionMetadata("""{"batchWatermarkMs":1}"""))
     assert(StreamExecutionMetadata(0, 2) ===
-      StreamExecutionMetadata("""{"currentBatchTimestampMillis":2}"""))
+      StreamExecutionMetadata("""{"batchTimestampMs":2}"""))
     assert(StreamExecutionMetadata(1, 2) ===
       StreamExecutionMetadata(
-        """{"currentEventTimeWatermarkMillis":1,"currentBatchTimestampMillis":2}"""))
+        """{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
+  }
+
+  test("ensure consistent results across batch executions") {
+    import testImplicits._
+    val clock = new SystemClock()
+    val ms = new MemoryStream[Long](0, sqlContext)
+    val df = ms.toDF().toDF("a")
+    val checkpointLoc = newMetadataDir
+    val checkpointDir = new File(checkpointLoc, "complete")
+    checkpointDir.mkdirs()
+    assert(checkpointDir.exists())
+    val tableName = "test"
+    def startQuery: StreamingQuery = {
+      df.groupBy("a")
+        .count()
+        .where('a >= current_timestamp().cast("long"))
+        .writeStream
+        .format("memory")
+        .queryName(tableName)
+        .option("checkpointLocation", checkpointLoc)
+        .outputMode("complete")
+        .start()
+    }
+    // no exception here
+    val t1 = clock.getTimeMillis() + 5000L
+    val t2 = clock.getTimeMillis() + 10000L
+    val q = startQuery
+    ms.addData(t1, t2)
+    q.processAllAvailable()
+
+    checkAnswer(
+      spark.table(tableName),
+      Seq(Row(t1, 1), Row(t2, 1))
+    )
+
+    q.stop()
+    Thread.sleep(20000L) // Expire t1 and t2
+    assert(t1 < clock.getTimeMillis())
+    assert(t2 < clock.getTimeMillis())
+
+    spark.sql(s"drop table $tableName")
+
+    // verify table is dropped
+    intercept[AnalysisException](spark.table(tableName).collect())
+    val q2 = startQuery
+    q2.processAllAvailable()
+    checkAnswer(
+      spark.table(tableName),
+      Seq(Row(t1, 1), Row(t2, 1))
+    )
+
+    q2.stop()
+
   }
 }
