@@ -50,6 +50,16 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     assert(error < hll.trueRsd * 3.0d, "Error should be within 3 std. errors.")
   }
 
+  test("test invalid parameter relativeSD") {
+    // `relativeSD` should be in the range [0.003, 0.39].
+    intercept[IllegalArgumentException] {
+      new HyperLogLogPlusPlus(new BoundReference(0, IntegerType, true), relativeSD = 0.002d)
+    }
+    intercept[IllegalArgumentException] {
+      new HyperLogLogPlusPlus(new BoundReference(0, IntegerType, true), relativeSD = 0.4d)
+    }
+  }
+
   test("add nulls") {
     val (hll, input, buffer) = createEstimator(0.05)
     input.setNullAt(0)

@@ -92,8 +92,11 @@ case class HyperLogLogPlusPlus(
    */
   private[this] val p = Math.ceil(2.0d * Math.log(1.106d / relativeSD) / Math.log(2.0d)).toInt
 
-  require(p >= 4, "HLL++ requires at least 4 bits for addressing. " +
-    "Use a lower error, at most 27%.")
+  // THRESHOLDS, RAW_ESTIMATE_DATA and BIAS_DATA all have the same length 15, and we probe these
+  // arrays by (p - 4), so we need to guarantee 0 <= p - 4 <= 14.
+  require(p >= 4 && p < HyperLogLogPlusPlus.THRESHOLDS.length + 4,
+    "HLL++ requires at least 4 bits and at most 18 bits for addressing. " +
+    "The error should be in the range [0.3%, 39%].")
 
   /**
    * Shift used to extract the index of the register from the hashed value.
