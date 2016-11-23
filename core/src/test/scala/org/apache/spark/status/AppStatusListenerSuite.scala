@@ -18,7 +18,8 @@
 package org.apache.spark.status
 
 import java.io.File
-import java.util.{Date, Properties}
+import java.lang.{Integer => JInteger, Long => JLong}
+import java.util.{Arrays, Date, Properties}
 
 import scala.collection.JavaConverters._
 import scala.reflect.{classTag, ClassTag}
@@ -36,6 +37,10 @@ import org.apache.spark.util.kvstore._
 
 class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
+  import config._
+
+  private val conf = new SparkConf().set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
+
   private var time: Long = _
   private var testDir: File = _
   private var store: KVStore = _
@@ -52,7 +57,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("scheduler events") {
-    val listener = new AppStatusListener(store)
+    val listener = new AppStatusListener(store, conf, true)
 
     // Start the application.
     time += 1
@@ -174,6 +179,14 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     s1Tasks.foreach { task =>
       check[TaskDataWrapper](task.taskId) { wrapper =>
         assert(wrapper.info.taskId === task.taskId)
+        assert(wrapper.stageId === stages.head.stageId)
+        assert(wrapper.stageAttemptId === stages.head.attemptId)
+        assert(Arrays.equals(wrapper.stage, Array(stages.head.stageId, stages.head.attemptId)))
+
+        val runtime = Array[AnyRef](stages.head.stageId: JInteger, stages.head.attemptId: JInteger,
+          -1L: JLong)
+        assert(Arrays.equals(wrapper.runtime, runtime))
+
         assert(wrapper.info.index === task.index)
         assert(wrapper.info.attempt === task.attemptNumber)
         assert(wrapper.info.launchTime === new Date(task.launchTime))
@@ -510,7 +523,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("storage events") {
-    val listener = new AppStatusListener(store)
+    val listener = new AppStatusListener(store, conf, true)
     val maxMemory = 42L
 
     // Register a couple of block managers.

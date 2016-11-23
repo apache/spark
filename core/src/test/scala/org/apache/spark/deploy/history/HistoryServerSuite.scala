@@ -72,6 +72,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   private var port: Int = -1
 
   def init(extraConf: (String, String)*): Unit = {
+    Utils.deleteRecursively(storeDir)
+    assert(storeDir.mkdir())
     val conf = new SparkConf()
       .set("spark.history.fs.logDirectory", logDir)
       .set("spark.history.fs.update.interval", "0")
@@ -292,21 +294,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val uiRoot = "/testwebproxybase"
     System.setProperty("spark.ui.proxyBase", uiRoot)
 
-    server.stop()
-
-    val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir)
-      .set("spark.history.fs.update.interval", "0")
-      .set("spark.testing", "true")
-      .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
-
-    provider = new FsHistoryProvider(conf)
-    provider.checkForLogs()
-    val securityManager = HistoryServer.createSecurityManager(conf)
-
-    server = new HistoryServer(conf, provider, securityManager, 18080)
-    server.initialize()
-    server.bind()
+    stop()
+    init()
 
     val port = server.boundPort
 
@@ -375,8 +364,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   }
 
   test("incomplete apps get refreshed") {
-    server.stop()
-
     implicit val webDriver: WebDriver = new HtmlUnitDriver
     implicit val formats = org.json4s.DefaultFormats
 
@@ -386,6 +373,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     // a new conf is used with the background thread set and running at its fastest
     // allowed refresh rate (1Hz)
+    stop()
     val myConf = new SparkConf()
       .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
       .set("spark.eventLog.dir", logDir.getAbsolutePath)
@@ -418,7 +406,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       }
     }
 
-    server = new HistoryServer(myConf, provider, securityManager, 18080)
+    server = new HistoryServer(myConf, provider, securityManager, 0)
     server.initialize()
     server.bind()
     val port = server.boundPort
@@ -464,7 +452,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     rootAppPage should not be empty
 
     def getAppUI: SparkUI = {
-      provider.getAppUI(appId, None).get.ui
+      server.withSparkUI(appId, None) { ui => ui }
     }
 
     // selenium isn't that useful on failures...add our own reporting
@@ -519,7 +507,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     getNumJobs("") should be (1)
     getNumJobs("/jobs") should be (1)
     getNumJobsRestful() should be (1)
-    assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
+    assert(metrics.lookupCount.getCount > 0, s"lookup count too low in $metrics")
 
     // dump state before the next bit of test, which is where update
     // checking really gets stressed
