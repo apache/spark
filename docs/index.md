@@ -125,8 +125,8 @@ options for deployment:
 * Integration with other storage systems:
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system
-* [Contributing to Spark](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark)
-* [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects): related third party Spark projects
+* [Contributing to Spark](http://spark.apache.org/contributing.html)
+* [Third Party Projects](http://spark.apache.org/third-party-projects.html): related third party Spark projects
 
 **External Resources:**
 

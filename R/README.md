@@ -51,7 +51,7 @@ sparkR.session()
 
 #### Making changes to SparkR
 
-The [instructions](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark) for making contributions to Spark also apply to SparkR.
+The [instructions](http://spark.apache.org/contributing.html) for making contributions to Spark also apply to SparkR.
 If you only make R file changes (i.e. no Scala changes) then you can just re-install the R package using `R/install-dev.sh` and test your changes.
 Once you have made your changes, please include unit tests for them and run existing unit tests using the `R/run-tests.sh` script as described below.
 
