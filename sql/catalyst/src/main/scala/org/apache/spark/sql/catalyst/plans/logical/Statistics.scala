@@ -88,6 +88,11 @@ case class ColumnStat(
     avgLen: Long,
     maxLen: Long) {
 
+  // We currently don't store min/max for byte arrays. This can change in the future and then
+  // we need to remove this require.
+  require(min.isEmpty || !min.get.isInstanceOf[Array[Byte]])
+  require(max.isEmpty || !max.get.isInstanceOf[Array[Byte]])
+
   /**
    * Returns a map from string to string that can be used to serialize the column stats.
    * The key is the name of the field (e.g. "distinctCount" or "min"), and the value is the string
@@ -146,7 +151,9 @@ object ColumnStat extends Logging {
       case BooleanType => _.toBoolean
       case DateType => java.sql.Date.valueOf
       case TimestampType => java.sql.Timestamp.valueOf
-      case BinaryType | StringType => identity
+      case StringType => identity
+      // This version of Spark does not use min/max for binary columns so we ignore it.
+      case BinaryType => _ => null
       case _ =>
         throw new AnalysisException("Column statistics deserialization is not supported for " +
           s"column ${field.name} of data type: ${field.dataType}.")
@@ -155,8 +162,9 @@ object ColumnStat extends Logging {
     try {
       Some(ColumnStat(
         distinctCount = BigInt(map(KEY_DISTINCT_COUNT).toLong),
-        min = map.get(KEY_MIN_VALUE).map(str2val),
-        max = map.get(KEY_MAX_VALUE).map(str2val),
+        // Note that flatMap(Option.apply) turns Option(null) into None.
+        min = map.get(KEY_MIN_VALUE).map(str2val).flatMap(Option.apply),
+        max = map.get(KEY_MAX_VALUE).map(str2val).flatMap(Option.apply),
         nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
         avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
         maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong
