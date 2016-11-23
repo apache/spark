@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.nio.ByteBuffer
+
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.{KryoSerializer, SerializerInstance}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Percentile.Countings
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
@@ -53,7 +58,7 @@ case class Percentile(
   child: Expression,
   percentageExpression: Expression,
   mutableAggBufferOffset: Int = 0,
-  inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
+  inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[Countings] {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, 0, 0)
@@ -61,13 +66,11 @@ case class Percentile(
 
   override def prettyName: String = "percentile"
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Percentile =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Percentile =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  private var counts = new OpenHashMap[Number, Long]
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
   private lazy val (returnPercentileArray: Boolean, percentages: Seq[Number]) =
@@ -87,18 +90,9 @@ case class Percentile(
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, "function percentile")
 
-  override def supportsPartial: Boolean = false
-
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
-
-  override val aggBufferAttributes: Seq[AttributeReference] = Nil
-
-  override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
-
-  override def initialize(buffer: InternalRow): Unit = {
-    // The counts OpenHashMap will contain values of other groups if we don't initialize it here.
-    // Since OpenHashMap doesn't support deletions, we have to create a new instance.
-    counts = new OpenHashMap[Number, Long]
+  override def createAggregationBuffer(): Countings = {
+    // Initialize new Countings instance here.
+    Countings()
   }
 
   private def evalPercentages(expr: Expression): (Boolean, Seq[Number]) = {
@@ -120,39 +114,20 @@ case class Percentile(
     (isArrayType, values)
   }
 
-  override def update(buffer: InternalRow, input: InternalRow): Unit = {
+  override def update(buffer: Countings, input: InternalRow): Unit = {
     val key = child.eval(input).asInstanceOf[Number]
-
-    // Null values are ignored when computing percentiles.
-    if (key != null) {
-      counts.changeValue(key, 1L, _ + 1L)
-    }
+    buffer.add(key)
   }
 
-  override def merge(buffer: InternalRow, inputBuffer: InternalRow): Unit = {
-    sys.error("Percentile cannot be used in partial aggregations.")
+  override def merge(buffer: Countings, other: Countings): Unit = {
+    buffer.merge(other)
   }
 
-  override def eval(buffer: InternalRow): Any = {
-    if (counts.isEmpty) {
-      return generateOutput(Seq.empty)
-    }
-
-    val sortedCounts = counts.toSeq.sortBy(_._1)(new Ordering[Number]() {
-      override def compare(a: Number, b: Number): Int =
-        scala.math.signum(a.doubleValue() - b.doubleValue()).toInt
-    })
-    val aggreCounts = sortedCounts.scanLeft(sortedCounts.head._1, 0L) {
-      (k1: (Number, Long), k2: (Number, Long)) => (k2._1, k1._2 + k2._2)
-    }.tail
-    val maxPosition = aggreCounts.last._2 - 1
-
-    generateOutput(percentages.map { percentile =>
-      getPercentile(aggreCounts, maxPosition * percentile.doubleValue()).doubleValue()
-    })
+  override def eval(buffer: Countings): Any = {
+    generateOutput(buffer.getPercentiles(percentages))
   }
 
-  private def generateOutput(results: Seq[Double]): Any = {
+  private def generateOutput(results: Seq[Number]): Any = {
     if (results.isEmpty) {
       null
     } else if (returnPercentileArray) {
@@ -162,40 +137,104 @@ case class Percentile(
     }
   }
 
-  /**
-   * Get the percentile value.
-   */
-  private def getPercentile(aggreCounts: Seq[(Number, Long)], position: Double): Number = {
-    // We may need to do linear interpolation to get the exact percentile
-    val lower = position.floor
-    val higher = position.ceil
-
-    // Linear search since this won't take much time from the total execution anyway
-    // lower has the range of [0 .. total-1]
-    // The first entry with accumulated count (lower+1) corresponds to the lower position.
-    var i = 0
-    while (aggreCounts(i)._2 < lower + 1) {
-      i += 1
-    }
-
-    val lowerKey = aggreCounts(i)._1
-    if (higher == lower) {
-      // no interpolation needed because position does not have a fraction
-      return lowerKey
-    }
-
-    if (aggreCounts(i)._2 < higher + 1) {
-      i += 1
-    }
-    val higherKey = aggreCounts(i)._1
-
-    if (higherKey == lowerKey) {
-      // no interpolation needed because lower position and higher position has the same key
-      return lowerKey
-    }
-
-    // Linear interpolation to get the exact percentile
-    return (higher - position) * lowerKey.doubleValue() +
-      (position - lower) * higherKey.doubleValue()
+  override def serialize(obj: Countings): Array[Byte] = {
+    Percentile.serializer.serialize(obj).array()
   }
+
+  override def deserialize(bytes: Array[Byte]): Countings = {
+    Percentile.serializer.deserialize[Countings](ByteBuffer.wrap(bytes))
+  }
+}
+
+object Percentile {
+  object Countings {
+    def apply(): Countings = Countings(new OpenHashMap[Number, Long])
+
+    def apply(counts: OpenHashMap[Number, Long]): Countings = new Countings(counts)
+  }
+
+  /**
+   * A class that stores the numbers and their counts, used to support [[Percentile]] function.
+   */
+  class Countings(val counts: OpenHashMap[Number, Long]) extends Serializable {
+    /**
+     * Insert a key into countings map.
+     */
+    def add(key: Number): Unit = {
+      // Null values are ignored in countings.
+      if (key != null) {
+        counts.changeValue(key, 1L, _ + 1L)
+      }
+    }
+
+    /**
+     * In place merges in another Countings.
+     */
+    def merge(other: Countings): Unit = {
+      other.counts.foreach { pair =>
+        counts.changeValue(pair._1, pair._2, _ + pair._2)
+      }
+    }
+
+    /**
+     * Get the percentile value for every percentile in `percentages`.
+     */
+    def getPercentiles(percentages: Seq[Number]): Seq[Number] = {
+      if (counts.isEmpty) {
+        return Seq.empty
+      }
+
+      val sortedCounts = counts.toSeq.sortBy(_._1)(new Ordering[Number]() {
+        override def compare(a: Number, b: Number): Int =
+          scala.math.signum(a.doubleValue() - b.doubleValue()).toInt
+      })
+      val aggreCounts = sortedCounts.scanLeft(sortedCounts.head._1, 0L) {
+        (k1: (Number, Long), k2: (Number, Long)) => (k2._1, k1._2 + k2._2)
+      }.tail
+      val maxPosition = aggreCounts.last._2 - 1
+
+      percentages.map { percentile =>
+        getPercentile(aggreCounts, maxPosition * percentile.doubleValue())
+      }
+    }
+
+    /**
+     * Get the percentile value.
+     */
+    private def getPercentile(aggreCounts: Seq[(Number, Long)], position: Double): Number = {
+      // We may need to do linear interpolation to get the exact percentile
+      val lower = position.floor
+      val higher = position.ceil
+
+      // Linear search since this won't take much time from the total execution anyway
+      // lower has the range of [0 .. total-1]
+      // The first entry with accumulated count (lower+1) corresponds to the lower position.
+      var i = 0
+      while (aggreCounts(i)._2 < lower + 1) {
+        i += 1
+      }
+
+      val lowerKey = aggreCounts(i)._1
+      if (higher == lower) {
+        // no interpolation needed because position does not have a fraction
+        return lowerKey
+      }
+
+      if (aggreCounts(i)._2 < higher + 1) {
+        i += 1
+      }
+      val higherKey = aggreCounts(i)._1
+
+      if (higherKey == lowerKey) {
+        // no interpolation needed because lower position and higher position has the same key
+        return lowerKey
+      }
+
+      // Linear interpolation to get the exact percentile
+      return (higher - position) * lowerKey.doubleValue() +
+        (position - lower) * higherKey.doubleValue()
+    }
+  }
+
+  val serializer: SerializerInstance = new KryoSerializer(new SparkConf).newInstance()
 }

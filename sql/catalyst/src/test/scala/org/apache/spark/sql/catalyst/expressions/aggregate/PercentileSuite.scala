@@ -23,31 +23,78 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Percentile.Countings
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 
 class PercentileSuite extends SparkFunSuite {
 
-  test("high level interface, update, merge, eval...") {
+  private val random = new java.util.Random()
+
+  private val data = (0 until 10000).map { _ =>
+    random.nextInt(10000)
+  }
+
+  test("serialize and de-serialize") {
+    val serializer = Percentile.serializer
+
+    // Check empty serialize and de-serialize
+    val emptyBuffer = Countings()
+    assert(compareEquals(emptyBuffer, serializer.deserialize(serializer.serialize(emptyBuffer))))
+
+    val buffer = Countings()
+    data.foreach { value =>
+      buffer.add(value)
+    }
+    assert(compareEquals(buffer, serializer.deserialize(serializer.serialize(buffer))))
+
+    val agg = new Percentile(BoundReference(0, DoubleType, true), Literal(0.5))
+    assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
+  }
+
+  test("class Countings, basic operations") {
+    val valueCount = 10000
+    val percentages = Seq[Number](0, 0.25, 0.5, 0.75, 1)
+    val buffer = Countings()
+    (1 to valueCount).grouped(10).foreach { group =>
+      val partialBuffer = Countings()
+      group.foreach(x => partialBuffer.add(x))
+      buffer.merge(partialBuffer)
+    }
+    val expectedPercentiles = Seq(1, 2500.75, 5000.5, 7500.25, 10000)
+    val percentiles = buffer.getPercentiles(percentages)
+    assert(percentiles.zip(expectedPercentiles)
+      .forall(pair => pair._1 == pair._2))
+  }
+
+  test("class Percentile, high level interface, update, merge, eval...") {
     val count = 10000
     val data = (1 to count)
-    val percentages = Array(0, 0.25, 0.5, 0.75, 1)
-    val expectedPercentiles = Array(1, 2500.75, 5000.5, 7500.25, 10000)
+    val percentages = Seq(0, 0.25, 0.5, 0.75, 1)
+    val expectedPercentiles = Seq(1, 2500.75, 5000.5, 7500.25, 10000)
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = false), DoubleType)
     val percentageExpression = CreateArray(percentages.toSeq.map(Literal(_)))
     val agg = new Percentile(childExpression, percentageExpression)
 
     assert(agg.nullable)
-    val group = (0 until data.length)
-    // Don't use group buffer for now.
-    val groupBuffer = InternalRow.empty
-    group.foreach { index =>
+    val group1 = (0 until data.length / 2)
+    val group1Buffer = agg.createAggregationBuffer()
+    group1.foreach { index =>
       val input = InternalRow(data(index))
-      agg.update(groupBuffer, input)
+      agg.update(group1Buffer, input)
     }
 
-    // Don't support partial aggregations for now.
-    val mergeBuffer = InternalRow.empty
+    val group2 = (data.length / 2 until data.length)
+    val group2Buffer = agg.createAggregationBuffer()
+    group2.foreach { index =>
+      val input = InternalRow(data(index))
+      agg.update(group2Buffer, input)
+    }
+
+    val mergeBuffer = agg.createAggregationBuffer()
+    agg.merge(mergeBuffer, group1Buffer)
+    agg.merge(mergeBuffer, group2Buffer)
+
     agg.eval(mergeBuffer) match {
       case arrayData: ArrayData =>
         val percentiles = arrayData.toDoubleArray()
@@ -56,13 +103,13 @@ class PercentileSuite extends SparkFunSuite {
     }
   }
 
-  test("low level interface, update, merge, eval...") {
+  test("class Percentile, low level interface, update, merge, eval...") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
     val inputAggregationBufferOffset = 1
     val mutableAggregationBufferOffset = 2
     val percentage = 0.5
 
-    // Test update.
+    // Phase one, partial mode aggregation
     val agg = new Percentile(childExpression, Literal(percentage))
       .withNewInputAggBufferOffset(inputAggregationBufferOffset)
       .withNewMutableAggBufferOffset(mutableAggregationBufferOffset)
@@ -74,8 +121,16 @@ class PercentileSuite extends SparkFunSuite {
     (1 to dataCount).foreach { data =>
       agg.update(mutableAggBuffer, InternalRow(data))
     }
+    agg.serializeAggregateBufferInPlace(mutableAggBuffer)
 
-    // Test eval
+    // Serialize the aggregation buffer
+    val serialized = mutableAggBuffer.getBinary(mutableAggregationBufferOffset)
+    val inputAggBuffer = new GenericInternalRow(Array[Any](null, serialized))
+
+    // Phase 2: final mode aggregation
+    // Re-initialize the aggregation buffer
+    agg.initialize(mutableAggBuffer)
+    agg.merge(mutableAggBuffer, inputAggBuffer)
     val expectedPercentile = 5.5
     assert(agg.eval(mutableAggBuffer).asInstanceOf[Double] == expectedPercentile)
   }
@@ -138,7 +193,6 @@ class PercentileSuite extends SparkFunSuite {
 
   test("fails analysis if percentage(s) are invalid") {
     val child = Cast(BoundReference(0, IntegerType, nullable = false), DoubleType)
-    val groupBuffer = InternalRow.empty
     val input = InternalRow(1)
 
     val validPercentages = Seq(Literal(0), Literal(0.5), Literal(1),
@@ -146,10 +200,11 @@ class PercentileSuite extends SparkFunSuite {
 
     validPercentages.foreach { percentage =>
       val percentile1 = new Percentile(child, percentage)
+      val group1Buffer = percentile1.createAggregationBuffer()
       // Make sure the inputs are not empty.
-      percentile1.update(groupBuffer, input)
+      percentile1.update(group1Buffer, input)
       // No exception should be thrown.
-      assert(percentile1.eval() != null)
+      assert(percentile1.eval(group1Buffer) != null)
     }
 
     val invalidPercentages = Seq(Literal(-0.5), Literal(1.5), Literal(2),
@@ -157,16 +212,18 @@ class PercentileSuite extends SparkFunSuite {
 
     invalidPercentages.foreach { percentage =>
       val percentile2 = new Percentile(child, percentage)
-      percentile2.update(groupBuffer, input)
-      intercept[IllegalArgumentException](percentile2.eval(),
+      val group2Buffer = percentile2.createAggregationBuffer()
+      percentile2.update(group2Buffer, input)
+      intercept[IllegalArgumentException](percentile2.eval(group2Buffer),
         s"Percentage values must be between 0.0 and 1.0")
     }
 
     val nonLiteralPercentage = Literal("val")
 
     val percentile3 = new Percentile(child, nonLiteralPercentage)
-    percentile3.update(groupBuffer, input)
-    intercept[AnalysisException](percentile3.eval(),
+    val group3Buffer = percentile3.createAggregationBuffer()
+    percentile3.update(group3Buffer, input)
+    intercept[AnalysisException](percentile3.eval(group3Buffer),
       s"Invalid data type ${nonLiteralPercentage.dataType} for parameter percentage")
   }
 
@@ -184,6 +241,12 @@ class PercentileSuite extends SparkFunSuite {
     // Add some non-empty row
     agg.update(buffer, InternalRow(0))
     assert(agg.eval(buffer) != null)
+  }
+
+  private def compareEquals(left: Countings, right: Countings): Boolean = {
+    left.counts.size == right.counts.size && left.counts.forall { pair =>
+      right.counts.apply(pair._1) == pair._2
+    }
   }
 
   private def assertEqual[T](left: T, right: T): Unit = {
