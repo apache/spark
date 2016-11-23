@@ -232,7 +232,7 @@ private[parquet] object ParquetFilters {
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
-        createFilter(schema, pred).map(FilterApi.not)
+        createFilter(schema, pred).map(FilterApi.not).map(LogicalInverseRewriter.rewrite)
 
       case sources.In(name, values) if dataTypeOf.contains(name) =>
         val eq = makeEq.lift(dataTypeOf(name))

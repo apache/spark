@@ -756,6 +756,19 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+
+  test("Ensure proper rewriting of predicates") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (128 * 1024 * 1024).toString) {
+      withTempPath { path =>
+        spark.sparkContext.parallelize(Seq(1, 2, 3), 3)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val column: Column = !df.col("x").isNull
+        assert(df.filter(column).collect().length == 3)
+      }
+    }
+  }
 }
 
 class CountingFileSystem extends RawLocalFileSystem {
