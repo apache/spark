@@ -61,8 +61,12 @@ import org.apache.spark.util.Utils
  *              qualified. This option only works when reading from a [[FileFormat]].
  * @param userSpecifiedSchema An optional specification of the schema of the data. When present
  *                            we skip attempting to infer the schema.
- * @param partitionColumns A list of column names that the relation is partitioned by. When this
- *                         list is empty, the relation is unpartitioned.
+ * @param partitionColumns A list of column names that the relation is partitioned by. This list is
+ *                         generally empty during the read path, unless this DataSource is managed
+ *                         by Hive. In these cases, during `resolveRelation`, we will call
+ *                         `getOrInferFileFormatSchema` for file based DataSources to infer the
+ *                         partitioning. In other cases, if this list is empty, then this table
+ *                         is unpartitioned.
  * @param bucketSpec An optional specification for bucketing (hash-partitioning) of the data.
  * @param catalogTable Optional catalog table reference that can be used to push down operations
  *                     over the datasource to the catalog service.
@@ -84,30 +88,106 @@ case class DataSource(
   private val caseInsensitiveOptions = new CaseInsensitiveMap(options)
 
   /**
-   * Infer the schema of the given FileFormat, returns a pair of schema and partition column names.
+   * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
+   * it. In the read path, only managed tables by Hive provide the partition columns properly when
+   * initializing this class. All other file based data sources will try to infer the partitioning,
+   * and then cast the inferred types to user specified dataTypes if the partition columns exist
+   * inside `userSpecifiedSchema`, otherwise we can hit data corruption bugs like SPARK-18510.
+   * This method will try to skip file scanning whether `userSpecifiedSchema` and
+   * `partitionColumns` are provided. Here are some code paths that use this method:
+   *   1. `spark.read` (no schema): Most amount of work. Infer both schema and partitioning columns
+   *   2. `spark.read.schema(userSpecifiedSchema)`: Parse partitioning columns, cast them to the
+   *     dataTypes provided in `userSpecifiedSchema` if they exist or fallback to inferred
+   *     dataType if they don't.
+   *   3. `spark.readStream.schema(userSpecifiedSchema)`: For streaming use cases, users have to
+   *     provide the schema. Here, we also perform partition inference like 2, and try to use
+   *     dataTypes in `userSpecifiedSchema`. All subsequent triggers for this stream will re-use
+   *     this information, therefore calls to this method should be very cheap, i.e. there won't
+   *     be any further inference in any triggers.
+   *   4. `df.saveAsTable(tableThatExisted)`: In this case, we call this method to resolve the
+   *     existing table's partitioning scheme. This is achieved by not providing
+   *     `userSpecifiedSchema`. For this case, we add the boolean `justPartitioning` for an early
+   *     exit, if we don't care about the schema of the original table.
+   *
+   * @param format the file format object for this DataSource
+   * @param justPartitioning Whether to exit early and provide just the schema partitioning.
+   * @return A pair of the data schema (excluding partition columns) and the schema of the partition
+   *         columns. If `justPartitioning` is `true`, then the dataSchema will be provided as
+   *         `null`.
    */
-  private def inferFileFormatSchema(format: FileFormat): (StructType, Seq[String]) = {
-    userSpecifiedSchema.map(_ -> partitionColumns).orElse {
-      val allPaths = caseInsensitiveOptions.get("path")
+  private def getOrInferFileFormatSchema(
+      format: FileFormat,
+      justPartitioning: Boolean = false): (StructType, StructType) = {
+    // the operations below are expensive therefore try not to do them if we don't need to
+    lazy val tempFileCatalog = {
+      val allPaths = caseInsensitiveOptions.get("path") ++ paths
+      val hadoopConf = sparkSession.sessionState.newHadoopConf()
       val globbedPaths = allPaths.toSeq.flatMap { path =>
         val hdfsPath = new Path(path)
-        val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+        val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      val fileCatalog = new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
-      val partitionSchema = fileCatalog.partitionSpec().partitionColumns
-      val inferred = format.inferSchema(
+      new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
+    }
+    val partitionSchema = if (partitionColumns.isEmpty && catalogTable.isEmpty) {
+      // Try to infer partitioning, because no DataSource in the read path provides the partitioning
+      // columns properly unless it is a Hive DataSource
+      val resolved = tempFileCatalog.partitionSchema.map { partitionField =>
+        val equality = sparkSession.sessionState.conf.resolver
+        // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
+        userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
+          partitionField)
+      }
+      StructType(resolved)
+    } else {
+      // in streaming mode, we have already inferred and registered partition columns, we will
+      // never have to materialize the lazy val below
+      lazy val inferredPartitions = tempFileCatalog.partitionSchema
+      // maintain old behavior before SPARK-18510. If userSpecifiedSchema is empty used inferred
+      // partitioning
+      if (userSpecifiedSchema.isEmpty) {
+        inferredPartitions
+      } else {
+        val partitionFields = partitionColumns.map { partitionColumn =>
+          userSpecifiedSchema.flatMap(_.find(_.name == partitionColumn)).orElse {
+            val inferredOpt = inferredPartitions.find(_.name == partitionColumn)
+            if (inferredOpt.isDefined) {
+              logDebug(
+                s"""Type of partition column: $partitionColumn not found in specified schema
+                   |for $format.
+                   |User Specified Schema
+                   |=====================
+                   |${userSpecifiedSchema.orNull}
+                   |
+                   |Falling back to inferred dataType if it exists.
+                 """.stripMargin)
+            }
+            inferredPartitions.find(_.name == partitionColumn)
+          }.getOrElse {
+            throw new AnalysisException(s"Failed to resolve the schema for $format for " +
+              s"the partition column: $partitionColumn. It must be specified manually.")
+          }
+        }
+        StructType(partitionFields)
+      }
+    }
+    if (justPartitioning) {
+      return (null, partitionSchema)
+    }
+    val dataSchema = userSpecifiedSchema.map { schema =>
+      val equality = sparkSession.sessionState.conf.resolver
+      StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
+    }.orElse {
+      format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
-        fileCatalog.allFiles())
-
-      inferred.map { inferredSchema =>
-        StructType(inferredSchema ++ partitionSchema) -> partitionSchema.map(_.name)
-      }
+        tempFileCatalog.allFiles())
     }.getOrElse {
-      throw new AnalysisException("Unable to infer schema. It must be specified manually.")
+      throw new AnalysisException(
+        s"Unable to infer schema for $format. It must be specified manually.")
     }
+    (dataSchema, partitionSchema)
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
@@ -144,8 +224,8 @@ case class DataSource(
               "you may be able to create a static DataFrame on that directory with " +
               "'spark.read.load(directory)' and infer schema from it.")
         }
-        val (schema, partCols) = inferFileFormatSchema(format)
-        SourceInfo(s"FileSource[$path]", schema, partCols)
+        val (schema, partCols) = getOrInferFileFormatSchema(format)
+        SourceInfo(s"FileSource[$path]", StructType(schema ++ partCols), partCols.fieldNames)
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -272,7 +352,7 @@ case class DataSource(
 
         HadoopFsRelation(
           fileCatalog,
-          partitionSchema = fileCatalog.partitionSpec().partitionColumns,
+          partitionSchema = fileCatalog.partitionSchema,
           dataSchema = dataSchema,
           bucketSpec = None,
           format,
@@ -281,9 +361,10 @@ case class DataSource(
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
+        val hadoopConf = sparkSession.sessionState.newHadoopConf()
         val globbedPaths = allPaths.flatMap { path =>
           val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+          val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
           val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
 
@@ -291,23 +372,14 @@ case class DataSource(
             throw new AnalysisException(s"Path does not exist: $qualified")
           }
           // Sufficient to check head of the globPath seq for non-glob scenario
+          // Don't need to check once again if files exist in streaming mode
           if (checkFilesExist && !fs.exists(globPath.head)) {
             throw new AnalysisException(s"Path does not exist: ${globPath.head}")
           }
           globPath
         }.toArray
 
-        // If they gave a schema, then we try and figure out the types of the partition columns
-        // from that schema.
-        val partitionSchema = userSpecifiedSchema.map { schema =>
-          StructType(
-            partitionColumns.map { c =>
-              // TODO: Case sensitivity.
-              schema
-                  .find(_.name.toLowerCase() == c.toLowerCase())
-                  .getOrElse(throw new AnalysisException(s"Invalid partition column '$c'"))
-            })
-        }
+        val (dataSchema, inferredPartitionSchema) = getOrInferFileFormatSchema(format)
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
@@ -316,27 +388,12 @@ case class DataSource(
             catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(0L))
         } else {
-          new InMemoryFileIndex(
-            sparkSession, globbedPaths, options, partitionSchema)
-        }
-
-        val dataSchema = userSpecifiedSchema.map { schema =>
-          val equality = sparkSession.sessionState.conf.resolver
-          StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
-        }.orElse {
-          format.inferSchema(
-            sparkSession,
-            caseInsensitiveOptions,
-            fileCatalog.asInstanceOf[InMemoryFileIndex].allFiles())
-        }.getOrElse {
-          throw new AnalysisException(
-            s"Unable to infer schema for $format at ${allPaths.take(2).mkString(",")}. " +
-              "It must be specified manually")
+          new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(inferredPartitionSchema))
         }
 
         HadoopFsRelation(
           fileCatalog,
-          partitionSchema = fileCatalog.partitionSchema,
+          partitionSchema = inferredPartitionSchema,
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
@@ -384,11 +441,7 @@ case class DataSource(
         // up.  If we fail to load the table for whatever reason, ignore the check.
         if (mode == SaveMode.Append) {
           val existingPartitionColumns = Try {
-            resolveRelation()
-              .asInstanceOf[HadoopFsRelation]
-              .partitionSchema
-              .fieldNames
-              .toSeq
+            getOrInferFileFormatSchema(format, justPartitioning = true)._2.fieldNames.toList
           }.getOrElse(Seq.empty[String])
           // TODO: Case sensitivity.
           val sameColumns =

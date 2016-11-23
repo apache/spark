@@ -274,7 +274,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           pathToPartitionedTable,
           userSpecifiedSchema = Option("num int, str string"),
           userSpecifiedPartitionCols = partitionCols,
-          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedSchema = new StructType().add("str", StringType).add("num", IntegerType),
           expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
       }
     }
