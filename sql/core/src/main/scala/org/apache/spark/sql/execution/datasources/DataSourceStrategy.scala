@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition, SimpleCatalogRelation}
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
@@ -176,8 +176,8 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.rootPaths
       }.flatten
 
-      val mode = if (overwrite.enabled) SaveMode.Overwrite else SaveMode.Append
-      if (overwrite.enabled && inputPaths.contains(outputPath)) {
+      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
+      if (overwrite && inputPaths.contains(outputPath)) {
         throw new AnalysisException(
           "Cannot overwrite a path that is also being read from.")
       }
@@ -188,6 +188,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         t.sparkSession.sessionState.conf.manageFilesourcePartitions &&
         l.catalogTable.isDefined && l.catalogTable.get.partitionColumnNames.nonEmpty &&
         l.catalogTable.get.tracksPartitionsInCatalog
+      val staticPartitions = part.filter(_._2.nonEmpty).map { case (k, v) => k -> v.get }
 
       var initialMatchingPartitions: Seq[TablePartitionSpec] = Nil
       var customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty
@@ -196,7 +197,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
       // may be relevant to the insertion job.
       if (partitionsTrackedByCatalog) {
         val matchingPartitions = t.sparkSession.sessionState.catalog.listPartitions(
-          l.catalogTable.get.identifier, Some(overwrite.staticPartitionKeys))
+          l.catalogTable.get.identifier, Some(staticPartitions))
         initialMatchingPartitions = matchingPartitions.map(_.spec)
         customPartitionLocations = getCustomPartitionLocations(
           t.sparkSession, l.catalogTable.get, outputPath, matchingPartitions)
@@ -212,7 +213,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
               l.catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
               ifNotExists = true).run(t.sparkSession)
           }
-          if (overwrite.enabled) {
+          if (overwrite) {
             val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
             if (deletedPartitions.nonEmpty) {
               AlterTableDropPartitionCommand(
@@ -225,17 +226,9 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         t.location.refresh()
       }
 
-      val staticPartitionKeys: TablePartitionSpec = if (overwrite.enabled) {
-        overwrite.staticPartitionKeys.map { case (k, v) =>
-          (partitionSchema.map(_.name).find(_.equalsIgnoreCase(k)).get, v)
-        }
-      } else {
-        Map.empty
-      }
-
       val insertCmd = InsertIntoHadoopFsRelationCommand(
         outputPath,
-        staticPartitionKeys,
+        if (overwrite) staticPartitions else Map.empty,
         customPartitionLocations,
         partitionSchema,
         t.bucketSpec,
