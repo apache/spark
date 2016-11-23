@@ -126,7 +126,6 @@ case class CreateDataSourceTableAsSelectCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
-    assert(table.schema.isEmpty)
 
     val provider = table.provider.get
     val sessionState = sparkSession.sessionState
@@ -208,7 +207,8 @@ case class CreateDataSourceTableAsSelectCommand(
       className = provider,
       partitionColumns = table.partitionColumnNames,
       bucketSpec = table.bucketSpec,
-      options = table.storage.properties ++ pathOption)
+      options = table.storage.properties ++ pathOption,
+      catalogTable = Some(table))
 
     val result = try {
       dataSource.write(mode, df)
