@@ -94,9 +94,9 @@ case class HyperLogLogPlusPlus(
 
   // THRESHOLDS, RAW_ESTIMATE_DATA and BIAS_DATA all have the same length 15, and we probe these
   // arrays by (p - 4), so we need to guarantee 0 <= p - 4 <= 14.
-  require(p >= 4 && p < HyperLogLogPlusPlus.THRESHOLDS.length + 4,
-    "HLL++ requires at least 4 bits and at most 18 bits for addressing. " +
-    "The error should be in the range [0.3%, 39%].")
+  require(p >= 4 && p <= HyperLogLogPlusPlus.THRESHOLDS.length + 3,
+    s"HLL++ requires at least 4 bits and at most ${HyperLogLogPlusPlus.THRESHOLDS.length + 3} " +
+    "bits for addressing. The error should be in the range [0.22%, 39%].")
 
   /**
    * Shift used to extract the index of the register from the hashed value.
