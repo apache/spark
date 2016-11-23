@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -926,6 +927,29 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   /**
    * Returns the partition names from hive metastore for a given table in a database.
+   */
+  override def listPartitionNames(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = withClient {
+    val actualPartColNames = getTable(db, table).partitionColumnNames
+    val clientPartitionNames =
+      client.getPartitionNames(db, table, partialSpec.map(lowerCasePartitionSpec))
+
+    if (actualPartColNames.exists(partColName => partColName != partColName.toLowerCase)) {
+      clientPartitionNames.map { partName =>
+        val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partName)
+        partSpec.map { case (partName, partValue) =>
+          actualPartColNames.find(_.equalsIgnoreCase(partName)).get + "=" + partValue
+        }.mkString("/")
+      }
+    } else {
+      clientPartitionNames
+    }
+  }
+
+  /**
+   * Returns the partitions from hive metastore for a given table in a database.
    */
   override def listPartitions(
       db: String,

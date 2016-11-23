@@ -190,6 +190,38 @@ abstract class ExternalCatalog {
       spec: TablePartitionSpec): Option[CatalogTablePartition]
 
   /**
+   * List the names of all partitions that belong to the specified table, assuming it exists.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then a partial spec of (a='1') will return the first two only.
+   *
+   * We provide a default implementation here which simply delegates to the `listPartitions`
+   * method. For efficiency's sake, overriding this method is recommended for external catalogs
+   * that can list partition names directly.
+   * @param db database name
+   * @param table table name
+   * @param partialSpec  partition spec
+   */
+  def listPartitionNames(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = {
+    def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
+      partColNames.map { name =>
+        ExternalCatalogUtils.escapePathName(name) + "=" +
+          ExternalCatalogUtils.escapePathName(spec(name))
+      }.mkString("/")
+    }
+
+    val catalogTable = getTable(db, table)
+
+    listPartitions(db, table, partialSpec).map { p =>
+      getPartName(p.spec, catalogTable.partitionColumnNames)
+    }
+  }
+
+  /**
    * List the metadata of all partitions that belong to the specified table, assuming it exists.
    *
    * A partial partition spec may optionally be provided to filter the partitions returned.
