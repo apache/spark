@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.command.{AnalyzeColumnCommand, DDLUtils}
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -514,7 +514,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
       }
       stats.colStats.foreach { case (colName, colStat) =>
-        statsProperties += (STATISTICS_COL_STATS_PREFIX + colName) -> colStat.toString
+        colStat.toMap.foreach { case (k, v) =>
+          statsProperties += (columnStatKeyPropName(colName, k) -> v)
+        }
       }
       tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
     } else {
@@ -605,48 +607,65 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * It reads table schema, provider, partition column names and bucket specification from table
    * properties, and filter out these special entries from table properties.
    */
-  private def restoreTableMetadata(table: CatalogTable): CatalogTable = {
+  private def restoreTableMetadata(inputTable: CatalogTable): CatalogTable = {
     if (conf.get(DEBUG_MODE)) {
-      return table
+      return inputTable
     }
 
-    val tableWithSchema = if (table.tableType == VIEW) {
-      table
-    } else {
-      getProviderFromTableProperties(table) match {
+    var table = inputTable
+
+    if (table.tableType != VIEW) {
+      table.properties.get(DATASOURCE_PROVIDER) match {
         // No provider in table properties, which means this table is created by Spark prior to 2.1,
         // or is created at Hive side.
         case None =>
-          table.copy(provider = Some(DDLUtils.HIVE_PROVIDER), tracksPartitionsInCatalog = true)
+          table = table.copy(
+            provider = Some(DDLUtils.HIVE_PROVIDER), tracksPartitionsInCatalog = true)
 
         // This is a Hive serde table created by Spark 2.1 or higher versions.
-        case Some(DDLUtils.HIVE_PROVIDER) => restoreHiveSerdeTable(table)
+        case Some(DDLUtils.HIVE_PROVIDER) =>
+          table = restoreHiveSerdeTable(table)
 
         // This is a regular data source table.
-        case Some(provider) => restoreDataSourceTable(table, provider)
+        case Some(provider) =>
+          table = restoreDataSourceTable(table, provider)
       }
     }
 
     // construct Spark's statistics from information in Hive metastore
-    val statsProps = tableWithSchema.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
-    val tableWithStats = if (statsProps.nonEmpty) {
-      val colStatsProps = statsProps.filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX))
-        .map { case (k, v) => (k.drop(STATISTICS_COL_STATS_PREFIX.length), v) }
-      val colStats: Map[String, ColumnStat] = tableWithSchema.schema.collect {
-        case f if colStatsProps.contains(f.name) =>
-          val numFields = AnalyzeColumnCommand.numStatFields(f.dataType)
-          (f.name, ColumnStat(numFields, colStatsProps(f.name)))
-      }.toMap
-      tableWithSchema.copy(
+    val statsProps = table.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
+
+    if (statsProps.nonEmpty) {
+      val colStats = new scala.collection.mutable.HashMap[String, ColumnStat]
+
+      // For each column, recover its column stats. Note that this is currently a O(n^2) operation,
+      // but given the number of columns it usually not enormous, this is probably OK as a start.
+      // If we want to map this a linear operation, we'd need a stronger contract between the
+      // naming convention used for serialization.
+      table.schema.foreach { field =>
+        if (statsProps.contains(columnStatKeyPropName(field.name, ColumnStat.KEY_VERSION))) {
+          // If "version" field is defined, then the column stat is defined.
+          val keyPrefix = columnStatKeyPropName(field.name, "")
+          val colStatMap = statsProps.filterKeys(_.startsWith(keyPrefix)).map { case (k, v) =>
+            (k.drop(keyPrefix.length), v)
+          }
+
+          ColumnStat.fromMap(table.identifier.table, field, colStatMap).foreach {
+            colStat => colStats += field.name -> colStat
+          }
+        }
+      }
+
+      table = table.copy(
         stats = Some(Statistics(
-          sizeInBytes = BigInt(tableWithSchema.properties(STATISTICS_TOTAL_SIZE)),
-          rowCount = tableWithSchema.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
-          colStats = colStats)))
-    } else {
-      tableWithSchema
+          sizeInBytes = BigInt(table.properties(STATISTICS_TOTAL_SIZE)),
+          rowCount = table.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
+          colStats = colStats.toMap)))
     }
 
-    tableWithStats.copy(properties = getOriginalTableProperties(table))
+    // Get the original table properties as defined by the user.
+    table.copy(
+      properties = table.properties.filterNot { case (key, _) => key.startsWith(SPARK_SQL_PREFIX) })
   }
 
   private def restoreHiveSerdeTable(table: CatalogTable): CatalogTable = {
@@ -1020,17 +1039,17 @@ object HiveExternalCatalog {
   val TABLE_PARTITION_PROVIDER_CATALOG = "catalog"
   val TABLE_PARTITION_PROVIDER_FILESYSTEM = "filesystem"
 
-
-  def getProviderFromTableProperties(metadata: CatalogTable): Option[String] = {
-    metadata.properties.get(DATASOURCE_PROVIDER)
-  }
-
-  def getOriginalTableProperties(metadata: CatalogTable): Map[String, String] = {
-    metadata.properties.filterNot { case (key, _) => key.startsWith(SPARK_SQL_PREFIX) }
+  /**
+   * Returns the fully qualified name used in table properties for a particular column stat.
+   * For example, for column "mycol", and "min" stat, this should return
+   * "spark.sql.statistics.colStats.mycol.min".
+   */
+  private def columnStatKeyPropName(columnName: String, statKey: String): String = {
+    STATISTICS_COL_STATS_PREFIX + columnName + "." + statKey
   }
 
   // A persisted data source table always store its schema in the catalog.
-  def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
+  private def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
     val errorMessage = "Could not read schema from the hive metastore because it is corrupted."
     val props = metadata.properties
     val schema = props.get(DATASOURCE_SCHEMA)
@@ -1078,11 +1097,11 @@ object HiveExternalCatalog {
     )
   }
 
-  def getPartitionColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
+  private def getPartitionColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
     getColumnNamesByType(metadata.properties, "part", "partitioning columns")
   }
 
-  def getBucketSpecFromTableProperties(metadata: CatalogTable): Option[BucketSpec] = {
+  private def getBucketSpecFromTableProperties(metadata: CatalogTable): Option[BucketSpec] = {
     metadata.properties.get(DATASOURCE_SCHEMA_NUMBUCKETS).map { numBuckets =>
       BucketSpec(
         numBuckets.toInt,
