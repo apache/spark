@@ -53,7 +53,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
   test("test invalid parameter relativeSD") {
     // `relativeSD` should be in the range [0.22%, 39%].
     intercept[IllegalArgumentException] {
-      new HyperLogLogPlusPlus(new BoundReference(0, IntegerType, true), relativeSD = 0.0023)
+      new HyperLogLogPlusPlus(new BoundReference(0, IntegerType, true), relativeSD = 0.0021)
     }
     intercept[IllegalArgumentException] {
       new HyperLogLogPlusPlus(new BoundReference(0, IntegerType, true), relativeSD = 0.4)
