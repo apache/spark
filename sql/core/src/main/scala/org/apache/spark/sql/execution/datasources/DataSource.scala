@@ -505,12 +505,11 @@ object DataSource {
                   provider1 == "com.databricks.spark.avro") {
                   throw new AnalysisException(
                     s"Failed to find data source: ${provider1.toLowerCase}. Please find an Avro " +
-                      "package at " +
-                      "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects")
+                      "package at http://spark.apache.org/third-party-projects.html")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider1. Please find packages at " +
-                      "https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects",
+                      "http://spark.apache.org/third-party-projects.html",
                     error)
                 }
             }
