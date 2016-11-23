@@ -196,11 +196,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the regularization parameter for L2 regularization.
    * The regularization term is
-   * <p><blockquote>
+   * <blockquote>
    *    $$
    *    0.5 * regParam * L2norm(coefficients)^2
    *    $$
-   * </blockquote></p>
+   * </blockquote>
    * Default is 0.0.
    *
    * @group setParam
