@@ -60,7 +60,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
                 <div id="history-summary" class="span12 pagination"></div> ++
                 <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
                 <script src={UIUtils.prependBaseUri("/static/historypage.js")}></script> ++
-                <script>setAppLimit({parent.maxApplications})</script>
+                <script>setAppLimit({parent.maxApplications})</script> ++
+                <script>setDeleteLogsEnabled({parent.deleteLogsEnabled})</script>
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
             } else if (eventLogsUnderProcessCount > 0) {

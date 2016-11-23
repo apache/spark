@@ -57,6 +57,8 @@ class HistoryServer(
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
+  val deleteLogsEnabled = conf.getBoolean("spark.history.deleteLogsEnabled", false)
+
   // How many applications the summary ui displays
   private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS);
 
@@ -121,6 +123,12 @@ class HistoryServer(
   def initialize() {
     attachPage(new HistoryPage(this))
 
+    attachHandler(createRedirectHandler(
+      "/logs/delete",
+      "/",
+      handleDeleteLogRequest,
+      httpMethods = Set("GET", "POST")))
+
     attachHandler(ApiRootResource.getServletHandler(this))
 
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
@@ -129,6 +137,16 @@ class HistoryServer(
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
     attachHandler(contextHandler)
+  }
+
+  def handleDeleteLogRequest(request: HttpServletRequest): Unit = {
+    if (deleteLogsEnabled && securityManager.checkModifyPermissions(request.getRemoteUser)) {
+      val appId = Option(request.getParameter("appId"))
+      val attemptId = Option(request.getParameter("attemptId"))
+      appId.foreach { id =>
+        provider.deleteLog(id, attemptId)
+      }
+    }
   }
 
   /** Bind to the HTTP server behind this web interface. */

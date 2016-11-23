@@ -21,6 +21,12 @@ function setAppLimit(val) {
     appLimit = val;
 }
 
+var deleteLogsEnabled = false;
+
+function setDeleteLogsEnabled(val) {
+    deleteLogsEnabled = val;
+}
+
 function makeIdNumeric(id) {
   var strs = id.split("_");
   if (strs.length < 3) {
@@ -180,6 +186,10 @@ $(document).ready(function() {
 
         $(selector).DataTable(conf);
         $('#hisotry-summary [data-toggle="tooltip"]').tooltip();
+
+        if (deleteLogsEnabled) {
+          $('.delete-app').css('display', 'inline-block');
+        }
       });
     });
 });

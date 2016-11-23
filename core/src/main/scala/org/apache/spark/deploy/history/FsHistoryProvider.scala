@@ -535,6 +535,25 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  override def deleteLog(appId: String, attemptId: Option[String]): Unit = {
+    applications.get(appId) match {
+      case Some(appInfo) =>
+        appInfo.attempts.filter { attempt =>
+          attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get
+        }.foreach { attempt =>
+          try {
+            fs.delete(new Path(logDir, attempt.logPath), true)
+            applications.remove(appId)
+          } catch {
+            case e: AccessControlException =>
+              logInfo(s"No permission to delete ${attempt.logPath}, ignoring.")
+            case t: IOException =>
+              logError(s"IOException in cleaning ${attempt.logPath}", t)
+          }
+        }
+    }
+  }
+
   /**
    * Delete event logs from the log directory according to the clean policy defined by the user.
    */
