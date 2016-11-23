@@ -49,14 +49,17 @@ public class SparkVectorizedOrcRecordReader
     private final long length;
     private float progress = 0.0f;
     private ObjectInspector objectInspector;
+    private List<Integer> columnIDs;
 
     SparkVectorizedOrcRecordReader(
         Reader file,
         Configuration conf,
-        FileSplit fileSplit) throws IOException {
+        FileSplit fileSplit,
+        List<Integer> columnIDs) throws IOException {
       this.offset = fileSplit.getStart();
       this.length = fileSplit.getLength();
       this.objectInspector = file.getObjectInspector();
+      this.columnIDs = columnIDs;
       this.reader = OrcInputFormat.createReaderFromFile(file, conf, this.offset,
         this.length);
       this.progress = reader.getProgress();
@@ -118,10 +121,10 @@ public class SparkVectorizedOrcRecordReader
     private VectorizedRowBatch constructVectorizedRowBatch(StructObjectInspector oi) {
       List<? extends StructField> fields = oi.getAllStructFieldRefs();
       VectorizedRowBatch result = new VectorizedRowBatch(fields.size());
-      int i = 0;
-      for (StructField field : fields) {
-        ObjectInspector fieldObjectInspector = field.getFieldObjectInspector();
-        result.cols[i++] = createColumnVector(fieldObjectInspector);
+      for (int i = 0; i < columnIDs.size(); i++) {
+        int fieldIndex = columnIDs.get(i);
+        ObjectInspector fieldObjectInspector = fields.get(fieldIndex).getFieldObjectInspector();
+        result.cols[fieldIndex] = createColumnVector(fieldObjectInspector);
       }
       return result;
     }

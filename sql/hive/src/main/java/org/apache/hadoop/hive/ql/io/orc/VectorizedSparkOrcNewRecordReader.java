@@ -25,7 +25,6 @@ import java.util.List;
 import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
@@ -36,51 +35,100 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
+import org.apache.spark.sql.execution.vectorized.ColumnVector;
+import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A RecordReader that returns InternalRow for Spark SQL execution.
- * This reader uses an internal reader that returns Hive's VectorizedRowBatch. An adapter
- * class is used to return internal row by directly accessing data in column vectors.
+ * A RecordReader that returns ColumnarBatch for Spark SQL execution.
+ * This reader uses an internal reader that returns Hive's VectorizedRowBatch.
  */
 public class VectorizedSparkOrcNewRecordReader
-    extends org.apache.hadoop.mapreduce.RecordReader<NullWritable, InternalRow> {
+    extends org.apache.hadoop.mapreduce.RecordReader<NullWritable, Object> {
   private final org.apache.hadoop.mapred.RecordReader<NullWritable, VectorizedRowBatch> reader;
   private final int numColumns;
-  private VectorizedRowBatch internalValue;
+  private VectorizedRowBatch hiveBatch;
   private float progress = 0.0f;
   private List<Integer> columnIDs;
 
+  private ColumnVector[] orcColumns;
+  private ColumnarBatch columnarBatch;;
+
+  /**
+   * If true, this class returns batches instead of rows.
+   */
+  private boolean returnColumnarBatch;
+
   private long numRowsOfBatch = 0;
   private int indexOfRow = 0;
-
-  private final Row row;
 
   public VectorizedSparkOrcNewRecordReader(
       Reader file,
       Configuration conf,
       FileSplit fileSplit,
-      List<Integer> columnIDs) throws IOException {
+      List<Integer> columnIDs,
+      StructType partitionColumns,
+      InternalRow partitionValues) throws IOException {
     List<OrcProto.Type> types = file.getTypes();
     numColumns = (types.size() == 0) ? 0 : types.get(0).getSubtypesCount();
     this.reader = new SparkVectorizedOrcRecordReader(file, conf,
-      new org.apache.hadoop.mapred.FileSplit(fileSplit));
+      new org.apache.hadoop.mapred.FileSplit(fileSplit), columnIDs);
+
+    this.hiveBatch = this.reader.createValue();
 
     this.columnIDs = new ArrayList<>(columnIDs);
-    this.internalValue = this.reader.createValue();
+    this.orcColumns = new ColumnVector[columnIDs.size() + partitionValues.numFields()];
+
+    // Allocate Spark ColumnVectors for data columns.
+    for (int i = 0; i < columnIDs.size(); i++) {
+      org.apache.hadoop.hive.ql.exec.vector.ColumnVector col =
+        this.hiveBatch.cols[columnIDs.get(i)];
+      this.orcColumns[i] = new OrcColumnVector(col);
+    }
+
+    // Allocate Spark ColumnVectors for partition columns.
+    if (partitionValues.numFields() > 0) {
+      int i = 0;
+      int base = columnIDs.size();
+      for (StructField f : partitionColumns.fields()) {
+        // Use onheap for partition column vectors.
+        ColumnVector col = ColumnVector.allocate(
+          VectorizedRowBatch.DEFAULT_SIZE,
+          f.dataType(),
+          MemoryMode.ON_HEAP);
+        ColumnVectorUtils.populate(col, partitionValues, i);
+        col.setIsConstant();
+        this.orcColumns[base + i] = col;
+        i++;
+      }
+    }
+
+    // Allocate Spark ColumnBatch
+    this.columnarBatch = new ColumnarBatch(this.orcColumns, VectorizedRowBatch.DEFAULT_SIZE);
+
     this.progress = reader.getProgress();
-    this.row = new Row(this.internalValue.cols, this.columnIDs);
   }
 
   @Override
   public void close() throws IOException {
     reader.close();
+  }
+
+  /*
+   * Can be called before any rows are returned to enable returning columnar batches directly.
+   */
+  public void enableReturningBatches() {
+    returnColumnarBatch = true;
   }
 
   @Override
@@ -89,14 +137,9 @@ public class VectorizedSparkOrcNewRecordReader
   }
 
   @Override
-  public InternalRow getCurrentValue() throws IOException, InterruptedException {
-    if (indexOfRow >= numRowsOfBatch) {
-      return null;
-    }
-    row.rowId = indexOfRow;
-    indexOfRow++;
-
-    return row;
+  public Object getCurrentValue() throws IOException, InterruptedException {
+    if (returnColumnarBatch) return this.columnarBatch;
+    return columnarBatch.getRow(indexOfRow - 1);
   }
 
   @Override
@@ -111,194 +154,37 @@ public class VectorizedSparkOrcNewRecordReader
 
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
-    if (indexOfRow == numRowsOfBatch) {
-      if (reader.next(NullWritable.get(), internalValue)) {
-        if (internalValue.endOfFile) {
-          progress = 1.0f;
-          numRowsOfBatch = 0;
-          indexOfRow = 0;
-          return false;
-        } else {
-          assert internalValue.numCols == numColumns : "Incorrect number of columns in OrcBatch";
-          numRowsOfBatch = internalValue.count();
-          indexOfRow = 0;
-          progress = reader.getProgress();
-        }
-        return true;
-      } else {
-        return false;
-      }
+    if (returnColumnarBatch) return nextBatch();
+
+    if (indexOfRow >= numRowsOfBatch) {
+      return nextBatch();
     } else {
-      if (indexOfRow < numRowsOfBatch) {
-        return true;
-      } else {
-        return false;
-      }
+      indexOfRow++;
+      return true;
     }
   }
 
   /**
-   * Adapter class to return an internal row.
+   * Advances to the next batch of rows. Returns false if there are no more.
    */
-  public static final class Row extends InternalRow {
-    protected int rowId;
-    private List<Integer> columnIDs;
-    private final ColumnVector[] columns;
-
-    private Row(ColumnVector[] columns, List<Integer> columnIDs) {
-      this.columns = columns;
-      this.columnIDs = columnIDs;
-    }
-
-    @Override
-    public int numFields() { return columnIDs.size(); }
-
-    @Override
-    public boolean anyNull() {
-      for (int i = 0; i < columns.length; i++) {
-        if (columnIDs.contains(i)) {
-          boolean isRepeating = columns[i].isRepeating;
-          if (isRepeating && columns[i].isNull[0]) {
-            return true;
-          } else if (!isRepeating && columns[i].isNull[rowId]) {
-            return true;
-          }
-        }
+  public boolean nextBatch() throws IOException, InterruptedException {
+    if (reader.next(NullWritable.get(), hiveBatch)) {
+      if (hiveBatch.endOfFile) {
+        progress = 1.0f;
+        numRowsOfBatch = 0;
+        columnarBatch.setNumRows((int) numRowsOfBatch);
+        indexOfRow = 0;
+        return false;
+      } else {
+        assert hiveBatch.numCols == numColumns : "Incorrect number of columns in the current batch";
+        numRowsOfBatch = hiveBatch.count();
+        columnarBatch.setNumRows((int) numRowsOfBatch);
+        indexOfRow = 0;
+        progress = reader.getProgress();
+        return true;
       }
+    } else {
       return false;
-    }
-
-    private int getColIndex(ColumnVector col) {
-      return col.isRepeating ? 0 : rowId;
-    }
-
-    @Override
-    public boolean isNullAt(int ordinal) {
-      ColumnVector col = columns[columnIDs.get(ordinal)];
-      return col.isNull[getColIndex(col)];
-    }
-
-    @Override
-    public boolean getBoolean(int ordinal) {
-      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
-      return col.vector[getColIndex(col)] > 0;
-    }
-
-    @Override
-    public byte getByte(int ordinal) {
-      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
-      return (byte)col.vector[getColIndex(col)];
-    }
-
-    @Override
-    public short getShort(int ordinal) {
-      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
-      return (short)col.vector[getColIndex(col)];
-    }
-
-    @Override
-    public int getInt(int ordinal) {
-      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
-      return (int)col.vector[getColIndex(col)];
-    }
-
-    @Override
-    public long getLong(int ordinal) {
-      LongColumnVector col = (LongColumnVector) columns[columnIDs.get(ordinal)];
-      return (long)col.vector[getColIndex(col)];
-    }
-
-    @Override
-    public float getFloat(int ordinal) {
-      DoubleColumnVector col = (DoubleColumnVector) columns[columnIDs.get(ordinal)];
-      return (float)col.vector[getColIndex(col)];
-    }
-
-    @Override
-    public double getDouble(int ordinal) {
-      DoubleColumnVector col = (DoubleColumnVector) columns[columnIDs.get(ordinal)];
-      return (double)col.vector[getColIndex(col)];
-    }
-
-    @Override
-    public Decimal getDecimal(int ordinal, int precision, int scale) {
-      DecimalColumnVector col = (DecimalColumnVector) columns[columnIDs.get(ordinal)];
-      int index = getColIndex(col);
-      return Decimal.apply(col.vector[index].getHiveDecimal().bigDecimalValue(), precision, scale);
-    }
-
-    @Override
-    public UTF8String getUTF8String(int ordinal) {
-      BytesColumnVector col = ((BytesColumnVector) columns[columnIDs.get(ordinal)]);
-      int index = getColIndex(col);
-      return UTF8String.fromBytes(col.vector[index], col.start[index], col.length[index]);
-    }
-
-    @Override
-    public byte[] getBinary(int ordinal) {
-      BytesColumnVector col = (BytesColumnVector) columns[columnIDs.get(ordinal)];
-      int index = getColIndex(col);
-      byte[] binary = new byte[col.length[index]];
-      System.arraycopy(col.vector[index], col.start[index], binary, 0, binary.length);
-      return binary;
-    }
-
-    /**
-     * The data type CalendarInterval is not suppported due to the Hive version used by Spark
-     * internally. When we upgrade to newer Hive versions in the future, this is possibly to
-     * support.
-     */
-    @Override
-    public CalendarInterval getInterval(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    /**
-     * The data type CalendarInterval is not suppported due to the Hive version used by Spark
-     * internally. When we upgrade to newer Hive versions in the future, this is possibly to
-     * be supported.
-     */
-    @Override
-    public InternalRow getStruct(int ordinal, int numFields) {
-      throw new NotImplementedException();
-    }
-
-    /**
-     * The data type Array is not suppported due to the Hive version used by Spark internally.
-     * When we upgrade to newer Hive versions in the future, this is possibly to be supported.
-     */
-    @Override
-    public ArrayData getArray(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    /**
-     * The data type Map is not suppported due to the Hive version used by Spark internally.
-     * When we upgrade to newer Hive versions in the future, this is possibly to be supported.
-     */
-    @Override
-    public MapData getMap(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    @Override
-    public Object get(int ordinal, DataType dataType) {
-      throw new NotImplementedException();
-    }
-
-    @Override
-    public InternalRow copy() {
-      throw new NotImplementedException();
-    }
-
-    @Override
-    public void setNullAt(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    @Override
-    public void update(int ordinal, Object value) {
-      throw new NotImplementedException();
     }
   }
 }
