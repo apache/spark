@@ -284,7 +284,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
       override def executorAdded(execId: String, host: String) {}
     }
 
-    val e0Offers = Seq(new WorkerOffer("executor0", "host0", 1))
+    val e0Offers = Seq(WorkerOffer("executor0", "host0", 1))
     val attempt1 = FakeTask.createTaskSet(1)
 
     // submit attempt 1, offer resources, task gets scheduled
