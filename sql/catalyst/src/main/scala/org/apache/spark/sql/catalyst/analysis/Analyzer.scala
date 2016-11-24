@@ -1076,6 +1076,10 @@ class Analyzer(
 
       // Simplify the predicates before pulling them out.
       val transformed = BooleanSimplification(sub) transformUp {
+        // WARNING:
+        // Only Filter can host correlated expressions at this time
+        // Anyone adding a new "case" below needs to add the call to
+        // "failOnOuterReference" to disallow correlated expressions in it.
         case f @ Filter(cond, child) =>
           // Find all predicates with an outer reference.
           val (correlated, local) = splitConjunctivePredicates(cond).partition(containsOuter)
@@ -1116,11 +1120,17 @@ class Analyzer(
             a
           }
         case w : Window =>
+          failOnOuterReference(w)
           failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, w)
           w
         case j @ Join(left, _, RightOuter, _) =>
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(left, "a RIGHT OUTER JOIN")
+          j
+        // SPARK-18578: Do not allow any correlated predicate
+        // in a Full (Outer) Join operator and its descendants
+        case j @ Join(_, _, FullOuter, _) =>
+          failOnOuterReferenceInSubTree(j, "a FULL OUTER JOIN")
           j
         case j @ Join(_, right, jt, _) if !jt.isInstanceOf[InnerLike] =>
           failOnOuterReference(j)
