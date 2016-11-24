@@ -20,8 +20,6 @@ package org.apache.spark.mllib.linalg
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.netlib.util.intW
 
-import org.apache.spark.ml.optim.SingularMatrixException
-
 /**
  * Compute Cholesky decomposition.
  */
@@ -30,43 +28,32 @@ private[spark] object CholeskyDecomposition {
   /**
    * Solves a symmetric positive definite linear system via Cholesky factorization.
    * The input arguments are modified in-place to store the factorization and the solution.
-   * @param A the upper triangular part of A
-   * @param bx right-hand side
-   * @return the solution array
+   * @param A The upper triangular part of A.
+   * @param bx Right-hand side.
+   * @return The solution array and a status that identifies whether the decomposition success.
+   *         A status value greater than 0 indicates singular matrix error; a status value less
+   *         than 0 indicates illegal input; otherwise, success.
    */
-  def solve(A: Array[Double], bx: Array[Double]): Array[Double] = {
+  def solve(A: Array[Double], bx: Array[Double]): (Array[Double], Int) = {
     val k = bx.length
     val info = new intW(0)
     lapack.dppsv("U", k, 1, A, bx, k, info)
-    checkReturnValue(info, "dppsv")
-    bx
+    (bx, info.`val`)
   }
 
   /**
    * Computes the inverse of a real symmetric positive definite matrix A
    * using the Cholesky factorization A = U**T*U.
    * The input arguments are modified in-place to store the inverse matrix.
-   * @param UAi the upper triangular factor U from the Cholesky factorization A = U**T*U
-   * @param k the dimension of A
-   * @return the upper triangle of the (symmetric) inverse of A
+   * @param UAi The upper triangular factor U from the Cholesky factorization A = U**T*U.
+   * @param k The dimension of A.
+   * @return The upper triangle of the (symmetric) inverse of A and a status that identifies
+   *         whether the decomposition success. A status value greater than 0 indicates singular
+   *         matrix error; a status value less than 0 indicates illegal input; otherwise, success.
    */
-  def inverse(UAi: Array[Double], k: Int): Array[Double] = {
+  def inverse(UAi: Array[Double], k: Int): (Array[Double], Int) = {
     val info = new intW(0)
     lapack.dpptri("U", k, UAi, info)
-    checkReturnValue(info, "dpptri")
-    UAi
+    (UAi, info.`val`)
   }
-
-  private def checkReturnValue(info: intW, method: String): Unit = {
-    info.`val` match {
-      case code if code < 0 =>
-        throw new IllegalStateException(s"LAPACK.$method returned $code; arg ${-code} is illegal")
-      case code if code > 0 =>
-        throw new SingularMatrixException (
-          s"LAPACK.$method returned $code because A is not positive definite. Is A derived from " +
-          "a singular matrix (e.g. collinear column values)?")
-      case _ => // do nothing
-    }
-  }
-
 }
