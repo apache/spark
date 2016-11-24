@@ -620,6 +620,7 @@ class JDBCSuite extends SparkFunSuite
     assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === "col0 >= 3")
     assert(doCompileFilter(In("col1", Array("jkl"))) === "col1 IN ('jkl')")
     assert(doCompileFilter(In("col1", Array.empty)) === "false")
+    assert(doCompileFilter(In(null, Array("jkl"))) === "NULL")
     assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
       === "(NOT (col1 IN ('mno', 'pqr')))")
     assert(doCompileFilter(IsNull("col1")) === "col1 IS NULL")

@@ -173,6 +173,20 @@ class OptimizeInSuite extends PlanTest {
     }
   }
 
+  test("OptimizedIn test: Replace In(null, list) with null literal.") {
+    val originalQuery1 = testRelation
+      .where(In(Literal.create(null, StringType), Seq(Literal(1), Literal(2))))
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    val correctAnswer1 = testRelation.where(Literal.create(null, BooleanType)).analyze
+    comparePlans(optimized1, correctAnswer1)
+
+    val originalQuery2 = testRelation
+      .where(Not(In(Literal.create(null, StringType), Seq(Literal(1), Literal(2)))))
+    val optimized2 = Optimize.execute(originalQuery2.analyze)
+    val correctAnswer2 = testRelation.where(Literal.create(null, BooleanType)).analyze
+    comparePlans(optimized2, correctAnswer2)
+  }
+
   test("OptimizedIn test: Replace In(value, Seq.empty) with false literal.") {
     val originalQuery = testRelation.where(In(UnresolvedAttribute("a"), Seq.empty))
     val optimized = Optimize.execute(originalQuery.analyze)
