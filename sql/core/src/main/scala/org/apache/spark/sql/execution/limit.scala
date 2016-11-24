@@ -67,6 +67,15 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val stopEarly = ctx.freshName("stopEarly")
+    ctx.addMutableState("boolean", stopEarly, s"$stopEarly = false;")
+
+    ctx.addNewFunction("stopEarly", s"""
+      @Override
+      protected boolean stopEarly() {
+        return $stopEarly;
+      }
+    """)
     val countTerm = ctx.freshName("count")
     ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
     s"""
@@ -74,7 +83,7 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
        |   $countTerm += 1;
        |   ${consume(ctx, input)}
        | } else {
-       |   // Do nothing
+       |   $stopEarly = true;
        | }
      """.stripMargin
   }
