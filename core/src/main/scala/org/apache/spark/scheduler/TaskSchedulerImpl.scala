@@ -344,10 +344,12 @@ private[spark] class TaskSchedulerImpl(
               // where each executor corresponds to a single task, so mark the executor as failed.
               val execId = taskIdToExecutorId.getOrElse(tid, throw new IllegalStateException(
                 "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"))
-              reason = Some(
-                SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
-              removeExecutor(execId, reason.get)
-              failedExecutor = Some(execId)
+              if (executorIdToRunningTaskIds.contains(execId)) {
+                reason = Some(
+                  SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
+                removeExecutor(execId, reason.get)
+                failedExecutor = Some(execId)
+              }
               taskSet.removeRunningTask(tid)
               taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
             } else {
