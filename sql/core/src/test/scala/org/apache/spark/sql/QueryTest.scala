@@ -404,7 +404,7 @@ object QueryTest {
         s"""
         |Results do not match for query:
         |Timezone: ${TimeZone.getDefault}
-        |Timezone Env: ${sys.env("TZ")}
+        |Timezone Env: ${sys.env.getOrElse("TZ", "")}
         |
         |${df.queryExecution}
         |== Results ==
@@ -429,6 +429,7 @@ object QueryTest {
     Row.fromSeq(row.toSeq.map {
       case null => null
       case d: java.math.BigDecimal => BigDecimal(d)
+      case d: Double => math.floor(d * 1000.0 + 0.5) // round to three digits
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
       case r: Row => prepareRow(r)
