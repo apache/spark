@@ -159,7 +159,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
-    // connectionProperties should override settings in extraOptions.
+    // properties should override settings in extraOptions.
     this.extraOptions = this.extraOptions ++ properties.asScala
     // explicit url and dbtable should override all
     this.extraOptions += ("url" -> url, "dbtable" -> table)
