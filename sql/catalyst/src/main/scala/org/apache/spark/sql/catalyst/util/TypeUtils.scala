@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.types._
 
 /**
@@ -34,7 +33,7 @@ object TypeUtils {
   }
 
   def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
-    if (RowOrdering.isOrderable(dt)) {
+    if (isOrderable(dt)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(s"$caller does not support ordering on type $dt")
@@ -65,7 +64,23 @@ object TypeUtils {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case m: MapType if m.ordered => m.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case other =>
+        throw new IllegalArgumentException(s"Type $other does not support ordered operations")
     }
+  }
+
+  /**
+   * Returns true iff the data type can be ordered (i.e. can be sorted).
+   */
+  def isOrderable(dataType: DataType): Boolean = dataType match {
+    case NullType => true
+    case dt: AtomicType => true
+    case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
+    case array: ArrayType => isOrderable(array.elementType)
+    case MapType(keyType, valueType, _, true) => isOrderable(keyType) && isOrderable(valueType)
+    case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
+    case _ => false
   }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {

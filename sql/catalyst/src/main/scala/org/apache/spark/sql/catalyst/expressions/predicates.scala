@@ -403,11 +403,6 @@ object Equality {
     case EqualNullSafe(l, r) => Some((l, r))
     case _ => None
   }
-
-  def canEquals(dataType: DataType): Boolean = dataType.existsRecursively {
-    case m: MapType => m.ordered
-    case _ => true
-  }
 }
 
 @ExpressionDescription(
@@ -420,11 +415,10 @@ case class EqualTo(left: Expression, right: Expression)
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
-        // TODO: although map type is not orderable, technically map type should be able to be used
-        // in equality comparison, remove this type check once we support it.
-        if (!Equality.canEquals(left.dataType)) {
-          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualTo, but the actual " +
-            s"input type is ${left.dataType.catalogString}.")
+        // Maps are only allowed when they are ordered.
+        if (MapType.containsUnorderedMap(left.dataType)) {
+          TypeCheckResult.TypeCheckFailure("Cannot use unordered map type in EqualTo, but " +
+            s"the actual input type is ${left.dataType.catalogString}.")
         } else {
           TypeCheckResult.TypeCheckSuccess
         }
@@ -463,11 +457,11 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
-        // TODO: although map type is not orderable, technically map type should be able to be used
-        // in equality comparison, remove this type check once we support it.
-        if (!Equality.canEquals(left.dataType)) {
-          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualNullSafe, but the actual " +
-            s"input type is ${left.dataType.catalogString}.")
+        EqualNullSafe
+        // Maps are only allowed when they are ordered.
+        if (MapType.containsUnorderedMap(left.dataType)) {
+          TypeCheckResult.TypeCheckFailure("Cannot use unordered map type in EqualNullSafe, but " +
+            s"the actual input type is ${left.dataType.catalogString}.")
         } else {
           TypeCheckResult.TypeCheckSuccess
         }

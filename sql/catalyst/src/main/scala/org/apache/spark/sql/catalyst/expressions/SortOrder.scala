@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
 
@@ -61,7 +62,7 @@ case class SortOrder(child: Expression, direction: SortDirection, nullOrdering: 
   override def foldable: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (RowOrdering.isOrderable(dataType)) {
+    if (TypeUtils.isOrderable(dataType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(s"cannot sort data type ${dataType.simpleString}")

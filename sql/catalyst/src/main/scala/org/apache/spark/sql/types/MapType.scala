@@ -23,7 +23,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.catalyst.util.MapData
+import org.apache.spark.sql.catalyst.util.{MapData, TypeUtils}
 
 /**
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
@@ -78,22 +78,13 @@ case class MapType(
     f(this) || keyType.existsRecursively(f) || valueType.existsRecursively(f)
   }
 
-  private[this] def ordering(dt: DataType): Ordering[Any] = {
-    dt match {
-      case a: AtomicType => a.ordering.asInstanceOf[Ordering[Any]]
-      case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case m: MapType => m.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case other =>
-        throw new IllegalArgumentException(s"Type $other does not support ordered operations")
-    }
-  }
+  @transient
+  private[sql] lazy val interpretedKeyOrdering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(keyType)
 
   @transient
-  private[sql] lazy val interpretedKeyOrdering: Ordering[Any] = ordering(keyType)
-
-  @transient
-  private[sql] lazy val interpretedValueOrdering: Ordering[Any] = ordering(valueType)
+  private[sql] lazy val interpretedValueOrdering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(valueType)
 
   @transient
   private[sql] lazy val interpretedOrdering: Ordering[MapData] = new Ordering[MapData] {
@@ -163,4 +154,14 @@ object MapType extends AbstractDataType {
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
     new MapType(keyType, valueType, valueContainsNull = true, ordered = false)
+
+  /**
+   * Check if a dataType contains an unordered map.
+   */
+  private[sql] def containsUnorderedMap(dataType: DataType): Boolean = {
+    dataType.existsRecursively {
+      case m: MapType => !m.ordered
+      case _ => false
+    }
+  }
 }

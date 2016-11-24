@@ -2338,26 +2338,24 @@ object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
  * MapType expressions are not comparable.
  */
 object SortMaps extends Rule[LogicalPlan] {
-  private def hasUnorderedMap(e: Expression): Boolean = e.dataType match {
-    case m: MapType => !m.ordered
-    case _ => false
-  }
+  private def containsUnorderedMap(e: Expression): Boolean =
+    MapType.containsUnorderedMap(e.dataType)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
-    case cmp @ BinaryComparison(left, right) if cmp.resolved && hasUnorderedMap(left) =>
-      cmp.withNewChildren(SortMap(left) :: right :: Nil)
-    case cmp @ BinaryComparison(left, right) if cmp.resolved && hasUnorderedMap(right) =>
-      cmp.withNewChildren(left :: SortMap(right) :: Nil)
-    case sort: SortOrder if sort.resolved && hasUnorderedMap(sort.child) =>
-      sort.copy(child = SortMap(sort.child))
+    case cmp @ BinaryComparison(left, right) if cmp.resolved && containsUnorderedMap(left) =>
+      cmp.withNewChildren(OrderMaps(left) :: right :: Nil)
+    case cmp @ BinaryComparison(left, right) if cmp.resolved && containsUnorderedMap(right) =>
+      cmp.withNewChildren(left :: OrderMaps(right) :: Nil)
+    case sort: SortOrder if sort.resolved && containsUnorderedMap(sort.child) =>
+      sort.copy(child = OrderMaps(sort.child))
   } transform {
-    case a: Aggregate if a.resolved && a.groupingExpressions.exists(hasUnorderedMap) =>
+    case a: Aggregate if a.resolved && a.groupingExpressions.exists(containsUnorderedMap) =>
       // Modify the top level grouping expressions
       val replacements = a.groupingExpressions.collect {
-        case a: Attribute if hasUnorderedMap(a) =>
-          a -> Alias(SortMap(a), a.name)(exprId = a.exprId, qualifier = a.qualifier)
-        case e if hasUnorderedMap(e) =>
-          e -> SortMap(e)
+        case a: Attribute if containsUnorderedMap(a) =>
+          a -> Alias(OrderMaps(a), a.name)(exprId = a.exprId, qualifier = a.qualifier)
+        case e if containsUnorderedMap(e) =>
+          e -> OrderMaps(e)
       }
 
       // Tranform the expression tree.
@@ -2370,10 +2368,10 @@ object SortMaps extends Rule[LogicalPlan] {
             .getOrElse(e)
       }
 
-    case Distinct(child) if child.resolved && child.output.exists(hasUnorderedMap) =>
+    case Distinct(child) if child.resolved && child.output.exists(containsUnorderedMap) =>
       val projectList = child.output.map { a =>
-        if (hasUnorderedMap(a)) {
-          Alias(SortMap(a), a.name)(exprId = a.exprId, qualifier = a.qualifier)
+        if (containsUnorderedMap(a)) {
+          Alias(OrderMaps(a), a.name)(exprId = a.exprId, qualifier = a.qualifier)
         } else {
           a
         }

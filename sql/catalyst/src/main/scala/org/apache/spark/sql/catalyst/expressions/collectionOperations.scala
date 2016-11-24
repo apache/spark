@@ -21,7 +21,7 @@ import java.util.Comparator
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 
 /**
@@ -139,7 +139,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
-    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+    case ArrayType(dt, _) if TypeUtils.isOrderable(dt) =>
       ascendingOrder match {
         case Literal(_: Boolean, BooleanType) =>
           TypeCheckResult.TypeCheckSuccess
@@ -289,11 +289,13 @@ case class ArrayContains(left: Expression, right: Expression)
 }
 
 /**
- * This expression sorts a map in ascending order.
+ * This expression orders all maps in an expression's result. This expression enables the use of
+ * maps in comparisons and equality operations.
  */
-case class SortMap(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class OrderMaps(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(ArrayType, MapType, StructType))
 
   /** Create a data type in which all maps are ordered. */
   private[this] def createDataType(dataType: DataType): DataType = dataType match {
@@ -304,14 +306,18 @@ case class SortMap(child: Expression) extends UnaryExpression with ExpectsInputT
     case ArrayType(elementType, containsNull) =>
       ArrayType(createDataType(elementType), containsNull)
     case MapType(keyType, valueType, valueContainsNull, false) =>
-      MapType(createDataType(keyType), createDataType(valueType), valueContainsNull, true)
+      MapType(
+        createDataType(keyType),
+        createDataType(valueType),
+        valueContainsNull,
+        ordered = true)
     case _ =>
       dataType
   }
 
   override lazy val dataType: DataType = createDataType(child.dataType)
 
-  private[this] val id = identity[Any] _
+  private[this] val identity = (id: Any) => id
 
   /**
    * Create a function that transforms a Spark SQL datum to a new datum for which all MapData
@@ -319,9 +325,9 @@ case class SortMap(child: Expression) extends UnaryExpression with ExpectsInputT
    */
   private[this] def createTransform(dataType: DataType): Option[Any => Any] = {
     dataType match {
-      case m@MapType(keyType, valueType, _, false) =>
-        val keyTransform = createTransform(keyType).getOrElse(id)
-        val valueTransform = createTransform(valueType).getOrElse(id)
+      case m @ MapType(keyType, valueType, _, false) =>
+        val keyTransform = createTransform(keyType).getOrElse(identity)
+        val valueTransform = createTransform(valueType).getOrElse(identity)
         val ordering = Ordering.Tuple2(m.interpretedKeyOrdering, m.interpretedValueOrdering)
         Option((data: Any) => {
           val input = data.asInstanceOf[MapData]
@@ -381,7 +387,7 @@ case class SortMap(child: Expression) extends UnaryExpression with ExpectsInputT
         if (transformOpts.exists(_.isDefined)) {
           val transforms = transformOpts.zip(fields).map { case (opt, field) =>
             val dataType = field.dataType
-            val transform = opt.getOrElse(id)
+            val transform = opt.getOrElse(identity)
             (input: InternalRow, i: Int) => {
               transform(input.get(i, dataType))
             }
@@ -409,7 +415,7 @@ case class SortMap(child: Expression) extends UnaryExpression with ExpectsInputT
   }
 
   @transient private[this] lazy val transform = {
-    createTransform(child.dataType).getOrElse(id)
+    createTransform(child.dataType).getOrElse(identity)
   }
 
   override protected def nullSafeEval(input: Any): Any = transform(input)
@@ -418,7 +424,7 @@ case class SortMap(child: Expression) extends UnaryExpression with ExpectsInputT
     // TODO we should code generate this.
     val tf = ctx.addReferenceObj("transform", transform, classOf[Any => Any].getCanonicalName)
     nullSafeCodeGen(ctx, ev, eval => {
-      s"${ev.value} = (MapData)$tf.apply($eval);"
+      s"${ev.value} = (${ctx.boxedType(dataType)})$tf.apply($eval);"
     })
   }
 }

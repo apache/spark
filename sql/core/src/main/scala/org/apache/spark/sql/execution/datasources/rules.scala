@@ -25,10 +25,11 @@ import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
@@ -161,7 +162,7 @@ case class AnalyzeCreateTable(sparkSession: SparkSession) extends Rule[LogicalPl
         checkDuplication(normalizedSortCols, "sort")
 
         schema.filter(f => normalizedSortCols.contains(f.name)).map(_.dataType).foreach {
-          case dt if RowOrdering.isOrderable(dt) => // OK
+          case dt if TypeUtils.isOrderable(dt) => // OK
           case other => failAnalysis(s"Cannot use ${other.simpleString} for sorting column")
         }
 

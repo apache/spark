@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.UsingJoin
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -226,7 +227,7 @@ trait CheckAnalysis extends PredicateHelper {
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
               // Check if the data type of expr is orderable.
-              if (!RowOrdering.isOrderable(expr.dataType)) {
+              if (!TypeUtils.isOrderable(expr.dataType)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
                     s"because its data type ${expr.dataType.simpleString} is not an orderable " +
@@ -247,7 +248,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
-              if (!RowOrdering.isOrderable(order.dataType)) {
+              if (!TypeUtils.isOrderable(order.dataType)) {
                 failAnalysis(
                   s"sorting is not supported for columns of type ${order.dataType.simpleString}")
               }
