@@ -127,7 +127,7 @@ case class Percentile(
     generateOutput(buffer.getPercentiles(percentages))
   }
 
-  private def generateOutput(results: Seq[Number]): Any = {
+  private def generateOutput(results: Seq[Double]): Any = {
     if (results.isEmpty) {
       null
     } else if (returnPercentileArray) {
@@ -179,7 +179,7 @@ object Percentile {
     /**
      * Get the percentile value for every percentile in `percentages`.
      */
-    def getPercentiles(percentages: Seq[Number]): Seq[Number] = {
+    def getPercentiles(percentages: Seq[Number]): Seq[Double] = {
       if (counts.isEmpty) {
         return Seq.empty
       }
@@ -194,7 +194,7 @@ object Percentile {
       val maxPosition = aggreCounts.last._2 - 1
 
       percentages.map { percentile =>
-        getPercentile(aggreCounts, maxPosition * percentile.doubleValue())
+        getPercentile(aggreCounts, maxPosition * percentile.doubleValue()).doubleValue()
       }
     }
 
