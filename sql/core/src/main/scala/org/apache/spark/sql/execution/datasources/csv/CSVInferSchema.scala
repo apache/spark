@@ -139,20 +139,14 @@ private[csv] object CSVInferSchema {
   }
 
   private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
-    if (options.dateFormat != null) {
-      // This case infers a custom `dataFormat` is set.
-      if ((allCatch opt options.dateFormat.parse(field)).isDefined) {
-        TimestampType
-      } else {
-        tryParseBoolean(field, options)
-      }
-    } else {
+    // This case infers a custom `dataFormat` is set.
+    if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
+      TimestampType
+    } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
       // We keep this for backwords competibility.
-      if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
-        TimestampType
-      } else {
-        tryParseBoolean(field, options)
-      }
+      TimestampType
+    } else {
+      tryParseBoolean(field, options)
     }
   }
 
@@ -253,7 +247,7 @@ private[csv] object CSVTypeCast {
             case options.positiveInf => Float.PositiveInfinity
             case _ =>
               Try(datum.toFloat)
-                  .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+                .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
           }
         case _: DoubleType =>
           datum match {
@@ -262,34 +256,30 @@ private[csv] object CSVTypeCast {
             case options.positiveInf => Double.PositiveInfinity
             case _ =>
               Try(datum.toDouble)
-                  .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+                .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
           }
         case _: BooleanType => datum.toBoolean
         case dt: DecimalType =>
           val value = new BigDecimal(datum.replaceAll(",", ""))
           Decimal(value, dt.precision, dt.scale)
-        case _: TimestampType if options.dateFormat != null =>
-          options.dateFormat.parse(datum).getTime * 1000L
         case _: TimestampType =>
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.
-          Try(DateTimeUtils.stringToTime(datum).getTime  * 1000L)
-              .getOrElse {
-                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility.
-                DateTimeUtils.stringToTime(datum).getTime * 1000L
-              }
-        case _: DateType if options.dateFormat != null =>
-          DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime)
+          Try(options.timestampFormat.parse(datum).getTime * 1000L)
+            .getOrElse {
+              // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              DateTimeUtils.stringToTime(datum).getTime * 1000L
+            }
         case _: DateType =>
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.x
           Try(DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime))
-              .getOrElse {
-                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-                // compatibility.
-                DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
-              }
+            .getOrElse {
+              // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+              // compatibility.
+              DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
+            }
         case _: StringType => UTF8String.fromString(datum)
         case udt: UserDefinedType[_] => castTo(datum, udt.sqlType, nullable, options)
         case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")

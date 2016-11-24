@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
@@ -119,14 +119,16 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
 
-    // Aggregation strategy can handle the query with single distinct
-    if (distinctAggGroups.size > 1) {
+    // Check if the aggregates contains functions that do not support partial aggregation.
+    val existsNonPartial = aggExpressions.exists(!_.aggregateFunction.supportsPartial)
+
+    // Aggregation strategy can handle queries with a single distinct group and partial aggregates.
+    if (distinctAggGroups.size > 1 || (distinctAggGroups.size == 1 && existsNonPartial)) {
       // Create the attributes for the grouping id and the group by clause.
-      val gid =
-        new AttributeReference("gid", IntegerType, false)(isGenerated = true)
+      val gid = AttributeReference("gid", IntegerType, nullable = false)(isGenerated = true)
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
-        case e => e -> new AttributeReference(e.sql, e.dataType, e.nullable)()
+        case e => e -> AttributeReference(e.sql, e.dataType, e.nullable)()
       }
       val groupByAttrs = groupByMap.map(_._2)
 
@@ -135,9 +137,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       def patchAggregateFunctionChildren(
           af: AggregateFunction)(
           attrs: Expression => Expression): AggregateFunction = {
-        af.withNewChildren(af.children.map {
-          case afc => attrs(afc)
-        }).asInstanceOf[AggregateFunction]
+        af.withNewChildren(af.children.map(attrs)).asInstanceOf[AggregateFunction]
       }
 
       // Setup unique distinct aggregate children.
@@ -265,5 +265,5 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
     // children, in this case attribute reuse causes the input of the regular aggregate to bound to
     // the (nulled out) input of the distinct aggregate.
-    e -> new AttributeReference(e.sql, e.dataType, true)()
+    e -> AttributeReference(e.sql, e.dataType, nullable = true)()
 }

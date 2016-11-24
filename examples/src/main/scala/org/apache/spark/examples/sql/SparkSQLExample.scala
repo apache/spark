@@ -203,7 +203,7 @@ object SparkSQLExample {
     // No pre-defined encoders for Dataset[Map[K,V]], define explicitly
     implicit val mapEncoder = org.apache.spark.sql.Encoders.kryo[Map[String, Any]]
     // Primitive types and case classes can be also defined as
-    implicit val stringIntMapEncoder: Encoder[Map[String, Int]] = ExpressionEncoder()
+    // implicit val stringIntMapEncoder: Encoder[Map[String, Any]] = ExpressionEncoder()
 
     // row.getValuesMap[T] retrieves multiple columns at once into a Map[String, T]
     teenagersDF.map(teenager => teenager.getValuesMap[Any](List("name", "age"))).collect()

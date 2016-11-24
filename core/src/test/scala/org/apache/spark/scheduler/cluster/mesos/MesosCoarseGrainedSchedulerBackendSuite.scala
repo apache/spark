@@ -18,9 +18,12 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.util.Collections
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.concurrent.Promise
 import scala.reflect.ClassTag
 
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
@@ -29,6 +32,7 @@ import org.apache.mesos.Protos.Value.Scalar
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.BeforeAndAfter
 
@@ -41,7 +45,8 @@ import org.apache.spark.scheduler.TaskSchedulerImpl
 class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     with LocalSparkContext
     with MockitoSugar
-    with BeforeAndAfter {
+    with BeforeAndAfter
+    with ScalaFutures {
 
   private var sparkConf: SparkConf = _
   private var driver: SchedulerDriver = _
@@ -50,6 +55,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   private var externalShuffleClient: MesosExternalShuffleClient = _
   private var driverEndpoint: RpcEndpointRef = _
   @volatile private var stopCalled = false
+
+  // All 'requests' to the scheduler run immediately on the same thread, so
+  // demand that all futures have their value available immediately.
+  implicit override val patienceConfig = PatienceConfig(timeout = Duration(0, TimeUnit.SECONDS))
 
   test("mesos supports killing and limiting executors") {
     setBackend()
@@ -65,8 +74,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyTaskLaunched("o1")
 
     // kills executors
-    backend.doRequestTotalExecutors(0)
-    assert(backend.doKillExecutors(Seq("0")))
+    assert(backend.doRequestTotalExecutors(0).futureValue)
+    assert(backend.doKillExecutors(Seq("0")).futureValue)
     val taskID0 = createTaskId("0")
     verify(driver, times(1)).killTask(taskID0)
 
@@ -410,6 +419,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     when(taskScheduler.sc).thenReturn(sc)
     externalShuffleClient = mock[MesosExternalShuffleClient]
     driverEndpoint = mock[RpcEndpointRef]
+    when(driverEndpoint.ask(any())(any())).thenReturn(Promise().future)
 
     backend = createSchedulerBackend(taskScheduler, driver, externalShuffleClient, driverEndpoint)
   }

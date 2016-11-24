@@ -42,6 +42,20 @@ class ApproxQuantileSuite extends SparkFunSuite {
     summary.compress()
   }
 
+  /**
+   * Interleaves compression and insertions.
+   */
+  private def buildCompressSummary(
+      data: Seq[Double],
+      epsi: Double,
+      threshold: Int): QuantileSummaries = {
+    var summary = new QuantileSummaries(threshold, epsi)
+    data.foreach { x =>
+      summary = summary.insert(x).compress()
+    }
+    summary
+  }
+
   private def checkQuantile(quant: Double, data: Seq[Double], summary: QuantileSummaries): Unit = {
     val approx = summary.query(quant)
     // The rank of the approximation.
@@ -56,8 +70,8 @@ class ApproxQuantileSuite extends SparkFunSuite {
 
   for {
     (seq_name, data) <- Seq(increasing, decreasing, random)
-    epsi <- Seq(0.1, 0.0001)
-    compression <- Seq(1000, 10)
+    epsi <- Seq(0.1, 0.0001) // With a significant value and with full precision
+    compression <- Seq(1000, 10) // This interleaves n so that we test without and with compression
   } {
 
     test(s"Extremas with epsi=$epsi and seq=$seq_name, compression=$compression") {
@@ -70,6 +84,17 @@ class ApproxQuantileSuite extends SparkFunSuite {
 
     test(s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression") {
       val s = buildSummary(data, epsi, compression)
+      assert(s.count == data.size, s"Found count=${s.count} but data size=${data.size}")
+      checkQuantile(0.9999, data, s)
+      checkQuantile(0.9, data, s)
+      checkQuantile(0.5, data, s)
+      checkQuantile(0.1, data, s)
+      checkQuantile(0.001, data, s)
+    }
+
+    test(s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression " +
+      s"(interleaved)") {
+      val s = buildCompressSummary(data, epsi, compression)
       assert(s.count == data.size, s"Found count=${s.count} but data size=${data.size}")
       checkQuantile(0.9999, data, s)
       checkQuantile(0.9, data, s)

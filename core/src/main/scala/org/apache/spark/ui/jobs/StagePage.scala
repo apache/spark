@@ -131,7 +131,14 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val stageData = stageDataOption.get
       val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
-      val numCompleted = tasks.count(_.taskInfo.finished)
+      val numCompleted = stageData.numCompleteTasks
+      val totalTasks = stageData.numActiveTasks +
+        stageData.numCompleteTasks + stageData.numFailedTasks
+      val totalTasksNumStr = if (totalTasks == tasks.size) {
+        s"$totalTasks"
+      } else {
+        s"$totalTasks, showing ${tasks.size}"
+      }
 
       val allAccumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
       val externalAccumulables = allAccumulables.values.filter { acc => !acc.internal }
@@ -576,7 +583,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         maybeAccumulableTable ++
-        <h4 id="tasks-section">Tasks</h4> ++ taskTableHTML ++ jsForScrollingDownToTaskTable
+        <h4 id="tasks-section">Tasks ({totalTasksNumStr})</h4> ++
+          taskTableHTML ++ jsForScrollingDownToTaskTable
       UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
     }
   }
@@ -628,9 +636,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         }
         val executorComputingTime = executorRunTime - shuffleReadTime - shuffleWriteTime
         val executorComputingTimeProportion =
-          (100 - schedulerDelayProportion - shuffleReadTimeProportion -
+          math.max(100 - schedulerDelayProportion - shuffleReadTimeProportion -
             shuffleWriteTimeProportion - serializationTimeProportion -
-            deserializationTimeProportion - gettingResultTimeProportion)
+            deserializationTimeProportion - gettingResultTimeProportion, 0)
 
         val schedulerDelayProportionPos = 0
         val deserializationTimeProportionPos =

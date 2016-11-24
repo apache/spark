@@ -230,10 +230,8 @@ private[sql] class HiveSessionCatalog(
   // List of functions we are explicitly not supporting are:
   // compute_stats, context_ngrams, create_union,
   // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
-  // in_file, index, java_method,
-  // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
-  // parse_url_tuple, posexplode, reflect2,
-  // str_to_map, windowingtablefunction.
+  // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
+  // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
   private val hiveFunctions = Seq(
     "hash",
     "histogram_numeric",

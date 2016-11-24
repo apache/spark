@@ -24,7 +24,7 @@ import scala.xml.Node
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.ExecutorState
 import org.apache.spark.deploy.master.ExecutorDesc
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
@@ -68,6 +68,16 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
                   app.desc.maxCores.get, app.coresGranted, app.coresLeft)
               }
             }
+            </li>
+            <li>
+              <span data-toggle="tooltip" title={ToolTips.APPLICATION_EXECUTOR_LIMIT}
+                    data-placement="right">
+                <strong>Executor Limit: </strong>
+                {
+                  if (app.executorLimit == Int.MaxValue) "Unlimited" else app.executorLimit
+                }
+                ({app.executors.size} granted)
+              </span>
             </li>
             <li>
               <strong>Executor Memory:</strong>
