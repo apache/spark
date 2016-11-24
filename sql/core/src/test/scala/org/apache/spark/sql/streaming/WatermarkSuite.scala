@@ -122,12 +122,15 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       },
       StartStream(),
       CheckLastBatch((10, 5)),
-      AddData(inputData, 30),
+      AddData(inputData, 30), // Advance watermark to 20 seconds
+      CheckLastBatch(),
       StopStream,
       StartStream(), // Watermark should still be 15 seconds
       AddData(inputData, 17),
       CheckLastBatch(), // We still do not see next batch
-      AddData(inputData, 30), // Move watermark to 20 seconds
+      AddData(inputData, 30), // Advance watermark to 20 seconds
+      CheckLastBatch(),
+      AddData(inputData, 30), // Evict items less than previous watermark.
       CheckLastBatch((15, 2)) // Ensure we see next window
     )
   }
