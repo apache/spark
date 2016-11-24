@@ -30,7 +30,6 @@ import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
-import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
@@ -94,7 +93,8 @@ public class ExternalShuffleSecuritySuite {
     client.init(appId);
     // Registration either succeeds or throws an exception.
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(), "exec0",
-      new ExecutorShuffleInfo(new String[0], 0, ""));
+      new ExecutorShuffleInfo(new String[0], 0,
+        "org.apache.spark.shuffle.sort.SortShuffleManager"));
     client.close();
   }
 

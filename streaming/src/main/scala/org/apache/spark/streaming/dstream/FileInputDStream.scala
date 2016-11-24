@@ -195,10 +195,16 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       )
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
-      val filter = new PathFilter {
+
+      val newFileFilter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
-      val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+      val directoryFilter = new PathFilter {
+        override def accept(path: Path): Boolean = fs.getFileStatus(path).isDirectory
+      }
+      val directories = fs.globStatus(directoryPath, directoryFilter).map(_.getPath)
+      val newFiles = directories.flatMap(dir =>
+        fs.listStatus(dir, newFileFilter).map(_.getPath.toString))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
@@ -276,7 +282,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
           config)
         case None => context.sparkContext.newAPIHadoopFile[K, V, F](file)
       }
-      if (rdd.partitions.size == 0) {
+      if (rdd.partitions.isEmpty) {
         logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
           "files that have been \"moved\" to the directory assigned to the file stream. " +
           "Refer to the streaming programming guide for more details.")
@@ -333,14 +339,13 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
     override def restore() {
       hadoopFiles.toSeq.sortBy(_._1)(Time.ordering).foreach {
-        case (t, f) => {
+        case (t, f) =>
           // Restore the metadata in both files and generatedRDDs
           logInfo("Restoring files for time " + t + " - " +
             f.mkString("[", ", ", "]") )
           batchTimeToSelectedFiles.synchronized { batchTimeToSelectedFiles += ((t, f)) }
           recentlySelectedFiles ++= f
           generatedRDDs += ((t, filesToRDD(f)))
-        }
       }
     }
 

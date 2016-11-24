@@ -1,0 +1,187 @@
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<!DOCTYPE module PUBLIC
+          "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
+          "http://www.puppycrawl.com/dtds/configuration_1_3.dtd">
+
+<!--
+
+    Checkstyle configuration based on the Google coding conventions from:
+
+    -  Google Java Style
+       https://google-styleguide.googlecode.com/svn-history/r130/trunk/javaguide.html
+
+    with Spark-specific changes from:
+
+    http://spark.apache.org/contributing.html#code-style-guide
+
+    Checkstyle is very configurable. Be sure to read the documentation at
+    http://checkstyle.sf.net (or in your downloaded distribution).
+
+    Most Checks are configurable, be sure to consult the documentation.
+
+    To completely disable a check, just comment it out or delete it from the file.
+
+    Authors: Max Vetrenko, Ruslan Diachenko, Roman Ivanov.
+
+ -->
+
+<module name = "Checker">
+    <property name="charset" value="UTF-8"/>
+
+    <property name="severity" value="error"/>
+
+    <property name="fileExtensions" value="java, properties, xml"/>
+
+    <module name="SuppressionFilter">
+      <property name="file" value="dev/checkstyle-suppressions.xml"/>
+    </module>
+
+    <!--
+    If you wish to turn off checking for a section of code, you can put a comment in the source
+    before and after the section, with the following syntax:
+
+      // checkstyle:off no.XXX (such as checkstyle.off: NoFinalizer)
+      ...  // stuff that breaks the styles
+      // checkstyle:on
+    -->
+    <module name="SuppressionCommentFilter">
+        <property name="offCommentFormat" value="checkstyle.off\: ([\w\|]+)"/>
+        <property name="onCommentFormat" value="checkstyle.on\: ([\w\|]+)"/>
+        <property name="checkFormat" value="$1"/>
+    </module>
+
+    <!-- Checks for whitespace                               -->
+    <!-- See http://checkstyle.sf.net/config_whitespace.html -->
+    <module name="FileTabCharacter">
+        <property name="eachLine" value="true"/>
+    </module>
+
+    <module name="RegexpSingleline">
+        <!-- \s matches whitespace character, $ matches end of line. -->
+        <property name="format" value="\s+$"/>
+        <property name="message" value="No trailing whitespace allowed."/>
+    </module>
+
+    <module name="NewlineAtEndOfFile"/>
+
+    <module name="TreeWalker">
+        <module name="OuterTypeFilename"/>
+        <module name="IllegalTokenText">
+            <property name="tokens" value="STRING_LITERAL, CHAR_LITERAL"/>
+            <property name="format" value="\\u00(08|09|0(a|A)|0(c|C)|0(d|D)|22|27|5(C|c))|\\(0(10|11|12|14|15|42|47)|134)"/>
+            <property name="message" value="Avoid using corresponding octal or Unicode escape."/>
+        </module>
+        <module name="AvoidEscapedUnicodeCharacters">
+            <property name="allowEscapesForControlCharacters" value="true"/>
+            <property name="allowByTailComment" value="true"/>
+            <property name="allowNonPrintableEscapes" value="true"/>
+        </module>
+        <module name="LineLength">
+            <property name="max" value="100"/>
+            <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
+        </module>
+        <module name="NoLineWrap"/>
+        <module name="EmptyBlock">
+            <property name="option" value="TEXT"/>
+            <property name="tokens" value="LITERAL_TRY, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, LITERAL_SWITCH"/>
+        </module>
+        <module name="NeedBraces">
+            <property name="allowSingleLineStatement" value="true"/>
+        </module>
+        <module name="OneStatementPerLine"/>
+        <module name="ArrayTypeStyle"/>
+        <module name="FallThrough"/>
+        <module name="UpperEll"/>
+        <module name="ModifierOrder"/>
+        <module name="SeparatorWrap">
+            <property name="tokens" value="DOT"/>
+            <property name="option" value="nl"/>
+        </module>
+        <module name="SeparatorWrap">
+            <property name="tokens" value="COMMA"/>
+            <property name="option" value="EOL"/>
+        </module>
+        <module name="PackageName">
+            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+            <message key="name.invalidPattern"
+             value="Package name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="ClassTypeParameterName">
+            <property name="format" value="([A-Z][a-zA-Z0-9]*$)"/>
+            <message key="name.invalidPattern"
+             value="Class type name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="MethodTypeParameterName">
+            <property name="format" value="([A-Z][a-zA-Z0-9]*)"/>
+            <message key="name.invalidPattern"
+             value="Method type name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="NoFinalizer"/>
+        <module name="GenericWhitespace">
+            <message key="ws.followed"
+             value="GenericWhitespace ''{0}'' is followed by whitespace."/>
+             <message key="ws.preceded"
+             value="GenericWhitespace ''{0}'' is preceded with whitespace."/>
+             <message key="ws.illegalFollow"
+             value="GenericWhitespace ''{0}'' should followed by whitespace."/>
+             <message key="ws.notPreceded"
+             value="GenericWhitespace ''{0}'' is not preceded with whitespace."/>
+        </module>
+        <!-- TODO: 11/09/15 disabled - indentation is currently inconsistent -->
+        <!--
+        <module name="Indentation">
+            <property name="basicOffset" value="4"/>
+            <property name="braceAdjustment" value="0"/>
+            <property name="caseIndent" value="4"/>
+            <property name="throwsIndent" value="4"/>
+            <property name="lineWrappingIndentation" value="4"/>
+            <property name="arrayInitIndent" value="4"/>
+        </module>
+        -->
+        <!-- TODO: 11/09/15 disabled - order is currently wrong in many places -->
+        <!--
+        <module name="ImportOrder">
+            <property name="separated" value="true"/>
+            <property name="ordered" value="true"/>
+            <property name="groups" value="/^javax?\./,scala,*,org.apache.spark"/>
+        </module>
+        -->
+        <module name="MethodParamPad"/>
+        <module name="AnnotationLocation">
+            <property name="tokens" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF"/>
+        </module>
+        <module name="AnnotationLocation">
+            <property name="tokens" value="VARIABLE_DEF"/>
+            <property name="allowSamelineMultipleAnnotations" value="true"/>
+        </module>
+        <module name="MethodName">
+            <property name="format" value="^[a-z][a-z0-9][a-zA-Z0-9_]*$"/>
+            <message key="name.invalidPattern"
+             value="Method name ''{0}'' must match pattern ''{1}''."/>
+        </module>
+        <module name="EmptyCatchBlock">
+            <property name="exceptionVariableName" value="expected"/>
+        </module>
+        <module name="CommentsIndentation"/>
+        <module name="UnusedImports"/>
+        <module name="RedundantImport"/>
+        <module name="RedundantModifier"/>
+        <module name="FileContentsHolder"/>
+    </module>
+</module>

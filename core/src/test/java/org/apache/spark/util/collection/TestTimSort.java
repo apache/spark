@@ -76,7 +76,7 @@ public class TestTimSort {
    * @param length The sum of all run lengths that will be added to <code>runs</code>.
    */
   private static List<Long> runsJDKWorstCase(int minRun, int length) {
-    List<Long> runs = new ArrayList<Long>();
+    List<Long> runs = new ArrayList<>();
 
     long runningTotal = 0, Y = minRun + 4, X = minRun;
 

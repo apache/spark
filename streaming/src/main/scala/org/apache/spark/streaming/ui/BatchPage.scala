@@ -24,7 +24,7 @@ import scala.xml._
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.ui.StreamingJobProgressListener.{OutputOpId, SparkJobId}
+import org.apache.spark.streaming.ui.StreamingJobProgressListener.SparkJobId
 import org.apache.spark.ui.{UIUtils => SparkUIUtils, WebUIPage}
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
@@ -86,7 +86,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
 
   /**
    * Generate a row for a Spark Job. Because duplicated output op infos needs to be collapsed into
-   * one cell, we use "rowspan" for the first row of a output op.
+   * one cell, we use "rowspan" for the first row of an output op.
    */
   private def generateNormalJobRow(
       outputOpData: OutputOperationUIData,
@@ -146,6 +146,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             completed = sparkJob.numCompletedTasks,
             failed = sparkJob.numFailedTasks,
             skipped = sparkJob.numSkippedTasks,
+            killed = sparkJob.numKilledTasks,
             total = sparkJob.numTasks - sparkJob.numSkippedTasks)
         }
       </td>
@@ -259,7 +260,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     } else {
       var nextLineIndex = failure.indexOf("\n")
       if (nextLineIndex < 0) {
-        nextLineIndex = failure.size
+        nextLineIndex = failure.length
       }
       val firstLine = failure.substring(0, nextLineIndex)
       s"Failed due to error: $firstLine\n$failure"

@@ -21,6 +21,8 @@ import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 
@@ -141,7 +143,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
       LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
-    primitiveTypes.map { t =>
+    primitiveTypes.foreach { t =>
       val dataGen = RandomDataGenerator.forType(t, nullable = true).get
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()
@@ -182,7 +184,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
       LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
-    primitiveTypes.map { t =>
+    primitiveTypes.foreach { t =>
       val dataGen = RandomDataGenerator.forType(t, nullable = true).get
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()
@@ -273,7 +275,8 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("BinaryComparison: null test") {
-    val normalInt = Literal(1)
+    // Use -1 (default value for codegen) which can trigger some weird bugs, e.g. SPARK-14757
+    val normalInt = Literal(-1)
     val nullInt = Literal.create(null, IntegerType)
 
     def nullTest(op: (Expression, Expression) => Expression): Unit = {
@@ -291,5 +294,32 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(EqualNullSafe(normalInt, nullInt), false)
     checkEvaluation(EqualNullSafe(nullInt, normalInt), false)
     checkEvaluation(EqualNullSafe(nullInt, nullInt), true)
+  }
+
+  test("EqualTo on complex type") {
+    val array = new GenericArrayData(Array(1, 2, 3))
+    val struct = create_row("a", 1L, array)
+
+    val arrayType = ArrayType(IntegerType)
+    val structType = new StructType()
+      .add("1", StringType)
+      .add("2", LongType)
+      .add("3", ArrayType(IntegerType))
+
+    val projection = UnsafeProjection.create(
+      new StructType().add("array", arrayType).add("struct", structType))
+
+    val unsafeRow = projection(InternalRow(array, struct))
+
+    val unsafeArray = unsafeRow.getArray(0)
+    val unsafeStruct = unsafeRow.getStruct(1, 3)
+
+    checkEvaluation(EqualTo(
+      Literal.create(array, arrayType),
+      Literal.create(unsafeArray, arrayType)), true)
+
+    checkEvaluation(EqualTo(
+      Literal.create(struct, structType),
+      Literal.create(unsafeStruct, structType)), true)
   }
 }

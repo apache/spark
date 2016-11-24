@@ -305,7 +305,7 @@ public class RetryingBlockFetcherSuite {
       }
     }
 
-    assert stub != null;
+    assertNotNull(stub);
     stub.when(fetchStarter).createAndStart((String[]) any(), (BlockFetchingListener) anyObject());
     String[] blockIdArray = blockIds.toArray(new String[blockIds.size()]);
     new RetryingBlockFetcher(conf, fetchStarter, blockIdArray, listener).start();

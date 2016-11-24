@@ -22,7 +22,9 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
+import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.util.Properties
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
@@ -39,15 +41,15 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
-import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
+import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
-
+import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.util._
 
 /**
  * Whether to submit, kill, or request the status of an application.
- * The latter two operations are currently supported only for standalone cluster mode.
+ * The latter two operations are currently supported only for standalone and Mesos cluster modes.
  */
 private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value
@@ -60,7 +62,7 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit {
+object SparkSubmit extends CommandLineUtils {
 
   // Cluster managers
   private val YARN = 1
@@ -74,10 +76,6 @@ object SparkSubmit {
   private val CLUSTER = 2
   private val ALL_DEPLOY_MODES = CLIENT | CLUSTER
 
-  // A special jar name that indicates the class being run is inside of Spark itself, and therefore
-  // no user jar is needed.
-  private val SPARK_INTERNAL = "spark-internal"
-
   // Special primary resource names that represent shells rather than application jars.
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
@@ -88,15 +86,6 @@ object SparkSubmit {
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // scalastyle:off println
-  // Exposed for testing
-  private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
-  private[spark] var printStream: PrintStream = System.err
-  private[spark] def printWarning(str: String): Unit = printStream.println("Warning: " + str)
-  private[spark] def printErrorAndExit(str: String): Unit = {
-    printStream.println("Error: " + str)
-    printStream.println("Run with --help for usage help or --verbose for debug output")
-    exitFn(1)
-  }
   private[spark] def printVersionAndExit(): Unit = {
     printStream.println("""Welcome to
       ____              __
@@ -105,12 +94,18 @@ object SparkSubmit {
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
                         """.format(SPARK_VERSION))
+    printStream.println("Using Scala %s, %s, %s".format(
+      Properties.versionString, Properties.javaVmName, Properties.javaVersion))
+    printStream.println("Branch %s".format(SPARK_BRANCH))
+    printStream.println("Compiled by user %s on %s".format(SPARK_BUILD_USER, SPARK_BUILD_DATE))
+    printStream.println("Revision %s".format(SPARK_REVISION))
+    printStream.println("Url %s".format(SPARK_REPO_URL))
     printStream.println("Type --help for more information.")
     exitFn(0)
   }
   // scalastyle:on println
 
-  def main(args: Array[String]): Unit = {
+  override def main(args: Array[String]): Unit = {
     val appArgs = new SparkSubmitArguments(args)
     if (appArgs.verbose) {
       // scalastyle:off println
@@ -150,6 +145,7 @@ object SparkSubmit {
    * Second, we use this launch environment to invoke the main method of the child
    * main class.
    */
+  @tailrec
   private def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
 
@@ -303,10 +299,11 @@ object SparkSubmit {
     }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
-    // In YARN cluster mode, python files are distributed as regular files, which can be non-local
-    if (args.isPython && !isYarnCluster) {
+    // In YARN cluster mode, python files are distributed as regular files, which can be non-local.
+    // In Mesos cluster mode, non-local python files are automatically downloaded by Mesos.
+    if (args.isPython && !isYarnCluster && !isMesosCluster) {
       if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
-        printErrorAndExit(s"Only local python files are supported: $args.primaryResource")
+        printErrorAndExit(s"Only local python files are supported: ${args.primaryResource}")
       }
       val nonLocalPyFiles = Utils.nonLocalPaths(args.pyFiles).mkString(",")
       if (nonLocalPyFiles.nonEmpty) {
@@ -315,17 +312,14 @@ object SparkSubmit {
     }
 
     // Require all R files to be local
-    if (args.isR && !isYarnCluster) {
+    if (args.isR && !isYarnCluster && !isMesosCluster) {
       if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
-        printErrorAndExit(s"Only local R files are supported: $args.primaryResource")
+        printErrorAndExit(s"Only local R files are supported: ${args.primaryResource}")
       }
     }
 
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
-      case (MESOS, CLUSTER) if args.isR =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for R " +
-          "applications on Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
@@ -403,17 +397,17 @@ object SparkSubmit {
       printErrorAndExit("Distributing R packages with standalone cluster is not supported.")
     }
 
-    // TODO: Support SparkR with mesos cluster
-    if (args.isR && clusterManager == MESOS) {
-      printErrorAndExit("SparkR is not supported for Mesos cluster.")
+    // TODO: Support distributing R packages with mesos cluster
+    if (args.isR && clusterManager == MESOS && !RUtils.rPackages.isEmpty) {
+      printErrorAndExit("Distributing R packages with mesos cluster is not supported.")
     }
 
-    // If we're running a R app, set the main class to our specific R runner
+    // If we're running an R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {
         args.mainClass = "org.apache.spark.api.r.RBackend"
       } else {
-        // If a R file is provided, add it to the child arguments and list of files to deploy.
+        // If an R file is provided, add it to the child arguments and list of files to deploy.
         // Usage: RRunner <main R file> [app arguments]
         args.mainClass = "org.apache.spark.deploy.RRunner"
         args.childArgs = ArrayBuffer(args.primaryResource) ++ args.childArgs
@@ -422,7 +416,7 @@ object SparkSubmit {
     }
 
     if (isYarnCluster && args.isR) {
-      // In yarn-cluster mode for a R app, add primary resource to files
+      // In yarn-cluster mode for an R app, add primary resource to files
       // that can be distributed with the job
       args.files = mergeFileLists(args.files, args.primaryResource)
     }
@@ -439,7 +433,6 @@ object SparkSubmit {
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.submit.deployMode"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
-      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = "spark.driver.memory"),
@@ -450,27 +443,15 @@ object SparkSubmit {
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.driver.extraLibraryPath"),
 
-      // Yarn client only
-      OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
+      // Yarn only
+      OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.instances"),
-      OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
-      OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
-      OptionAssigner(args.principal, YARN, CLIENT, sysProp = "spark.yarn.principal"),
-      OptionAssigner(args.keytab, YARN, CLIENT, sysProp = "spark.yarn.keytab"),
-
-      // Yarn cluster only
-      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
-      OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
-      OptionAssigner(args.driverCores, YARN, CLUSTER, clOption = "--driver-cores"),
-      OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
-      OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
-      OptionAssigner(args.executorCores, YARN, CLUSTER, clOption = "--executor-cores"),
-      OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),
-      OptionAssigner(args.archives, YARN, CLUSTER, clOption = "--archives"),
-      OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
-      OptionAssigner(args.principal, YARN, CLUSTER, clOption = "--principal"),
-      OptionAssigner(args.keytab, YARN, CLUSTER, clOption = "--keytab"),
+      OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.jars"),
+      OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.files"),
+      OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.archives"),
+      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
+      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
@@ -481,10 +462,11 @@ object SparkSubmit {
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.files"),
-      OptionAssigner(args.jars, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars"),
-      OptionAssigner(args.driverMemory, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.jars, LOCAL, CLIENT, sysProp = "spark.jars"),
+      OptionAssigner(args.jars, STANDALONE | MESOS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN, CLUSTER,
         sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN, CLUSTER,
         sysProp = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         sysProp = "spark.driver.supervise"),
@@ -548,6 +530,10 @@ object SparkSubmit {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
       }
+
+      if (args.pyFiles != null) {
+        sysProps("spark.submit.pyFiles") = args.pyFiles
+      }
     }
 
     // assure a keytab is available from any place in a JVM
@@ -574,16 +560,13 @@ object SparkSubmit {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.isPython) {
         childArgs += ("--primary-py-file", args.primaryResource)
-        if (args.pyFiles != null) {
-          childArgs += ("--py-files", args.pyFiles)
-        }
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
       } else if (args.isR) {
         val mainFile = new Path(args.primaryResource).getName
         childArgs += ("--primary-r-file", mainFile)
         childArgs += ("--class", "org.apache.spark.deploy.RRunner")
       } else {
-        if (args.primaryResource != SPARK_INTERNAL) {
+        if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
           childArgs += ("--jar", args.primaryResource)
         }
         childArgs += ("--class", args.mainClass)
@@ -602,6 +585,9 @@ object SparkSubmit {
         if (args.pyFiles != null) {
           sysProps("spark.submit.pyFiles") = args.pyFiles
         }
+      } else if (args.isR) {
+        // Second argument is main class
+        childArgs += (args.primaryResource, "")
       } else {
         childArgs += (args.primaryResource, args.mainClass)
       }
@@ -624,9 +610,9 @@ object SparkSubmit {
     val pathConfigs = Seq(
       "spark.jars",
       "spark.files",
-      "spark.yarn.jar",
       "spark.yarn.dist.files",
-      "spark.yarn.dist.archives")
+      "spark.yarn.dist.archives",
+      "spark.yarn.dist.jars")
     pathConfigs.foreach { config =>
       // Replace old URIs with resolved URIs, if they exist
       sysProps.get(config).foreach { oldValue =>
@@ -639,7 +625,14 @@ object SparkSubmit {
     // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
     sysProps.get("spark.submit.pyFiles").foreach { pyFiles =>
       val resolvedPyFiles = Utils.resolveURIs(pyFiles)
-      val formattedPyFiles = PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
+      val formattedPyFiles = if (!isYarnCluster && !isMesosCluster) {
+        PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
+      } else {
+        // Ignoring formatting python path in yarn and mesos cluster mode, these two modes
+        // support dealing with remote python files, they could distribute and add python files
+        // locally.
+        resolvedPyFiles
+      }
       sysProps("spark.submit.pyFiles") = formattedPyFiles
     }
 
@@ -721,6 +714,7 @@ object SparkSubmit {
       throw new IllegalStateException("The main method in the given main class must be static")
     }
 
+    @tailrec
     def findCause(t: Throwable): Throwable = t match {
       case e: UndeclaredThrowableException =>
         if (e.getCause() != null) findCause(e.getCause()) else e
@@ -802,7 +796,7 @@ object SparkSubmit {
   }
 
   private[deploy] def isInternal(res: String): Boolean = {
-    res == SPARK_INTERNAL
+    res == SparkLauncher.NO_RESOURCE
   }
 
   /**
@@ -902,9 +896,12 @@ private[spark] object SparkSubmitUtils {
     val localIvyRoot = new File(ivySettings.getDefaultIvyUserDir, "local")
     localIvy.setLocal(true)
     localIvy.setRepository(new FileRepository(localIvyRoot))
-    val ivyPattern = Seq("[organisation]", "[module]", "[revision]", "[type]s",
-      "[artifact](-[classifier]).[ext]").mkString(File.separator)
-    localIvy.addIvyPattern(localIvyRoot.getAbsolutePath + File.separator + ivyPattern)
+    val ivyPattern = Seq(localIvyRoot.getAbsolutePath, "[organisation]", "[module]", "[revision]",
+      "ivys", "ivy.xml").mkString(File.separator)
+    localIvy.addIvyPattern(ivyPattern)
+    val artifactPattern = Seq(localIvyRoot.getAbsolutePath, "[organisation]", "[module]",
+      "[revision]", "[type]s", "[artifact](-[classifier]).[ext]").mkString(File.separator)
+    localIvy.addArtifactPattern(artifactPattern)
     localIvy.setName("local-ivy-cache")
     cr.add(localIvy)
 
@@ -949,7 +946,7 @@ private[spark] object SparkSubmitUtils {
     artifacts.foreach { mvn =>
       val ri = ModuleRevisionId.newInstance(mvn.groupId, mvn.artifactId, mvn.version)
       val dd = new DefaultDependencyDescriptor(ri, false, false)
-      dd.addDependencyConfiguration(ivyConfName, ivyConfName)
+      dd.addDependencyConfiguration(ivyConfName, ivyConfName + "(runtime)")
       // scalastyle:off println
       printStream.println(s"${dd.getDependencyId} added as a dependency")
       // scalastyle:on println
@@ -965,9 +962,9 @@ private[spark] object SparkSubmitUtils {
     // Add scala exclusion rule
     md.addExcludeRule(createExclusion("*:scala-library:*", ivySettings, ivyConfName))
 
-    // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka and
+    // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
     // other spark-streaming utility components. Underscore is there to differentiate between
-    // spark-streaming_2.1x and spark-streaming-kafka-assembly_2.1x
+    // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
     val components = Seq("catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 

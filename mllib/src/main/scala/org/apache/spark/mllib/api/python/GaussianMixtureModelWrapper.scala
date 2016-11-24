@@ -24,15 +24,15 @@ import org.apache.spark.mllib.clustering.GaussianMixtureModel
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
-  * Wrapper around GaussianMixtureModel to provide helper methods in Python
-  */
+ * Wrapper around GaussianMixtureModel to provide helper methods in Python
+ */
 private[python] class GaussianMixtureModelWrapper(model: GaussianMixtureModel) {
   val weights: Vector = Vectors.dense(model.weights)
   val k: Int = weights.size
 
   /**
-    * Returns gaussians as a List of Vectors and Matrices corresponding each MultivariateGaussian
-    */
+   * Returns gaussians as a List of Vectors and Matrices corresponding each MultivariateGaussian
+   */
   val gaussians: Array[Byte] = {
     val modelGaussians = model.gaussians.map { gaussian =>
       Array[Any](gaussian.mu, gaussian.sigma)

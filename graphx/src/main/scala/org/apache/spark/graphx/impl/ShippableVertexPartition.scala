@@ -28,7 +28,7 @@ private[graphx]
 class VertexAttributeBlock[VD: ClassTag](val vids: Array[VertexId], val attrs: Array[VD])
   extends Serializable {
   def iterator: Iterator[(VertexId, VD)] =
-    (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
+    (0 until vids.length).iterator.map { i => (vids(i), attrs(i)) }
 }
 
 private[graphx]
@@ -49,7 +49,7 @@ object ShippableVertexPartition {
   /**
    * Construct a `ShippableVertexPartition` from the given vertices with the specified routing
    * table, filling in missing vertices mentioned in the routing table using `defaultVal`,
-   * and merging duplicate vertex atrribute with mergeFunc.
+   * and merging duplicate vertex attribute with mergeFunc.
    */
   def apply[VD: ClassTag](
       iter: Iterator[(VertexId, VD)], routingTable: RoutingTablePartition, defaultVal: VD,

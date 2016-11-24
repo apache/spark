@@ -53,12 +53,14 @@ object AttributeSet {
  * cosmetically (e.g., the names have different capitalizations).
  *
  * Note that we do not override equality for Attribute references as it is really weird when
- * `AttributeReference("a"...) == AttrributeReference("b", ...)`. This tactic leads to broken tests,
+ * `AttributeReference("a"...) == AttributeReference("b", ...)`. This tactic leads to broken tests,
  * and also makes doing transformations hard (we always try keep older trees instead of new ones
  * when the transformation was a no-op).
  */
 class AttributeSet private (val baseSet: Set[AttributeEquals])
   extends Traversable[Attribute] with Serializable {
+
+  override def hashCode: Int = baseSet.hashCode()
 
   /** Returns true if the members of this AttributeSet and other are the same. */
   override def equals(other: Any): Boolean = other match {

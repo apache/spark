@@ -18,11 +18,13 @@
 package org.apache.spark.scheduler.cluster
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -38,9 +40,12 @@ private[spark] abstract class YarnSchedulerBackend(
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
-  if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
-    minRegisteredRatio = 0.8
-  }
+  override val minRegisteredRatio =
+    if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
+      0.8
+    } else {
+      super.minRegisteredRatio
+    }
 
   protected var totalExpectedExecutors = 0
 
@@ -95,11 +100,12 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * Get the attempt ID for this run, if the cluster manager supports multiple
    * attempts. Applications run in client mode will not have attempt IDs.
+   * This attempt ID only includes attempt counter, like "1", "2".
    *
    * @return The application attempt id, if available.
    */
   override def applicationAttemptId(): Option[String] = {
-    attemptId.map(_.toString)
+    attemptId.map(_.getAttemptId.toString)
   }
 
   /**
@@ -119,16 +125,16 @@ private[spark] abstract class YarnSchedulerBackend(
    * Request executors from the ApplicationMaster by specifying the total number desired.
    * This includes executors already pending or running.
    */
-  override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
-    yarnSchedulerEndpointRef.askWithRetry[Boolean](
+  override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+    yarnSchedulerEndpointRef.ask[Boolean](
       RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount))
   }
 
   /**
    * Request that the ApplicationMaster kill the specified executors.
    */
-  override def doKillExecutors(executorIds: Seq[String]): Boolean = {
-    yarnSchedulerEndpointRef.askWithRetry[Boolean](KillExecutors(executorIds))
+  override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {
+    yarnSchedulerEndpointRef.ask[Boolean](KillExecutors(executorIds))
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -206,37 +212,35 @@ private[spark] abstract class YarnSchedulerBackend(
     extends ThreadSafeRpcEndpoint with Logging {
     private var amEndpoint: Option[RpcEndpointRef] = None
 
-    private val askAmThreadPool =
-      ThreadUtils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-thread-pool")
-    implicit val askAmExecutor = ExecutionContext.fromExecutor(askAmThreadPool)
-
     private[YarnSchedulerBackend] def handleExecutorDisconnectedFromDriver(
         executorId: String,
         executorRpcAddress: RpcAddress): Unit = {
-      amEndpoint match {
+      val removeExecutorMessage = amEndpoint match {
         case Some(am) =>
           val lossReasonRequest = GetExecutorLossReason(executorId)
-          val future = am.ask[ExecutorLossReason](lossReasonRequest, askTimeout)
-          future onSuccess {
-            case reason: ExecutorLossReason => {
-              driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
-            }
-          }
-          future onFailure {
-            case NonFatal(e) => {
-              logWarning(s"Attempted to get executor loss reason" +
-                s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
-                s" but got no response. Marking as slave lost.", e)
-              driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
-            }
-            case t => throw t
-          }
+          am.ask[ExecutorLossReason](lossReasonRequest, askTimeout)
+            .map { reason => RemoveExecutor(executorId, reason) }(ThreadUtils.sameThread)
+            .recover {
+              case NonFatal(e) =>
+                logWarning(s"Attempted to get executor loss reason" +
+                  s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
+                  s" but got no response. Marking as slave lost.", e)
+                RemoveExecutor(executorId, SlaveLost())
+            }(ThreadUtils.sameThread)
         case None =>
           logWarning("Attempted to check for an executor loss reason" +
             " before the AM has registered!")
-          driverEndpoint.askWithRetry[Boolean](
-            RemoveExecutor(executorId, SlaveLost("AM is not yet registered.")))
+          Future.successful(RemoveExecutor(executorId, SlaveLost("AM is not yet registered.")))
       }
+
+      removeExecutorMessage
+        .flatMap { message =>
+          driverEndpoint.ask[Boolean](message)
+        }(ThreadUtils.sameThread)
+        .onFailure {
+          case NonFatal(e) => logError(
+            s"Error requesting driver to remove executor $executorId after disconnection.", e)
+        }(ThreadUtils.sameThread)
     }
 
     override def receive: PartialFunction[Any, Unit] = {
@@ -254,9 +258,13 @@ private[spark] abstract class YarnSchedulerBackend(
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
 
-      case RemoveExecutor(executorId, reason) =>
+      case r @ RemoveExecutor(executorId, reason) =>
         logWarning(reason.toString)
-        removeExecutor(executorId, reason)
+        driverEndpoint.ask[Boolean](r).onFailure {
+          case e =>
+            logError("Error requesting driver to remove executor" +
+              s" $executorId for reason $reason", e)
+        }(ThreadUtils.sameThread)
     }
 
 
@@ -264,13 +272,12 @@ private[spark] abstract class YarnSchedulerBackend(
       case r: RequestExecutors =>
         amEndpoint match {
           case Some(am) =>
-            Future {
-              context.reply(am.askWithRetry[Boolean](r))
-            } onFailure {
-              case NonFatal(e) =>
+            am.ask[Boolean](r).andThen {
+              case Success(b) => context.reply(b)
+              case Failure(NonFatal(e)) =>
                 logError(s"Sending $r to AM was unsuccessful", e)
                 context.sendFailure(e)
-            }
+            }(ThreadUtils.sameThread)
           case None =>
             logWarning("Attempted to request executors before the AM has registered!")
             context.reply(false)
@@ -279,17 +286,19 @@ private[spark] abstract class YarnSchedulerBackend(
       case k: KillExecutors =>
         amEndpoint match {
           case Some(am) =>
-            Future {
-              context.reply(am.askWithRetry[Boolean](k))
-            } onFailure {
-              case NonFatal(e) =>
+            am.ask[Boolean](k).andThen {
+              case Success(b) => context.reply(b)
+              case Failure(NonFatal(e)) =>
                 logError(s"Sending $k to AM was unsuccessful", e)
                 context.sendFailure(e)
-            }
+            }(ThreadUtils.sameThread)
           case None =>
             logWarning("Attempted to kill executors before the AM has registered!")
             context.reply(false)
         }
+
+      case RetrieveLastAllocatedExecutorId =>
+        context.reply(currentExecutorIdCounter)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -297,10 +306,6 @@ private[spark] abstract class YarnSchedulerBackend(
         logWarning(s"ApplicationMaster has disassociated: $remoteAddress")
         amEndpoint = None
       }
-    }
-
-    override def onStop(): Unit = {
-      askAmThreadPool.shutdownNow()
     }
   }
 }

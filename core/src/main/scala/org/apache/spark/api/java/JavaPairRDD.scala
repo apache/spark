@@ -139,9 +139,12 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * math.ceil(numItems * samplingRate) over all key values.
    */
   def sampleByKey(withReplacement: Boolean,
-      fractions: java.util.Map[K, Double],
+      fractions: java.util.Map[K, jl.Double],
       seed: Long): JavaPairRDD[K, V] =
-    new JavaPairRDD[K, V](rdd.sampleByKey(withReplacement, fractions.asScala, seed))
+    new JavaPairRDD[K, V](rdd.sampleByKey(
+      withReplacement,
+      fractions.asScala.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
+      seed))
 
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling).
@@ -154,7 +157,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Use Utils.random.nextLong as the default seed for the random number generator.
    */
   def sampleByKey(withReplacement: Boolean,
-      fractions: java.util.Map[K, Double]): JavaPairRDD[K, V] =
+      fractions: java.util.Map[K, jl.Double]): JavaPairRDD[K, V] =
     sampleByKey(withReplacement, fractions, Utils.random.nextLong)
 
   /**
@@ -168,9 +171,12 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * two additional passes.
    */
   def sampleByKeyExact(withReplacement: Boolean,
-      fractions: java.util.Map[K, Double],
+      fractions: java.util.Map[K, jl.Double],
       seed: Long): JavaPairRDD[K, V] =
-    new JavaPairRDD[K, V](rdd.sampleByKeyExact(withReplacement, fractions.asScala, seed))
+    new JavaPairRDD[K, V](rdd.sampleByKeyExact(
+      withReplacement,
+      fractions.asScala.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
+      seed))
 
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
@@ -186,7 +192,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def sampleByKeyExact(
       withReplacement: Boolean,
-      fractions: java.util.Map[K, Double]): JavaPairRDD[K, V] =
+      fractions: java.util.Map[K, jl.Double]): JavaPairRDD[K, V] =
     sampleByKeyExact(withReplacement, fractions, Utils.random.nextLong)
 
   /**
@@ -200,7 +206,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
    *
-   * Note that this method performs a shuffle internally.
+   * @note This method performs a shuffle internally.
    */
   def intersection(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.intersection(other.rdd))
@@ -217,9 +223,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
-   * "combined type" C. Note that V and C can be different -- for example, one might group an
-   * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
-   * functions:
+   * "combined type" C.
+   *
+   * Users provide three functions:
    *
    *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
@@ -228,6 +234,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, the serializer that is use
    * for the shuffle, and whether to perform map-side aggregation (if a mapper can produce multiple
    * items with the same key).
+   *
+   * @note V and C can be different -- for example, one might group an RDD of type (Int, Int) into
+   * an RDD of type (Int, List[Int]).
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
       mergeValue: JFunction2[C, V, C],
@@ -249,9 +258,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
-   * "combined type" C. Note that V and C can be different -- for example, one might group an
-   * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
-   * functions:
+   * "combined type" C.
+   *
+   * Users provide three functions:
    *
    *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
@@ -259,6 +268,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *
    * In addition, users can control the partitioning of the output RDD. This method automatically
    * uses map-side aggregation in shuffling the RDD.
+   *
+   * @note V and C can be different -- for example, one might group an RDD of type (Int, Int) into
+   * an RDD of type (Int, List[Int]).
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
       mergeValue: JFunction2[C, V, C],
@@ -392,7 +404,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Allows controlling the
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    *
-   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
    * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
    * will provide much better performance.
    */
@@ -403,7 +415,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with into `numPartitions` partitions.
    *
-   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
    * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
    * will provide much better performance.
    */
@@ -461,10 +473,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     fromRDD(rdd.partitionBy(partitioner))
 
   /**
-    * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
-    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
-    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
-    */
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
+   */
   def join[W](other: JavaPairRDD[K, W], partitioner: Partitioner): JavaPairRDD[K, (V, W)] =
     fromRDD(rdd.join(other, partitioner))
 
@@ -533,7 +545,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Group the values for each key in the RDD into a single sequence. Hash-partitions the
    * resulting RDD with the existing partitioner/parallelism level.
    *
-   * Note: If you are grouping in order to perform an aggregation (such as a sum or average) over
+   * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
    * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
    * will provide much better performance.
    */

@@ -34,7 +34,7 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     try {
-      StreamingContext.getActive().map { _.stop() }
+      StreamingContext.getActive().foreach(_.stop())
     } finally {
       super.afterAll()
     }
@@ -97,7 +97,7 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
       assert(blockRDD.walRecordHandles.toSeq === blockInfos.map { _.walRecordHandleOption.get })
   }
 
-  testWithWAL("createBlockRDD creates BlockRDD when some block info dont have WAL info") {
+  testWithWAL("createBlockRDD creates BlockRDD when some block info don't have WAL info") {
     receiverStream =>
       val blockInfos1 = Seq.fill(2) { createBlockInfo(withWALInfo = true) }
       val blockInfos2 = Seq.fill(3) { createBlockInfo(withWALInfo = false) }

@@ -20,7 +20,6 @@ package org.apache.spark.streaming
 import java.io.{IOException, ObjectInputStream}
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.RDD

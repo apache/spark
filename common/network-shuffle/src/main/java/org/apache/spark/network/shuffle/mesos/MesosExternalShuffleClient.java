@@ -19,7 +19,12 @@ package org.apache.spark.network.shuffle.mesos;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +44,14 @@ import org.apache.spark.network.util.TransportConf;
  * has to detect this itself.
  */
 public class MesosExternalShuffleClient extends ExternalShuffleClient {
-  private final Logger logger = LoggerFactory.getLogger(MesosExternalShuffleClient.class);
+  private static final Logger logger = LoggerFactory.getLogger(MesosExternalShuffleClient.class);
+
+  private final ScheduledExecutorService heartbeaterThread =
+      Executors.newSingleThreadScheduledExecutor(
+        new ThreadFactoryBuilder()
+          .setDaemon(true)
+          .setNameFormat("mesos-external-shuffle-client-heartbeater")
+          .build());
 
   /**
    * Creates an Mesos external shuffle client that wraps the {@link ExternalShuffleClient}.
@@ -53,21 +65,59 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
     super(conf, secretKeyHolder, saslEnabled, saslEncryptionEnabled);
   }
 
-  public void registerDriverWithShuffleService(String host, int port) throws IOException {
-    checkInit();
-    ByteBuffer registerDriver = new RegisterDriver(appId).toByteBuffer();
-    TransportClient client = clientFactory.createClient(host, port);
-    client.sendRpc(registerDriver, new RpcResponseCallback() {
-      @Override
-      public void onSuccess(ByteBuffer response) {
-        logger.info("Successfully registered app " + appId + " with external shuffle service.");
-      }
+  public void registerDriverWithShuffleService(
+      String host,
+      int port,
+      long heartbeatTimeoutMs,
+      long heartbeatIntervalMs) throws IOException {
 
-      @Override
-      public void onFailure(Throwable e) {
-        logger.warn("Unable to register app " + appId + " with external shuffle service. " +
+    checkInit();
+    ByteBuffer registerDriver = new RegisterDriver(appId, heartbeatTimeoutMs).toByteBuffer();
+    TransportClient client = clientFactory.createClient(host, port);
+    client.sendRpc(registerDriver, new RegisterDriverCallback(client, heartbeatIntervalMs));
+  }
+
+  private class RegisterDriverCallback implements RpcResponseCallback {
+    private final TransportClient client;
+    private final long heartbeatIntervalMs;
+
+    private RegisterDriverCallback(TransportClient client, long heartbeatIntervalMs) {
+      this.client = client;
+      this.heartbeatIntervalMs = heartbeatIntervalMs;
+    }
+
+    @Override
+    public void onSuccess(ByteBuffer response) {
+      heartbeaterThread.scheduleAtFixedRate(
+          new Heartbeater(client), 0, heartbeatIntervalMs, TimeUnit.MILLISECONDS);
+      logger.info("Successfully registered app " + appId + " with external shuffle service.");
+    }
+
+    @Override
+    public void onFailure(Throwable e) {
+      logger.warn("Unable to register app " + appId + " with external shuffle service. " +
           "Please manually remove shuffle data after driver exit. Error: " + e);
-      }
-    });
+    }
+  }
+
+  @Override
+  public void close() {
+    heartbeaterThread.shutdownNow();
+    super.close();
+  }
+
+  private class Heartbeater implements Runnable {
+
+    private final TransportClient client;
+
+    private Heartbeater(TransportClient client) {
+      this.client = client;
+    }
+
+    @Override
+    public void run() {
+      // TODO: Stop sending heartbeats if the shuffle service has lost the app due to timeout
+      client.send(new ShuffleServiceHeartbeat(appId).toByteBuffer());
+    }
   }
 }

@@ -29,8 +29,8 @@ export LC_ALL=C
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
 # NOTE: These should match those in the release publishing script
-HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pyarn -Phive"
-MVN="build/mvn --force"
+HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pyarn -Phive"
+MVN="build/mvn"
 HADOOP_PROFILES=(
     hadoop-2.2
     hadoop-2.3
@@ -79,7 +79,7 @@ for HADOOP_PROFILE in "${HADOOP_PROFILES[@]}"; do
   echo "Generating dependency manifest for $HADOOP_PROFILE"
   mkdir -p dev/pr-deps
   $MVN $HADOOP2_MODULE_PROFILES -P$HADOOP_PROFILE dependency:build-classpath -pl assembly \
-    | grep "Building Spark Project Assembly" -A 5 \
+    | grep "Dependencies classpath:" -A 1 \
     | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
     | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_PROFILE
 done

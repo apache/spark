@@ -30,7 +30,7 @@ dependencies, and can support different cluster managers and deploy modes that S
 
 {% highlight bash %}
 ./bin/spark-submit \
-  --class <main-class>
+  --class <main-class> \
   --master <master-url> \
   --deploy-mode <deploy-mode> \
   --conf <key>=<value> \
@@ -58,8 +58,8 @@ for applications that involve the REPL (e.g. Spark shell).
 
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
-the drivers and the executors. Note that `cluster` mode is currently not supported for
-Mesos clusters. Currently only YARN supports cluster mode for Python applications.
+the drivers and the executors. Currently, standalone mode does not support cluster mode for Python
+applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
@@ -92,8 +92,8 @@ run it with `--help`. Here are a few examples of common options:
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
-  --deploy-mode cluster
-  --supervise
+  --deploy-mode cluster \
+  --supervise \
   --executor-memory 20G \
   --total-executor-cores 100 \
   /path/to/examples.jar \
@@ -120,8 +120,8 @@ export HADOOP_CONF_DIR=XXX
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master mesos://207.184.161.138:7077 \
-  --deploy-mode cluster
-  --supervise
+  --deploy-mode cluster \
+  --supervise \
   --executor-memory 20G \
   --total-executor-cores 100 \
   http://path/to/examples.jar \
@@ -190,6 +190,8 @@ is handled automatically, and with Spark standalone, automatic cleanup can be co
 Users may also include any other dependencies by supplying a comma-delimited list of maven coordinates
 with `--packages`. All transitive dependencies will be handled when using this command. Additional
 repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`.
+(Note that credentials for password-protected repositories can be supplied in some cases in the repository URI,
+such as in `https://user:password@host/...`. Be careful when supplying credentials this way.)
 These commands can be used with `pyspark`, `spark-shell`, and `spark-submit` to include Spark Packages.
 
 For Python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries

@@ -22,7 +22,9 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
 import org.apache.spark.mllib.clustering.PowerIterationClustering
+// $example off$
 import org.apache.spark.rdd.RDD
 
 /**
@@ -75,14 +77,13 @@ object PowerIterationClusteringExample {
         .action((x, c) => c.copy(maxIterations = x))
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName(s"PowerIterationClustering with $params")
@@ -90,6 +91,7 @@ object PowerIterationClusteringExample {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
+    // $example on$
     val circlesRdd = generateCirclesRdd(sc, params.k, params.numPoints)
     val model = new PowerIterationClustering()
       .setK(params.k)
@@ -101,12 +103,13 @@ object PowerIterationClusteringExample {
     val assignments = clusters.toList.sortBy { case (k, v) => v.length }
     val assignmentsStr = assignments
       .map { case (k, v) =>
-      s"$k -> ${v.sorted.mkString("[", ",", "]")}"
-    }.mkString(", ")
+        s"$k -> ${v.sorted.mkString("[", ",", "]")}"
+      }.mkString(", ")
     val sizesStr = assignments.map {
       _._2.length
     }.sorted.mkString("(", ",", ")")
     println(s"Cluster assignments: $assignmentsStr\ncluster sizes: $sizesStr")
+    // $example off$
 
     sc.stop()
   }

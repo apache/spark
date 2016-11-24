@@ -18,7 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{File, IOException}
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 import scala.collection.JavaConverters._
@@ -30,7 +30,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 
@@ -164,6 +164,7 @@ object MasterFailureTest extends Logging {
     val mergedOutput = runStreams(ssc, lastExpectedOutput, maxTimeToRun)
 
     fileGeneratingThread.join()
+    ssc.stop()
     fs.delete(checkpointDir, true)
     fs.delete(testDir, true)
     logInfo("Finished test after " + killCount + " failures")
@@ -371,7 +372,7 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
         val localFile = new File(localTestDir, (i + 1).toString)
         val hadoopFile = new Path(testDir, (i + 1).toString)
         val tempHadoopFile = new Path(testDir, ".tmp_" + (i + 1).toString)
-        Files.write(input(i) + "\n", localFile, Charset.forName("UTF-8"))
+        Files.write(input(i) + "\n", localFile, StandardCharsets.UTF_8)
         var tries = 0
         var done = false
             while (!done && tries < maxTries) {
@@ -382,11 +383,10 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
                 fs.rename(tempHadoopFile, hadoopFile)
             done = true
           } catch {
-            case ioe: IOException => {
+            case ioe: IOException =>
                   fs = testDir.getFileSystem(new Configuration())
                   logWarning("Attempt " + tries + " at generating file " + hadoopFile + " failed.",
                     ioe)
-            }
           }
         }
         if (!done) {

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.util.Utils
 
@@ -31,19 +32,30 @@ class SparkPlanInfo(
     val simpleString: String,
     val children: Seq[SparkPlanInfo],
     val metadata: Map[String, String],
-    val metrics: Seq[SQLMetricInfo])
+    val metrics: Seq[SQLMetricInfo]) {
 
-private[sql] object SparkPlanInfo {
+  override def hashCode(): Int = {
+    // hashCode of simpleString should be good enough to distinguish the plans from each other
+    // within a plan
+    simpleString.hashCode
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case o: SparkPlanInfo =>
+      nodeName == o.nodeName && simpleString == o.simpleString && children == o.children
+    case _ => false
+  }
+}
+
+private[execution] object SparkPlanInfo {
 
   def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
     val children = plan match {
-      case WholeStageCodegen(child, _) => child :: Nil
-      case InputAdapter(child) => child :: Nil
-      case plan => plan.children
+      case ReusedExchangeExec(_, child) => child :: Nil
+      case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
-      new SQLMetricInfo(metric.name.getOrElse(key), metric.id,
-        Utils.getFormattedClassName(metric.param))
+      new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
     }
 
     new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan),

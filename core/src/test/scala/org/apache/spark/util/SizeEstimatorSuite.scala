@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
 import org.apache.spark.SparkFunSuite
 
@@ -150,12 +150,12 @@ class SizeEstimatorSuite
 
     val buf = new ArrayBuffer[DummyString]()
     for (i <- 0 until 5000) {
-      buf.append(new DummyString(new Array[Char](10)))
+      buf += new DummyString(new Array[Char](10))
     }
     assertResult(340016)(SizeEstimator.estimate(buf.toArray))
 
     for (i <- 0 until 5000) {
-      buf.append(new DummyString(arr))
+      buf += new DummyString(arr)
     }
     assertResult(683912)(SizeEstimator.estimate(buf.toArray))
 

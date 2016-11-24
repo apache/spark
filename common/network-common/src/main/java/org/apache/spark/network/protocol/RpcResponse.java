@@ -19,7 +19,6 @@ package org.apache.spark.network.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;

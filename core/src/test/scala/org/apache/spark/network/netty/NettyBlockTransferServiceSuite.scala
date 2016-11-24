@@ -17,10 +17,13 @@
 
 package org.apache.spark.network.netty
 
+import scala.util.Random
+
 import org.mockito.Mockito.mock
 import org.scalatest._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config._
 import org.apache.spark.network.BlockDataManager
 
 class NettyBlockTransferServiceSuite
@@ -59,28 +62,35 @@ class NettyBlockTransferServiceSuite
   }
 
   test("can bind to a specific port") {
-    val port = 17634
+    val port = 17634 + Random.nextInt(10000)
+    logInfo("random port for test: " + port)
     service0 = createService(port)
-    service0.port should be >= port
-    service0.port should be <= (port + 10) // avoid testing equality in case of simultaneous tests
+    verifyServicePort(expectedPort = port, actualPort = service0.port)
   }
 
   test("can bind to a specific port twice and the second increments") {
-    val port = 17634
+    val port = 17634 + Random.nextInt(10000)
+    logInfo("random port for test: " + port)
     service0 = createService(port)
-    service1 = createService(port)
-    service0.port should be >= port
-    service0.port should be <= (port + 10)
-    service1.port should be (service0.port + 1)
+    verifyServicePort(expectedPort = port, actualPort = service0.port)
+    service1 = createService(service0.port)
+    // `service0.port` is occupied, so `service1.port` should not be `service0.port`
+    verifyServicePort(expectedPort = service0.port + 1, actualPort = service1.port)
+  }
+
+  private def verifyServicePort(expectedPort: Int, actualPort: Int): Unit = {
+    actualPort should be >= expectedPort
+    // avoid testing equality in case of simultaneous tests
+    actualPort should be <= (expectedPort + 10)
   }
 
   private def createService(port: Int): NettyBlockTransferService = {
     val conf = new SparkConf()
       .set("spark.app.id", s"test-${getClass.getName}")
-      .set("spark.blockManager.port", port.toString)
     val securityManager = new SecurityManager(conf)
     val blockDataManager = mock(classOf[BlockDataManager])
-    val service = new NettyBlockTransferService(conf, securityManager, numCores = 1)
+    val service = new NettyBlockTransferService(conf, securityManager, "localhost", "localhost",
+      port, 1)
     service.init(blockDataManager)
     service
   }

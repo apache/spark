@@ -17,21 +17,20 @@
 
 package org.apache.spark.network.sasl;
 
-import java.lang.Override;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A class that manages shuffle secret used by the external shuffle service.
  */
 public class ShuffleSecretManager implements SecretKeyHolder {
-  private final Logger logger = LoggerFactory.getLogger(ShuffleSecretManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(ShuffleSecretManager.class);
+
   private final ConcurrentHashMap<String, String> shuffleSecretMap;
 
   // Spark user used for authenticating SASL connections
@@ -39,7 +38,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   private static final String SPARK_SASL_USER = "sparkSaslUser";
 
   public ShuffleSecretManager() {
-    shuffleSecretMap = new ConcurrentHashMap<String, String>();
+    shuffleSecretMap = new ConcurrentHashMap<>();
   }
 
   /**

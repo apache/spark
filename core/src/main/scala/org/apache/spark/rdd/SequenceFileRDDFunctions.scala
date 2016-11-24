@@ -23,13 +23,14 @@ import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,
- * through an implicit conversion. Note that this can't be part of PairRDDFunctions because
- * we need more implicit parameters to convert our keys and values to Writable.
+ * through an implicit conversion.
  *
+ * @note This can't be part of PairRDDFunctions because we need more implicit parameters to
+ * convert our keys and values to Writable.
  */
 class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag](
     self: RDD[(K, V)],

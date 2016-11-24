@@ -42,8 +42,8 @@ class KinesisUtils(object):
         Create an input stream that pulls messages from a Kinesis stream. This uses the
         Kinesis Client Library (KCL) to pull messages from Kinesis.
 
-        Note: The given AWS credentials will get saved in DStream checkpoints if checkpointing is
-        enabled. Make sure that your checkpoint directory is secure.
+        .. note:: The given AWS credentials will get saved in DStream checkpoints if checkpointing
+            is enabled. Make sure that your checkpoint directory is secure.
 
         :param ssc:  StreamingContext object
         :param kinesisAppName:  Kinesis application name used by the Kinesis Client Library (KCL) to
@@ -74,16 +74,14 @@ class KinesisUtils(object):
 
         try:
             # Use KinesisUtilsPythonHelper to access Scala's KinesisUtils
-            helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
-                .loadClass("org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper")
-            helper = helperClass.newInstance()
-            jstream = helper.createStream(ssc._jssc, kinesisAppName, streamName, endpointUrl,
-                                          regionName, initialPositionInStream, jduration, jlevel,
-                                          awsAccessKeyId, awsSecretKey)
-        except Py4JJavaError as e:
-            if 'ClassNotFoundException' in str(e.java_exception):
+            helper = ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
+        except TypeError as e:
+            if str(e) == "'JavaPackage' object is not callable":
                 KinesisUtils._printErrorMsg(ssc.sparkContext)
-            raise e
+            raise
+        jstream = helper.createStream(ssc._jssc, kinesisAppName, streamName, endpointUrl,
+                                      regionName, initialPositionInStream, jduration, jlevel,
+                                      awsAccessKeyId, awsSecretKey)
         stream = DStream(jstream, ssc, NoOpSerializer())
         return stream.map(lambda v: decoder(v))
 

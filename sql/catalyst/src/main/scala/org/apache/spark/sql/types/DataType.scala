@@ -22,15 +22,16 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.util.Utils
 
 /**
- * :: DeveloperApi ::
  * The base type of all Spark SQL data types.
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 abstract class DataType extends AbstractDataType {
   /**
    * Enables matching against DataType for expressions:
@@ -62,6 +63,9 @@ abstract class DataType extends AbstractDataType {
   /** Readable string representation for the type. */
   def simpleString: String = typeName
 
+  /** String representation for the type saved in external catalogs. */
+  def catalogString: String = simpleString
+
   /** Readable string representation for the type with truncation */
   private[sql] def simpleString(maxNumberFields: Int): String = simpleString
 
@@ -91,6 +95,10 @@ abstract class DataType extends AbstractDataType {
 }
 
 
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object DataType {
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
@@ -103,7 +111,7 @@ object DataType {
 
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
-    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
+    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
@@ -237,6 +245,30 @@ object DataType {
             fromField.name == toField.name &&
               (toField.nullable || !fromField.nullable) &&
               equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
+  /**
+   * Compares two types, ignoring nullability of ArrayType, MapType, StructType, and ignoring case
+   * sensitivity of field names in StructType.
+   */
+  private[sql] def equalsIgnoreCaseAndNullability(from: DataType, to: DataType): Boolean = {
+    (from, to) match {
+      case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
+        equalsIgnoreCaseAndNullability(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+        equalsIgnoreCaseAndNullability(fromKey, toKey) &&
+          equalsIgnoreCaseAndNullability(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (l, r) =>
+            l.name.equalsIgnoreCase(r.name) &&
+              equalsIgnoreCaseAndNullability(l.dataType, r.dataType)
           }
 
       case (fromDataType, toDataType) => fromDataType == toDataType

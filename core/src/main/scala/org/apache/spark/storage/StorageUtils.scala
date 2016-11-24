@@ -17,10 +17,15 @@
 
 package org.apache.spark.storage
 
+import java.nio.{ByteBuffer, MappedByteBuffer}
+
 import scala.collection.Map
 import scala.collection.mutable
 
+import sun.nio.ch.DirectBuffer
+
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 
 /**
  * :: DeveloperApi ::
@@ -66,7 +71,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /**
    * Return the blocks stored in this block manager.
    *
-   * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
+   * @note This is somewhat expensive, as it involves cloning the underlying maps and then
    * concatenating them together. Much faster alternatives exist for common operations such as
    * contains, get, and size.
    */
@@ -75,16 +80,14 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   /**
    * Return the RDD blocks stored in this block manager.
    *
-   * Note that this is somewhat expensive, as it involves cloning the underlying maps and then
+   * @note This is somewhat expensive, as it involves cloning the underlying maps and then
    * concatenating them together. Much faster alternatives exist for common operations such as
    * getting the memory, disk, and off-heap memory sizes occupied by this RDD.
    */
   def rddBlocks: Map[BlockId, BlockStatus] = _rddBlocks.flatMap { case (_, blocks) => blocks }
 
   /** Return the blocks that belong to the given RDD stored in this block manager. */
-  def rddBlocksById(rddId: Int): Map[BlockId, BlockStatus] = {
-    _rddBlocks.get(rddId).getOrElse(Map.empty)
-  }
+  def rddBlocksById(rddId: Int): Map[BlockId, BlockStatus] = _rddBlocks.getOrElse(rddId, Map.empty)
 
   /** Add the given block to this storage status. If it already exists, overwrite it. */
   private[spark] def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
@@ -125,7 +128,8 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /**
    * Return whether the given block is stored in this block manager in O(1) time.
-   * Note that this is much faster than `this.blocks.contains`, which is O(blocks) time.
+   *
+   * @note This is much faster than `this.blocks.contains`, which is O(blocks) time.
    */
   def containsBlock(blockId: BlockId): Boolean = {
     blockId match {
@@ -138,12 +142,13 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /**
    * Return the given block stored in this block manager in O(1) time.
-   * Note that this is much faster than `this.blocks.get`, which is O(blocks) time.
+   *
+   * @note This is much faster than `this.blocks.get`, which is O(blocks) time.
    */
   def getBlock(blockId: BlockId): Option[BlockStatus] = {
     blockId match {
       case RDDBlockId(rddId, _) =>
-        _rddBlocks.get(rddId).map(_.get(blockId)).flatten
+        _rddBlocks.get(rddId).flatMap(_.get(blockId))
       case _ =>
         _nonRddBlocks.get(blockId)
     }
@@ -151,19 +156,22 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
   /**
    * Return the number of blocks stored in this block manager in O(RDDs) time.
-   * Note that this is much faster than `this.blocks.size`, which is O(blocks) time.
+   *
+   * @note This is much faster than `this.blocks.size`, which is O(blocks) time.
    */
   def numBlocks: Int = _nonRddBlocks.size + numRddBlocks
 
   /**
    * Return the number of RDD blocks stored in this block manager in O(RDDs) time.
-   * Note that this is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
+   *
+   * @note This is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
    */
   def numRddBlocks: Int = _rddBlocks.values.map(_.size).sum
 
   /**
    * Return the number of blocks that belong to the given RDD in O(1) time.
-   * Note that this is much faster than `this.rddBlocksById(rddId).size`, which is
+   *
+   * @note This is much faster than `this.rddBlocksById(rddId).size`, which is
    * O(blocks in this RDD) time.
    */
   def numRddBlocksById(rddId: Int): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)
@@ -172,7 +180,10 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   def memRemaining: Long = maxMem - memUsed
 
   /** Return the memory used by this block manager. */
-  def memUsed: Long = _nonRddStorageInfo._1 + _rddBlocks.keys.toSeq.map(memUsedByRdd).sum
+  def memUsed: Long = _nonRddStorageInfo._1 + cacheSize
+
+  /** Return the memory used by caching RDDs */
+  def cacheSize: Long = _rddBlocks.keys.toSeq.map(memUsedByRdd).sum
 
   /** Return the disk space used by this block manager. */
   def diskUsed: Long = _nonRddStorageInfo._2 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum
@@ -224,7 +235,22 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 }
 
 /** Helper methods for storage-related objects. */
-private[spark] object StorageUtils {
+private[spark] object StorageUtils extends Logging {
+
+  /**
+   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
+   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
+   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
+   * unfortunately no standard API to do this.
+   */
+  def dispose(buffer: ByteBuffer): Unit = {
+    if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
+      logTrace(s"Unmapping $buffer")
+      if (buffer.asInstanceOf[DirectBuffer].cleaner() != null) {
+        buffer.asInstanceOf[DirectBuffer].cleaner().clean()
+      }
+    }
+  }
 
   /**
    * Update the given list of RDDInfo with the given list of storage statuses.

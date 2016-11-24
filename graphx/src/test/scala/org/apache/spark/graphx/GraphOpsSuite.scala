@@ -19,8 +19,6 @@ package org.apache.spark.graphx
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
-import org.apache.spark.graphx.impl.EdgePartition
-import org.apache.spark.rdd._
 
 class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
 

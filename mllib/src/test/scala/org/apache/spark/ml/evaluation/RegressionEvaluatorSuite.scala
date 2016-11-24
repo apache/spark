@@ -20,12 +20,14 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
 class RegressionEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   test("params") {
     ParamsSuite.checkParams(new RegressionEvaluator)
@@ -42,9 +44,9 @@ class RegressionEvaluatorSuite
      * data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1))
      *   .saveAsTextFile("path")
      */
-    val dataset = sqlContext.createDataFrame(
-      sc.parallelize(LinearDataGenerator.generateLinearInput(
-        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
+    val dataset = LinearDataGenerator.generateLinearInput(
+      6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1)
+      .map(_.asML).toDF()
 
     /**
      * Using the following R code to load the data, train the model and evaluate metrics.
@@ -82,5 +84,9 @@ class RegressionEvaluatorSuite
       .setLabelCol("myLabel")
       .setMetricName("r2")
     testDefaultReadWrite(evaluator)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    MLTestingUtils.checkNumericTypes(new RegressionEvaluator, spark)
   }
 }

@@ -7,6 +7,9 @@
     "lastUpdated" : "",
     "duration" : 9011,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1422981779720,
+    "endTimeEpoch" : 1422981788731,
+    "lastUpdatedEpoch" : 0
   } ]
 }

@@ -66,17 +66,6 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
     }
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
-    val info = taskEnd.taskInfo
-    val metrics = taskEnd.taskMetrics
-    if (info != null && metrics != null) {
-      val updatedBlocks = metrics.updatedBlockStatuses
-      if (updatedBlocks.length > 0) {
-        updateStorageStatus(info.executorId, updatedBlocks)
-      }
-    }
-  }
-
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD): Unit = synchronized {
     updateStorageStatus(unpersistRDD.rddId)
   }
@@ -88,6 +77,10 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
       val maxMem = blockManagerAdded.maxMem
       val storageStatus = new StorageStatus(blockManagerId, maxMem)
       executorIdToStorageStatus(executorId) = storageStatus
+
+      // Try to remove the dead storage status if same executor register the block manager twice.
+      deadExecutorStorageStatus.zipWithIndex.find(_._1.blockManagerId.executorId == executorId)
+        .foreach(toRemoveExecutor => deadExecutorStorageStatus.remove(toRemoveExecutor._2))
     }
   }
 
@@ -101,5 +94,15 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
         deadExecutorStorageStatus.trimStart(1)
       }
     }
+  }
+
+  override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
+    val executorId = blockUpdated.blockUpdatedInfo.blockManagerId.executorId
+    val blockId = blockUpdated.blockUpdatedInfo.blockId
+    val storageLevel = blockUpdated.blockUpdatedInfo.storageLevel
+    val memSize = blockUpdated.blockUpdatedInfo.memSize
+    val diskSize = blockUpdated.blockUpdatedInfo.diskSize
+    val blockStatus = BlockStatus(storageLevel, memSize, diskSize)
+    updateStorageStatus(executorId, Seq((blockId, blockStatus)))
   }
 }

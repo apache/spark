@@ -17,17 +17,14 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{ImpurityStats,
   InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict}
 
 /**
- * :: DeveloperApi ::
  * Decision tree node interface.
  */
-@DeveloperApi
 sealed abstract class Node extends Serializable {
 
   // TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
@@ -78,6 +75,9 @@ sealed abstract class Node extends Serializable {
    * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
    */
   private[ml] def maxSplitFeatureIndex(): Int
+
+  /** Returns a deep copy of the subtree rooted at this node. */
+  private[tree] def deepCopy(): Node
 }
 
 private[ml] object Node {
@@ -106,13 +106,11 @@ private[ml] object Node {
 }
 
 /**
- * :: DeveloperApi ::
  * Decision tree leaf node.
  * @param prediction  Prediction this node makes
  * @param impurity  Impurity measure at this node (for training data)
  */
-@DeveloperApi
-final class LeafNode private[ml] (
+class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
     override private[ml] val impurityStats: ImpurityCalculator) extends Node {
@@ -137,21 +135,23 @@ final class LeafNode private[ml] (
   }
 
   override private[ml] def maxSplitFeatureIndex(): Int = -1
+
+  override private[tree] def deepCopy(): Node = {
+    new LeafNode(prediction, impurity, impurityStats)
+  }
 }
 
 /**
- * :: DeveloperApi ::
  * Internal Decision Tree node.
  * @param prediction  Prediction this node would make if it were a leaf node
  * @param impurity  Impurity measure at this node (for training data)
- * @param gain Information gain value.
- *             Values < 0 indicate missing values; this quirk will be removed with future updates.
+ * @param gain Information gain value. Values less than 0 indicate missing values;
+ *             this quirk will be removed with future updates.
  * @param leftChild  Left-hand child node
  * @param rightChild  Right-hand child node
  * @param split  Information about the test used to split to the left or right child.
  */
-@DeveloperApi
-final class InternalNode private[ml] (
+class InternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
     val gain: Double,
@@ -159,6 +159,9 @@ final class InternalNode private[ml] (
     val rightChild: Node,
     val split: Split,
     override private[ml] val impurityStats: ImpurityCalculator) extends Node {
+
+  // Note to developers: The constructor argument impurityStats should be reconsidered before we
+  //                     make the constructor public.  We may be able to improve the representation.
 
   override def toString: String = {
     s"InternalNode(prediction = $prediction, impurity = $impurity, split = $split)"
@@ -202,6 +205,11 @@ final class InternalNode private[ml] (
   override private[ml] def maxSplitFeatureIndex(): Int = {
     math.max(split.featureIndex,
       math.max(leftChild.maxSplitFeatureIndex(), rightChild.maxSplitFeatureIndex()))
+  }
+
+  override private[tree] def deepCopy(): Node = {
+    new InternalNode(prediction, impurity, gain, leftChild.deepCopy(), rightChild.deepCopy(),
+      split, impurityStats)
   }
 }
 
@@ -286,11 +294,12 @@ private[tree] class LearningNode(
    *
    * @param binnedFeatures  Binned feature vector for data point.
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
-   * @return  Leaf index if the data point reaches a leaf.
-   *          Otherwise, last node reachable in tree matching this example.
-   *          Note: This is the global node index, i.e., the index used in the tree.
-   *                This index is different from the index used during training a particular
-   *                group of nodes on one call to [[findBestSplits()]].
+   * @return Leaf index if the data point reaches a leaf.
+   *         Otherwise, last node reachable in tree matching this example.
+   *         Note: This is the global node index, i.e., the index used in the tree.
+   *         This index is different from the index used during training a particular
+   *         group of nodes on one call to
+   *         [[org.apache.spark.ml.tree.impl.RandomForest.findBestSplits()]].
    */
   def predictImpl(binnedFeatures: Array[Int], splits: Array[Array[Split]]): Int = {
     if (this.isLeaf || this.split.isEmpty) {

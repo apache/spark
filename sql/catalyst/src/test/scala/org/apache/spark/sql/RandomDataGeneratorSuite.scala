@@ -40,7 +40,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
     if (nullable) {
       assert(Iterator.fill(100)(generator()).contains(null))
     } else {
-      assert(Iterator.fill(100)(generator()).forall(_ != null))
+      assert(!Iterator.fill(100)(generator()).contains(null))
     }
     for (_ <- 1 to 10) {
       val generatedValue = generator()

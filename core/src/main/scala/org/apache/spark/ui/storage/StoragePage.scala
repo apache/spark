@@ -156,7 +156,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       streamBlockTableSubrow(block._1, replications.head, replications.size, true)
     } else {
       streamBlockTableSubrow(block._1, replications.head, replications.size, true) ++
-        replications.tail.map(streamBlockTableSubrow(block._1, _, replications.size, false)).flatten
+        replications.tail.flatMap(streamBlockTableSubrow(block._1, _, replications.size, false))
     }
   }
 

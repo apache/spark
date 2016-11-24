@@ -38,6 +38,7 @@ import java.io.InputStreamReader;
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class JavaReceiverAPISuite implements Serializable {
@@ -126,7 +127,8 @@ public class JavaReceiverAPISuite implements Serializable {
         BufferedReader in = null;
         try {
           socket = new Socket(host, port);
-          in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+          in = new BufferedReader(
+              new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
           String userInput;
           while ((userInput = in.readLine()) != null) {
             store(userInput);

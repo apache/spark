@@ -21,7 +21,6 @@ import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
  * Response to {@link StreamRequest} when the stream has been successfully opened.

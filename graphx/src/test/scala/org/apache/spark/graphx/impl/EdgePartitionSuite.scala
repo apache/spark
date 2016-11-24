@@ -18,7 +18,6 @@
 package org.apache.spark.graphx.impl
 
 import scala.reflect.ClassTag
-import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.graphx._

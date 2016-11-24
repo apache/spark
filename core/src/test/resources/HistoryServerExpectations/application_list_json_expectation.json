@@ -7,7 +7,10 @@
     "lastUpdated" : "",
     "duration" : 10505,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1430917380893,
+    "endTimeEpoch" : 1430917391398,
+    "lastUpdatedEpoch" : 0
   } ]
 }, {
   "id" : "local-1430917381535",
@@ -19,7 +22,10 @@
     "lastUpdated" : "",
     "duration" : 57,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1430917380893,
+    "endTimeEpoch" : 1430917380950,
+    "lastUpdatedEpoch" : 0
   }, {
     "attemptId" : "1",
     "startTime" : "2015-05-06T13:03:00.880GMT",
@@ -27,7 +33,10 @@
     "lastUpdated" : "",
     "duration" : 10,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1430917380880,
+    "endTimeEpoch" : 1430917380890,
+    "lastUpdatedEpoch" : 0
   } ]
 }, {
   "id" : "local-1426533911241",
@@ -39,7 +48,10 @@
     "lastUpdated" : "",
     "duration" : 34935,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1426633910242,
+    "endTimeEpoch" : 1426633945177,
+    "lastUpdatedEpoch" : 0
   }, {
     "attemptId" : "1",
     "startTime" : "2015-03-16T19:25:10.242GMT",
@@ -47,7 +59,10 @@
     "lastUpdated" : "",
     "duration" : 34935,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1426533910242,
+    "endTimeEpoch" : 1426533945177,
+    "lastUpdatedEpoch" : 0
   } ]
 }, {
   "id" : "local-1425081759269",
@@ -58,7 +73,10 @@
     "lastUpdated" : "",
     "duration" : 8635,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1425081758277,
+    "endTimeEpoch" : 1425081766912,
+    "lastUpdatedEpoch" : 0
   } ]
 }, {
   "id" : "local-1422981780767",
@@ -69,7 +87,10 @@
     "lastUpdated" : "",
     "duration" : 9011,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1422981779720,
+    "endTimeEpoch" : 1422981788731,
+    "lastUpdatedEpoch" : 0
   } ]
 }, {
   "id" : "local-1422981759269",
@@ -80,6 +101,9 @@
     "lastUpdated" : "",
     "duration" : 8635,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1422981758277,
+    "endTimeEpoch" : 1422981766912,
+    "lastUpdatedEpoch" : 0
   } ]
 } ]
