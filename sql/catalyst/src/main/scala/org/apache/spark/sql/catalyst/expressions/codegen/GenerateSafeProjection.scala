@@ -54,19 +54,20 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val rowClass = classOf[GenericInternalRow].getName
     val isHomogenousStruct = {
       var i = 1
-      val ref =  ctx.javaType(schema.fields(0).dataType)
+      val ref = ctx.javaType(schema.fields(0).dataType)
       var broken = false || !ctx.isPrimitiveType(ref) || schema.length <=1
       while( !broken && i < schema.length) {
-        if(ctx.javaType(schema.fields(i).dataType) != ref) {
+        if (ctx.javaType(schema.fields(i).dataType) != ref) {
           broken = true
         }
         i +=1
       }
       !broken
     }
-    val allFields =  if(isHomogenousStruct) {
+    val allFields = if (isHomogenousStruct){
       val counter = ctx.freshName("counter")
-      val converter = convertToSafe(ctx, ctx.getValue(tmp, schema.fields(0).dataType, counter), schema.fields(0).dataType)
+      val converter = convertToSafe(ctx, ctx.getValue(tmp, schema.fields(0).dataType, counter),
+        schema.fields(0).dataType)
       s"""
           for(int $counter = 0; $counter < ${schema.length}; ++$counter) {
            if (!$tmp.isNullAt($counter)) {
@@ -76,7 +77,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           }
       """
 
-    }else {
+    } else {
       val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
         val converter = convertToSafe(ctx, ctx.getValue(tmp, dt, i.toString), dt)
         s"""

@@ -305,10 +305,15 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
-        val nonNullBitmask = x.bitmasks.reduce(_ & _)
+        // The rightmost bit in the bitmasks corresponds to the last expression in groupByAliases
+        // with 0 indicating this expression is in the grouping set. The following line of code
+        // calculates the bitmask representing the expressions that absent in at least one grouping
+        // set (indicated by 1).
+        val nullBitmask = x.bitmasks.reduce(_ | _)
 
+        val attrLength = groupByAliases.length
         val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
-          a.toAttribute.withNullability((nonNullBitmask & 1 << idx) == 0)
+          a.toAttribute.withNullability(((nullBitmask >> (attrLength - idx - 1)) & 1) == 1)
         }
 
         val expand = Expand(x.bitmasks, groupByAliases, expandedAttributes, gid, x.child)
@@ -838,6 +843,8 @@ class Analyzer(
           // attributes that its child might have or could have.
           val missing = missingAttrs -- g.child.outputSet
           g.copy(join = true, child = addMissingAttr(g.child, missing))
+        case d: Distinct =>
+          throw new AnalysisException(s"Can't add $missingAttrs to $d")
         case u: UnaryNode =>
           u.withNewChildren(addMissingAttr(u.child, missingAttrs) :: Nil)
         case other =>
@@ -1023,6 +1030,19 @@ class Analyzer(
         case e: Expand =>
           failOnOuterReferenceInSubTree(e, "an EXPAND")
           e
+        case l : LocalLimit =>
+          failOnOuterReferenceInSubTree(l, "a LIMIT")
+          l
+        // Since LIMIT <n> is represented as GlobalLimit(<n>, (LocalLimit (<n>, child))
+        // and we are walking bottom up, we will fail on LocalLimit before
+        // reaching GlobalLimit.
+        // The code below is just a safety net.
+        case g : GlobalLimit =>
+          failOnOuterReferenceInSubTree(g, "a LIMIT")
+          g
+        case s : Sample =>
+          failOnOuterReferenceInSubTree(s, "a TABLESAMPLE")
+          s
         case p =>
           failOnOuterReference(p)
           p

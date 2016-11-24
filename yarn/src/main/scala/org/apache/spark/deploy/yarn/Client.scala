@@ -1170,7 +1170,10 @@ private object Client extends Logging {
     // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
     System.setProperty("SPARK_YARN_MODE", "true")
     val sparkConf = new SparkConf
-
+    // SparkSubmit would use yarn cache to distribute files & jars in yarn mode,
+    // so remove them from sparkConf here for yarn mode.
+    sparkConf.remove("spark.jars")
+    sparkConf.remove("spark.files")
     val args = new ClientArguments(argStrings)
     new Client(args, sparkConf).run()
   }

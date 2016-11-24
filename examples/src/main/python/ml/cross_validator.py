@@ -83,10 +83,10 @@ if __name__ == "__main__":
 
     # Prepare test documents, which are unlabeled.
     test = spark.createDataFrame([
-        (4L, "spark i j k"),
-        (5L, "l m n"),
-        (6L, "mapreduce spark"),
-        (7L, "apache hadoop")
+        (4, "spark i j k"),
+        (5, "l m n"),
+        (6, "mapreduce spark"),
+        (7, "apache hadoop")
     ], ["id", "text"])
 
     # Make predictions on test documents. cvModel uses the best model found (lrModel).

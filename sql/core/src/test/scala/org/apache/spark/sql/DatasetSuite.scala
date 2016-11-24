@@ -882,6 +882,53 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       df.withColumn("b", expr("0")).as[ClassData]
         .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
   }
+
+  // This is moved from ReplSuite to prevent java.lang.ClassCircularityError.
+  test("SPARK-18189: Fix serialization issue in KeyValueGroupedDataset") {
+    val resultValue = 12345
+    val keyValueGrouped = Seq((1, 2), (3, 4)).toDS().groupByKey(_._1)
+    val mapGroups = keyValueGrouped.mapGroups((k, v) => (k, 1))
+    val broadcasted = spark.sparkContext.broadcast(resultValue)
+
+    // Using broadcast triggers serialization issue in KeyValueGroupedDataset
+    val dataset = mapGroups.map(_ => broadcasted.value)
+
+    assert(dataset.collect() sameElements Array(resultValue, resultValue))
+  }
+
+  test("SPARK-18125: Spark generated code causes CompileException") {
+    val data = Array(
+      Route("a", "b", 1),
+      Route("a", "b", 2),
+      Route("a", "c", 2),
+      Route("a", "d", 10),
+      Route("b", "a", 1),
+      Route("b", "a", 5),
+      Route("b", "c", 6))
+    val ds = sparkContext.parallelize(data).toDF.as[Route]
+
+    val grped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
+      .groupByKey(r => (r.src, r.dest))
+      .reduceGroups { (g1: GroupedRoutes, g2: GroupedRoutes) =>
+        GroupedRoutes(g1.src, g1.dest, g1.routes ++ g2.routes)
+      }.map(_._2)
+
+    val expected = Seq(
+      GroupedRoutes("a", "d", Seq(Route("a", "d", 10))),
+      GroupedRoutes("b", "c", Seq(Route("b", "c", 6))),
+      GroupedRoutes("a", "b", Seq(Route("a", "b", 1), Route("a", "b", 2))),
+      GroupedRoutes("b", "a", Seq(Route("b", "a", 1), Route("b", "a", 5))),
+      GroupedRoutes("a", "c", Seq(Route("a", "c", 2)))
+    )
+
+    implicit def ordering[GroupedRoutes]: Ordering[GroupedRoutes] = new Ordering[GroupedRoutes] {
+      override def compare(x: GroupedRoutes, y: GroupedRoutes): Int = {
+        x.toString.compareTo(y.toString)
+      }
+    }
+
+    checkDatasetUnorderly(grped, expected: _*)
+  }
 }
 
 case class Generic[T](id: T, value: Double)
@@ -954,3 +1001,6 @@ object DatasetTransform {
     ds.map(_ + 1)
   }
 }
+
+case class Route(src: String, dest: String, cost: Int)
+case class GroupedRoutes(src: String, dest: String, routes: Seq[Route])

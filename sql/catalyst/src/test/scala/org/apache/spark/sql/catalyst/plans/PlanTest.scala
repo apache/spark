@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, OneRowRelation, Sample}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
 
 /**
@@ -56,14 +56,35 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
    *   ((expr 1 && expr 2) && expr 3), (expr 1 && expr 2 && expr 3), (expr 3 && (expr 1 && expr 2)
    *   etc., will all now be equivalent.
    * - Sample the seed will replaced by 0L.
+   * - Join conditions will be resorted by hashCode.
    */
   private def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
       case filter @ Filter(condition: Expression, child: LogicalPlan) =>
-        Filter(splitConjunctivePredicates(condition).sortBy(_.hashCode()).reduce(And), child)
+        Filter(splitConjunctivePredicates(condition).map(rewriteEqual(_)).sortBy(_.hashCode())
+          .reduce(And), child)
       case sample: Sample =>
         sample.copy(seed = 0L)(true)
+      case join @ Join(left, right, joinType, condition) if condition.isDefined =>
+        val newCondition =
+          splitConjunctivePredicates(condition.get).map(rewriteEqual(_)).sortBy(_.hashCode())
+            .reduce(And)
+        Join(left, right, joinType, Some(newCondition))
     }
+  }
+
+  /**
+   * Rewrite [[EqualTo]] and [[EqualNullSafe]] operator to keep order. The following cases will be
+   * equivalent:
+   * 1. (a = b), (b = a);
+   * 2. (a <=> b), (b <=> a).
+   */
+  private def rewriteEqual(condition: Expression): Expression = condition match {
+    case eq @ EqualTo(l: Expression, r: Expression) =>
+      Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo)
+    case eq @ EqualNullSafe(l: Expression, r: Expression) =>
+      Seq(l, r).sortBy(_.hashCode()).reduce(EqualNullSafe)
+    case _ => condition // Don't reorder.
   }
 
   /** Fails the test if the two plans do not match */

@@ -449,7 +449,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             c.bucketSpec,
             c.mode,
             c.options,
-            c.child)
+            c.query)
         ExecutedCommandExec(cmd) :: Nil
 
       case c: CreateTempViewUsing =>

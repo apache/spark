@@ -424,6 +424,9 @@ private[hive] trait HiveInspectors {
           null
         }
 
+    case _: VoidObjectInspector =>
+      (_: Any) => null // always be null for void object inspector
+
     case soi: StandardStructObjectInspector =>
       val schema = dataType.asInstanceOf[StructType]
       val wrappers = soi.getAllStructFieldRefs.asScala.zip(schema.fields).map {

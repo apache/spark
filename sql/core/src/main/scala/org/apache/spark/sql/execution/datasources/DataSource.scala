@@ -74,7 +74,7 @@ case class DataSource(
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty) extends Logging {
 
-  case class SourceInfo(name: String, schema: StructType)
+  case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
   lazy val providingClass: Class[_] = lookupDataSource(className)
   lazy val sourceInfo = sourceSchema()
@@ -185,8 +185,11 @@ case class DataSource(
     }
   }
 
-  private def inferFileFormatSchema(format: FileFormat): StructType = {
-    userSpecifiedSchema.orElse {
+  /**
+   * Infer the schema of the given FileFormat, returns a pair of schema and partition column names.
+   */
+  private def inferFileFormatSchema(format: FileFormat): (StructType, Seq[String]) = {
+    userSpecifiedSchema.map(_ -> partitionColumns).orElse {
       val caseInsensitiveOptions = new CaseInsensitiveMap(options)
       val allPaths = caseInsensitiveOptions.get("path")
       val globbedPaths = allPaths.toSeq.flatMap { path =>
@@ -196,10 +199,15 @@ case class DataSource(
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
       val fileCatalog = new ListingFileCatalog(sparkSession, globbedPaths, options, None)
-      format.inferSchema(
+      val partitionSchema = fileCatalog.partitionSpec().partitionColumns
+      val inferred = format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
         fileCatalog.allFiles())
+
+      inferred.map { inferredSchema =>
+        StructType(inferredSchema ++ partitionSchema) -> partitionSchema.map(_.name)
+      }
     }.getOrElse {
       throw new AnalysisException("Unable to infer schema. It must be specified manually.")
     }
@@ -211,7 +219,7 @@ case class DataSource(
       case s: StreamSourceProvider =>
         val (name, schema) = s.sourceSchema(
           sparkSession.sqlContext, userSpecifiedSchema, className, options)
-        SourceInfo(name, schema)
+        SourceInfo(name, schema, Nil)
 
       case format: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
@@ -240,7 +248,8 @@ case class DataSource(
               "you may be able to create a static DataFrame on that directory with " +
               "'spark.read.load(directory)' and infer schema from it.")
         }
-        SourceInfo(s"FileSource[$path]", inferFileFormatSchema(format))
+        val (schema, partCols) = inferFileFormatSchema(format)
+        SourceInfo(s"FileSource[$path]", schema, partCols)
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -260,7 +269,13 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
         new FileStreamSource(
-          sparkSession, path, className, sourceInfo.schema, metadataPath, options)
+          sparkSession = sparkSession,
+          path = path,
+          fileFormatClassName = className,
+          schema = sourceInfo.schema,
+          partitionColumns = sourceInfo.partitionColumns,
+          metadataPath = metadataPath,
+          options = options)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")

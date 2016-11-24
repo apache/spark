@@ -214,6 +214,18 @@ trait CheckAnalysis extends PredicateHelper {
                         s"appear in the arguments of an aggregate function.")
                   }
                 }
+              case e: Attribute if groupingExprs.isEmpty =>
+                // Collect all [[AggregateExpressions]]s.
+                val aggExprs = aggregateExprs.filter(_.collect {
+                  case a: AggregateExpression => a
+                }.nonEmpty)
+                failAnalysis(
+                  s"grouping expressions sequence is empty, " +
+                    s"and '${e.sql}' is not an aggregate function. " +
+                    s"Wrap '${aggExprs.map(_.sql).mkString("(", ", ", ")")}' in windowing " +
+                    s"function(s) or wrap '${e.sql}' in first() (or first_value) " +
+                    s"if you don't care which value you get."
+                )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.sql}' is neither present in the group by, " +

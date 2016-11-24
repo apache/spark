@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 import java.util.UUID
 
 import scala.language.postfixOps
@@ -27,9 +28,11 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1564,5 +1567,117 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val sampleDf = df.sample(true, 2.00)
     val d = sampleDf.withColumn("c", monotonically_increasing_id).select($"c").collect
     assert(d.size == d.distinct.size)
+  }
+
+  test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
+    withTable("bar") {
+      withTempView("foo") {
+        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
+          sql("select 0 as id").createOrReplaceTempView("foo")
+          val df = sql("select * from foo group by id")
+          // If we optimize the query in CTAS more than once, the following saveAsTable will fail
+          // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
+          df.write.mode("overwrite").saveAsTable("bar")
+          checkAnswer(spark.table("bar"), Row(0) :: Nil)
+          val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
+          assert(tableMetadata.properties(DATASOURCE_PROVIDER) == "json",
+            "the expected table is a data source table using json")
+        }
+      }
+    }
+  }
+
+  private def verifyNullabilityInFilterExec(
+      df: DataFrame,
+      expr: String,
+      expectedNonNullableColumns: Seq[String]): Unit = {
+    val dfWithFilter = df.where(s"isnotnull($expr)").selectExpr(expr)
+    // In the logical plan, all the output columns of input dataframe are nullable
+    dfWithFilter.queryExecution.optimizedPlan.collect {
+      case e: Filter => assert(e.output.forall(_.nullable))
+    }
+
+    dfWithFilter.queryExecution.executedPlan.collect {
+      // When the child expression in isnotnull is null-intolerant (i.e. any null input will
+      // result in null output), the involved columns are converted to not nullable;
+      // otherwise, no change should be made.
+      case e: FilterExec =>
+        assert(e.output.forall { o =>
+          if (expectedNonNullableColumns.contains(o.name)) !o.nullable else o.nullable
+        })
+    }
+  }
+
+  test("SPARK-17957: no change on nullability in FilterExec output") {
+    val df = sparkContext.parallelize(Seq(
+      null.asInstanceOf[java.lang.Integer] -> new java.lang.Integer(3),
+      new java.lang.Integer(1) -> null.asInstanceOf[java.lang.Integer],
+      new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF()
+
+    verifyNullabilityInFilterExec(df,
+      expr = "Rand()", expectedNonNullableColumns = Seq.empty[String])
+    verifyNullabilityInFilterExec(df,
+      expr = "coalesce(_1, _2)", expectedNonNullableColumns = Seq.empty[String])
+    verifyNullabilityInFilterExec(df,
+      expr = "coalesce(_1, 0) + Rand()", expectedNonNullableColumns = Seq.empty[String])
+    verifyNullabilityInFilterExec(df,
+      expr = "cast(coalesce(cast(coalesce(_1, _2) as double), 0.0) as int)",
+      expectedNonNullableColumns = Seq.empty[String])
+  }
+
+  test("SPARK-17957: set nullability to false in FilterExec output") {
+    val df = sparkContext.parallelize(Seq(
+      null.asInstanceOf[java.lang.Integer] -> new java.lang.Integer(3),
+      new java.lang.Integer(1) -> null.asInstanceOf[java.lang.Integer],
+      new java.lang.Integer(2) -> new java.lang.Integer(4))).toDF()
+
+    verifyNullabilityInFilterExec(df,
+      expr = "_1 + _2 * 3", expectedNonNullableColumns = Seq("_1", "_2"))
+    verifyNullabilityInFilterExec(df,
+      expr = "_1 + _2", expectedNonNullableColumns = Seq("_1", "_2"))
+    verifyNullabilityInFilterExec(df,
+      expr = "_1", expectedNonNullableColumns = Seq("_1"))
+    // `constructIsNotNullConstraints` infers the IsNotNull(_2) from IsNotNull(_2 + Rand())
+    // Thus, we are able to set nullability of _2 to false.
+    // If IsNotNull(_2) is not given from `constructIsNotNullConstraints`, the impl of
+    // isNullIntolerant in `FilterExec` needs an update for more advanced inference.
+    verifyNullabilityInFilterExec(df,
+      expr = "_2 + Rand()", expectedNonNullableColumns = Seq("_2"))
+    verifyNullabilityInFilterExec(df,
+      expr = "_2 * 3 + coalesce(_1, 0)", expectedNonNullableColumns = Seq("_2"))
+    verifyNullabilityInFilterExec(df,
+      expr = "cast((_1 + _2) as boolean)", expectedNonNullableColumns = Seq("_1", "_2"))
+  }
+
+  test("SPARK-17957: outer join + na.fill") {
+    val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
+    val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
+    val df3 = Seq((3, 1)).toDF("a", "d")
+    checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
+  }
+
+  test("SPARK-17123: Performing set operations that combine non-scala native types") {
+    val dates = Seq(
+      (BigDecimal.valueOf(1), new Timestamp(2)),
+      (BigDecimal.valueOf(4), new Timestamp(5))
+    ).toDF("decimal", "timestamp")
+
+    val widenTypedRows = Seq(
+      (10.5D, "string")
+    ).toDF("decimal", "timestamp")
+
+    dates.union(widenTypedRows).collect()
+    dates.except(widenTypedRows).collect()
+    dates.intersect(widenTypedRows).collect()
+  }
+
+  test("SPARK-18070 binary operator should not consider nullability when comparing input types") {
+    val rows = Seq(Row(Seq(1), Seq(1)))
+    val schema = new StructType()
+      .add("array1", ArrayType(IntegerType))
+      .add("array2", ArrayType(IntegerType, containsNull = false))
+    val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
+    assert(df.filter($"array1" === $"array2").count() == 1)
   }
 }

@@ -1372,7 +1372,7 @@ res2: Long = 10
 {% endhighlight %}
 
 While this code used the built-in support for accumulators of type Long, programmers can also
-create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.AccumulatorV2).
+create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.util.AccumulatorV2).
 The AccumulatorV2 abstract class has several methods which need to override: 
 `reset` for resetting the accumulator to zero, and `add` for add anothor value into the accumulator, `merge` for merging another same-type accumulator into this one. Other methods need to override can refer to scala API document. For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:

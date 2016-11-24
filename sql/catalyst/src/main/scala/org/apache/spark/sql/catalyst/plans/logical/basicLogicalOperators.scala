@@ -116,6 +116,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
   protected def leftConstraints: Set[Expression] = left.constraints
 
   protected def rightConstraints: Set[Expression] = {
@@ -125,6 +127,13 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
       case a: Attribute => attributeRewrites(a)
     })
   }
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.length == right.output.length &&
+      left.output.zip(right.output).forall {
+        case (l, r) => l.dataType.asNullable == r.dataType.asNullable } &&
+      duplicateResolved
 }
 
 object SetOperation {
@@ -133,8 +142,6 @@ object SetOperation {
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
 
-  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
-
   override def output: Seq[Attribute] =
     left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
@@ -142,14 +149,6 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 
   override protected def validConstraints: Set[Expression] =
     leftConstraints.union(rightConstraints)
-
-  // Intersect are only resolved if they don't introduce ambiguous expression ids,
-  // since the Optimizer will convert Intersect to Join.
-  override lazy val resolved: Boolean =
-    childrenResolved &&
-      left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
-      duplicateResolved
 
   override def maxRows: Option[Long] = {
     if (children.exists(_.maxRows.isEmpty)) {
@@ -171,18 +170,10 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
 
-  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
-
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
   override protected def validConstraints: Set[Expression] = leftConstraints
-
-  override lazy val resolved: Boolean =
-    childrenResolved &&
-      left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
-      duplicateResolved
 
   override lazy val statistics: Statistics = {
     left.statistics.copy()
@@ -218,7 +209,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
-          case (l, r) => l.dataType == r.dataType }
+          case (l, r) => l.dataType.asNullable == r.dataType.asNullable }
       )
 
     children.length > 1 && childrenResolved && allChildrenCompatible

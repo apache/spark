@@ -40,7 +40,9 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
    */
   def post(event: StreamingQueryListener.Event) {
     event match {
-      case s: QueryStarted =>
+      case s: QueryStartedEvent =>
+        sparkListenerBus.post(s)
+        // post to local listeners to trigger callbacks
         postToAll(s)
       case _ =>
         sparkListenerBus.post(event)
@@ -50,7 +52,13 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
       case e: StreamingQueryListener.Event =>
-        postToAll(e)
+        // SPARK-18144: we broadcast QueryStartedEvent to all listeners attached to this bus
+        // synchronously and the ones attached to LiveListenerBus asynchronously. Therefore,
+        // we need to ignore QueryStartedEvent if this method is called within SparkListenerBus
+        // thread
+        if (!LiveListenerBus.withinListenerThread.value || !e.isInstanceOf[QueryStartedEvent]) {
+          postToAll(e)
+        }
       case _ =>
     }
   }
@@ -59,11 +67,11 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
       listener: StreamingQueryListener,
       event: StreamingQueryListener.Event): Unit = {
     event match {
-      case queryStarted: QueryStarted =>
+      case queryStarted: QueryStartedEvent =>
         listener.onQueryStarted(queryStarted)
-      case queryProgress: QueryProgress =>
+      case queryProgress: QueryProgressEvent =>
         listener.onQueryProgress(queryProgress)
-      case queryTerminated: QueryTerminated =>
+      case queryTerminated: QueryTerminatedEvent =>
         listener.onQueryTerminated(queryTerminated)
       case _ =>
     }

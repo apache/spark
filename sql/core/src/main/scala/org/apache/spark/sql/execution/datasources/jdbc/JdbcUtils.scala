@@ -236,7 +236,7 @@ object JdbcUtils extends Logging {
     } catch {
       case e: SQLException =>
         val cause = e.getNextException
-        if (e.getCause != cause) {
+        if (cause != null && e.getCause != cause) {
           if (e.getCause == null) {
             e.initCause(cause)
           } else {

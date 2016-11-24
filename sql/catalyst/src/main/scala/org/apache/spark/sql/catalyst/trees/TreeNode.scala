@@ -159,6 +159,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * Returns a Seq containing the leaves in this tree.
+   */
+  def collectLeaves(): Seq[BaseType] = {
+    this.collect { case p if p.children.isEmpty => p }
+  }
+
+  /**
    * Finds and returns the first [[TreeNode]] of the tree for which the given partial function
    * is defined (pre-order), and applies the partial function to it.
    */

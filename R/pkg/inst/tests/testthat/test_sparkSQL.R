@@ -208,6 +208,17 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
+test_that("createDataFrame uses files for large objects", {
+  # To simulate a large file scenario, we set spark.r.maxAllocationLimit to a smaller value
+  conf <- callJMethod(sparkSession, "conf")
+  callJMethod(conf, "set", "spark.r.maxAllocationLimit", "100")
+  df <- suppressWarnings(createDataFrame(iris))
+
+  # Resetting the conf back to default value
+  callJMethod(conf, "set", "spark.r.maxAllocationLimit", toString(.Machine$integer.max / 10))
+  expect_equal(dim(df), dim(iris))
+})
+
 test_that("read/write csv as DataFrame", {
   csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
   mockLinesCsv <- c("year,make,model,comment,blank",
@@ -360,6 +371,19 @@ test_that("create DataFrame with different data types", {
                                 c("d", "string"), c("e", "date"), c("f", "timestamp")))
   expect_equal(count(df), 1)
   expect_equal(collect(df), data.frame(l, stringsAsFactors = FALSE))
+})
+
+test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
+  df <- data.frame(
+    id = 1:2,
+    time = c(as.POSIXlt("2016-01-10"), NA),
+    date = c(as.Date("2016-10-01"), NA))
+
+  DF <- collect(createDataFrame(df))
+  expect_true(is.na(DF$date[2]))
+  expect_equal(DF$date[1], as.Date("2016-10-01"))
+  expect_true(is.na(DF$time[2]))
+  expect_equal(DF$time[1], as.POSIXlt("2016-01-10"))
 })
 
 test_that("create DataFrame with complex types", {
@@ -791,7 +815,7 @@ test_that("names() colnames() set the column names", {
   expect_equal(names(df)[1], "col3")
 
   expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
-               "Colum names cannot contain the '.' symbol.")
+               "Column names cannot contain the '.' symbol.")
   expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
   expect_error(colnames(df) <- c("a"),
                "Column names must have the same length as the number of columns in the dataset.")

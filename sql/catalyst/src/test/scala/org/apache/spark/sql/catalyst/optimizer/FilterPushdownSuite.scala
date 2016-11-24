@@ -536,14 +536,14 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = {
       testRelationWithArrayType
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6))
+        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('c > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where('b >= 5)
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where('a + Rand(10).as("rnd") > 6)
+        .where('a + Rand(10).as("rnd") > 6 && 'c > 6)
         .analyze
     }
 
@@ -687,6 +687,23 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-17712: aggregate: don't push down filters that are data-independent") {
+    val originalQuery = LocalRelation.apply(testRelation.output, Seq.empty)
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("broadcast hint") {
     val originalQuery = BroadcastHint(testRelation)
       .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
@@ -704,14 +721,14 @@ class FilterPushdownSuite extends PlanTest {
     val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
 
     val originalQuery = Union(Seq(testRelation, testRelation2))
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3 && 'c > 5L)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = Union(Seq(
       testRelation.where('a === 2L),
       testRelation2.where('d === 2L)))
-      .where('b + Rand(10).as("rnd") === 3)
+      .where('b + Rand(10).as("rnd") === 3 && 'c > 5L)
       .analyze
 
     comparePlans(optimized, correctAnswer)

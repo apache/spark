@@ -166,10 +166,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 #### Running the Example
 To run the example,
 
-- Download Spark source and follow the [instructions](building-spark.html) to build Spark with profile *-Pkinesis-asl*.
-
-        mvn -Pkinesis-asl -DskipTests clean package
-
+- Download a Spark binary from the [download site](http://spark.apache.org/downloads.html).
 
 - Set up Kinesis stream (see earlier section) within AWS. Note the name of the Kinesis stream and the endpoint URL corresponding to the region where the stream was created.
 
@@ -180,12 +177,12 @@ To run the example,
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 
-        bin/run-example streaming.KinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
+        bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.KinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
 
 	</div>
 	<div data-lang="java" markdown="1">
 
-        bin/run-example streaming.JavaKinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
+        bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.JavaKinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
 
 	</div>
 	<div data-lang="python" markdown="1">
