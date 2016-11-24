@@ -354,12 +354,7 @@ private[spark] class TaskSchedulerImpl(
               taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
             } else {
               if (TaskState.isFinished(state)) {
-                taskIdToTaskSetManager.remove(tid)
-                taskIdToExecutorId.remove(tid).foreach { execId =>
-                  if (executorIdToRunningTaskIds.contains(execId)) {
-                    executorIdToRunningTaskIds(execId).remove(tid)
-                  }
-                }
+                cleanupTaskState(tid)
               }
               if (state == TaskState.FINISHED) {
                 taskSet.removeRunningTask(tid)
@@ -526,18 +521,29 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
+   * Cleans up the TaskScheduler's state for tracking the given task.
+   */
+  private def cleanupTaskState(tid: Long): Unit = {
+    taskIdToTaskSetManager.remove(tid)
+    taskIdToExecutorId.remove(tid).foreach { executorId =>
+      executorIdToRunningTaskIds.get(executorId).foreach { _.remove(tid) }
+    }
+  }
+
+  /**
    * Remove an executor from all our data structures and mark it as lost. If the executor's loss
    * reason is not yet known, do not yet remove its association with its host nor update the status
    * of any running tasks, since the loss reason defines whether we'll fail those tasks.
    */
   private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
+    // The tasks on the lost executor may not send any more status updates (because the executor
+    // has been lost), so they should be cleaned up here.
     executorIdToRunningTaskIds.remove(executorId).foreach { taskIds =>
       logDebug("Cleaning up TaskScheduler state for tasks " +
         s"${taskIds.mkString("[", ",", "]")} on failed executor $executorId")
-      taskIds.foreach { tid =>
-        taskIdToExecutorId.remove(tid)
-        taskIdToTaskSetManager.remove(tid)
-      }
+      // We do not notify the TaskSetManager of the task failures because that will
+      // happen below in the rootPool.executorLost() call.
+      taskIds.foreach(cleanupTaskState)
     }
 
     val host = executorIdToHost(executorId)
