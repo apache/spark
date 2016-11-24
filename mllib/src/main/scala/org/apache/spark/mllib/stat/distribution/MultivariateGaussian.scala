@@ -29,7 +29,7 @@ import org.apache.spark.mllib.util.MLUtils
  * the event that the covariance matrix is singular, the density will be computed in a
  * reduced dimensional subspace under which the distribution is supported.
  * (see <a href="http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case">
- * here</a>)
+ * Multivariate normal distribution (Wikipedia)</a>)
  *
  * @param mu The mean vector of the distribution
  * @param sigma The covariance matrix of the distribution

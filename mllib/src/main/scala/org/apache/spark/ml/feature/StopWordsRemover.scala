@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
  * @note null values from input array are preserved unless adding null to stopWords
  * explicitly.
  *
- * @see <a href="http://en.wikipedia.org/wiki/Stop_words">here</a>
+ * @see <a href="http://en.wikipedia.org/wiki/Stop_words">Stop words (Wikipedia)</a>
  */
 @Since("1.5.0")
 class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String)
