@@ -87,6 +87,18 @@ class GaussianMixtureModel private[ml] (
     @Since("2.0.0") val gaussians: Array[MultivariateGaussian])
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable {
 
+  /** @group setParam */
+  @Since("2.1.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setProbabilityCol(value: String): this.type = set(probabilityCol, value)
+
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
     val copied = copyValues(new GaussianMixtureModel(uid, weights, gaussians), extra)
