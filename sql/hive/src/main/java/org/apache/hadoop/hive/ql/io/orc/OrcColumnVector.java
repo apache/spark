@@ -17,8 +17,8 @@
 package org.apache.hadoop.hive.ql.io.orc;
 
 import org.apache.commons.lang.NotImplementedException;
-import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
@@ -27,8 +27,10 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A column wrapping Hive's ColumnVector. This column vector is used to adapt Hive's ColumnVector
- * with Spark ColumnBatch.
+ * A column vector class wrapping Hive's ColumnVector. Because Spark ColumnarBatch only accepts
+ * Spark's vectorized.ColumnVector, this column vector is used to adapt Hive ColumnVector with
+ * Spark ColumnarBatch. This class inherits Spark's vectorized.ColumnVector class, but all data
+ * setter methods (e.g., putInt) in Spark vectorized.ColumnVector are not implemented.
  */
 public class OrcColumnVector extends org.apache.spark.sql.execution.vectorized.ColumnVector {
   private ColumnVector col;
