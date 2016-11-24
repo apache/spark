@@ -41,7 +41,7 @@ class StreamExecutionMetadataSuite extends StreamTest {
         """{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
   }
 
-  test("ensure consistent results across batch executions") {
+  test("metadata is recovered from log when query is restarted") {
     import testImplicits._
     val clock = new SystemClock()
     val ms = new MemoryStream[Long](0, sqlContext)
@@ -51,6 +51,9 @@ class StreamExecutionMetadataSuite extends StreamTest {
     checkpointDir.mkdirs()
     assert(checkpointDir.exists())
     val tableName = "test"
+    // Query that prunes timestamps less than current_timestamp, making
+    // it easy to use for ensuring that a batch is re-processed with the
+    // timestamp used when it was first proccessed.
     def startQuery: StreamingQuery = {
       df.groupBy("a")
         .count()
@@ -63,8 +66,8 @@ class StreamExecutionMetadataSuite extends StreamTest {
         .start()
     }
     // no exception here
-    val t1 = clock.getTimeMillis() + 5000L
-    val t2 = clock.getTimeMillis() + 10000L
+    val t1 = clock.getTimeMillis() + 60L * 1000L
+    val t2 = clock.getTimeMillis() + 60L * 1000L + 1000L
     val q = startQuery
     ms.addData(t1, t2)
     q.processAllAvailable()
@@ -75,7 +78,7 @@ class StreamExecutionMetadataSuite extends StreamTest {
     )
 
     q.stop()
-    Thread.sleep(20000L) // Expire t1 and t2
+    Thread.sleep(60L * 1000L + 5000L) // Expire t1 and t2
     assert(t1 < clock.getTimeMillis())
     assert(t2 < clock.getTimeMillis())
 

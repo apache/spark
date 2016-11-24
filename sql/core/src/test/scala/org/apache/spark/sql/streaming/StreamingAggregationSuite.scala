@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.TimeZone
+
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
@@ -249,7 +251,6 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       inputData.toDF()
         .groupBy($"value")
         .agg(count("*"))
-        .as[(Long, Long)]
         .where('value >= current_timestamp().cast("long") - 10L)
 
     testStream(aggregated, Complete)(
@@ -277,37 +278,36 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("prune results by date_time, complete mode") {
+  test("prune results by current_date, complete mode") {
     import testImplicits._
     import StreamingAggregationSuite._
     clock = new StreamManualClock
-
+    val tz = TimeZone.getDefault.getID
     val inputData = MemoryStream[Long]
     val aggregated =
       inputData.toDF()
+        .select(to_utc_timestamp(from_unixtime('value * DateTimeUtils.SECONDS_PER_DAY), tz))
+        .toDF("value")
         .groupBy($"value")
         .agg(count("*"))
-        .as[(Long, Long)]
-        .where(from_unixtime('value + 10L) >= current_date())
-
+        // .select('value, date_sub(current_date(), 10).cast("timestamp").alias("t"))
+        // .select('value, 't, 'value >= 't)
+        .where($"value" >= date_sub(current_date(), 10).cast("timestamp"))
+        .select(($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
-      StartStream(ProcessingTime("10 days"), triggerClock = clock),
-
-      // advance clock to 10 seconds, should retain all keys
+      StartStream(ProcessingTime("10 day"), triggerClock = clock),
+      // advance clock to 10 days, should retain all keys
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
-
-      // advance clock to 20 seconds, should retain keys >= 10
+      // advance clock to 20 days, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
       AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
       CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
-
-      // advance clock to 30 seconds, should retain keys >= 20
+      // advance clock to 30 days, should retain keys >= 20
       AddData(inputData, 0L),
       AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
       CheckLastBatch((20L, 1)),
-
       // advance clock to 40 seconds, should retain keys >= 30
       AddData(inputData, 25L, 30L, 40L, 45L),
       AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
