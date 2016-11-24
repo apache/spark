@@ -53,7 +53,7 @@ class StreamExecutionMetadataSuite extends StreamTest {
     val tableName = "test"
     // Query that prunes timestamps less than current_timestamp, making
     // it easy to use for ensuring that a batch is re-processed with the
-    // timestamp used when it was first proccessed.
+    // timestamp used when it was first processed.
     def startQuery: StreamingQuery = {
       df.groupBy("a")
         .count()

@@ -97,57 +97,39 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
   }
 
   test("recovery") {
-    val ms = new MemoryStream[Int](0, sqlContext)
-    val df = ms.toDF().toDF("a")
-    val tableName = "recovery"
-    def startQuery: StreamingQuery = {
-      ms.toDF()
-        .withColumn("eventTime", $"value".cast("timestamp"))
-        .withWatermark("eventTime", "10 seconds")
-        .groupBy(window($"eventTime", "5 seconds") as 'window)
-        .agg(count("*") as 'count)
-        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
-        .writeStream
-        .format("memory")
-        .queryName(tableName)
-        .outputMode("append")
-        .start()
-    }
-
-    var q = startQuery
-    ms.addData(10, 11, 12, 13, 14, 15)
-    q.processAllAvailable()
-
-    checkAnswer(
-      spark.table(tableName), Seq()
+    val inputData = MemoryStream[Int]
+    val df = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+    val outputMode = OutputMode.Append
+    val memorySink = new MemorySink(df.schema, outputMode)
+    testStream(df)(
+      AddData(inputData, 10, 11, 12, 13, 14, 15),
+      CheckAnswer(),
+      AddData(inputData, 25), // Advance watermark to 15 seconds
+      StopStream,
+      StartStream(),
+      CheckLastBatch(),
+      AddData(inputData, 25), // Evict items less than previous watermark.
+      CheckLastBatch((10, 5)),
+      StopStream,
+      AssertOnQuery { q => // clear the sink
+        q.sink.asInstanceOf[MemorySink].clear()
+        true
+      },
+      StartStream(),
+      CheckLastBatch((10, 5)),
+      AddData(inputData, 30),
+      StopStream,
+      StartStream(), // Watermark should still be 15 seconds
+      AddData(inputData, 17),
+      CheckLastBatch(), // We still do not see next batch
+      AddData(inputData, 30), // Move watermark to 20 seconds
+      CheckLastBatch((15, 2)) // Ensure we see next window
     )
-
-    // Advance watermark to 15 seconds,
-    // but do not process batch
-    ms.addData(25)
-    q.stop()
-
-    q = startQuery
-    q.processAllAvailable()
-    checkAnswer(
-      spark.table(tableName), Seq()
-    )
-
-    // Evict items less than previous watermark
-    ms.addData(25)
-    q.processAllAvailable()
-    checkAnswer(
-      spark.table(tableName), Seq(Row(10, 5))
-    )
-    q.stop()
-
-    // Ensure we do not send again
-    q = startQuery
-    q.processAllAvailable()
-    checkAnswer(
-      spark.table(tableName), Seq()
-    )
-    q.stop()
   }
 
   test("dropping old data") {
