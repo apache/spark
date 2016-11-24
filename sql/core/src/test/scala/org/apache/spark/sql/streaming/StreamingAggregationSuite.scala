@@ -278,6 +278,7 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
+
   test("prune results by current_date, complete mode") {
     import testImplicits._
     import StreamingAggregationSuite._
@@ -292,25 +293,25 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
         .agg(count("*"))
         // .select('value, date_sub(current_date(), 10).cast("timestamp").alias("t"))
         // .select('value, 't, 'value >= 't)
-        .where($"value" >= date_sub(current_date(), 10).cast("timestamp"))
+        .where($"value".cast("date") >= date_sub(current_date(), 10))
         .select(($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
       StartStream(ProcessingTime("10 day"), triggerClock = clock),
       // advance clock to 10 days, should retain all keys
       AddData(inputData, 0L, 5L, 5L, 10L),
-      AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
       // advance clock to 20 days, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
-      AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
       // advance clock to 30 days, should retain keys >= 20
       AddData(inputData, 0L),
-      AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((20L, 1)),
       // advance clock to 40 seconds, should retain keys >= 30
       AddData(inputData, 25L, 30L, 40L, 45L),
-      AdvanceManualClock(DateTimeUtils.daysToMillis(10)),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((30L, 1), (40L, 1), (45L, 1))
     )
   }
