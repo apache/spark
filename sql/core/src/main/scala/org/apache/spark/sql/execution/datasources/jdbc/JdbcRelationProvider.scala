@@ -35,12 +35,12 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val upperBound = jdbcOptions.upperBound
     val numPartitions = jdbcOptions.numPartitions
 
-    val partitionInfo = if (partitionColumn == null || lowerBound == null || upperBound == null ||
+    val partitionInfo = if (partitionColumn.isEmpty || lowerBound.isEmpty || upperBound.isEmpty ||
         numPartitions.isEmpty) {
       null
     } else {
       JDBCPartitioningInfo(
-        partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.get)
+        partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
     JDBCRelation(parts, jdbcOptions)(sqlContext.sparkSession)

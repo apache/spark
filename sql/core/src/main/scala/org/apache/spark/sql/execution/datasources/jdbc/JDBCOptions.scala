@@ -84,13 +84,13 @@ class JDBCOptions(
   // Optional parameters only for reading
   // ------------------------------------------------------------
   // the column used to partition
-  val partitionColumn = parameters.getOrElse(JDBC_PARTITION_COLUMN, null)
+  val partitionColumn = parameters.get(JDBC_PARTITION_COLUMN)
   // the lower bound of partition column
-  val lowerBound = parameters.getOrElse(JDBC_LOWER_BOUND, null)
+  val lowerBound = parameters.get(JDBC_LOWER_BOUND).map(_.toLong)
   // the upper bound of the partition column
-  val upperBound = parameters.getOrElse(JDBC_UPPER_BOUND, null)
-  require(partitionColumn == null ||
-    (lowerBound != null && upperBound != null && numPartitions.isDefined),
+  val upperBound = parameters.get(JDBC_UPPER_BOUND).map(_.toLong)
+  require(partitionColumn.isEmpty ||
+    (lowerBound.isDefined && upperBound.isDefined && numPartitions.isDefined),
     s"If '$JDBC_PARTITION_COLUMN' is specified then '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND'," +
       s" and '$JDBC_NUM_PARTITIONS' are required.")
   val fetchSize = {
