@@ -354,7 +354,8 @@ class StreamExecution(
         assert(offsetLog.add(currentBatchId,
           availableOffsets.toOffsetSeq(sources, streamExecutionMetadata.json)),
           s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
-        logInfo(s"Committed offsets for batch $currentBatchId.")
+        logInfo(s"Committed offsets for batch $currentBatchId. " +
+          s"Metadata ${streamExecutionMetadata.toString}")
 
         // NOTE: The following code is correct because runBatches() processes exactly one
         // batch at a time. If we add pipeline parallelism (multiple batches in flight at

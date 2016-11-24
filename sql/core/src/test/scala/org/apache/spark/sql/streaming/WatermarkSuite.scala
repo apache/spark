@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 
@@ -96,28 +96,58 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
     )
   }
 
-  ignore("recovery") {
-    val inputData = MemoryStream[Int]
-
-    val windowedAggregation = inputData.toDF()
+  test("recovery") {
+    val ms = new MemoryStream[Int](0, sqlContext)
+    val df = ms.toDF().toDF("a")
+    val tableName = "recovery"
+    def startQuery: StreamingQuery = {
+      ms.toDF()
         .withColumn("eventTime", $"value".cast("timestamp"))
         .withWatermark("eventTime", "10 seconds")
         .groupBy(window($"eventTime", "5 seconds") as 'window)
         .agg(count("*") as 'count)
         .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+        .writeStream
+        .format("memory")
+        .queryName(tableName)
+        .outputMode("append")
+        .start()
+    }
 
-    testStream(windowedAggregation)(
-      AddData(inputData, 10, 11, 12, 13, 14, 15),
-      CheckAnswer(),
-      AddData(inputData, 25), // Advance watermark to 15 seconds
-      StopStream,
-      StartStream(),
-      CheckAnswer(),
-      AddData(inputData, 25), // Evict items less than previous watermark.
-      StopStream,
-      StartStream(),
-      CheckAnswer((10, 5))
+    var q = startQuery
+    ms.addData(10, 11, 12, 13, 14, 15)
+    q.processAllAvailable()
+
+    checkAnswer(
+      spark.table(tableName), Seq()
     )
+
+    // Advance watermark to 15 seconds,
+    // but do not process batch
+    ms.addData(25)
+    q.stop()
+
+    q = startQuery
+    q.processAllAvailable()
+    checkAnswer(
+      spark.table(tableName), Seq()
+    )
+
+    // Evict items less than previous watermark
+    ms.addData(25)
+    q.processAllAvailable()
+    checkAnswer(
+      spark.table(tableName), Seq(Row(10, 5))
+    )
+    q.stop()
+
+    // Ensure we do not send again
+    q = startQuery
+    q.processAllAvailable()
+    checkAnswer(
+      spark.table(tableName), Seq()
+    )
+    q.stop()
   }
 
   test("dropping old data") {
