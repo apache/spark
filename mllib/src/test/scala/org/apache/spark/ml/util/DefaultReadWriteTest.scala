@@ -22,7 +22,7 @@ import java.io.{File, IOException}
 import org.scalatest.Suite
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
@@ -79,6 +79,34 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
   }
 
   /**
+   * Compare Params with complex types that could not compare with [[===]].
+   *
+   * @param stage A pipeline stage contains these params.
+   * @param stage2 Another pipeline stage to compare.
+   * @param testParams Params to compare.
+   * @param testFunctions Functions to compare complex type params.
+   */
+  def compareParamsWithComplexTypes(
+      stage: PipelineStage,
+      stage2: PipelineStage,
+      testParams: Map[String, Any],
+      testFunctions: Map[String, (Any, Any) => Unit]): Unit = {
+    testParams.foreach { case (p, v) =>
+      if (stage.hasParam(p)) {
+        assert(stage2.hasParam(p))
+        val param = stage.getParam(p)
+        val paramVal = stage.get(param).get
+        val paramVal2 = stage2.get(param).get
+        if (testFunctions.contains(p)) {
+          testFunctions(p)(paramVal, paramVal2)
+        } else {
+          assert(paramVal === paramVal2)
+        }
+      }
+    }
+  }
+
+  /**
    * Default test for Estimator, Model pairs:
    *  - Explicitly set Params, and train model
    *  - Test save/load using [[testDefaultReadWrite()]] on Estimator and Model
@@ -100,7 +128,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       estimator: E,
       dataset: Dataset[_],
       testParams: Map[String, Any],
-      checkModelData: (M, M) => Unit): Unit = {
+      checkModelData: (M, M) => Unit,
+      checkParamsFunctions: Map[String, (Any, Any) => Unit] = Map.empty): Unit = {
     // Set some Params to make sure set Params are serialized.
     testParams.foreach { case (p, v) =>
       estimator.set(estimator.getParam(p), v)
@@ -108,18 +137,12 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     val model = estimator.fit(dataset)
 
     // Test Estimator save/load
-    val estimator2 = testDefaultReadWrite(estimator)
-    testParams.foreach { case (p, v) =>
-      val param = estimator.getParam(p)
-      assert(estimator.get(param).get === estimator2.get(param).get)
-    }
+    val estimator2 = testDefaultReadWrite(estimator, testParams = false)
+    compareParamsWithComplexTypes(estimator, estimator2, testParams, checkParamsFunctions)
 
     // Test Model save/load
-    val model2 = testDefaultReadWrite(model)
-    testParams.foreach { case (p, v) =>
-      val param = model.getParam(p)
-      assert(model.get(param).get === model2.get(param).get)
-    }
+    val model2 = testDefaultReadWrite(model, testParams = false)
+    compareParamsWithComplexTypes(model, model2, testParams, checkParamsFunctions)
 
     checkModelData(model, model2)
   }

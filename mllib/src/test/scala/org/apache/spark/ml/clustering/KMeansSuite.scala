@@ -17,11 +17,15 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
+import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
@@ -29,13 +33,14 @@ private[clustering] case class TestRow(features: Vector)
 
 class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  final val k = 5
+  final val k: Int = 5
+  final val dim: Int = 3
   @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
+    dataset = KMeansSuite.generateKMeansData(spark, 50, dim, k)
   }
 
   test("default parameters") {
@@ -148,16 +153,65 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       assert(model.clusterCenters === model2.clusterCenters)
     }
     val kmeans = new KMeans()
-    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData,
+      Map("initialModel" -> (checkModelData _).asInstanceOf[(Any, Any) => Unit]))
+  }
+
+  test("Initialize using a trained model") {
+    val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(1)
+    val oneIterModel = kmeans.fit(dataset)
+    val twoIterModel = kmeans.copy(ParamMap(ParamPair(kmeans.maxIter, 2))).fit(dataset)
+    val oneMoreIterModel = kmeans.setInitialModel(oneIterModel).fit(dataset)
+
+    assert(oneMoreIterModel.getK === k)
+
+    twoIterModel.clusterCenters.zip(oneMoreIterModel.clusterCenters)
+      .foreach { case (center1, center2) => assert(center1 ~== center2 absTol 1E-8) }
+  }
+
+  test("Initialize using a model with wrong dimension of cluster centers") {
+    val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(1)
+
+    val wrongDimModel = KMeansSuite.generateRandomKMeansModel(4, k)
+    val wrongDimModelThrown = intercept[IllegalArgumentException] {
+      kmeans.setInitialModel(wrongDimModel).fit(dataset)
+    }
+    assert(wrongDimModelThrown.getMessage.contains("mismatched dimension"))
+  }
+
+  test("Infer K from an initial model") {
+    val kmeans = new KMeans().setK(5)
+    val testNewK = 10
+    val randomModel = KMeansSuite.generateRandomKMeansModel(dim, testNewK)
+    assert(kmeans.setInitialModel(randomModel).getK === testNewK)
+  }
+
+  test("Ignore k if initialModel is set") {
+    val kmeans = new KMeans()
+
+    val randomModel = KMeansSuite.generateRandomKMeansModel(dim, k)
+    // ignore k if initialModel is set
+    assert(kmeans.setInitialModel(randomModel).setK(k - 1).getK === k)
+    kmeans.clear(kmeans.initialModel)
+    // k is not ignored after initialModel is cleared
+    assert(kmeans.setK(k - 1).getK === k - 1)
   }
 }
 
 object KMeansSuite {
+
   def generateKMeansData(spark: SparkSession, rows: Int, dim: Int, k: Int): DataFrame = {
     val sc = spark.sparkContext
     val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
-      .map(v => new TestRow(v))
+      .map(v => TestRow(v))
     spark.createDataFrame(rdd)
+  }
+
+  def generateRandomKMeansModel(dim: Int, k: Int, seed: Int = 42): KMeansModel = {
+    val rng = new Random(seed)
+    val clusterCenters = (1 to k)
+      .map(i => MLlibVectors.dense(Array.fill(dim)(rng.nextDouble)))
+    new KMeansModel("test model", new MLlibKMeansModel(clusterCenters.toArray))
   }
 
   /**
@@ -169,6 +223,7 @@ object KMeansSuite {
     "predictionCol" -> "myPrediction",
     "k" -> 3,
     "maxIter" -> 2,
-    "tol" -> 0.01
+    "tol" -> 0.01,
+    "initialModel" -> generateRandomKMeansModel(3, 3)
   )
 }

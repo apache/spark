@@ -418,6 +418,8 @@ object KMeans {
   val RANDOM = "random"
   @Since("0.8.0")
   val K_MEANS_PARALLEL = "k-means||"
+  @Since("2.1.0")
+  val K_MEANS_INITIAL_MODEL = "initialModel"
 
   /**
    * Trains a k-means model using the given set of parameters.
@@ -593,6 +595,7 @@ object KMeans {
     initMode match {
       case KMeans.RANDOM => true
       case KMeans.K_MEANS_PARALLEL => true
+      case KMeans.K_MEANS_INITIAL_MODEL => true
       case _ => false
     }
   }

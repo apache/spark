@@ -19,6 +19,8 @@ package org.apache.spark.ml.util
 
 import java.io.IOException
 
+import scala.util.Try
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.{DefaultFormats, JObject}
@@ -32,6 +34,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
+import org.apache.spark.ml.param.shared.HasInitialModel
 import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.util.Utils
@@ -300,7 +303,8 @@ private[ml] object DefaultParamsWriter {
       paramMap: Option[JValue] = None): String = {
     val uid = instance.uid
     val cls = instance.getClass.getName
-    val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
+    val params = instance.extractParamMap().toSeq
+      .filter(_.param.name != "initialModel").asInstanceOf[Seq[ParamPair[Any]]]
     val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
     }.toList))
@@ -309,6 +313,7 @@ private[ml] object DefaultParamsWriter {
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
       ("paramMap" -> jsonParams)
+
     val metadata = extraMetadata match {
       case Some(jObject) =>
         basicMetadata ~ jObject
@@ -317,6 +322,20 @@ private[ml] object DefaultParamsWriter {
     }
     val metadataJson: String = compact(render(metadata))
     metadataJson
+  }
+
+  def saveInitialModel[T <: HasInitialModel[_ <: MLWritable with Params]](
+      instance: T, path: String): Unit = {
+    if (instance.isDefined(instance.initialModel)) {
+      val initialModelPath = new Path(path, "initialModel").toString
+      val initialModel = instance.getOrDefault(instance.initialModel)
+      // When saving, only keep the direct initialModel by eliminating possible initialModels of the
+      // direct initialModel, to avoid unnecessary deep recursion of initialModel.
+      if (initialModel.hasParam("initialModel")) {
+        initialModel.clear(initialModel.getParam("initialModel"))
+      }
+      initialModel.save(initialModelPath)
+    }
   }
 }
 
@@ -445,6 +464,11 @@ private[ml] object DefaultParamsReader {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
     val cls = Utils.classForName(metadata.className)
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
+  }
+
+  def loadInitialModel[M <: Model[M]](path: String, sc: SparkContext): Try[M] = {
+    val initialModelPath = new Path(path, "initialModel").toString
+    Try(loadParamsInstance[M](initialModelPath, sc))
   }
 }
 

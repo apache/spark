@@ -17,7 +17,10 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.util.{Failure, Success}
+
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.InvalidInputException
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
@@ -36,7 +39,25 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
- * Common params for KMeans and KMeansModel
+ * Params for KMeans
+ */
+
+private[clustering] trait KMeansInitialModelParams extends HasInitialModel[KMeansModel] {
+  /**
+   * Param for KMeansModel to use for warm start.
+   * Whenever initialModel is set:
+   *   1. the initialModel k will override the param k;
+   *   2. the param initMode is set to initialModel and manually set is ignored;
+   *   3. other params are untouched.
+   * @group param
+   */
+  final val initialModel: Param[KMeansModel] =
+    new Param[KMeansModel](this, "initialModel", "A KMeansModel for warm start.")
+
+}
+
+/**
+ * Params for KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
   with HasSeed with HasPredictionCol with HasTol {
@@ -59,6 +80,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * Param for the initialization algorithm. This can be either "random" to choose random points as
    * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
+   * The param initMode will be ignored if the param initialModel is set.
    * @group expertParam
    */
   @Since("1.5.0")
@@ -83,6 +105,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   @Since("1.5.0")
   def getInitSteps: Int = $(initSteps)
 
+
   /**
    * Validates and transforms the input schema.
    * @param schema input schema
@@ -104,7 +127,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 @Experimental
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    private val parentModel: MLlibKMeansModel)
+    private[ml] val parentModel: MLlibKMeansModel)
   extends Model[KMeansModel] with KMeansParams with MLWritable {
 
   @Since("1.5.0")
@@ -124,7 +147,8 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val predictUDF = udf((vector: Vector) => predict(vector))
+    val tmpParent: MLlibKMeansModel = parentModel
+    val predictUDF = udf((vector: Vector) => tmpParent.predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
@@ -132,8 +156,6 @@ class KMeansModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
-
-  private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
@@ -210,6 +232,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
+
       // Save model data: cluster centers
       val data: Array[Data] = instance.clusterCenters.zipWithIndex.map { case (center, idx) =>
         Data(idx, center)
@@ -241,6 +264,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       }
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
       DefaultParamsReader.getAndSetParams(model, metadata)
+
       model
     }
   }
@@ -256,7 +280,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
 @Experimental
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
-  extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
+  extends Estimator[KMeansModel]
+    with KMeansParams with KMeansInitialModelParams with DefaultParamsWritable {
 
   setDefault(
     k -> 2,
@@ -281,11 +306,26 @@ class KMeans @Since("1.5.0") (
 
   /** @group setParam */
   @Since("1.5.0")
-  def setK(value: Int): this.type = set(k, value)
+  def setK(value: Int): this.type = {
+    if (isSet(initialModel)) {
+      logWarning("initialModel is set, so k will be ignored. Clear initialModel first.")
+      this
+    } else {
+      set(k, value)
+    }
+  }
 
   /** @group expertSetParam */
   @Since("1.5.0")
-  def setInitMode(value: String): this.type = set(initMode, value)
+  def setInitMode(value: String): this.type = {
+    if (isSet(initialModel)) {
+      logWarning(s"initialModel is set, so initMode will be ignored. Clear initialModel first.")
+    }
+    if (value == MLlibKMeans.K_MEANS_INITIAL_MODEL) {
+      logWarning(s"initMode of $value is not supported here, please use setInitialModel.")
+    }
+   set(initMode, value)
+  }
 
   /** @group expertSetParam */
   @Since("1.5.0")
@@ -302,6 +342,25 @@ class KMeans @Since("1.5.0") (
   /** @group setParam */
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setInitialModel(value: KMeansModel): this.type = {
+    val kOfInitialModel = value.parentModel.clusterCenters.length
+    if (isSet(k)) {
+      if ($(k) != kOfInitialModel) {
+        val previousK = $(k)
+        set(k, kOfInitialModel)
+        logWarning(s"Param K is set to $kOfInitialModel by the initialModel." +
+          s" Previous value is $previousK.")
+      }
+    } else {
+      set(k, kOfInitialModel)
+      logWarning(s"Param K is set to $kOfInitialModel by the initialModel.")
+    }
+    set(initMode, "initialModel")
+    set(initialModel, value)
+  }
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
@@ -320,6 +379,24 @@ class KMeans @Since("1.5.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setEpsilon($(tol))
+
+    if (isDefined(initialModel)) {
+      // Check that the feature dimensions are equal
+      val dimOfData = rdd.first().size
+      val dimOfInitialModel = $(initialModel).clusterCenters.head.size
+      require(dimOfData == dimOfInitialModel,
+        s"mismatched dimension, $dimOfData in data while $dimOfInitialModel in the initial model.")
+
+      // Check that the number of clusters are equal
+      val kOfInitialModel = $(initialModel).parentModel.clusterCenters.length
+      if (kOfInitialModel != $(k)) {
+        logWarning(s"mismatched cluster count, ${$(k)} cluster centers required but" +
+          s" $kOfInitialModel found in the initial model.")
+      }
+
+      algo.setInitialModel($(initialModel).parentModel)
+    }
+
     val parentModel = algo.run(rdd, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
@@ -333,13 +410,48 @@ class KMeans @Since("1.5.0") (
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  @Since("2.1.0")
+  override def write: MLWriter = new KMeans.KMeansWriter(this)
 }
 
 @Since("1.6.0")
 object KMeans extends DefaultParamsReadable[KMeans] {
 
+  // TODO: [SPARK-17784]: Add a fromCenters method
+
   @Since("1.6.0")
   override def load(path: String): KMeans = super.load(path)
+
+  @Since("1.6.0")
+  override def read: MLReader[KMeans] = new KMeansReader
+
+  /** [[MLWriter]] instance for [[KMeans]] */
+  private[KMeans] class KMeansWriter(instance: KMeans) extends MLWriter {
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveInitialModel(instance, path)
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+    }
+  }
+
+  private class KMeansReader extends MLReader[KMeans] {
+
+    /** Checked against metadata when loading estimator */
+    private val className = classOf[KMeans].getName
+
+    override def load(path: String): KMeans = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val instance = new KMeans(metadata.uid)
+
+      DefaultParamsReader.getAndSetParams(instance, metadata)
+      DefaultParamsReader.loadInitialModel[KMeansModel](path, sc) match {
+        case Success(v) => instance.setInitialModel(v)
+        case Failure(_: InvalidInputException) =>  // initialModel doesn't exist, do nothing
+        case Failure(e) => throw e
+      }
+      instance
+    }
+  }
 }
 
 /**
