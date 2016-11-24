@@ -628,7 +628,7 @@ case class ShowTablesCommand(
       val isTemp = catalog.isTemporaryTable(tableIdent)
       if (isExtended) {
         val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).toString
-        Row(database, tableName, isTemp, information)
+        Row(database, tableName, isTemp, s"${information}\n")
       } else {
         Row(database, tableName, isTemp)
       }
