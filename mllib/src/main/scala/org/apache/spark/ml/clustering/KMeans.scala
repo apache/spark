@@ -310,7 +310,7 @@ class KMeans @Since("1.5.0") (
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     fit(dataset, handlePersistence)
   }
-  
+
   @Since("2.2.0")
   protected def fit(dataset: Dataset[_], handlePersistence: Boolean): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
