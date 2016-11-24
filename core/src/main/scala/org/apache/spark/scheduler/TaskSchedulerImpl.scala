@@ -338,32 +338,34 @@ private[spark] class TaskSchedulerImpl(
     synchronized {
       try {
         taskIdToTaskSetManager.get(tid) match {
-          case Some(taskSet) if state == TaskState.LOST =>
-            // TaskState.LOST is only used by the deprecated Mesos fine-grained scheduling mode,
-            // where each executor corresponds to a single task, so mark the executor as failed.
-            val execId = taskIdToExecutorId.getOrElse(tid, throw new IllegalStateException(
-              "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"))
-            reason = Some(
-              SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
-            removeExecutor(execId, reason.get)
-            failedExecutor = Some(execId)
-            taskSet.removeRunningTask(tid)
-            taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
           case Some(taskSet) =>
-            if (TaskState.isFinished(state)) {
-              taskIdToTaskSetManager.remove(tid)
-              taskIdToExecutorId.remove(tid).foreach { execId =>
-                if (executorIdToRunningTaskIds.contains(execId)) {
-                  executorIdToRunningTaskIds(execId).remove(tid)
-                }
-              }
-            }
-            if (state == TaskState.FINISHED) {
-              taskSet.removeRunningTask(tid)
-              taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
-            } else if (Set(TaskState.FAILED, TaskState.KILLED).contains(state)) {
+            if (state == TaskState.LOST) {
+              // TaskState.LOST is only used by the deprecated Mesos fine-grained scheduling mode,
+              // where each executor corresponds to a single task, so mark the executor as failed.
+              val execId = taskIdToExecutorId.getOrElse(tid, throw new IllegalStateException(
+                "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"))
+              reason = Some(
+                SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
+              removeExecutor(execId, reason.get)
+              failedExecutor = Some(execId)
               taskSet.removeRunningTask(tid)
               taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+            } else {
+              if (TaskState.isFinished(state)) {
+                taskIdToTaskSetManager.remove(tid)
+                taskIdToExecutorId.remove(tid).foreach { execId =>
+                  if (executorIdToRunningTaskIds.contains(execId)) {
+                    executorIdToRunningTaskIds(execId).remove(tid)
+                  }
+                }
+              }
+              if (state == TaskState.FINISHED) {
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              } else if (Set(TaskState.FAILED, TaskState.KILLED).contains(state)) {
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+              }
             }
           case None =>
             logError(
