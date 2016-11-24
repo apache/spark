@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.orc
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.io.orc.{OrcStruct, SparkOrcNewRecordReader}
 import org.scalatest.BeforeAndAfterAll
@@ -54,7 +56,43 @@ case class Contact(name: String, phone: String)
 
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
-class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
+class OrcQuerySuite extends OrcQueryBase {
+  override protected val value = "false"
+  private var currentValue: Option[String] = None
+
+  override protected def beforeAll(): Unit = {
+    currentValue = Try(spark.conf.get(key)).toOption
+    spark.conf.set(key, value)
+  }
+
+  override protected def afterAll(): Unit = {
+    currentValue match {
+      case Some(value) => spark.conf.set(key, value)
+      case None => spark.conf.unset(key)
+    }
+  }
+}
+
+class OrcQueryVectorizedSuite extends OrcQueryBase {
+  override protected val value = "true"
+  private var currentValue: Option[String] = None
+
+  override protected def beforeAll(): Unit = {
+    currentValue = Try(spark.conf.get(key)).toOption
+    spark.conf.set(key, value)
+  }
+
+  override protected def afterAll(): Unit = {
+    currentValue match {
+      case Some(value) => spark.conf.set(key, value)
+      case None => spark.conf.unset(key)
+    }
+  }
+}
+
+abstract class OrcQueryBase extends QueryTest with BeforeAndAfterAll with OrcTest {
+  protected val key = SQLConf.ORC_VECTORIZED_READER_ENABLED.key
+  protected val value: String
 
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
