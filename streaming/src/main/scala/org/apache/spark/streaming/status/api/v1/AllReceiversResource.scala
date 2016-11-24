@@ -21,8 +21,8 @@ import java.util.Date
 import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.streaming.ui.StreamingJobProgressListener
 import org.apache.spark.streaming.status.api.v1.AllReceiversResource._
+import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AllReceiversResource(listener: StreamingJobProgressListener) {
@@ -37,7 +37,7 @@ private[v1] object AllReceiversResource {
 
   def receiverInfoList(listener: StreamingJobProgressListener): Seq[ReceiverInfo] = {
     listener.synchronized {
-      listener.receivedEventRateWithBatchTime.map { case (streamId, eventRates) =>
+      listener.receivedRecordRateWithBatchTime.map { case (streamId, eventRates) =>
 
         val receiverInfo = listener.receiverInfo(streamId)
         val streamName = receiverInfo.map(_.name).

@@ -22,8 +22,8 @@ import javax.ws.rs.{GET, PathParam, Produces}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.ui.StreamingJobProgressListener
 import org.apache.spark.streaming.status.api.v1.AllOutputOperationsResource._
+import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AllOutputOperationsResource(listener: StreamingJobProgressListener) {
@@ -41,10 +41,10 @@ private[v1] object AllOutputOperationsResource {
 
     listener.synchronized {
       listener.getBatchUIData(Time(batchId)) match {
-        case Some(batch) => {
+        case Some(batch) =>
           for ((opId, op) <- batch.outputOperations) yield {
-            val jobIds =
-              batch.outputOpIdSparkJobIdPairs.filter(_.outputOpId == opId).map(_.sparkJobId).sorted
+            val jobIds = batch.outputOpIdSparkJobIdPairs
+              .filter(_.outputOpId == opId).map(_.sparkJobId).toSeq.sorted
 
             new OutputOperationInfo(
               outputOpId = opId,
@@ -57,10 +57,8 @@ private[v1] object AllOutputOperationsResource {
               jobIds = jobIds
             )
           }
-        }.toSeq
-
         case None => throw new NotFoundException("unknown batch: " + batchId)
       }
-    }
+    }.toSeq
   }
 }

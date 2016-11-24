@@ -17,12 +17,12 @@
 
 package org.apache.spark.streaming.status.api.v1
 
-import java.util.{Date, ArrayList => JArrayList, Arrays => JArrays, List => JList}
+import java.util.{ArrayList => JArrayList, Arrays => JArrays, Date, List => JList}
 import javax.ws.rs.{GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.streaming.ui.StreamingJobProgressListener
 import org.apache.spark.streaming.status.api.v1.AllBatchesResource._
+import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AllBatchesResource(listener: StreamingJobProgressListener) {

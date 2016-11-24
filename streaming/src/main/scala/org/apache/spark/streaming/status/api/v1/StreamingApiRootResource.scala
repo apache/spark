@@ -21,10 +21,11 @@ import javax.servlet.ServletContext
 import javax.ws.rs.{Path, WebApplicationException}
 import javax.ws.rs.core.{Context, Response}
 
-import com.sun.jersey.spi.container.servlet.ServletContainer
 import org.eclipse.jetty.server.handler.ContextHandler
-import org.eclipse.jetty.servlet.ServletContextHandler
-import org.eclipse.jetty.servlet.ServletHolder
+import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.glassfish.jersey.server.ServerProperties
+import org.glassfish.jersey.servlet.ServletContainer
+
 import org.apache.spark.status.api.v1.UIRoot
 import org.apache.spark.streaming.ui.StreamingJobProgressListener
 
@@ -79,12 +80,8 @@ private[spark] object StreamingApiRootResource {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/streaming/api")
     val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
-    holder.setInitParameter("com.sun.jersey.config.property.resourceConfigClass",
-      "com.sun.jersey.api.core.PackagesResourceConfig")
-    holder.setInitParameter("com.sun.jersey.config.property.packages",
+    holder.setInitParameter(ServerProperties.PROVIDER_PACKAGES,
       "org.apache.spark.streaming.status.api.v1")
-    // holder.setInitParameter(ResourceConfig.PROPERTY_CONTAINER_REQUEST_FILTERS,
-    // classOf[SecurityFilter].getCanonicalName)
     StreamingUIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     StreamingUIRootFromServletContext.setListener(jerseyContext, listener)
     StreamingUIRootFromServletContext.setStartTimeMillis(jerseyContext, startTimeMillis)
@@ -141,7 +138,7 @@ private[v1] class NotFoundException(msg: String) extends WebApplicationException
 )
 
 /**
-  * Signal to JacksonMessageWriter to not convert the message into json (which would result in an
-  * extra set of quotes).
-  */
+ * Signal to JacksonMessageWriter to not convert the message into json (which would result in an
+ * extra set of quotes).
+ */
 private[v1] case class ErrorWrapper(s: String)
