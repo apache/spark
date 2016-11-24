@@ -53,7 +53,7 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  * @see <a href="http://www.jstor.org/stable/2345503">P. J. Green, Iteratively
  * Reweighted Least Squares for Maximum Likelihood Estimation, and some Robust
  * and Resistant Alternatives, Journal of the Royal Statistical Society.
- * Series B, 1984.</a>.
+ * Series B, 1984.</a>
  */
 private[ml] class IterativelyReweightedLeastSquares(
     val initialModel: WeightedLeastSquaresModel,

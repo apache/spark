@@ -98,7 +98,7 @@ class RandomBlockReplicationPolicy
    * @param n total number of indices
    * @param m number of samples needed
    * @param r random number generator
-   * @return list of m random unique indicesa
+   * @return list of m random unique indices
    */
   // scalastyle:on line.size.limit
   private def getSampleIds(n: Int, m: Int, r: Random): List[Int] = {

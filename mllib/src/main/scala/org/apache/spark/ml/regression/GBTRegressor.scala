@@ -151,7 +151,7 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 }
 
 /**
- * <a href="http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
+ * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Gradient-Boosted Trees (GBTs)</a>
  * model for regression.
  * It supports both continuous and categorical features.
  * @param _trees  Decision trees in the ensemble.

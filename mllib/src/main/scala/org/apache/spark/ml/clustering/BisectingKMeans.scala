@@ -202,7 +202,7 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
  *
  * @see <a href="http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf">
  * Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
- * KDD Workshop on Text Mining, 2000</a>
+ * KDD Workshop on Text Mining, 2000.</a>
  */
 @Since("2.0.0")
 @Experimental
