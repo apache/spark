@@ -327,6 +327,10 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
    * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
    * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
    * (default = 20)
+   *
+   * Note: The reason that we cannot add this to both GBT and RF (i.e. in TreeEnsembleParams)
+   * is the param `maxIter` controls how many trees a GBT has. The semantics in the algorithms
+   * are a bit different.
    * @group param
    */
   final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",

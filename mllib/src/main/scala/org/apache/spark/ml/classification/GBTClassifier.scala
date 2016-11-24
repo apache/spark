@@ -204,6 +204,7 @@ class GBTClassificationModel private[ml](
   /**
    * Number of trees in ensemble
    */
+  @Since("2.0.0")
   val getNumTrees: Int = trees.length
 
   @Since("1.4.0")
