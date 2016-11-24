@@ -1129,10 +1129,8 @@ class Analyzer(
           j
         // SPARK-18578: Do not allow any correlated predicate
         // in a Full (Outer) Join operator and its descendants
-        case j @ Join(left, right, FullOuter, _) =>
-          failOnOuterReference(j)
-          failOnOuterReferenceInSubTree(left, "a FULL OUTER JOIN")
-          failOnOuterReferenceInSubTree(right, "a FULL OUTER JOIN")
+        case j @ Join(_, _, FullOuter, _) =>
+          failOnOuterReferenceInSubTree(j, "a FULL OUTER JOIN")
           j
         case j @ Join(_, right, jt, _) if !jt.isInstanceOf[InnerLike] =>
           failOnOuterReference(j)
