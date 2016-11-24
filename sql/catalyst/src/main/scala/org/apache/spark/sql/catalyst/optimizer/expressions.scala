@@ -112,9 +112,10 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 /**
  * Optimize IN predicates:
  * 1. Removes literal repetitions.
- * 2. Replaces [[In (value, seq[Literal])]] with optimized version
- *    [[InSet (value, HashSet[Literal])]] which is much faster.
+ * 2. Replaces [[In (null, seq)]] with null literal.
  * 3. Replaces [[In (value, Seq.empty)]] with false literal.
+ * 4. Replaces [[In (value, seq[Literal])]] with optimized version
+ *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
