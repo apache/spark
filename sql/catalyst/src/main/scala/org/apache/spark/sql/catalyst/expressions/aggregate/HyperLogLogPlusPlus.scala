@@ -307,6 +307,8 @@ case class HyperLogLogPlusPlus(
     val estimate = if (V > 0) {
       // Use linear counting for small cardinality estimates.
       val H = m * Math.log(m / V)
+      // HLL++ is defined only when p < 19, otherwise we need to fallback to HLL.
+      // The threshold `2.5 * m` is from the original HLL algorithm.
       if ((p < 19 && H <= THRESHOLDS(p - 4)) || E <= 2.5 * m) {
         H
       } else {
