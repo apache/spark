@@ -484,6 +484,7 @@ class CodegenContext {
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
+    case map: MapType if map.ordered => genComp(map, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
     case _ =>
       throw new IllegalArgumentException(
@@ -567,9 +568,9 @@ class CodegenContext {
             ArrayData bValues = b.valueArray();
             int minLength = (lengthA > lengthB) ? lengthB : lengthA;
             for (int i = 0; i < minLength; i++) {
-              ${javaType(keyType)} keyA = ${getValue("aKeys", valueType, "i")};
-              ${javaType(keyType)} keyB = ${getValue("bKeys", valueType, "i")};
-              int comp = ${genComp(valueType, "keyA", "keyB")};
+              ${javaType(keyType)} keyA = ${getValue("aKeys", keyType, "i")};
+              ${javaType(keyType)} keyB = ${getValue("bKeys", keyType, "i")};
+              int comp = ${genComp(keyType, "keyA", "keyB")};
               if (comp != 0) {
                 return comp;
               }
@@ -584,19 +585,13 @@ class CodegenContext {
               } else {
                 ${javaType(valueType)} valueA = ${getValue("aValues", valueType, "i")};
                 ${javaType(valueType)} valueB = ${getValue("bValues", valueType, "i")};
-                int comp = ${genComp(valueType, "valueA", "valueB")};
+                comp = ${genComp(valueType, "valueA", "valueB")};
                 if (comp != 0) {
                   return comp;
                 }
               }
             }
-
-            if (lengthA < lengthB) {
-              return -1;
-            } else if (lengthA > lengthB) {
-              return 1;
-            }
-            return 0;
+            return lengthA - lengthB;
           }
         """
       addNewFunction(compareFunc, funcCode)

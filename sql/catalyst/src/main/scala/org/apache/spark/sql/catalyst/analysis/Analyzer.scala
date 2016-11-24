@@ -2336,14 +2336,14 @@ object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
  */
 object SortMaps extends Rule[LogicalPlan] {
   private def containsUnorderedMap(e: Expression): Boolean =
-    MapType.containsUnorderedMap(e.dataType)
+    e.resolved && MapType.containsUnorderedMap(e.dataType)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
-    case cmp @ BinaryComparison(left, right) if cmp.resolved && containsUnorderedMap(left) =>
+    case cmp @ BinaryComparison(left, right) if containsUnorderedMap(left) =>
       cmp.withNewChildren(OrderMaps(left) :: right :: Nil)
-    case cmp @ BinaryComparison(left, right) if cmp.resolved && containsUnorderedMap(right) =>
+    case cmp @ BinaryComparison(left, right) if containsUnorderedMap(right) =>
       cmp.withNewChildren(left :: OrderMaps(right) :: Nil)
-    case sort: SortOrder if sort.resolved && containsUnorderedMap(sort.child) =>
+    case sort: SortOrder if containsUnorderedMap(sort.child) =>
       sort.copy(child = OrderMaps(sort.child))
   } transform {
     case a: Aggregate if a.resolved && a.groupingExpressions.exists(containsUnorderedMap) =>

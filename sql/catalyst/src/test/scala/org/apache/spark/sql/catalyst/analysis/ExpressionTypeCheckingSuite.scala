@@ -40,8 +40,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     val e = intercept[AnalysisException] {
       assertSuccess(expr)
     }
-    assert(e.getMessage.contains(
-      s"cannot resolve '${expr.sql}' due to data type mismatch:"))
+    assert(e.getMessage.contains("cannot resolve "))
+    assert(e.getMessage.contains("due to data type mismatch:"))
     assert(e.getMessage.contains(errorMessage))
   }
 
@@ -51,8 +51,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   def assertErrorForDifferingTypes(expr: Expression): Unit = {
-    assertError(expr,
-      s"differing types in '${expr.sql}'")
+    assertError(expr, "differing types in")
   }
 
   test("check types for unary arithmetic") {
@@ -99,6 +98,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(LessThanOrEqual('intField, 'stringField))
     assertSuccess(GreaterThan('intField, 'stringField))
     assertSuccess(GreaterThanOrEqual('intField, 'stringField))
+    assertSuccess(EqualTo('mapField, 'mapField))
+    assertSuccess(EqualNullSafe('mapField, 'mapField))
 
     // We will transform EqualTo with numeric and boolean types to CaseKeyWhen
     assertSuccess(EqualTo('intField, 'booleanField))
@@ -111,8 +112,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
 
-    assertError(EqualTo('mapField, 'mapField), "Cannot use map type in EqualTo")
-    assertError(EqualNullSafe('mapField, 'mapField), "Cannot use map type in EqualNullSafe")
     assertError(LessThan('mapField, 'mapField),
       s"requires ${TypeCollection.Ordered.simpleString} type")
     assertError(LessThanOrEqual('mapField, 'mapField),

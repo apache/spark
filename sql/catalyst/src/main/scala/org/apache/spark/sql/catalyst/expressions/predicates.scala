@@ -419,8 +419,8 @@ case class EqualTo(left: Expression, right: Expression)
       case TypeCheckResult.TypeCheckSuccess =>
         // Maps are only allowed when they are ordered.
         if (MapType.containsUnorderedMap(left.dataType)) {
-          TypeCheckResult.TypeCheckFailure("Cannot use unordered map type in EqualTo, but " +
-            s"the actual input type is ${left.dataType.catalogString}.")
+          TypeCheckResult.TypeCheckFailure(
+            s"Cannot use unordered map type in EqualTo: ${left.dataType.catalogString}.")
         } else {
           TypeCheckResult.TypeCheckSuccess
         }
@@ -452,8 +452,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
         EqualNullSafe
         // Maps are only allowed when they are ordered.
         if (MapType.containsUnorderedMap(left.dataType)) {
-          TypeCheckResult.TypeCheckFailure("Cannot use unordered map type in EqualNullSafe, but " +
-            s"the actual input type is ${left.dataType.catalogString}.")
+          TypeCheckResult.TypeCheckFailure(
+            s"Cannot use unordered map type in EqualNullSafe: ${left.dataType.catalogString}.")
         } else {
           TypeCheckResult.TypeCheckSuccess
         }

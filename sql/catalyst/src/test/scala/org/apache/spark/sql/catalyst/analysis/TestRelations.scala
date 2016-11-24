@@ -57,4 +57,7 @@ object TestRelations {
 
   val mapRelation = LocalRelation(
     AttributeReference("map", MapType(IntegerType, IntegerType))())
+
+  val intervalRelation = LocalRelation(
+    AttributeReference("interval", CalendarIntervalType)())
 }

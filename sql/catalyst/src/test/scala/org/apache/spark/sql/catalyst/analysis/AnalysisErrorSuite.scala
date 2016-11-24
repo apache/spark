@@ -212,8 +212,8 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "sorting by unsupported column types",
-    mapRelation.orderBy('map.asc),
-    "sort" :: "type" :: "map<int,int>" :: Nil)
+    intervalRelation.orderBy('interval.asc),
+    "sort" :: "type" :: "calendarinterval" :: Nil)
 
   errorTest(
     "sorting by attributes are not from grouping expressions",
