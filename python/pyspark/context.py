@@ -25,7 +25,7 @@ import threading
 import warnings
 from threading import RLock
 from tempfile import NamedTemporaryFile
-
+import warnings
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
@@ -43,6 +43,8 @@ from pyspark.profiler import ProfilerCollector, BasicProfiler
 if sys.version > '3':
     xrange = range
 
+if sys.version < '2.7':
+    warnings.warn("Deprecated in 2.1.0. Use Python 2.7+ instead", DeprecationWarning)
 
 __all__ = ['SparkContext']
 
