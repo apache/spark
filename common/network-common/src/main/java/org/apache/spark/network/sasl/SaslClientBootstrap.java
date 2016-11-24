@@ -97,10 +97,10 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         if (conf.aesEncryptionEnabled()) {
           // Generate a request config message to send to server.
           AesConfigMessage configMessage = AesCipher.createConfigMessage(conf);
-          ByteBuffer buf = configMessage.encodeMessage();
+          ChunkedByteBuffer buf = configMessage.encodeMessage();
 
           // Encrypted the config message.
-          byte[] toEncrypt = JavaUtils.bufferToArray(buf);
+          byte[] toEncrypt = buf.toArray();
           ChunkedByteBuffer encrypted = ChunkedByteBufferUtil.wrap(saslClient.wrap(toEncrypt,
               0, toEncrypt.length));
 

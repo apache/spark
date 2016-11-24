@@ -140,11 +140,12 @@ class SaslRpcHandler extends RpcHandler {
 
       // Create AES cipher when it is authenticated
       try {
-        ChunkedByteBuffer chunkedByteBuffer=  ChunkedByteBufferUtil.wrap(message)
+        ChunkedByteBuffer chunkedByteBuffer = ChunkedByteBufferUtil.wrap(message);
         byte[] encrypted = chunkedByteBuffer.toArray();
-        ByteBuffer decrypted = ByteBuffer.wrap(saslServer.unwrap(encrypted, 0 , encrypted.length));
 
-        AesConfigMessage configMessage = AesConfigMessage.decodeMessage(decrypted);
+        InputStream in = ChunkedByteBufferUtil.wrap(saslServer.unwrap(encrypted,
+            0, encrypted.length)).toInputStream();
+        AesConfigMessage configMessage = AesConfigMessage.decodeMessage(in);
         AesCipher cipher = new AesCipher(configMessage, conf);
 
         // Send response back to client to confirm that server accept config.
