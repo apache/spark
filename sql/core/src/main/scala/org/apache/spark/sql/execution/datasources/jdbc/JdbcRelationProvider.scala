@@ -35,10 +35,11 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val upperBound = jdbcOptions.upperBound
     val numPartitions = jdbcOptions.numPartitions
 
-    val partitionInfo = if (partitionColumn.isEmpty || lowerBound.isEmpty || upperBound.isEmpty ||
-        numPartitions.isEmpty) {
+    val partitionInfo = if (partitionColumn.isEmpty) {
+      assert(lowerBound.isEmpty && upperBound.isEmpty)
       null
     } else {
+      assert(lowerBound.nonEmpty && upperBound.nonEmpty && numPartitions.nonEmpty)
       JDBCPartitioningInfo(
         partitionColumn.get, lowerBound.get, upperBound.get, numPartitions.get)
     }
