@@ -111,7 +111,25 @@ abstract class MLWriter extends BaseReadWrite with Logging {
           s"Path $path already exists. Please use write.overwrite().save(path) to overwrite it.")
       }
     }
-    saveImpl(path)
+    if (supportedFormats.contains(source)) {
+      saveImpl(path)
+    } else {
+      throw new IllegalArgumentException(s"Format ${source} is not supported by this model " +
+        s"try one of (${supportedFormats})")
+    }
+  }
+
+  protected val supportedFormats = List("native")
+
+  protected var source = "native"
+
+  /**
+   * Specifies the underlying output data format. Default is "native" with some models also
+   * supporting "pmml".
+   */
+  def format(source: String): MLWriter = {
+    this.source = source.toLowerCase()
+    this
   }
 
   /**
@@ -140,6 +158,36 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 /**
  * :: Experimental ::
  *
+ * Abstract class for utility classes that can save ML instances in both native Spark and PMML.
+ */
+@Experimental
+@Since("1.6.0")
+abstract class PMMLWriter extends MLWriter {
+  protected override val supportedFormats = List("pmml", "native")
+
+  /**
+   * Specifies the underlying output data format as PMML
+   */
+  def pmml(): MLWriter = {
+    this.source = "pmml"
+    this
+  }
+
+  override protected def saveImpl(path: String): Unit = {
+    source match {
+      case "native" => saveNative(path)
+      case "pmml" => savePMML(path)
+    }
+  }
+
+  protected def savePMML(path: String): Unit
+
+  protected def saveNative(path: String): Unit
+}
+
+/**
+ * :: Experimental ::
+ *
  * Trait for classes that provide [[MLWriter]].
  */
 @Experimental
@@ -162,6 +210,31 @@ trait MLWritable {
 
 /**
  * :: DeveloperApi ::
+ *
+ * Trait for classes that can be exported to PMML.
+ */
+@Experimental
+@Since("2.1.0")
+trait PMMLWritable extends MLWritable {
+  /**
+   * Returns an [[PMMLWriter]] instance for this ML instance capable of saving to both native Spark
+   * and PMML.
+   */
+  @Since("2.1.0")
+  override def write: PMMLWriter
+
+  /**
+   * Save this ML instance to the input path in PMML format. A shortcut of
+   * `write.format("pmml").save(path)`.
+   */
+  @Since("2.1.0")
+  def toPMML(path: String): Unit = {
+    write.format("pmml").save(path)
+  }
+}
+
+/**
+ * :: Experimental ::
  *
  * Helper trait for making simple [[Params]] types writable.  If a [[Params]] class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide

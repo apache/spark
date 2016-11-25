@@ -17,17 +17,21 @@
 
 package org.apache.spark.ml.clustering
 
+import org.dmg.pmml.PMML
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.util.Utils
 
 private[clustering] case class TestRow(features: Vector)
 
-class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest
+    with PMMLReadWriteTest {
 
   final val k = 5
   @transient var dataset: Dataset[_] = _
@@ -126,6 +130,24 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
 
     model.setSummary(None)
     assert(!model.hasSummary)
+  }
+
+
+  test("pmml export") {
+    val predictionColName = "kmeans_prediction"
+    val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
+    val model = kmeans.fit(dataset)
+    def checkModel(pmml: PMML): Unit = {
+      assert(pmml.getDataDictionary.getNumberOfFields === 3)
+    }
+    testPMMLWrite(sc, model, checkModel)
+  }
+
+  test("generic pmml export") {
+    val predictionColName = "kmeans_prediction"
+    val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
+    val model = kmeans.fit(dataset)
+
   }
 
   test("KMeansModel transform with non-default feature and prediction cols") {

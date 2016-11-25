@@ -37,7 +37,7 @@ import org.apache.spark.mllib.pmml.export.PMMLModelExportFactory
 trait PMMLExportable {
 
   /**
-   * Export the model to the stream result in PMML format
+   * Export the model to the stream result in PMML format.
    */
   private def toPMML(streamResult: StreamResult): Unit = {
     val pmmlModelExport = PMMLModelExportFactory.createPMMLModelExport(this)
@@ -53,7 +53,9 @@ trait PMMLExportable {
   }
 
   /**
-   * Export the model to a directory on a distributed file system in PMML format
+   * Export the model to a directory on a distributed file system in PMML format.
+   * Models should override if they may contain more data than
+   * is reasonable to store locally.
    */
   @Since("1.4.0")
   def toPMML(sc: SparkContext, path: String): Unit = {
@@ -78,5 +80,4 @@ trait PMMLExportable {
     toPMML(new StreamResult(writer))
     writer.toString
   }
-
 }

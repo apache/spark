@@ -42,6 +42,13 @@ object MimaExcludes {
       // [SPARK-14743] Improve delegation token handling in secure cluster
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.getTimeFromNowToRenewal"),
       // [SPARK-16199][SQL] Add a method to list the referenced columns in data source Filter
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references")
+    ) ++
+    Seq(
+      // [SPARK-11171][SPARK-11237][SPARK-11241] Add PMML exportable to ML
+      ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.ml.util.MLWriter.saveImpl")
+    ) ++
+    Seq(
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references"),
       // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
       ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select"),
