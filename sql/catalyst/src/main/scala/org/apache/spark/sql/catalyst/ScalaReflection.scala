@@ -591,8 +591,11 @@ object ScalaReflection extends ScalaReflection {
               "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
           }
 
+          // primitive take only non-null or struct takes non-null object guarded by isNull
+          val returnNonNull = fieldType.typeSymbol.asClass.isPrimitive ||
+            definedByConstructorParams(fieldType)
           val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType),
-            returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
+            returnNullable = !returnNonNull)
           val clsName = getClassNameFromType(fieldType)
           val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType, newPath) :: Nil
