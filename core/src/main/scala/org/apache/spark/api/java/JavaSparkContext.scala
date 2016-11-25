@@ -238,9 +238,9 @@ class JavaSparkContext(val sc: SparkContext)
    * }}}
    *
    * Do
-   * <code>
-   *   JavaPairRDD&lt;String, byte[]&gt; rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")
-   * </code>,
+   * {{{
+   *   JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")
+   * }}}
    *
    * then `rdd` contains
    * {{{
@@ -272,9 +272,9 @@ class JavaSparkContext(val sc: SparkContext)
    * }}}
    *
    * Do
-   * <code>
-   *   JavaPairRDD&lt;String, byte[]&gt; rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")
-   * </code>,
+   * {{{
+   *   JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")
+   * }}},
    *
    * then `rdd` contains
    * {{{
