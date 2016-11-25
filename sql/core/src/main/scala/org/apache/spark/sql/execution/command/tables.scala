@@ -431,7 +431,13 @@ case class DescribeTableCommand(
       describeSchema(catalog.lookupRelation(table).schema, result)
     } else {
       val metadata = catalog.getTableMetadata(table)
-      describeSchema(metadata.schema, result)
+      if (metadata.schema.isEmpty) {
+        // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+        // inferred at runtime. We should still support it.
+        describeSchema(catalog.lookupRelation(metadata.identifier).schema, result)
+      } else {
+        describeSchema(metadata.schema, result)
+      }
 
       describePartitionInfo(metadata, result)
 

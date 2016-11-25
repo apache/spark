@@ -270,7 +270,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
           .setParent(this))
       val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
         wlsModel.diagInvAtWA.toArray, 1, getSolver)
-      return model.setSummary(trainingSummary)
+      return model.setSummary(Some(trainingSummary))
     }
 
     // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
@@ -284,7 +284,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         .setParent(this))
     val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
       irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
-    model.setSummary(trainingSummary)
+    model.setSummary(Some(trainingSummary))
   }
 
   @Since("2.0.0")
@@ -761,8 +761,8 @@ class GeneralizedLinearRegressionModel private[ml] (
   def hasSummary: Boolean = trainingSummary.nonEmpty
 
   private[regression]
-  def setSummary(summary: GeneralizedLinearRegressionTrainingSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  def setSummary(summary: Option[GeneralizedLinearRegressionTrainingSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -778,8 +778,7 @@ class GeneralizedLinearRegressionModel private[ml] (
   override def copy(extra: ParamMap): GeneralizedLinearRegressionModel = {
     val copied = copyValues(new GeneralizedLinearRegressionModel(uid, coefficients, intercept),
       extra)
-    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
-    copied.setParent(parent)
+    copied.setSummary(trainingSummary).setParent(parent)
   }
 
   /**
@@ -879,8 +878,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
    * Private copy of model to ensure Params are not modified outside this class.
    * Coefficients is not a deep copy, but that is acceptable.
    *
-   * NOTE: [[predictionCol]] must be set correctly before the value of [[model]] is set,
-   *       and [[model]] must be set before [[predictions]] is set!
+   * @note [[predictionCol]] must be set correctly before the value of [[model]] is set,
+   * and [[model]] must be set before [[predictions]] is set!
    */
   protected val model: GeneralizedLinearRegressionModel =
     origModel.copy(ParamMap.empty).setPredictionCol(predictionCol)

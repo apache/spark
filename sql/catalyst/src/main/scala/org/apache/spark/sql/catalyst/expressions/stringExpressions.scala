@@ -40,15 +40,13 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  * An expression that concatenates multiple input strings into a single string.
  * If any input is null, concat returns null.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of `str1`, `str2`, ..., `strN`.",
+  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of str1, str2, ..., strN.",
   extended = """
     Examples:
-      > SELECT _FUNC_('Spark','SQL');
+      > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
   """)
-// scalastyle:on line.size.limit
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
@@ -89,8 +87,8 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
   usage = "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
   extended = """
     Examples:
-      > SELECT _FUNC_(' ', Spark', 'SQL');
-       Spark SQL
+      > SELECT _FUNC_(' ', 'Spark', 'SQL');
+        Spark SQL
   """)
 // scalastyle:on line.size.limit
 case class ConcatWs(children: Seq[Expression])

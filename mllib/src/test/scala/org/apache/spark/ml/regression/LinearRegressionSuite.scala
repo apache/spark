@@ -146,6 +146,8 @@ class LinearRegressionSuite
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
+    model.setSummary(None)
+    assert(!model.hasSummary)
 
     model.transform(datasetWithDenseFeature)
       .select("label", "prediction")

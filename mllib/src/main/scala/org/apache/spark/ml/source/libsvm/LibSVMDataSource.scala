@@ -48,7 +48,7 @@ import org.apache.spark.sql.{DataFrame, DataFrameReader}
  *    inconsistent feature dimensions.
  *  - "vectorType": feature vector type, "sparse" (default) or "dense".
  *
- * Note that this class is public for documentation purpose. Please don't use this class directly.
+ * @note This class is public for documentation purpose. Please don't use this class directly.
  * Rather, use the data source API as illustrated above.
  *
  * @see [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets]]

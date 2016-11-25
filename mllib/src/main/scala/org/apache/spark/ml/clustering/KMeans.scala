@@ -33,6 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
  * Common params for KMeans and KMeansModel
@@ -109,8 +110,7 @@ class KMeansModel private[ml] (
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
     val copied = copyValues(new KMeansModel(uid, parentModel), extra)
-    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
-    copied.setParent(this.parent)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   /** @group setParam */
@@ -164,8 +164,8 @@ class KMeansModel private[ml] (
 
   private var trainingSummary: Option[KMeansSummary] = None
 
-  private[clustering] def setSummary(summary: KMeansSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[clustering] def setSummary(summary: Option[KMeansSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -232,10 +232,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
 
-      val versionRegex = "([0-9]+)\\.(.+)".r
-      val versionRegex(major, _) = metadata.sparkVersion
-
-      val clusterCenters = if (major.toInt >= 2) {
+      val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {
         val data: Dataset[Data] = sparkSession.read.parquet(dataPath).as[Data]
         data.collect().sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
       } else {
@@ -327,7 +324,7 @@ class KMeans @Since("1.5.0") (
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    model.setSummary(summary)
+    model.setSummary(Some(summary))
     instr.logSuccess(model)
     model
   }
