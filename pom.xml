@@ -266,25 +266,6 @@
       <artifactId>unused</artifactId>
       <version>1.0.0</version>
     </dependency>
-    <!--
-         This is needed by the scalatest plugin, and so is declared here to be available in
-         all child modules, just as scalatest is run in all children
-    -->
-    <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.novocode</groupId>
-      <artifactId>junit-interface</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
   <dependencyManagement>
     <dependencies>
@@ -2420,6 +2401,37 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>testCompilation</id>
+      <activation>
+        <property>
+          <name>maven.test.skip</name>
+          <value>!true</value>
+        </property>
+      </activation>
+      <dependencies>
+
+        <!--
+             This is needed by the scalatest plugin, and so is declared here to be available in
+             all child modules, just as scalatest is run in all children
+        -->
+        <dependency>
+          <groupId>org.scalatest</groupId>
+          <artifactId>scalatest_${scala.binary.version}</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>junit</groupId>
+          <artifactId>junit</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>com.novocode</groupId>
+          <artifactId>junit-interface</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
 
     <!--
       This profile is enabled automatically by the sbt built. It changes the scope for the guava

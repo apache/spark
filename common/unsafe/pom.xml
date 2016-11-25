@@ -60,24 +60,38 @@
       <artifactId>slf4j-api</artifactId>
       <scope>provided</scope>
     </dependency>
-
-    <!-- Test dependencies -->
-    <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-core</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-lang3</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
+
+  <!-- Test dependencies -->
+  <profiles>
+    <profile>
+      <id>testCompilation</id>
+      <activation>
+        <property>
+          <name>maven.test.skip</name>
+          <value>!true</value>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.mockito</groupId>
+          <artifactId>mockito-core</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.scalacheck</groupId>
+          <artifactId>scalacheck_${scala.binary.version}</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-lang3</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
