@@ -17,8 +17,10 @@
 
 package org.apache.spark.network.server;
 
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 
@@ -31,7 +33,8 @@ public class NoOpRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
+  public void receive(TransportClient client, InputStream message,
+                      RpcResponseCallback callback) {
     throw new UnsupportedOperationException("Cannot handle messages");
   }
 

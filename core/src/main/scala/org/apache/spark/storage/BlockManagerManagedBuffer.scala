@@ -17,8 +17,9 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.network.buffer.{ManagedBuffer, NettyManagedBuffer}
-import org.apache.spark.util.io.ChunkedByteBuffer
+import java.io.InputStream
+
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ManagedBuffer, NioManagedBuffer}
 
 /**
  * This [[ManagedBuffer]] wraps a [[ChunkedByteBuffer]] retrieved from the [[BlockManager]]
@@ -29,19 +30,54 @@ import org.apache.spark.util.io.ChunkedByteBuffer
  * to the network layer's notion of retain / release counts.
  */
 private[storage] class BlockManagerManagedBuffer(
-    blockInfoManager: BlockInfoManager,
-    blockId: BlockId,
-    chunkedBuffer: ChunkedByteBuffer) extends NettyManagedBuffer(chunkedBuffer.toNetty) {
+  blockInfoManager: BlockInfoManager,
+  blockId: BlockId,
+  managedBuffer: ManagedBuffer) extends ManagedBuffer {
 
-  override def retain(): ManagedBuffer = {
-    super.retain()
+  def this(blockInfoManager: BlockInfoManager,
+    blockId: BlockId,
+    chunkedBuffer: ChunkedByteBuffer) {
+    this(blockInfoManager, blockId, new NioManagedBuffer(chunkedBuffer))
+  }
+
+  def size: Long = managedBuffer.size()
+
+  def nioByteBuffer: ChunkedByteBuffer = managedBuffer.nioByteBuffer()
+
+  def createInputStream: InputStream = managedBuffer.createInputStream()
+
+  override def refCnt: Int = managedBuffer.refCnt
+
+  override def retain: ManagedBuffer = {
+    managedBuffer.retain()
     val locked = blockInfoManager.lockForReading(blockId, blocking = false)
     assert(locked.isDefined)
     this
   }
 
-  override def release(): ManagedBuffer = {
-    blockInfoManager.unlock(blockId)
-    super.release()
+  override def retain(increment: Int): ManagedBuffer = {
+    if (increment <= 0) {
+      throw new IllegalArgumentException("increment: " + increment + " (expected: > 0)")
+    }
+    (0 until increment).foreach { _ =>
+      retain()
+    }
+    this
   }
+
+  override def release: Boolean = {
+    blockInfoManager.unlock(blockId)
+    managedBuffer.release()
+  }
+
+  override def release(decrement: Int): Boolean = {
+    if (decrement <= 0) {
+      throw new IllegalArgumentException("decrement: " + decrement + " (expected: > 0)")
+    }
+    (0 until decrement).map { _ =>
+      release()
+    }.last
+  }
+
+  def convertToNetty: AnyRef = managedBuffer.convertToNetty()
 }

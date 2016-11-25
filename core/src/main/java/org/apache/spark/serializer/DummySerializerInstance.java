@@ -25,6 +25,7 @@ import java.nio.ByteBuffer;
 import scala.reflect.ClassTag;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.unsafe.Platform;
 
 /**
@@ -71,7 +72,7 @@ public final class DummySerializerInstance extends SerializerInstance {
   }
 
   @Override
-  public <T> ByteBuffer serialize(T t, ClassTag<T> ev1) {
+  public <T> ChunkedByteBuffer serialize(T t, ClassTag<T> ev1) {
     throw new UnsupportedOperationException();
   }
 
@@ -81,12 +82,12 @@ public final class DummySerializerInstance extends SerializerInstance {
   }
 
   @Override
-  public <T> T deserialize(ByteBuffer bytes, ClassLoader loader, ClassTag<T> ev1) {
+  public <T> T deserialize(InputStream bytes, ClassLoader loader, ClassTag<T> ev1) {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public <T> T deserialize(ByteBuffer bytes, ClassTag<T> ev1) {
+  public <T> T deserialize(InputStream bytes, ClassTag<T> ev1) {
     throw new UnsupportedOperationException();
   }
 }

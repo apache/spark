@@ -18,16 +18,15 @@
 package org.apache.spark.serializer
 
 import java.io.{BufferedInputStream, BufferedOutputStream, InputStream, OutputStream}
-import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.storage._
-import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
  * Component which configures serialization, compression and encryption for various Spark
@@ -169,10 +168,9 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
       blockId: BlockId,
       values: Iterator[_],
       classTag: ClassTag[_]): ChunkedByteBuffer = {
-    val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * 4, ByteBuffer.allocate)
-    val byteStream = new BufferedOutputStream(bbos)
+    val bbos = ChunkedByteBufferOutputStream.newInstance()
     val ser = getSerializer(classTag).newInstance()
-    ser.serializeStream(wrapStream(blockId, byteStream)).writeAll(values).close()
+    ser.serializeStream(wrapStream(blockId, bbos)).writeAll(values).close()
     bbos.toChunkedByteBuffer
   }
 

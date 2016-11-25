@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import com.google.common.io.ByteStreams
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -176,9 +177,10 @@ private class UnsafeRowSerializerInstance(
   }
 
   // These methods are never called by shuffle code.
-  override def serialize[T: ClassTag](t: T): ByteBuffer = throw new UnsupportedOperationException
-  override def deserialize[T: ClassTag](bytes: ByteBuffer): T =
+  override def serialize[T: ClassTag](t: T): ChunkedByteBuffer =
     throw new UnsupportedOperationException
-  override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =
+  override def deserialize[T: ClassTag](bytes: InputStream): T =
+    throw new UnsupportedOperationException
+  override def deserialize[T: ClassTag](bytes: InputStream, loader: ClassLoader): T =
     throw new UnsupportedOperationException
 }

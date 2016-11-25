@@ -30,12 +30,12 @@ import com.google.common.io.ByteStreams
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
+import org.apache.spark.network.buffer.{Allocator, ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel}
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.{SizeEstimator, Utils}
+import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
-import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 private sealed trait MemoryEntry[T] {
   def size: Long
@@ -331,7 +331,10 @@ private[spark] class MemoryStore(
     var unrollMemoryUsedByThisBlock = 0L
     // Underlying buffer for unrolling the block
     val redirectableStream = new RedirectableOutputStream
-    val bbos = new ChunkedByteBufferOutputStream(initialMemoryThreshold.toInt, allocator)
+    val bbos = ChunkedByteBufferOutputStream.newInstance(initialMemoryThreshold.toInt,
+      new Allocator {
+        override def allocate(len: Int) = allocator(len)
+      })
     redirectableStream.setOutputStream(bbos)
     val serializationStream: SerializationStream = {
       val ser = serializerManager.getSerializer(classTag).newInstance()
@@ -411,7 +414,7 @@ private[spark] class MemoryStore(
       case null => None
       case e: DeserializedMemoryEntry[_] =>
         throw new IllegalArgumentException("should only call getBytes on serialized blocks")
-      case SerializedMemoryEntry(bytes, _, _) => Some(bytes)
+      case SerializedMemoryEntry(bytes, _, _) => Some(bytes.retain())
     }
   }
 
@@ -432,12 +435,15 @@ private[spark] class MemoryStore(
       entries.remove(blockId)
     }
     if (entry != null) {
+      val entrySize = entry.size
+      val entryMemoryMode = entry.memoryMode
       entry match {
-        case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
+        case SerializedMemoryEntry(buffer, _, _) =>
+          if (buffer.refCnt() > 0) buffer.release(buffer.refCnt())
         case _ =>
       }
-      memoryManager.releaseStorageMemory(entry.size, entry.memoryMode)
-      logDebug(s"Block $blockId of size ${entry.size} dropped " +
+      memoryManager.releaseStorageMemory(entrySize, entryMemoryMode)
+      logDebug(s"Block $blockId of size $entrySize dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")
       true
     } else {
@@ -764,7 +770,7 @@ private[storage] class PartiallySerializedBlock[T](
     taskContext.addTaskCompletionListener { _ =>
       // When a task completes, its unroll memory will automatically be freed. Thus we do not call
       // releaseUnrollMemoryForThisTask() here because we want to avoid double-freeing.
-      unrolledBuffer.dispose()
+      if (unrolledBuffer.refCnt() > 0) unrolledBuffer.release(unrolledBuffer.refCnt())
     }
   }
 
@@ -797,7 +803,7 @@ private[storage] class PartiallySerializedBlock[T](
         serializationStream.close()
       } finally {
         discarded = true
-        unrolledBuffer.dispose()
+        unrolledBuffer.release()
         memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
       }
     }
@@ -811,7 +817,8 @@ private[storage] class PartiallySerializedBlock[T](
     verifyNotConsumedAndNotDiscarded()
     consumed = true
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
-    ByteStreams.copy(unrolledBuffer.toInputStream(dispose = true), os)
+    ByteStreams.copy(unrolledBuffer.toInputStream(), os)
+    unrolledBuffer.release()
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     redirectableOutputStream.setOutputStream(os)
     while (rest.hasNext) {
@@ -835,7 +842,7 @@ private[storage] class PartiallySerializedBlock[T](
     serializationStream.close()
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
     val unrolledIter = serializerManager.dataDeserializeStream(
-      blockId, unrolledBuffer.toInputStream(dispose = true))(classTag)
+      blockId, unrolledBuffer.toInputStream())(classTag)
     // The unroll memory will be freed once `unrolledIter` is fully consumed in
     // PartiallyUnrolledIterator. If the iterator is not consumed by the end of the task then any
     // extra unroll memory will automatically be freed by a `finally` block in `Task`.
@@ -843,7 +850,7 @@ private[storage] class PartiallySerializedBlock[T](
       memoryStore,
       memoryMode,
       unrollMemory,
-      unrolled = unrolledIter,
+      CompletionIterator[T, Iterator[T]](unrolledIter, unrolledBuffer.release()),
       rest = rest)
   }
 }

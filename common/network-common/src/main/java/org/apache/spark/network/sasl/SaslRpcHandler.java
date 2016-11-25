@@ -18,15 +18,16 @@
 package org.apache.spark.network.sasl;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import javax.security.sasl.Sasl;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.aes.AesCipher;
@@ -78,19 +79,20 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
+  public void receive(
+      TransportClient client, InputStream message,
+      RpcResponseCallback callback) throws Exception {
     if (isComplete) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);
       return;
     }
     if (saslServer == null || !saslServer.isComplete()) {
-      ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
       SaslMessage saslMessage;
       try {
-        saslMessage = SaslMessage.decode(nettyBuf);
+        saslMessage = SaslMessage.decode(message);
       } finally {
-        nettyBuf.release();
+        message.close();
       }
 
       if (saslServer == null) {
@@ -102,12 +104,11 @@ class SaslRpcHandler extends RpcHandler {
 
       byte[] response;
       try {
-        response = saslServer.response(JavaUtils.bufferToArray(
-          saslMessage.body().nioByteBuffer()));
+        response = saslServer.response(saslMessage.body().nioByteBuffer().toArray());
       } catch (IOException ioe) {
         throw new RuntimeException(ioe);
       }
-      callback.onSuccess(ByteBuffer.wrap(response));
+      callback.onSuccess(ChunkedByteBufferUtil.wrap(response));
     }
 
     // Setup encryption after the SASL response is sent, otherwise the client can't parse the
@@ -139,14 +140,16 @@ class SaslRpcHandler extends RpcHandler {
 
       // Create AES cipher when it is authenticated
       try {
-        byte[] encrypted = JavaUtils.bufferToArray(message);
-        ByteBuffer decrypted = ByteBuffer.wrap(saslServer.unwrap(encrypted, 0 , encrypted.length));
+        ChunkedByteBuffer chunkedByteBuffer = ChunkedByteBufferUtil.wrap(message);
+        byte[] encrypted = chunkedByteBuffer.toArray();
 
-        AesConfigMessage configMessage = AesConfigMessage.decodeMessage(decrypted);
+        InputStream in = ChunkedByteBufferUtil.wrap(saslServer.unwrap(encrypted,
+            0, encrypted.length)).toInputStream();
+        AesConfigMessage configMessage = AesConfigMessage.decodeMessage(in);
         AesCipher cipher = new AesCipher(configMessage, conf);
 
         // Send response back to client to confirm that server accept config.
-        callback.onSuccess(JavaUtils.stringToBytes(AesCipher.TRANSFORM));
+        callback.onSuccess(ChunkedByteBufferUtil.wrap(JavaUtils.stringToBytes(AesCipher.TRANSFORM)));
         logger.info("Enabling AES cipher for Server channel {}", client);
         cipher.addToChannel(channel);
         complete(true);
@@ -157,7 +160,7 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ByteBuffer message) {
+  public void receive(TransportClient client, InputStream message) throws Exception {
     delegate.receive(client, message);
   }
 

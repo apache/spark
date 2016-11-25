@@ -33,6 +33,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.StaticMemoryManager
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, ChunkedByteBufferUtil}
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
@@ -42,7 +43,6 @@ import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
 import org.apache.spark.util.{ManualClock, Utils}
-import org.apache.spark.util.io.ChunkedByteBuffer
 
 class ReceivedBlockHandlerSuite
   extends SparkFunSuite
@@ -164,7 +164,8 @@ class ReceivedBlockHandlerSuite
           val bytes = reader.read(fileSegment)
           reader.close()
           serializerManager.dataDeserializeStream(
-            generateBlockId(), new ChunkedByteBuffer(bytes).toInputStream())(ClassTag.Any).toList
+            generateBlockId(),
+            ChunkedByteBufferUtil.wrap(bytes).toInputStream())(ClassTag.Any).toList
         }
         loggedData shouldEqual data
       }

@@ -18,8 +18,10 @@
 package org.apache.spark.network.protocol;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.LinkedList;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -31,8 +33,12 @@ import org.mockito.Mockito;
 import static org.junit.Assert.*;
 
 import org.apache.spark.network.TestManagedBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
+import org.apache.spark.network.buffer.InputStreamManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
+import org.apache.spark.network.protocol.ByteBufInputStream;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 
 public class MessageWithHeaderSuite {
@@ -50,13 +56,14 @@ public class MessageWithHeaderSuite {
   @Test
   public void testByteBufBody() throws Exception {
     ByteBuf header = Unpooled.copyLong(42);
-    ByteBuf bodyPassedToNettyManagedBuffer = Unpooled.copyLong(84);
+    ChunkedByteBuffer bodyPassedToNettyManagedBuffer =
+        ChunkedByteBufferUtil.wrap(Unpooled.copyLong(84));
     assertEquals(1, header.refCnt());
     assertEquals(1, bodyPassedToNettyManagedBuffer.refCnt());
-    ManagedBuffer managedBuf = new NettyManagedBuffer(bodyPassedToNettyManagedBuffer);
+    ManagedBuffer managedBuf = new NioManagedBuffer(bodyPassedToNettyManagedBuffer);
 
     Object body = managedBuf.convertToNetty();
-    assertEquals(2, bodyPassedToNettyManagedBuffer.refCnt());
+    assertEquals(1, bodyPassedToNettyManagedBuffer.refCnt());
     assertEquals(1, header.refCnt());
 
     MessageWithHeader msg = new MessageWithHeader(managedBuf, header, body, managedBuf.size());
@@ -71,11 +78,29 @@ public class MessageWithHeaderSuite {
   }
 
   @Test
+  public void testInputStreamBody() throws Exception {
+    ByteBuf header = Unpooled.copyLong(42);
+    ByteBuf bodyByteBuf = Unpooled.copyLong(8);
+    LinkedList<ByteBuf> list = new LinkedList<>();
+    list.add(bodyByteBuf);
+    ManagedBuffer managedBuf = new InputStreamManagedBuffer(new ByteBufInputStream(list), 8);
+    MessageWithHeader msg = new MessageWithHeader(managedBuf, header, managedBuf.convertToNetty(),
+        managedBuf.size());
+    ByteBuf result = doWrite(msg, 1);
+
+    assertEquals(0, bodyByteBuf.refCnt());
+    assertEquals(42, result.readLong());
+    assertEquals(8, result.readLong());
+    managedBuf.release();
+    assertEquals(0, managedBuf.refCnt());
+  }
+
+  @Test
   public void testDeallocateReleasesManagedBuffer() throws Exception {
     ByteBuf header = Unpooled.copyLong(42);
     ManagedBuffer managedBuf = Mockito.spy(new TestManagedBuffer(84));
     ByteBuf body = (ByteBuf) managedBuf.convertToNetty();
-    assertEquals(2, body.refCnt());
+    assertEquals(1, body.refCnt());
     MessageWithHeader msg = new MessageWithHeader(managedBuf, header, body, body.readableBytes());
     assertTrue(msg.release());
     Mockito.verify(managedBuf, Mockito.times(1)).release();

@@ -22,18 +22,20 @@ import java.nio.ByteBuffer;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferOutputStream;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.sasl.aes.AesCipher;
 import org.apache.spark.network.sasl.aes.AesConfigMessage;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
+
 
 /**
  * Bootstraps a {@link TransportClient} by performing SASL authentication on the connection. The
@@ -75,12 +77,13 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
 
       while (!saslClient.isComplete()) {
         SaslMessage msg = new SaslMessage(appId, payload);
-        ByteBuf buf = Unpooled.buffer(msg.encodedLength() + (int) msg.body().size());
-        msg.encode(buf);
-        buf.writeBytes(msg.body().nioByteBuffer());
-
-        ByteBuffer response = client.sendRpcSync(buf.nioBuffer(), conf.saslRTTimeoutMs());
-        payload = saslClient.response(JavaUtils.bufferToArray(response));
+        ChunkedByteBufferOutputStream outputStream = ChunkedByteBufferOutputStream.newInstance();
+        msg.encode(outputStream);
+        outputStream.write(msg.body().nioByteBuffer().toArray());
+        outputStream.close();
+        ChunkedByteBuffer response = client.sendRpcSync(outputStream.toChunkedByteBuffer(),
+            conf.saslRTTimeoutMs());
+        payload = saslClient.response(response.toArray());
       }
 
       client.setClientId(appId);
@@ -94,11 +97,12 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         if (conf.aesEncryptionEnabled()) {
           // Generate a request config message to send to server.
           AesConfigMessage configMessage = AesCipher.createConfigMessage(conf);
-          ByteBuffer buf = configMessage.encodeMessage();
+          ChunkedByteBuffer buf = configMessage.encodeMessage();
 
           // Encrypted the config message.
-          byte[] toEncrypt = JavaUtils.bufferToArray(buf);
-          ByteBuffer encrypted = ByteBuffer.wrap(saslClient.wrap(toEncrypt, 0, toEncrypt.length));
+          byte[] toEncrypt = buf.toArray();
+          ChunkedByteBuffer encrypted = ChunkedByteBufferUtil.wrap(saslClient.wrap(toEncrypt,
+              0, toEncrypt.length));
 
           client.sendRpcSync(encrypted, conf.saslRTTimeoutMs());
           AesCipher cipher = new AesCipher(configMessage, conf);

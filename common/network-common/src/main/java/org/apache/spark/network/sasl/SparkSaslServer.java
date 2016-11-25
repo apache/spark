@@ -146,7 +146,10 @@ public class SparkSaslServer implements SaslEncryptionBackend {
 
   @Override
   public byte[] unwrap(byte[] data, int offset, int len) throws SaslException {
-    return saslServer.unwrap(data, offset, len);
+    byte[] bytes = saslServer.unwrap(data, offset, len);
+    Preconditions.checkState(bytes.length > 0, "Unwraps a byte array received from a client," +
+        "but the length of the result is equal to 0.");
+    return bytes;
   }
 
   /**

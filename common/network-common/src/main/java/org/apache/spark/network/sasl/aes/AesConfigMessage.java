@@ -17,11 +17,17 @@
 
 package org.apache.spark.network.sasl.aes;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
+import org.apache.spark.network.buffer.ChunkedByteBufferOutputStream;
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil;
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
 
@@ -49,52 +55,47 @@ public class AesConfigMessage implements Encodable {
   }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return 1 +
       Encoders.ByteArrays.encodedLength(inKey) + Encoders.ByteArrays.encodedLength(outKey) +
       Encoders.ByteArrays.encodedLength(inIv) + Encoders.ByteArrays.encodedLength(outIv);
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    buf.writeByte(TAG_BYTE);
-    Encoders.ByteArrays.encode(buf, inKey);
-    Encoders.ByteArrays.encode(buf, inIv);
-    Encoders.ByteArrays.encode(buf, outKey);
-    Encoders.ByteArrays.encode(buf, outIv);
+  public void encode(OutputStream output) throws IOException {
+    output.write(TAG_BYTE);
+    Encoders.ByteArrays.encode(output, inKey);
+    Encoders.ByteArrays.encode(output, inIv);
+    Encoders.ByteArrays.encode(output, outKey);
+    Encoders.ByteArrays.encode(output, outIv);
   }
 
   /**
    * Encode the config message.
    * @return ByteBuffer which contains encoded config message.
    */
-  public ByteBuffer encodeMessage(){
-    ByteBuffer buf = ByteBuffer.allocate(encodedLength());
-
-    ByteBuf wrappedBuf = Unpooled.wrappedBuffer(buf);
-    wrappedBuf.clear();
-    encode(wrappedBuf);
-
-    return buf;
+  public ChunkedByteBuffer encodeMessage() throws IOException {
+    ChunkedByteBufferOutputStream outputStream = ChunkedByteBufferOutputStream.newInstance();
+    encode(outputStream);
+    outputStream.close();
+    return outputStream.toChunkedByteBuffer();
   }
 
   /**
    * Decode the config message from buffer
-   * @param buffer the buffer contain encoded config message
+   * @param in the buffer contain encoded config message
    * @return config message
    */
-  public static AesConfigMessage decodeMessage(ByteBuffer buffer) {
-    ByteBuf buf = Unpooled.wrappedBuffer(buffer);
-
-    if (buf.readByte() != TAG_BYTE) {
+  public static AesConfigMessage decodeMessage(InputStream in) throws IOException {
+    if (Encoders.Bytes.decode(in) != TAG_BYTE) {
       throw new IllegalStateException("Expected AesConfigMessage, received something else"
         + " (maybe your client does not have AES enabled?)");
     }
 
-    byte[] outKey = Encoders.ByteArrays.decode(buf);
-    byte[] outIv = Encoders.ByteArrays.decode(buf);
-    byte[] inKey = Encoders.ByteArrays.decode(buf);
-    byte[] inIv = Encoders.ByteArrays.decode(buf);
+    byte[] outKey = Encoders.ByteArrays.decode(in);
+    byte[] outIv = Encoders.ByteArrays.decode(in);
+    byte[] inKey = Encoders.ByteArrays.decode(in);
+    byte[] inIv = Encoders.ByteArrays.decode(in);
     return new AesConfigMessage(inKey, inIv, outKey, outIv);
   }
 

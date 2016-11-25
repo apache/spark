@@ -17,8 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.nio.ByteBuffer
-
 import scala.collection.JavaConverters._
 
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver}
@@ -29,6 +27,8 @@ import org.apache.spark.{SparkConf, SparkEnv, TaskState}
 import org.apache.spark.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.buffer.ChunkedByteBuffer
+import org.apache.spark.network.buffer.ChunkedByteBufferUtil
 import org.apache.spark.scheduler.cluster.mesos.{MesosSchedulerUtils, MesosTaskLaunchData}
 import org.apache.spark.util.Utils
 
@@ -41,12 +41,12 @@ private[spark] class MesosExecutorBackend
   var executor: Executor = null
   var driver: ExecutorDriver = null
 
-  override def statusUpdate(taskId: Long, state: TaskState.TaskState, data: ByteBuffer) {
+  override def statusUpdate(taskId: Long, state: TaskState.TaskState, data: ChunkedByteBuffer) {
     val mesosTaskId = TaskID.newBuilder().setValue(taskId.toString).build()
     driver.sendStatusUpdate(MesosTaskStatus.newBuilder()
       .setTaskId(mesosTaskId)
       .setState(taskStateToMesos(state))
-      .setData(ByteString.copyFrom(data))
+      .setData(ByteString.copyFrom(data.toByteBuffer))
       .build())
   }
 
@@ -91,7 +91,7 @@ private[spark] class MesosExecutorBackend
     } else {
       SparkHadoopUtil.get.runAsSparkUser { () =>
         executor.launchTask(this, taskId = taskId, attemptNumber = taskData.attemptNumber,
-          taskInfo.getName, taskData.serializedTask)
+          taskInfo.getName, ChunkedByteBufferUtil.wrap(taskData.serializedTask))
       }
     }
   }

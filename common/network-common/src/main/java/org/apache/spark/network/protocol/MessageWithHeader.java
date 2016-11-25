@@ -18,11 +18,13 @@
 package org.apache.spark.network.protocol;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import javax.annotation.Nullable;
 
 import com.google.common.base.Preconditions;
+import com.google.common.io.ByteStreams;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.FileRegion;
 import io.netty.util.AbstractReferenceCounted;
@@ -43,6 +45,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
   private final Object body;
   private final long bodyLength;
   private long totalBytesTransferred;
+  private ByteBuffer buf = null;
 
   /**
    * When the write buffer size is larger than this limit, I/O will be done in chunks of this size.
@@ -71,8 +74,9 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
       ByteBuf header,
       Object body,
       long bodyLength) {
-    Preconditions.checkArgument(body instanceof ByteBuf || body instanceof FileRegion,
-      "Body must be a ByteBuf or a FileRegion.");
+    Preconditions.checkArgument(
+        body instanceof ByteBuf || body instanceof FileRegion || body instanceof InputStream,
+        "Body must be a ByteBuf or a FileRegion or a InputStream.");
     this.managedBuffer = managedBuffer;
     this.header = header;
     this.headerLength = header.readableBytes();
@@ -121,6 +125,8 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
       writtenBody = ((FileRegion) body).transferTo(target, totalBytesTransferred - headerLength);
     } else if (body instanceof ByteBuf) {
       writtenBody = copyByteBuf((ByteBuf) body, target);
+    } else if (body instanceof InputStream) {
+      writtenBody = copyInputStream((InputStream) body, target);
     }
     totalBytesTransferred += writtenBody;
 
@@ -134,6 +140,23 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     if (managedBuffer != null) {
       managedBuffer.release();
     }
+  }
+
+  private int copyInputStream(InputStream in, WritableByteChannel target) throws IOException {
+    if (buf == null) {
+      buf = ByteBuffer.wrap(new byte[NIO_BUFFER_LIMIT]);
+    } else if (buf.hasRemaining()) {
+      return writeNioBuffer(target, buf);
+    }
+
+    byte[] bufArr = buf.array();
+    int bufLen = bufArr.length;
+    int len = (int) Math.min(bodyLength - (totalBytesTransferred - headerLength), bufLen);
+    ByteStreams.readFully(in, bufArr, 0, len);
+
+    buf.limit(len);
+    buf.position(0);
+    return writeNioBuffer(target, buf);
   }
 
   private int copyByteBuf(ByteBuf buf, WritableByteChannel target) throws IOException {

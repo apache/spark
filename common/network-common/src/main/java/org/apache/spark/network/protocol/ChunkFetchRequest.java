@@ -17,9 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
+import com.google.common.base.Objects;
 /**
  * Request to fetch a sequence of a single chunk of a stream. This will correspond to a single
  * {@link org.apache.spark.network.protocol.ResponseMessage} (either success or failure).
@@ -35,17 +37,17 @@ public final class ChunkFetchRequest extends AbstractMessage implements RequestM
   public Type type() { return Type.ChunkFetchRequest; }
 
   @Override
-  public int encodedLength() {
+  public long encodedLength() {
     return streamChunkId.encodedLength();
   }
 
   @Override
-  public void encode(ByteBuf buf) {
-    streamChunkId.encode(buf);
+  public void encode(OutputStream out) throws IOException {
+    streamChunkId.encode(out);
   }
 
-  public static ChunkFetchRequest decode(ByteBuf buf) {
-    return new ChunkFetchRequest(StreamChunkId.decode(buf));
+  public static ChunkFetchRequest decode(InputStream in) throws IOException {
+    return new ChunkFetchRequest(StreamChunkId.decode(in));
   }
 
   @Override

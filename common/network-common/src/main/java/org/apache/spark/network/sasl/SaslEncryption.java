@@ -35,7 +35,7 @@ import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.util.AbstractReferenceCounted;
 
 import org.apache.spark.network.util.ByteArrayWritableChannel;
-import org.apache.spark.network.util.NettyUtils;
+import org.apache.spark.network.util.TransportFrameDecoder;
 
 /**
  * Provides SASL-based encription for transport channels. The single method exposed by this
@@ -61,7 +61,12 @@ class SaslEncryption {
     channel.pipeline()
       .addFirst(ENCRYPTION_HANDLER_NAME, new EncryptionHandler(backend, maxOutboundBlockSize))
       .addFirst("saslDecryption", new DecryptionHandler(backend))
-      .addFirst("saslFrameDecoder", NettyUtils.createFrameDecoder());
+      .addFirst("saslFrameDecoder", createFrameDecoder());
+  }
+
+  // Each frame does not exceed 8 + maxOutboundBlockSize bytes
+  private static TransportFrameDecoder createFrameDecoder() {
+    return new TransportFrameDecoder(false);
   }
 
   private static class EncryptionHandler extends ChannelOutboundHandlerAdapter {

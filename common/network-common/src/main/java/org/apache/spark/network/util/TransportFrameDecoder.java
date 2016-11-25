@@ -51,10 +51,19 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
 
   private final LinkedList<ByteBuf> buffers = new LinkedList<>();
   private final ByteBuf frameLenBuf = Unpooled.buffer(LENGTH_SIZE, LENGTH_SIZE);
+  private final boolean isSupportLargeData;
 
   private long totalSize = 0;
   private long nextFrameSize = UNKNOWN_FRAME_SIZE;
   private volatile Interceptor interceptor;
+
+  public TransportFrameDecoder() {
+    this(true);
+  }
+
+  public TransportFrameDecoder(boolean isSupportLargeData) {
+    this.isSupportLargeData = isSupportLargeData;
+  }
 
   @Override
   public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
@@ -78,7 +87,13 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
         totalSize -= read;
       } else {
         // Interceptor is not active, so try to decode one frame.
-        ByteBuf frame = decodeNext();
+        Object frame ;
+        if (isSupportLargeData) {
+          frame = decodeList();
+        } else {
+          frame = decodeByteBuf();
+        }
+
         if (frame == null) {
           break;
         }
@@ -121,7 +136,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     return nextFrameSize;
   }
 
-  private ByteBuf decodeNext() throws Exception {
+  private ByteBuf decodeByteBuf() throws Exception {
     long frameSize = decodeFrameSize();
     if (frameSize == UNKNOWN_FRAME_SIZE || totalSize < frameSize) {
       return null;
@@ -150,16 +165,45 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     return frame;
   }
 
+  private LinkedList<ByteBuf> decodeList() throws Exception {
+    long frameSize = decodeFrameSize();
+    if (frameSize == UNKNOWN_FRAME_SIZE || totalSize < frameSize) {
+      return null;
+    }
+
+    // Reset size for next frame.
+    nextFrameSize = UNKNOWN_FRAME_SIZE;
+
+    Preconditions.checkArgument(frameSize > 0, "Frame length should be positive: %s", frameSize);
+    
+    LinkedList<ByteBuf> frame = new LinkedList<>();
+    // If the first buffer holds the entire frame, return it.
+    long remaining = frameSize;
+    if (buffers.getFirst().readableBytes() >= remaining) {
+      frame.add(nextBufferForFrame(remaining));
+      return frame;
+    }
+
+    while (remaining > 0) {
+      ByteBuf next = nextBufferForFrame(remaining);
+      frame.add(next);
+      remaining -= next.readableBytes();
+    }
+    assert remaining == 0;
+    return frame;
+  }
+
   /**
    * Takes the first buffer in the internal list, and either adjust it to fit in the frame
    * (by taking a slice out of it) or remove it from the internal list.
    */
-  private ByteBuf nextBufferForFrame(int bytesToRead) {
+  private ByteBuf nextBufferForFrame(long bytesToRead) {
     ByteBuf buf = buffers.getFirst();
     ByteBuf frame;
 
     if (buf.readableBytes() > bytesToRead) {
-      frame = buf.retain().readSlice(bytesToRead);
+      // buf.readableBytes() less than Integer.MAX_VALUE
+      frame = buf.retain().readSlice((int) bytesToRead);
       totalSize -= bytesToRead;
     } else {
       frame = buf;
