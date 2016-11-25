@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 
 
 /**
- * The data type representing `Boolean` values. Please use the singleton [[DataTypes.BooleanType]].
+ * The data type representing `Boolean` values. Please use the singleton `DataTypes.BooleanType`.
  *
  * @since 1.3.0
  */

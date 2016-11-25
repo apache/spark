@@ -42,7 +42,7 @@ private[clustering] trait BisectingKMeansParams extends Params
   with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
 
   /**
-   * The desired number of leaf clusters. Must be > 1. Default: 4.
+   * The desired number of leaf clusters. Must be &gt; 1. Default: 4.
    * The actual number could be smaller if there are no divisible leaf clusters.
    * @group param
    */
@@ -55,8 +55,8 @@ private[clustering] trait BisectingKMeansParams extends Params
   def getK: Int = $(k)
 
   /**
-   * The minimum number of points (if >= 1.0) or the minimum proportion
-   * of points (if < 1.0) of a divisible cluster (default: 1.0).
+   * The minimum number of points (if &gt;= 1.0) or the minimum proportion
+   * of points (if &lt; 1.0) of a divisible cluster (default: 1.0).
    * @group expertParam
    */
   @Since("2.0.0")
@@ -208,9 +208,9 @@ object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
  * If bisecting all divisible clusters on the bottom level would result more than `k` leaf clusters,
  * larger clusters get higher priority.
  *
- * @see [[http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
- *     Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
- *     KDD Workshop on Text Mining, 2000.]]
+ * @see <a href="http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf">
+ * Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
+ * KDD Workshop on Text Mining, 2000.</a>
  */
 @Since("2.0.0")
 @Experimental
@@ -296,7 +296,7 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  * :: Experimental ::
  * Summary of BisectingKMeans.
  *
- * @param predictions  [[DataFrame]] produced by [[BisectingKMeansModel.transform()]].
+ * @param predictions  `DataFrame` produced by `BisectingKMeansModel.transform()`.
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.

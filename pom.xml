@@ -2506,6 +2506,18 @@
                   <name>tparam</name>
                   <placement>X</placement>
                 </tag>
+                <tag>
+                  <name>constructor</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>todo</name>
+                  <placement>X</placement>
+                </tag>
+                <tag>
+                  <name>groupname</name>
+                  <placement>X</placement>
+                </tag>
               </tags>
             </configuration>
           </plugin>

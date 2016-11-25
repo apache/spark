@@ -405,7 +405,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * partitioning of the resulting key-value pair RDD by passing a Partitioner.
    *
    * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
-   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * each key, using `JavaPairRDD.reduceByKey` or `JavaPairRDD.combineByKey`
    * will provide much better performance.
    */
   def groupByKey(partitioner: Partitioner): JavaPairRDD[K, JIterable[V]] =
@@ -416,7 +416,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * resulting RDD with into `numPartitions` partitions.
    *
    * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
-   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * each key, using `JavaPairRDD.reduceByKey` or `JavaPairRDD.combineByKey`
    * will provide much better performance.
    */
   def groupByKey(numPartitions: Int): JavaPairRDD[K, JIterable[V]] =
@@ -546,7 +546,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * resulting RDD with the existing partitioner/parallelism level.
    *
    * @note If you are grouping in order to perform an aggregation (such as a sum or average) over
-   * each key, using [[JavaPairRDD.reduceByKey]] or [[JavaPairRDD.combineByKey]]
+   * each key, using `JavaPairRDD.reduceByKey` or `JavaPairRDD.combineByKey`
    * will provide much better performance.
    */
   def groupByKey(): JavaPairRDD[K, JIterable[V]] =
