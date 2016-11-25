@@ -30,7 +30,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-case class TestDataPoint(x: Int, y: Double, s: String)
+case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
+case class TestDataPoint2(x: Int, s: String)
+
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
@@ -1007,10 +1009,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(df10.schema(0).nullable == true)
     assert(df10.schema(0).dataType.asInstanceOf[MapType].valueContainsNull == true)
 
-    val df11 = Seq(TestDataPoint(1, 2.2, "a"), TestDataPoint(3, 4.4, "null")).toDF
+    val df11 = Seq(TestDataPoint(1, 2.2, "a", null),
+                   TestDataPoint(3, 4.4, "null", (TestDataPoint2(33, "b")))).toDF
     assert(df11.schema(0).nullable == false)
     assert(df11.schema(1).nullable == false)
     assert(df11.schema(2).nullable == true)
+    assert(df11.schema(3).nullable == true)
+    assert(df11.schema(3).dataType.asInstanceOf[StructType].fields(0).nullable == false)
+    assert(df11.schema(3).dataType.asInstanceOf[StructType].fields(1).nullable == true)
   }
 
   Seq(true, false).foreach { eager =>
