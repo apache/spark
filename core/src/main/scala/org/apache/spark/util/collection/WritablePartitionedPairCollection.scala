@@ -127,4 +127,3 @@ private[spark] trait WritablePartitionedIterator {
 
   def nextPartition(): Int
 }
-

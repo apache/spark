@@ -98,4 +98,3 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
 private object PartitionedPairBuffer {
   val MAXIMUM_CAPACITY = Int.MaxValue / 2 // 2 ^ 30 - 1
 }
-

@@ -37,4 +37,3 @@ private[spark] class PartitionedAppendOnlyMap[K, V]
     update((partition, key), value)
   }
 }
-
