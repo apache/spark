@@ -488,6 +488,19 @@ class InMemoryCatalog(
     }
   }
 
+  override def listPartitionNames(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = synchronized {
+    val partitionColumnNames = getTable(db, table).partitionColumnNames
+
+    listPartitions(db, table, partialSpec).map { partition =>
+      partitionColumnNames.map { name =>
+        name + "=" + partition.spec(name)
+      }.mkString("/")
+    }
+  }
+
   override def listPartitions(
       db: String,
       table: String,
