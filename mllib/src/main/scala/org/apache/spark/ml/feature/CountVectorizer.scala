@@ -53,7 +53,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /**
    * Specifies the minimum number of different documents a term must appear in to be included
    * in the vocabulary.
-   * If this is an integer >= 1, this specifies the number of documents the term must appear in;
+   * If this is an integer &gt;= 1, this specifies the number of documents the term must appear in;
    * if this is a double in [0,1), then this specifies the fraction of documents.
    *
    * Default: 1.0
@@ -78,7 +78,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /**
    * Filter to ignore rare words in a document. For each document, terms with
    * frequency/count less than the given threshold are ignored.
-   * If this is an integer >= 1, then this specifies a count (of times the term must appear
+   * If this is an integer &gt;= 1, then this specifies a count (of times the term must appear
    * in the document);
    * if this is a double in [0,1), then this specifies a fraction (out of the document's token
    * count).

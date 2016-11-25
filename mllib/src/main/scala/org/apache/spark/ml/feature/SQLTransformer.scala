@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
  * use Spark SQL built-in function and UDFs to operate on these selected columns.
  * For example, [[SQLTransformer]] supports statements like:
  *  - SELECT a, a + b AS a_b FROM __THIS__
- *  - SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5
+ *  - SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a &gt; 5
  *  - SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b
  */
 @Since("1.6.0")

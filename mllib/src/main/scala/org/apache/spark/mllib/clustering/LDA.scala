@@ -261,7 +261,7 @@ class LDA private (
   def getCheckpointInterval: Int = checkpointInterval
 
   /**
-   * Parameter for set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that
+   * Parameter for set checkpoint interval (&gt;= 1) or disable checkpoint (-1). E.g. 10 means that
    * the cache will get checkpointed every 10 iterations. Checkpointing helps with recovery
    * (when nodes fail). It also helps with eliminating temporary shuffle files on disk, which can be
    * important when LDA is run for many iterations. If the checkpoint directory is not set in
@@ -340,7 +340,7 @@ class LDA private (
   }
 
   /**
-   * Java-friendly version of [[run()]]
+   * Java-friendly version of `run()`
    */
   @Since("1.3.0")
   def run(documents: JavaPairRDD[java.lang.Long, Vector]): LDAModel = {

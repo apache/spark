@@ -119,7 +119,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set the ElasticNet mixing parameter.
    * For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
-   * For 0 < alpha < 1, the penalty is a combination of L1 and L2.
+   * For 0 &lt; alpha &lt; 1, the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
    *
    * @group setParam
@@ -165,7 +165,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    *  - "l-bfgs" denotes Limited-memory BFGS which is a limited-memory quasi-Newton
    *    optimization method.
    *  - "normal" denotes using Normal Equation as an analytical solution to the linear regression
-   *    problem.  This solver is limited to [[LinearRegression.MAX_FEATURES_FOR_NORMAL_SOLVER]].
+   *    problem.  This solver is limited to `LinearRegression.MAX_FEATURES_FOR_NORMAL_SOLVER`.
    *  - "auto" (default) means that the solver algorithm is selected automatically.
    *    The Normal Equations solver will be used when possible, but this will automatically fall
    *    back to iterative optimization methods when needed.
@@ -181,7 +181,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   setDefault(solver -> "auto")
 
   /**
-   * Suggested depth for treeAggregate (>= 2).
+   * Suggested depth for treeAggregate (&gt;= 2).
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
@@ -338,12 +338,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       /*
          Note that in Linear Regression, the objective history (loss + regularization) returned
          from optimizer is computed in the scaled space given by the following formula.
-         <p><blockquote>
+         <blockquote>
             $$
             L &= 1/2n||\sum_i w_i(x_i - \bar{x_i}) / \hat{x_i} - (y - \bar{y}) / \hat{y}||^2
                  + regTerms \\
             $$
-         </blockquote></p>
+         </blockquote>
        */
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
       var state: optimizer.State = null
@@ -414,7 +414,7 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
   override def load(path: String): LinearRegression = super.load(path)
 
   /**
-   * When using [[LinearRegression.solver]] == "normal", the solver must limit the number of
+   * When using `LinearRegression.solver` == "normal", the solver must limit the number of
    * features to at most this number.  The entire covariance matrix X^T^X will be collected
    * to the driver. This limit helps prevent memory overflow errors.
    */
@@ -584,7 +584,7 @@ class LinearRegressionTrainingSummary private[regression] (
    *
    * This value is only available when using the "l-bfgs" solver.
    *
-   * @see [[LinearRegression.solver]]
+   * @see `LinearRegression.solver`
    */
   @Since("1.5.0")
   val totalIterations = objectiveHistory.length
@@ -627,7 +627,7 @@ class LinearRegressionSummary private[regression] (
    * Reference: <a href="http://en.wikipedia.org/wiki/Explained_variation">
    * Wikipedia explain variation</a>
    *
-   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
    * This will change in later Spark versions.
    */
   @Since("1.5.0")
@@ -637,7 +637,7 @@ class LinearRegressionSummary private[regression] (
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
    *
-   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
    * This will change in later Spark versions.
    */
   @Since("1.5.0")
@@ -647,7 +647,7 @@ class LinearRegressionSummary private[regression] (
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
    *
-   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
    * This will change in later Spark versions.
    */
   @Since("1.5.0")
@@ -657,7 +657,7 @@ class LinearRegressionSummary private[regression] (
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
    *
-   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
    * This will change in later Spark versions.
    */
   @Since("1.5.0")
@@ -668,7 +668,7 @@ class LinearRegressionSummary private[regression] (
    * Reference: <a href="http://en.wikipedia.org/wiki/Coefficient_of_determination">
    * Wikipedia coefficient of determination</a>
    *
-   * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
+   * @note This ignores instance weights (setting all to 1.0) from `LinearRegression.weightCol`.
    * This will change in later Spark versions.
    */
   @Since("1.5.0")
@@ -714,7 +714,7 @@ class LinearRegressionSummary private[regression] (
    * Standard error of estimated coefficients and intercept.
    * This value is only available when using the "normal" solver.
    *
-   * If [[LinearRegression.fitIntercept]] is set to true,
+   * If `LinearRegression.fitIntercept` is set to true,
    * then the last element returned corresponds to the intercept.
    *
    * @see [[LinearRegression.solver]]
@@ -742,7 +742,7 @@ class LinearRegressionSummary private[regression] (
    * T-statistic of estimated coefficients and intercept.
    * This value is only available when using the "normal" solver.
    *
-   * If [[LinearRegression.fitIntercept]] is set to true,
+   * If `LinearRegression.fitIntercept` is set to true,
    * then the last element returned corresponds to the intercept.
    *
    * @see [[LinearRegression.solver]]
@@ -765,7 +765,7 @@ class LinearRegressionSummary private[regression] (
    * Two-sided p-value of estimated coefficients and intercept.
    * This value is only available when using the "normal" solver.
    *
-   * If [[LinearRegression.fitIntercept]] is set to true,
+   * If `LinearRegression.fitIntercept` is set to true,
    * then the last element returned corresponds to the intercept.
    *
    * @see [[LinearRegression.solver]]

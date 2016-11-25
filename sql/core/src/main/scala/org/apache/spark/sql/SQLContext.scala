@@ -84,7 +84,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
-   * tables, registered functions, but sharing the same [[SparkContext]], cached data and
+   * tables, registered functions, but sharing the same `SparkContext`, cached data and
    * other things.
    *
    * @since 1.6.0
@@ -883,8 +883,8 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Loads an JavaRDD<String> storing JSON objects (one object per record) and applies the given
-   * schema, returning the result as a `DataFrame`.
+   * Loads an JavaRDD&lt;String&gt; storing JSON objects (one object per record) and applies the
+   * given schema, returning the result as a `DataFrame`.
    *
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`.
