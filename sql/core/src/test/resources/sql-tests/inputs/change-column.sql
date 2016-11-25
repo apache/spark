@@ -22,6 +22,10 @@ ALTER TABLE test_change CHANGE a a Int COMMENT 'this is column a';
 ALTER TABLE test_change CHANGE b b String COMMENT '#*02?`', c c Int COMMENT '';
 DESC test_change;
 
+-- Don't change anything.
+ALTER TABLE test_change CHANGE a a Int COMMENT 'this is column a';
+DESC test_change;
+
 -- Change column name/dataType/position/comment together (not supported yet)
 ALTER TABLE test_change CHANGE a a1 String COMMENT 'this is column a1' AFTER b;
 DESC test_change;

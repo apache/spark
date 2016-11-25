@@ -293,19 +293,18 @@ case class AlterTableChangeColumnsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, false)
-    // Assert we only alter the column's comment, other fields e.g. name/dataType remain
-    // unchanged.
-    columns.foreach { pair =>
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+    // Currently only support changing column comment, throw a Exception if other fields e.g.
+    // name/dataType are changed.
+    columns.foreach { case (oldColumnName, newColumn) =>
       val originColumn = table.schema.collectFirst {
-        case field if field.name == pair._1 => field
+        case field if field.name == oldColumnName => field
       }
-      val newColumn = pair._2
-      val unchanged = originColumn.map(equalIgnoreComment(_, newColumn)).getOrElse(true)
+      val unchanged = originColumn.forall(equalIgnoreComment(_, newColumn))
       if (!unchanged) {
         throw new AnalysisException(
-          s"ALTER TABLE CHANGE COLUMN don't support change column " +
-            s"'${originColumn.get.getDesc}' to '${newColumn.getDesc}'")
+          s"ALTER TABLE CHANGE COLUMN is not supported for changing column " +
+            s"'${getDesc(originColumn.get)}' to '${getDesc(newColumn)}'")
       }
     }
 
@@ -325,6 +324,10 @@ case class AlterTableChangeColumnsCommand(
     field.withComment("") == other.withComment("")
   }
 
+  // Genereate the full description of a StructField.
+  private def getDesc(field: StructField): String = {
+    s"StructField(${field.name},${field.dataType},${field.nullable},${field.metadata})"
+  }
 }
 
 /**
