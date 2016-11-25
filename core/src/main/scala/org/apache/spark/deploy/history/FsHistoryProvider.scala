@@ -663,9 +663,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       false
   }
 
-  // For testing.
   private[history] def isFsInSafeMode(dfs: DistributedFileSystem): Boolean = {
-    dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_GET)
+    /* true to check only for Active NNs status */
+    dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_GET, true)
   }
 
   /**
