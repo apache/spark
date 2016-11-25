@@ -198,6 +198,9 @@ if [[ "$1" == "package" ]]; then
         $PYTHON_DIST_NAME.sha
     fi
 
+    echo "Copying R source package"
+    cp spark-$SPARK_VERSION-bin-$NAME/R/SparkR_$SPARK_VERSION.tar.gz .
+
     echo "Copying and signing regular binary distribution"
     cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
