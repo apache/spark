@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.nio.ByteBuffer
-
-import org.apache.spark.SparkConf
-import org.apache.spark.serializer.{KryoSerializer, SerializerInstance}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -28,7 +24,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Percentile.Countings
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET
 import org.apache.spark.util.collection.OpenHashMap
+
 
 /**
  * The Percentile aggregate function returns the exact percentile(s) of numeric column `expr` at
@@ -138,11 +136,11 @@ case class Percentile(
   }
 
   override def serialize(obj: Countings): Array[Byte] = {
-    Percentile.serializer.serialize(obj).array()
+    Percentile.serializer.serialize(obj, child.dataType)
   }
 
   override def deserialize(bytes: Array[Byte]): Countings = {
-    Percentile.serializer.deserialize[Countings](ByteBuffer.wrap(bytes))
+    Percentile.serializer.deserialize(bytes, child.dataType)
   }
 }
 
@@ -236,5 +234,59 @@ object Percentile {
     }
   }
 
-  val serializer: SerializerInstance = new KryoSerializer(new SparkConf).newInstance()
+
+  /**
+   * Serializer for class [[Countings]]
+   *
+   * This class is thread safe.
+   */
+  class CountingsSerializer {
+
+    final def serialize(obj: Countings, dataType: DataType): Array[Byte] = {
+      val counts = obj.counts
+
+      // Write the size of counts map.
+      val sizeProjection = UnsafeProjection.create(Array[DataType](IntegerType))
+      val row = InternalRow.apply(counts.size)
+      var buffer = sizeProjection.apply(row).getBytes
+
+      // Write the pairs of counts map.
+      val projection = UnsafeProjection.create(Array[DataType](dataType, LongType))
+      counts.foreach { pair =>
+        val row = InternalRow.apply(pair._1, pair._2)
+        val unsafeRow = projection.apply(row)
+        buffer ++= unsafeRow.getBytes
+      }
+
+      buffer
+    }
+
+    final def deserialize(bytes: Array[Byte], dataType: DataType): Countings = {
+      val counts = new OpenHashMap[Number, Long]
+      var offset = 0
+
+      // Read the size of counts map
+      val sizeRow = new UnsafeRow(1)
+      val rowSizeInBytes = UnsafeRow.calculateFixedPortionByteSize(1)
+      sizeRow.pointTo(bytes, rowSizeInBytes)
+      val size = sizeRow.get(0, IntegerType).asInstanceOf[Integer]
+      offset += rowSizeInBytes
+
+      // Read the pairs of counts map
+      val row = new UnsafeRow(2)
+      val pairRowSizeInBytes = UnsafeRow.calculateFixedPortionByteSize(2)
+      var i = 0
+      while (i < size) {
+        row.pointTo(bytes, offset + BYTE_ARRAY_OFFSET, pairRowSizeInBytes)
+        val key = row.get(0, dataType).asInstanceOf[Number]
+        val count = row.get(1, LongType).asInstanceOf[Long]
+        offset += pairRowSizeInBytes
+        counts.update(key, count)
+        i += 1
+      }
+      Countings(counts)
+    }
+  }
+
+  val serializer: CountingsSerializer = new CountingsSerializer
 }

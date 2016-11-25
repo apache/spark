@@ -40,15 +40,17 @@ class PercentileSuite extends SparkFunSuite {
 
     // Check empty serialize and de-serialize
     val emptyBuffer = Countings()
-    assert(compareEquals(emptyBuffer, serializer.deserialize(serializer.serialize(emptyBuffer))))
+    assert(compareEquals(emptyBuffer,
+      serializer.deserialize(serializer.serialize(emptyBuffer, DoubleType), DoubleType)))
 
     val buffer = Countings()
     data.foreach { value =>
       buffer.add(value)
     }
-    assert(compareEquals(buffer, serializer.deserialize(serializer.serialize(buffer))))
+    assert(compareEquals(buffer,
+      serializer.deserialize(serializer.serialize(buffer, IntegerType), IntegerType)))
 
-    val agg = new Percentile(BoundReference(0, DoubleType, true), Literal(0.5))
+    val agg = new Percentile(BoundReference(0, IntegerType, true), Literal(0.5))
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
 
