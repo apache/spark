@@ -309,7 +309,7 @@ object FPGrowth {
 
   /**
    * Frequent itemset.
-   * @param items items in this itemset. Java users should call `FreqItemset#javaItems` instead.
+   * @param items items in this itemset. Java users should call `FreqItemset.javaItems` instead.
    * @param freq frequency
    * @tparam Item item type
    *

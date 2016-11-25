@@ -74,7 +74,7 @@ class GradientBoostedTrees private[spark] (
   }
 
   /**
-   * Java-friendly API for `org.apache.spark.mllib.tree.GradientBoostedTrees!#run`.
+   * Java-friendly API for `org.apache.spark.mllib.tree.GradientBoostedTrees.run`.
    */
   @Since("1.2.0")
   def run(input: JavaRDD[LabeledPoint]): GradientBoostedTreesModel = {
@@ -106,7 +106,7 @@ class GradientBoostedTrees private[spark] (
   }
 
   /**
-   * Java-friendly API for `org.apache.spark.mllib.tree.GradientBoostedTrees!#runWithValidation`.
+   * Java-friendly API for `org.apache.spark.mllib.tree.GradientBoostedTrees.runWithValidation`.
    */
   @Since("1.4.0")
   def runWithValidation(
