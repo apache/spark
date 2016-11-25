@@ -160,9 +160,11 @@ private[spark] object StratifiedSamplingUtils extends Logging {
    *
    * To do so, we compute sampleSize = math.ceil(size * samplingRate) for each stratum and compare
    * it to the number of items that were accepted instantly and the number of items in the waitlist
-   * for that stratum. Most of the time, numAccepted <= sampleSize <= (numAccepted + numWaitlisted),
-   * which means we need to sort the elements in the waitlist by their associated values in order
-   * to find the value T s.t. |{elements in the stratum whose associated values <= T}| = sampleSize.
+   * for that stratum.
+   *
+   * Most of the time, numAccepted &lt;= sampleSize &lt;= (numAccepted + numWaitlisted), which
+   * means we need to sort the elements in the waitlist by their associated values in order to find
+   * the value T s.t. |{elements in the stratum whose associated values &lt;= T}| = sampleSize.
    * Note that all elements in the waitlist have values >= bound for instant accept, so a T value
    * in the waitlist range would allow all elements that were instantly accepted on the first pass
    * to be included in the sample.

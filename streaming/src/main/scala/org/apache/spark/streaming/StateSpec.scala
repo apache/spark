@@ -100,7 +100,7 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, MappedType] exten
 
 /**
  * :: Experimental ::
- * Builder object for creating instances of [[org.apache.spark.streaming.StateSpec StateSpec]]
+ * Builder object for creating instances of `org.apache.spark.streaming.StateSpec`
  * that is used for specifying the parameters of the DStream transformation `mapWithState`
  * that is used for specifying the parameters of the DStream transformation
  * `mapWithState` operation of a

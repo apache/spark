@@ -23,7 +23,7 @@ import org.apache.spark.Partition
 
 /**
  * Enumeration to manage state transitions of an RDD through checkpointing
- * [ Initialized --> checkpointing in progress --> checkpointed ].
+ * [ Initialized --&gt; checkpointing in progress --&gt; checkpointed ].
  */
 private[spark] object CheckpointState extends Enumeration {
   type CheckpointState = Value

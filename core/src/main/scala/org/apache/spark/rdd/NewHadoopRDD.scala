@@ -63,7 +63,7 @@ private[spark] class NewHadoopPartition(
  * @param valueClass Class of the value associated with the inputFormatClass.
  *
  * @note Instantiating this class directly is not recommended, please use
- * [[org.apache.spark.SparkContext.newAPIHadoopRDD()]]
+ * `org.apache.spark.SparkContext.newAPIHadoopRDD()`
  */
 @DeveloperApi
 class NewHadoopRDD[K, V](
