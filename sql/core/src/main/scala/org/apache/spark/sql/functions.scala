@@ -474,7 +474,7 @@ object functions {
   /**
    * Aggregate function: returns the level of grouping, equals to
    *
-   *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+   *   (grouping(c1) &lt;&lt; (n-1)) + (grouping(c2) &lt;&lt; (n-2)) + ... + grouping(cn)
    *
    * @note The list of columns should match with grouping columns exactly, or empty (means all the
    * grouping columns).
@@ -487,7 +487,7 @@ object functions {
   /**
    * Aggregate function: returns the level of grouping, equals to
    *
-   *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+   *   (grouping(c1) &lt;&lt; (n-1)) + (grouping(c2) &lt;&lt; (n-2)) + ... + grouping(cn)
    *
    * @note The list of columns should match with grouping columns exactly.
    *
@@ -1048,9 +1048,9 @@ object functions {
    * within each partition in the lower 33 bits. The assumption is that the data frame has
    * less than 1 billion partitions, and each partition has less than 8 billion records.
    *
-   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * As an example, consider a `DataFrame` with two partitions, each with 3 records.
    * This expression would return the following IDs:
-   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   * 0, 1, 2, 8589934592 (1L &lt;&lt; 33), 8589934593, 8589934594.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1066,9 +1066,9 @@ object functions {
    * within each partition in the lower 33 bits. The assumption is that the data frame has
    * less than 1 billion partitions, and each partition has less than 8 billion records.
    *
-   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * As an example, consider a `DataFrame` with two partitions, each with 3 records.
    * This expression would return the following IDs:
-   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   * 0, 1, 2, 8589934592 (1L &lt;&lt; 33), 8589934593, 8589934594.
    *
    * @group normal_funcs
    * @since 1.6.0
@@ -1184,7 +1184,7 @@ object functions {
 
   /**
    * Creates a new struct column.
-   * If the input column is a column in a [[DataFrame]], or a derived column expression
+   * If the input column is a column in a `DataFrame`, or a derived column expression
    * that is named (i.e. aliased), its name would be remained as the StructField's name,
    * otherwise, the newly generated StructField's name would be auto generated as col${index + 1},
    * i.e. col1, col2, col3, ...
@@ -1846,8 +1846,8 @@ object functions {
   def round(e: Column): Column = round(e, 0)
 
   /**
-   * Round the value of `e` to `scale` decimal places if `scale` >= 0
-   * or at integral part when `scale` < 0.
+   * Round the value of `e` to `scale` decimal places if `scale` &gt;= 0
+   * or at integral part when `scale` &lt; 0.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1864,7 +1864,7 @@ object functions {
 
   /**
    * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
-   * if `scale` >= 0 or at integral part when `scale` < 0.
+   * if `scale` &gt;= 0 or at integral part when `scale` &lt; 0.
    *
    * @group math_funcs
    * @since 2.0.0

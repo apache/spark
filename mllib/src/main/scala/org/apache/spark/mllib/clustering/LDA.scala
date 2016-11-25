@@ -216,7 +216,7 @@ class LDA private (
   def getBeta: Double = getTopicConcentration
 
   /**
-   * Alias for [[setTopicConcentration()]]
+   * Alias for `setTopicConcentration()`
    */
   @Since("1.3.0")
   def setBeta(beta: Double): this.type = setTopicConcentration(beta)

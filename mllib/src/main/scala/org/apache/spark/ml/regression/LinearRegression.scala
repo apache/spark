@@ -60,11 +60,11 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  * The learning objective is to minimize the squared error, with regularization.
  * The specific squared error loss function used is:
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    L = 1/2n ||A coefficients - y||^2^
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * This supports multiple types of regularization:
  *  - none (a.k.a. ordinary least squares)
@@ -717,7 +717,7 @@ class LinearRegressionSummary private[regression] (
    * If `LinearRegression.fitIntercept` is set to true,
    * then the last element returned corresponds to the intercept.
    *
-   * @see [[LinearRegression.solver]]
+   * @see `LinearRegression.solver`
    */
   lazy val coefficientStandardErrors: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
@@ -745,7 +745,7 @@ class LinearRegressionSummary private[regression] (
    * If `LinearRegression.fitIntercept` is set to true,
    * then the last element returned corresponds to the intercept.
    *
-   * @see [[LinearRegression.solver]]
+   * @see `LinearRegression.solver`
    */
   lazy val tValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
@@ -768,7 +768,7 @@ class LinearRegressionSummary private[regression] (
    * If `LinearRegression.fitIntercept` is set to true,
    * then the last element returned corresponds to the intercept.
    *
-   * @see [[LinearRegression.solver]]
+   * @see `LinearRegression.solver`
    */
   lazy val pValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {

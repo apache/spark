@@ -44,7 +44,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * of `x` is close to (p * N).
    * More precisely,
    *
-   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+   *   floor((p - err) * N) &lt;= rank(x) &lt;= ceil((p + err) * N).
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
@@ -55,7 +55,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
    *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
-   * @param relativeError The relative target precision to achieve (>= 0).
+   * @param relativeError The relative target precision to achieve (&gt;= 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities
@@ -254,7 +254,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * and Papadimitriou.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting [[DataFrame]].
+   * backward compatibility of the schema of the resulting `DataFrame`.
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
@@ -299,7 +299,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * Uses a `default` support of 1%.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting [[DataFrame]].
+   * backward compatibility of the schema of the resulting `DataFrame`.
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
@@ -317,7 +317,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *                  its fraction as zero.
    * @param seed random seed
    * @tparam T stratum type
-   * @return a new [[DataFrame]] that represents the stratified sample
+   * @return a new `DataFrame` that represents the stratified sample
    *
    * {{{
    *    val df = spark.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
@@ -354,7 +354,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *                  its fraction as zero.
    * @param seed random seed
    * @tparam T stratum type
-   * @return a new [[DataFrame]] that represents the stratified sample
+   * @return a new `DataFrame` that represents the stratified sample
    *
    * @since 1.5.0
    */
@@ -369,7 +369,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param depth depth of the sketch
    * @param width width of the sketch
    * @param seed random seed
-   * @return a [[CountMinSketch]] over column `colName`
+   * @return a `CountMinSketch` over column `colName`
    * @since 2.0.0
    */
   def countMinSketch(colName: String, depth: Int, width: Int, seed: Int): CountMinSketch = {
@@ -383,7 +383,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param eps relative error of the sketch
    * @param confidence confidence of the sketch
    * @param seed random seed
-   * @return a [[CountMinSketch]] over column `colName`
+   * @return a `CountMinSketch` over column `colName`
    * @since 2.0.0
    */
   def countMinSketch(
@@ -398,7 +398,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param depth depth of the sketch
    * @param width width of the sketch
    * @param seed random seed
-   * @return a [[CountMinSketch]] over column `colName`
+   * @return a `CountMinSketch` over column `colName`
    * @since 2.0.0
    */
   def countMinSketch(col: Column, depth: Int, width: Int, seed: Int): CountMinSketch = {
@@ -412,7 +412,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param eps relative error of the sketch
    * @param confidence confidence of the sketch
    * @param seed random seed
-   * @return a [[CountMinSketch]] over column `colName`
+   * @return a `CountMinSketch` over column `colName`
    * @since 2.0.0
    */
   def countMinSketch(col: Column, eps: Double, confidence: Double, seed: Int): CountMinSketch = {
