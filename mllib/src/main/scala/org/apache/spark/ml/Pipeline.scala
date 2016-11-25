@@ -45,6 +45,9 @@ abstract class PipelineStage extends Params with Logging {
    * :: DeveloperApi ::
    *
    * Check transform validity and derive the output schema from the input schema.
+   * This only needs to check for interactions between parameters. Raise an exception if
+   * any parameter value is invalid. Parameter value checks which do not depend on other
+   * parameters are handled by `Param.validate()`.
    *
    * Typical implementation should first conduct verification on schema change and parameter
    * validity, including complex parameter interaction checks.

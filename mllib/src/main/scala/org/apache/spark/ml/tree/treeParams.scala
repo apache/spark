@@ -405,7 +405,7 @@ private[ml] trait RandomForestRegressorParams
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.
@@ -424,17 +424,20 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /**
-   * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
-   * estimator.
+   * Param for Step size (a.k.a. learning rate) in interval (0, 1] for shrinking
+   * the contribution of each estimator.
    * (default = 0.1)
-   * @group setParam
+   * @group param
    */
-  def setStepSize(value: Double): this.type = {
-    require(ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true)(
-      value), "GBT parameter stepSize should be in interval (0, 1], " +
-      s"but it given invalid value $value.")
-    set(stepSize, value)
-  }
+  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
+    "(a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator.",
+    ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
+
+  /** @group getParam */
+  final def getStepSize: Double = $(stepSize)
+
+  /** @group setParam */
+  def setStepSize(value: Double): this.type = set(stepSize, value)
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(
