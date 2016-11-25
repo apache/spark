@@ -343,7 +343,7 @@ trait Row extends Serializable {
   }
 
   /**
-   * Returns a Map(name -> value) for the requested fieldNames
+   * Returns a Map(name -&gt; value) for the requested fieldNames
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
    *

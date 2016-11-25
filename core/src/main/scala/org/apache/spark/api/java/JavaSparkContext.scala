@@ -238,7 +238,9 @@ class JavaSparkContext(val sc: SparkContext)
    * }}}
    *
    * Do
-   * `JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   * {{{
+   *   JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")
+   * }}}
    *
    * then `rdd` contains
    * {{{
@@ -270,7 +272,9 @@ class JavaSparkContext(val sc: SparkContext)
    * }}}
    *
    * Do
-   * `JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")`,
+   * {{{
+   *   JavaPairRDD<String, byte[]> rdd = sparkContext.dataStreamFiles("hdfs://a-hdfs-path")
+   * }}},
    *
    * then `rdd` contains
    * {{{
@@ -749,7 +753,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   /**
    * Get a local property set in this thread, or null if it is missing. See
-   * [[org.apache.spark.api.java.JavaSparkContext.setLocalProperty]].
+   * `org.apache.spark.api.java.JavaSparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String = sc.getLocalProperty(key)
 
@@ -769,7 +773,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Application programmers can use this method to group all those jobs together and give a
    * group description. Once set, the Spark web UI will associate such jobs with this group.
    *
-   * The application can also use [[org.apache.spark.api.java.JavaSparkContext.cancelJobGroup]]
+   * The application can also use `org.apache.spark.api.java.JavaSparkContext.cancelJobGroup`
    * to cancel all running jobs in this group. For example,
    * {{{
    * // In the main thread:
@@ -802,7 +806,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   /**
    * Cancel active jobs for the specified group. See
-   * [[org.apache.spark.api.java.JavaSparkContext.setJobGroup]] for more information.
+   * `org.apache.spark.api.java.JavaSparkContext.setJobGroup` for more information.
    */
   def cancelJobGroup(groupId: String): Unit = sc.cancelJobGroup(groupId)
 
