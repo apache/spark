@@ -181,9 +181,14 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
         if (enableVectorizedReader) {
           val columnIDs =
             requiredSchema.map(a => physicalSchema.fieldIndex(a.name): Integer).sorted.asJava
-          val orcRecordReader =
-            new VectorizedSparkOrcNewRecordReader(
-              orcReader, conf, fileSplit, columnIDs, partitionSchema, file.partitionValues)
+          val orcRecordReader = new VectorizedSparkOrcNewRecordReader(
+            orcReader,
+            conf,
+            fileSplit,
+            columnIDs,
+            requiredSchema,
+            partitionSchema,
+            file.partitionValues)
 
           if (returningBatch) {
             orcRecordReader.enableReturningBatches()
@@ -226,11 +231,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
    * Returns whether the reader will return the rows as batch or not.
    */
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
-    val conf = sparkSession.sessionState.conf
-    conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      schema.length <= conf.wholeStageMaxNumFields &&
-      schema.forall(f => f.dataType.isInstanceOf[AtomicType] &&
-        !f.dataType.isInstanceOf[DateType] && !f.dataType.isInstanceOf[TimestampType])
+    OrcRelation.supportBatch(sparkSession, schema)
   }
 }
 
@@ -373,5 +374,16 @@ private[orc] object OrcRelation extends HiveInspectors {
     val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+  }
+
+  /**
+   * Returns whether the reader will return the rows as batch or not.
+   */
+  def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
+    val conf = sparkSession.sessionState.conf
+    conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
+      schema.length <= conf.wholeStageMaxNumFields &&
+      schema.forall(f => f.dataType.isInstanceOf[AtomicType] &&
+        !f.dataType.isInstanceOf[DateType] && !f.dataType.isInstanceOf[TimestampType])
   }
 }

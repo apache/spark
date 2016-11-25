@@ -77,6 +77,7 @@ public class VectorizedSparkOrcNewRecordReader
       Configuration conf,
       FileSplit fileSplit,
       List<Integer> columnIDs,
+      StructType requiredSchema,
       StructType partitionColumns,
       InternalRow partitionValues) throws IOException {
     List<OrcProto.Type> types = file.getTypes();
@@ -93,7 +94,7 @@ public class VectorizedSparkOrcNewRecordReader
     for (int i = 0; i < columnIDs.size(); i++) {
       org.apache.hadoop.hive.ql.exec.vector.ColumnVector col =
         this.hiveBatch.cols[columnIDs.get(i)];
-      this.orcColumns[i] = new OrcColumnVector(col);
+      this.orcColumns[i] = new OrcColumnVector(col, requiredSchema.fields()[i].dataType());
     }
 
     // Allocate Spark ColumnVectors for partition columns.

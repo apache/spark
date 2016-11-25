@@ -80,7 +80,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
     }
   }
 
-  private def testLongColumnVector[T](num: Int)
+  private def testLongColumnVector[T](num: Int, dt: DataType)
       (genExpected: (Seq[Long] => Seq[T]))
       (genActual: (OrcColumnVector, Int) => Seq[T]): Unit = {
     val seed = System.currentTimeMillis()
@@ -96,12 +96,12 @@ class OrcColumnVectorSuite extends SparkFunSuite {
 
     val expected = genExpected(data)
 
-    val orcCol = new OrcColumnVector(lv)
+    val orcCol = new OrcColumnVector(lv, dt)
     val actual = genActual(orcCol, num)
     assert(actual === expected)
   }
 
-  private def testDoubleColumnVector[T](num: Int)
+  private def testDoubleColumnVector[T](num: Int, dt: DataType)
       (genExpected: (Seq[Double] => Seq[T]))
       (genActual: (OrcColumnVector, Int) => Seq[T]): Unit = {
     val seed = System.currentTimeMillis()
@@ -117,12 +117,12 @@ class OrcColumnVectorSuite extends SparkFunSuite {
 
     val expected = genExpected(data)
 
-    val orcCol = new OrcColumnVector(lv)
+    val orcCol = new OrcColumnVector(lv, dt)
     val actual = genActual(orcCol, num)
     assert(actual === expected)
   }
 
-  private def testBytesColumnVector[T](num: Int)
+  private def testBytesColumnVector[T](num: Int, dt: DataType)
       (genExpected: (Seq[Seq[Byte]] => Seq[T]))
       (genActual: (OrcColumnVector, Int) => Seq[T]): Unit = {
     val seed = System.currentTimeMillis()
@@ -139,7 +139,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
 
     val expected = genExpected(data)
 
-    val orcCol = new OrcColumnVector(lv)
+    val orcCol = new OrcColumnVector(lv, dt)
     val actual = genActual(orcCol, num)
     actual.zip(expected).foreach { case (a, e) =>
       assert(a === e)
@@ -168,7 +168,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
 
       val expected = genExpected(data)
 
-      val orcCol = new OrcColumnVector(lv)
+      val orcCol = new OrcColumnVector(lv, decimalType)
       val actual = genActual(orcCol, num, decimalType.precision, decimalType.scale)
       actual.zip(expected).foreach { case (a, e) =>
         assert(a.compareTo(e) == 0)
@@ -183,7 +183,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
         col.getBoolean(rowId)
       }
     }
-    testLongColumnVector(100)(genExpected)(genActual)
+    testLongColumnVector(100, BooleanType)(genExpected)(genActual)
   }
 
   test("Hive LongColumnVector: Int") {
@@ -193,7 +193,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
         col.getInt(rowId)
       }
     }
-    testLongColumnVector(100)(genExpected)(genActual)
+    testLongColumnVector(100, IntegerType)(genExpected)(genActual)
   }
 
   test("Hive LongColumnVector: Byte") {
@@ -203,7 +203,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
         col.getByte(rowId)
       }
     }
-    testLongColumnVector(100)(genExpected)(genActual)
+    testLongColumnVector(100, ByteType)(genExpected)(genActual)
   }
 
   test("Hive LongColumnVector: Short") {
@@ -213,7 +213,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
         col.getShort(rowId)
       }
     }
-    testLongColumnVector(100)(genExpected)(genActual)
+    testLongColumnVector(100, ShortType)(genExpected)(genActual)
   }
 
   test("Hive LongColumnVector: Long") {
@@ -223,7 +223,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
         col.getLong(rowId)
       }
     }
-    testLongColumnVector(100)(genExpected)(genActual)
+    testLongColumnVector(100, LongType)(genExpected)(genActual)
   }
 
   test("Hive DoubleColumnVector: Float") {
@@ -233,7 +233,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
         col.getFloat(rowId)
       }
     }
-    testDoubleColumnVector(100)(genExpected)(genActual)
+    testDoubleColumnVector(100, FloatType)(genExpected)(genActual)
   }
 
   test("Hive DoubleColumnVector: Double") {
@@ -243,7 +243,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
         col.getDouble(rowId)
       }
     }
-    testDoubleColumnVector(100)(genExpected)(genActual)
+    testDoubleColumnVector(100, DoubleType)(genExpected)(genActual)
   }
 
   test("Hive BytesColumnVector: Binary") {
@@ -253,7 +253,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
         col.getBinary(rowId).toSeq
       }
     }
-    testBytesColumnVector(100)(genExpected)(genActual)
+    testBytesColumnVector(100, BinaryType)(genExpected)(genActual)
   }
 
   test("Hive BytesColumnVector: String") {
@@ -266,7 +266,7 @@ class OrcColumnVectorSuite extends SparkFunSuite {
         col.getUTF8String(rowId)
       }
     }
-    testBytesColumnVector(100)(genExpected)(genActual)
+    testBytesColumnVector(100, StringType)(genExpected)(genActual)
   }
 
   test("Hive DecimalColumnVector") {

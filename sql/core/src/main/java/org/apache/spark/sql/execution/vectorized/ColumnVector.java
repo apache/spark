@@ -980,9 +980,9 @@ public abstract class ColumnVector implements AutoCloseable {
     return dictionaryIds;
   }
 
-  public ColumnVector() {
+  public ColumnVector(DataType type) {
     this.capacity = 0;
-    this.type = null;
+    this.type = type;
     this.childColumns = null;
     this.resultArray = null;
     this.resultStruct = null;

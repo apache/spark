@@ -23,6 +23,7 @@ import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -35,7 +36,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class OrcColumnVector extends org.apache.spark.sql.execution.vectorized.ColumnVector {
   private ColumnVector col;
 
-  public OrcColumnVector(ColumnVector col) {
+  public OrcColumnVector(ColumnVector col, DataType type) {
+    super(type);
     this.col = col;
   }
 
