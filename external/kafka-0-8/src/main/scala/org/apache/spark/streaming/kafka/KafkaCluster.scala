@@ -231,7 +231,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   // this 0 here indicates api version, in this case the original ZK backed api.
   private def defaultConsumerApiVersion: Short = 0
 
-  /** Requires Kafka >= 0.8.1.1.  Defaults to the original ZooKeeper backed api version. */
+  /** Requires Kafka &gt;= 0.8.1.1.  Defaults to the original ZooKeeper backed api version. */
   def getConsumerOffsets(
       groupId: String,
       topicAndPartitions: Set[TopicAndPartition]
@@ -250,7 +250,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     }
   }
 
-  /** Requires Kafka >= 0.8.1.1.  Defaults to the original ZooKeeper backed api version. */
+  /** Requires Kafka &gt;= 0.8.1.1.  Defaults to the original ZooKeeper backed api version. */
   def getConsumerOffsetMetadata(
       groupId: String,
       topicAndPartitions: Set[TopicAndPartition]
@@ -287,7 +287,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     Left(errs)
   }
 
-  /** Requires Kafka >= 0.8.1.1.  Defaults to the original ZooKeeper backed api version. */
+  /** Requires Kafka &gt;= 0.8.1.1.  Defaults to the original ZooKeeper backed api version. */
   def setConsumerOffsets(
       groupId: String,
       offsets: Map[TopicAndPartition, Long]
@@ -305,7 +305,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     setConsumerOffsetMetadata(groupId, meta, consumerApiVersion)
   }
 
-  /** Requires Kafka >= 0.8.1.1.  Defaults to the original ZooKeeper backed api version. */
+  /** Requires Kafka &gt;= 0.8.1.1.  Defaults to the original ZooKeeper backed api version. */
   def setConsumerOffsetMetadata(
       groupId: String,
       metadata: Map[TopicAndPartition, OffsetAndMetadata]

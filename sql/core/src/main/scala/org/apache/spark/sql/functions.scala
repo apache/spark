@@ -2172,7 +2172,7 @@ object functions {
    * and returns the result as a string column.
    *
    * If d is 0, the result has no decimal point or fractional part.
-   * If d < 0, the result will be null.
+   * If d &lt; 0, the result will be null.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2888,7 +2888,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Parses a column containing a JSON string into a [[StructType]] with the
+   * (Scala-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -2904,7 +2904,7 @@ object functions {
   }
 
   /**
-   * (Java-specific) Parses a column containing a JSON string into a [[StructType]] with the
+   * (Java-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -2919,7 +2919,7 @@ object functions {
     from_json(e, schema, options.asScala.toMap)
 
   /**
-   * Parses a column containing a JSON string into a [[StructType]] with the specified schema.
+   * Parses a column containing a JSON string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -2932,7 +2932,7 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON string into a [[StructType]] with the specified schema.
+   * Parses a column containing a JSON string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -2946,7 +2946,7 @@ object functions {
 
 
   /**
-   * (Scala-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * (Scala-specific) Converts a column containing a `StructType` into a JSON string with the
    * specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a struct column.
@@ -2961,7 +2961,7 @@ object functions {
   }
 
   /**
-   * (Java-specific) Converts a column containing a [[StructType]] into a JSON string with the
+   * (Java-specific) Converts a column containing a `StructType` into a JSON string with the
    * specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a struct column.
@@ -2975,7 +2975,7 @@ object functions {
     to_json(e, options.asScala.toMap)
 
   /**
-   * Converts a column containing a [[StructType]] into a JSON string with the
+   * Converts a column containing a `StructType` into a JSON string with the
    * specified schema. Throws an exception, in the case of an unsupported type.
    *
    * @param e a struct column.

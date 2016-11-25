@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
- * Statistic functions for [[DataFrame]]s.
+ * Statistic functions for `DataFrame`s.
  *
  * @since 1.4.0
  */
@@ -189,7 +189,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * The `support` should be greater than 1e-4.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting [[DataFrame]].
+   * backward compatibility of the schema of the resulting `DataFrame`.
    *
    * @param cols the names of the columns to search frequent items in.
    * @param support The minimum frequency for an item to be considered `frequent`. Should be greater
@@ -236,7 +236,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * Uses a `default` support of 1%.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting [[DataFrame]].
+   * backward compatibility of the schema of the resulting `DataFrame`.
    *
    * @param cols the names of the columns to search frequent items in.
    * @return A Local DataFrame with the Array of frequent items for each column.
