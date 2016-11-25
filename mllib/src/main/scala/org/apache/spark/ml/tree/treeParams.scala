@@ -418,8 +418,6 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   // final val validationTol: DoubleParam = new DoubleParam(this, "validationTol", "")
   // validationTol -> 1e-5
 
-  setDefault(maxIter -> 20, stepSize -> 0.1)
-
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
@@ -438,6 +436,8 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 
   /** @group setParam */
   def setStepSize(value: Double): this.type = set(stepSize, value)
+
+  setDefault(maxIter -> 20, stepSize -> 0.1)
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(
