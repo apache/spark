@@ -58,7 +58,7 @@ case class CreateTempViewUsing(
 
   override def argString: String = {
     s"[tableIdent:$tableIdent " +
-      userSpecifiedSchema.getOrElse("") +
+      userSpecifiedSchema.map(_ + " ").getOrElse("") +
       s"replace:$replace " +
       s"provider:$provider " +
       CatalogUtils.maskCredentials(options)

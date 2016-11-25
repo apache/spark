@@ -54,7 +54,7 @@ case class CatalogStorageFormat(
   override def toString: String = {
     val serdePropsToString = CatalogUtils.maskCredentials(properties) match {
       case props if props.isEmpty => ""
-      case props => s"Properties: " + props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+      case props => "Properties: " + props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
     }
     val output =
       Seq(locationUri.map("Location: " + _).getOrElse(""),

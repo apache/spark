@@ -767,5 +767,4 @@ object DDLUtils {
       }
     }
   }
-
 }
