@@ -342,9 +342,9 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    *  - sqrt: recommended by Breiman manual for random forests
    *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
    *    package.
-   * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
-   * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
-   *     random forests]]
+   * @see <a href="http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf">Breiman (2001)</a>
+   * @see <a href="http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf">
+   * Breiman manual for random forests</a>
    *
    * @group param
    */
