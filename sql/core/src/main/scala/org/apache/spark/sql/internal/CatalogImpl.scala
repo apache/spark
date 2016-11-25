@@ -176,7 +176,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Get the database with the specified name. This throws an `AnalysisException` when no
-   * [[Database]] can be found.
+   * `Database` can be found.
    */
   override def getDatabase(dbName: String): Database = {
     makeDatabase(dbName)

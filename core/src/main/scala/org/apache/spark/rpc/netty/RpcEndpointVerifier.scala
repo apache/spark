@@ -35,6 +35,6 @@ private[netty] class RpcEndpointVerifier(override val rpcEnv: RpcEnv, dispatcher
 private[netty] object RpcEndpointVerifier {
   val NAME = "endpoint-verifier"
 
-  /** A message used to ask the remote [[RpcEndpointVerifier]] if an [[RpcEndpoint]] exists. */
+  /** A message used to ask the remote [[RpcEndpointVerifier]] if an `RpcEndpoint` exists. */
   case class CheckExistence(name: String)
 }
