@@ -624,7 +624,8 @@ class LinearRegressionSummary private[regression] (
   /**
    * Returns the explained variance regression score.
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-   * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
+   * Reference: <a href="http://en.wikipedia.org/wiki/Explained_variation">
+   * Wikipedia explain variation</a>
    *
    * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
    * This will change in later Spark versions.
@@ -664,7 +665,8 @@ class LinearRegressionSummary private[regression] (
 
   /**
    * Returns R^2^, the coefficient of determination.
-   * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   * Reference: <a href="http://en.wikipedia.org/wiki/Coefficient_of_determination">
+   * Wikipedia coefficient of determination</a>
    *
    * @note This ignores instance weights (setting all to 1.0) from [[LinearRegression.weightCol]].
    * This will change in later Spark versions.
@@ -805,11 +807,11 @@ class LinearRegressionSummary private[regression] (
  * When training with intercept enabled,
  * The objective function in the scaled space is given by
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    L = 1/2n ||\sum_i w_i(x_i - \bar{x_i}) / \hat{x_i} - (y - \bar{y}) / \hat{y}||^2,
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * where $\bar{x_i}$ is the mean of $x_i$, $\hat{x_i}$ is the standard deviation of $x_i$,
  * $\bar{y}$ is the mean of label, and $\hat{y}$ is the standard deviation of label.
@@ -820,7 +822,7 @@ class LinearRegressionSummary private[regression] (
  *
  * This can be rewritten as
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *     L &= 1/2n ||\sum_i (w_i/\hat{x_i})x_i - \sum_i (w_i/\hat{x_i})\bar{x_i} - y / \hat{y}
@@ -828,34 +830,34 @@ class LinearRegressionSummary private[regression] (
  *       &= 1/2n ||\sum_i w_i^\prime x_i - y / \hat{y} + offset||^2 = 1/2n diff^2
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * where $w_i^\prime$ is the effective coefficients defined by $w_i/\hat{x_i}$, offset is
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    - \sum_i (w_i/\hat{x_i})\bar{x_i} + \bar{y} / \hat{y}.
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * and diff is
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \sum_i w_i^\prime x_i - y / \hat{y} + offset
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * Note that the effective coefficients and offset don't depend on training dataset,
  * so they can be precomputed.
  *
  * Now, the first derivative of the objective function in scaled space is
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \frac{\partial L}{\partial w_i} = diff/N (x_i - \bar{x_i}) / \hat{x_i}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * However, $(x_i - \bar{x_i})$ will densify the computation, so it's not
  * an ideal formula when the training dataset is sparse format.
@@ -865,7 +867,7 @@ class LinearRegressionSummary private[regression] (
  * objective function from all the samples is
  *
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *       \frac{\partial L}{\partial w_i} &=
@@ -874,14 +876,14 @@ class LinearRegressionSummary private[regression] (
  *         &= 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) + correction_i)
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * where $correction_i = - diffSum \bar{x_i} / \hat{x_i}$
  *
  * A simple math can show that diffSum is actually zero, so we don't even
  * need to add the correction terms in the end. From the definition of diff,
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *       diffSum &= \sum_j (\sum_i w_i(x_{ij} - \bar{x_i})
@@ -890,17 +892,17 @@ class LinearRegressionSummary private[regression] (
  *         &= 0
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * As a result, the first derivative of the total objective function only depends on
  * the training dataset, which can be easily computed in distributed fashion, and is
  * sparse format friendly.
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \frac{\partial L}{\partial w_i} = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i})
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param labelStd The standard deviation value of the label.

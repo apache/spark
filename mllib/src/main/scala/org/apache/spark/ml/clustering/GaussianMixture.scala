@@ -44,7 +44,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol {
 
   /**
-   * Number of independent Gaussians in the mixture model. Must be > 1. Default: 2.
+   * Number of independent Gaussians in the mixture model. Must be &gt; 1. Default: 2.
    * @group param
    */
   @Since("2.0.0")
@@ -76,7 +76,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
  * @param weights Weight for each Gaussian distribution in the mixture.
  *                This is a multinomial probability distribution over the k Gaussians,
  *                where weights(i) is the weight for Gaussian i, and weights sum to 1.
- * @param gaussians Array of [[MultivariateGaussian]] where gaussians(i) represents
+ * @param gaussians Array of `MultivariateGaussian` where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
 @Since("2.0.0")
@@ -374,7 +374,7 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  * :: Experimental ::
  * Summary of GaussianMixture.
  *
- * @param predictions  [[DataFrame]] produced by [[GaussianMixtureModel.transform()]].
+ * @param predictions  `DataFrame` produced by `GaussianMixtureModel.transform()`.
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param probabilityCol  Name for column of predicted probability of each cluster
  *                        in `predictions`.
