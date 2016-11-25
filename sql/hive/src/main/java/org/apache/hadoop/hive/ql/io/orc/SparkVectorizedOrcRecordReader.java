@@ -51,7 +51,7 @@ public class SparkVectorizedOrcRecordReader
     private ObjectInspector objectInspector;
     private List<Integer> columnIDs;
 
-    SparkVectorizedOrcRecordReader(
+    public SparkVectorizedOrcRecordReader(
         Reader file,
         Configuration conf,
         FileSplit fileSplit,
@@ -100,7 +100,7 @@ public class SparkVectorizedOrcRecordReader
                 return new DecimalColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
                     decimalTypeInfo.precision(), decimalTypeInfo.scale());
               default:
-                throw new RuntimeException("Vectorizaton is not supported for datatype:"
+                throw new RuntimeException("Vectorization is not supported for datatype:"
                     + primitiveTypeInfo.getPrimitiveCategory() + ". "
                     + "Please disable spark.sql.orc.enableVectorizedReader.");
             }

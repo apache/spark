@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
-import org.apache.spark.sql.types.{AtomicType, DateType, StructType, TimestampType}
+import org.apache.spark.sql.types.{AtomicType, StructType, TimestampType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -147,7 +147,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     val enableVectorizedReader: Boolean =
       sparkSession.sessionState.conf.orcVectorizedReaderEnabled &&
       resultSchema.forall(f => f.dataType.isInstanceOf[AtomicType] &&
-        !f.dataType.isInstanceOf[DateType] && !f.dataType.isInstanceOf[TimestampType])
+        !f.dataType.isInstanceOf[TimestampType])
 
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
@@ -384,6 +384,6 @@ private[orc] object OrcRelation extends HiveInspectors {
     conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
       schema.forall(f => f.dataType.isInstanceOf[AtomicType] &&
-        !f.dataType.isInstanceOf[DateType] && !f.dataType.isInstanceOf[TimestampType])
+        !f.dataType.isInstanceOf[TimestampType])
   }
 }
