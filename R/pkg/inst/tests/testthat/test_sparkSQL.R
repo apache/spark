@@ -2684,7 +2684,7 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   # It makes sure that we can omit path argument in read.df API and then it calls
   # DataFrameWriter.load() without path.
   expect_error(read.df(source = "json"),
-               paste("Error in loadDF : analysis error - Unable to infer schema for JSON at .",
+               paste("Error in loadDF : analysis error - Unable to infer schema for JSON.",
                      "It must be specified manually"))
   expect_error(read.df("arbitrary_path"), "Error in loadDF : analysis error - Path does not exist")
   expect_error(read.json("arbitrary_path"), "Error in json : analysis error - Path does not exist")

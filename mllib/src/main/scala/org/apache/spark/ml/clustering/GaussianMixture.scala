@@ -44,7 +44,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol {
 
   /**
-   * Number of independent Gaussians in the mixture model. Must be > 1. Default: 2.
+   * Number of independent Gaussians in the mixture model. Must be &gt; 1. Default: 2.
    * @group param
    */
   @Since("2.0.0")
@@ -76,7 +76,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
  * @param weights Weight for each Gaussian distribution in the mixture.
  *                This is a multinomial probability distribution over the k Gaussians,
  *                where weights(i) is the weight for Gaussian i, and weights sum to 1.
- * @param gaussians Array of [[MultivariateGaussian]] where gaussians(i) represents
+ * @param gaussians Array of `MultivariateGaussian` where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
 @Since("2.0.0")
@@ -87,11 +87,22 @@ class GaussianMixtureModel private[ml] (
     @Since("2.0.0") val gaussians: Array[MultivariateGaussian])
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable {
 
+  /** @group setParam */
+  @Since("2.1.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setProbabilityCol(value: String): this.type = set(probabilityCol, value)
+
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
     val copied = copyValues(new GaussianMixtureModel(uid, weights, gaussians), extra)
-    if (trainingSummary.isDefined) copied.setSummary(trainingSummary.get)
-    copied.setParent(this.parent)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   @Since("2.0.0")
@@ -150,8 +161,8 @@ class GaussianMixtureModel private[ml] (
 
   private var trainingSummary: Option[GaussianMixtureSummary] = None
 
-  private[clustering] def setSummary(summary: GaussianMixtureSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[clustering] def setSummary(summary: Option[GaussianMixtureSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -340,7 +351,7 @@ class GaussianMixture @Since("2.0.0") (
       .setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
-    model.setSummary(summary)
+    model.setSummary(Some(summary))
     instr.logNumFeatures(model.gaussians.head.mean.size)
     instr.logSuccess(model)
     model
@@ -363,7 +374,7 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  * :: Experimental ::
  * Summary of GaussianMixture.
  *
- * @param predictions  [[DataFrame]] produced by [[GaussianMixtureModel.transform()]].
+ * @param predictions  `DataFrame` produced by `GaussianMixtureModel.transform()`.
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param probabilityCol  Name for column of predicted probability of each cluster
  *                        in `predictions`.

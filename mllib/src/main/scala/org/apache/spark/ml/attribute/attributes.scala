@@ -98,7 +98,7 @@ sealed abstract class Attribute extends Serializable {
   def toMetadata(): Metadata = toMetadata(Metadata.empty)
 
   /**
-   * Converts to a [[StructField]] with some existing metadata.
+   * Converts to a `StructField` with some existing metadata.
    * @param existingMetadata existing metadata to carry over
    */
   def toStructField(existingMetadata: Metadata): StructField = {
@@ -109,7 +109,7 @@ sealed abstract class Attribute extends Serializable {
     StructField(name.get, DoubleType, nullable = false, newMetadata)
   }
 
-  /** Converts to a [[StructField]]. */
+  /** Converts to a `StructField`. */
   def toStructField(): StructField = toStructField(Metadata.empty)
 
   override def toString: String = toMetadataImpl(withType = true).toString

@@ -144,30 +144,38 @@ private[r] object GeneralizedLinearRegressionWrapper
       features
     }
 
-    val rCoefficientStandardErrors = if (glm.getFitIntercept) {
-      Array(summary.coefficientStandardErrors.last) ++
-        summary.coefficientStandardErrors.dropRight(1)
-    } else {
-      summary.coefficientStandardErrors
-    }
+    val rCoefficients: Array[Double] = if (summary.isNormalSolver) {
+      val rCoefficientStandardErrors = if (glm.getFitIntercept) {
+        Array(summary.coefficientStandardErrors.last) ++
+          summary.coefficientStandardErrors.dropRight(1)
+      } else {
+        summary.coefficientStandardErrors
+      }
 
-    val rTValues = if (glm.getFitIntercept) {
-      Array(summary.tValues.last) ++ summary.tValues.dropRight(1)
-    } else {
-      summary.tValues
-    }
+      val rTValues = if (glm.getFitIntercept) {
+        Array(summary.tValues.last) ++ summary.tValues.dropRight(1)
+      } else {
+        summary.tValues
+      }
 
-    val rPValues = if (glm.getFitIntercept) {
-      Array(summary.pValues.last) ++ summary.pValues.dropRight(1)
-    } else {
-      summary.pValues
-    }
+      val rPValues = if (glm.getFitIntercept) {
+        Array(summary.pValues.last) ++ summary.pValues.dropRight(1)
+      } else {
+        summary.pValues
+      }
 
-    val rCoefficients: Array[Double] = if (glm.getFitIntercept) {
-      Array(glm.intercept) ++ glm.coefficients.toArray ++
-        rCoefficientStandardErrors ++ rTValues ++ rPValues
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray ++
+          rCoefficientStandardErrors ++ rTValues ++ rPValues
+      } else {
+        glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      }
     } else {
-      glm.coefficients.toArray ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray
+      } else {
+        glm.coefficients.toArray
+      }
     }
 
     val rDispersion: Double = summary.dispersion
