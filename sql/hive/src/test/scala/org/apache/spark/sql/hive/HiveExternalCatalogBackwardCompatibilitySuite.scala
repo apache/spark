@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 
-class HiveExternalCatalogCompatibilitySuite extends QueryTest with TestHiveSingleton {
+class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest with TestHiveSingleton {
 
   // To test `HiveExternalCatalog`, we need to read/write the raw table meta from/to hive client.
   val hiveClient: HiveClient =
