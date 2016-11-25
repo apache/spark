@@ -173,7 +173,7 @@ class OptimizeInSuite extends PlanTest {
       case _ => fail("Unexpected result for OptimizedIn")
     }
   }
-  
+
   test("OptimizedIn test: In(null, list) should return null") {
     val originalQuery1 = testRelation
       .where(In(Literal.create(null, StringType), Seq(Literal(1), Literal(2))))
