@@ -313,15 +313,15 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       .save()
   }
 
-  test("SPARK-18413: Add `maxConnections` JDBCOption") {
+  test("SPARK-18413: Use `numPartitions` JDBCOption") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val e = intercept[IllegalArgumentException] {
       df.write.format("jdbc")
         .option("dbtable", "TEST.SAVETEST")
         .option("url", url1)
-        .option(s"${JDBCOptions.JDBC_MAX_CONNECTIONS}", "0")
+        .option(s"${JDBCOptions.JDBC_NUM_PARTITIONS}", "0")
         .save()
     }.getMessage
-    assert(e.contains("Invalid value `0` for parameter `maxConnections`. The minimum value is 1"))
+    assert(e.contains("Invalid value `0` for parameter `numPartitions`. The minimum value is 1"))
   }
 }
