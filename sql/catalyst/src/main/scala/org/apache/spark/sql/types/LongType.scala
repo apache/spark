@@ -24,7 +24,7 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 
 /**
- * The data type representing `Long` values. Please use the singleton [[DataTypes.LongType]].
+ * The data type representing `Long` values. Please use the singleton `DataTypes.LongType`.
  *
  * @since 1.3.0
  */

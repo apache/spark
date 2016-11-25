@@ -57,9 +57,9 @@ import org.apache.spark.util.SerializableJobConf
  * @param partition a map from the partition key to the partition value (optional). If the partition
  *                  value is optional, dynamic partition insert will be performed.
  *                  As an example, `INSERT INTO tbl PARTITION (a=1, b=2) AS ...` would have
- *                  Map('a' -> Some('1'), 'b' -> Some('2')),
+ *                  Map('a' -&gt; Some('1'), 'b' -&gt; Some('2')),
  *                  and `INSERT INTO tbl PARTITION (a=1, b) AS ...`
- *                  would have Map('a' -> Some('1'), 'b' -> None).
+ *                  would have Map('a' -&gt; Some('1'), 'b' -&gt; None).
  * @param child the logical plan representing data to write to.
  * @param overwrite overwrite existing table or partitions.
  * @param ifNotExists If true, only write if the table or partition does not exist.

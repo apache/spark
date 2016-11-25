@@ -147,18 +147,18 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
 /**
  * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
- * [[http://dx.doi.org/10.1145/1454008.1454027 Li et al., PFP: Parallel FP-Growth for Query
- *  Recommendation]]. PFP distributes computation in such a way that each worker executes an
+ * <a href="http://dx.doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
+ * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
  * independent group of mining tasks. The FP-Growth algorithm is described in
- * [[http://dx.doi.org/10.1145/335191.335372 Han et al., Mining frequent patterns without candidate
- *  generation]].
+ * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
+ * candidate generation</a>.
  *
  * @param minSupport the minimal support level of the frequent pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
  * @param numPartitions number of partitions used by parallel FP-growth
  *
- * @see [[http://en.wikipedia.org/wiki/Association_rule_learning Association rule learning
- *       (Wikipedia)]]
+ * @see <a href="http://en.wikipedia.org/wiki/Association_rule_learning">
+ * Association rule learning (Wikipedia)</a>
  *
  */
 @Since("1.3.0")

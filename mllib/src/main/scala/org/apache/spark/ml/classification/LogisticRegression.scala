@@ -56,13 +56,13 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Set threshold in binary classification, in range [0, 1].
    *
-   * If the estimated probability of class label 1 is > threshold, then predict 1, else 0.
+   * If the estimated probability of class label 1 is &gt; threshold, then predict 1, else 0.
    * A high threshold encourages the model to predict 0 more often;
    * a low threshold encourages the model to predict 1 more often.
    *
    * Note: Calling this with threshold p is equivalent to calling `setThresholds(Array(1-p, p))`.
-   *       When [[setThreshold()]] is called, any user-set value for [[thresholds]] will be cleared.
-   *       If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be
+   *       When `setThreshold()` is called, any user-set value for `thresholds` will be cleared.
+   *       If both `threshold` and `thresholds` are set in a ParamMap, then they must be
    *       equivalent.
    *
    * Default is 0.5.
@@ -101,12 +101,12 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Get threshold for binary classification.
    *
-   * If [[thresholds]] is set with length 2 (i.e., binary classification),
+   * If `thresholds` is set with length 2 (i.e., binary classification),
    * this returns the equivalent threshold: {{{1 / (1 + thresholds(0) / thresholds(1))}}}.
-   * Otherwise, returns [[threshold]] if set, or its default value if unset.
+   * Otherwise, returns `threshold` if set, or its default value if unset.
    *
    * @group getParam
-   * @throws IllegalArgumentException if [[thresholds]] is set to an array of length other than 2.
+   * @throws IllegalArgumentException if `thresholds` is set to an array of length other than 2.
    */
   override def getThreshold: Double = {
     checkThresholdConsistency()
@@ -122,13 +122,13 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   /**
    * Set thresholds in multiclass (or binary) classification to adjust the probability of
-   * predicting each class. Array must have length equal to the number of classes, with values > 0,
-   * excepting that at most one value may be 0.
+   * predicting each class. Array must have length equal to the number of classes,
+   * with values &gt; 0, excepting that at most one value may be 0.
    * The class with largest value p/t is predicted, where p is the original probability of that
    * class and t is the class's threshold.
    *
-   * Note: When [[setThresholds()]] is called, any user-set value for [[threshold]] will be cleared.
-   *       If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be
+   * Note: When `setThresholds()` is called, any user-set value for `threshold` will be cleared.
+   *       If both `threshold` and `thresholds` are set in a ParamMap, then they must be
    *       equivalent.
    *
    * @group setParam
@@ -141,8 +141,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Get thresholds for binary or multiclass classification.
    *
-   * If [[thresholds]] is set, return its value.
-   * Otherwise, if [[threshold]] is set, return the equivalent thresholds for binary
+   * If `thresholds` is set, return its value.
+   * Otherwise, if `threshold` is set, return the equivalent thresholds for binary
    * classification: (1-threshold, threshold).
    * If neither are set, throw an exception.
    *
@@ -159,9 +159,9 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   }
 
   /**
-   * If [[threshold]] and [[thresholds]] are both set, ensures they are consistent.
+   * If `threshold` and `thresholds` are both set, ensures they are consistent.
    *
-   * @throws IllegalArgumentException if [[threshold]] and [[thresholds]] are not equivalent
+   * @throws IllegalArgumentException if `threshold` and `thresholds` are not equivalent
    */
   protected def checkThresholdConsistency(): Unit = {
     if (isSet(threshold) && isSet(thresholds)) {
@@ -207,7 +207,7 @@ class LogisticRegression @Since("1.2.0") (
   /**
    * Set the ElasticNet mixing parameter.
    * For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
-   * For 0 < alpha < 1, the penalty is a combination of L1 and L2.
+   * For 0 &lt; alpha &lt; 1, the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
    *
    * @group setParam
@@ -294,7 +294,7 @@ class LogisticRegression @Since("1.2.0") (
   override def getThresholds: Array[Double] = super.getThresholds
 
   /**
-   * Suggested depth for treeAggregate (>= 2).
+   * Suggested depth for treeAggregate (&gt;= 2).
    * If the dimensions of features or the number of partitions are large,
    * this param could be adjusted to a larger size.
    * Default is 2.
@@ -815,7 +815,7 @@ class LogisticRegressionModel private[spark] (
 
   /**
    * Predict label for the given feature vector.
-   * The behavior of this can be adjusted using [[thresholds]].
+   * The behavior of this can be adjusted using `thresholds`.
    */
   override protected def predict(features: Vector): Double = if (isMultinomial) {
     super.predict(features)
@@ -1274,7 +1274,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  *
  * The probability of the multinomial outcome $y$ taking on any of the K possible outcomes is:
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    P(y_i=0|\vec{x}_i, \beta) = \frac{e^{\vec{x}_i^T \vec{\beta}_0}}{\sum_{k=0}^{K-1}
  *       e^{\vec{x}_i^T \vec{\beta}_k}} \\
@@ -1283,7 +1283,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    P(y_i=K-1|\vec{x}_i, \beta) = \frac{e^{\vec{x}_i^T \vec{\beta}_{K-1}}\,}{\sum_{k=0}^{K-1}
  *       e^{\vec{x}_i^T \vec{\beta}_k}}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * The model coefficients $\beta = (\beta_0, \beta_1, \beta_2, ..., \beta_{K-1})$ become a matrix
  * which has dimension of $K \times (N+1)$ if the intercepts are added. If the intercepts are not
@@ -1292,7 +1292,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  * Note that the coefficients in the model above lack identifiability. That is, any constant scalar
  * can be added to all of the coefficients and the probabilities remain the same.
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *    \frac{e^{\vec{x}_i^T \left(\vec{\beta}_0 + \vec{c}\right)}}{\sum_{k=0}^{K-1}
@@ -1302,7 +1302,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    = \frac{e^{\vec{x}_i^T \vec{\beta}_0}}{\sum_{k=0}^{K-1} e^{\vec{x}_i^T \vec{\beta}_k}}
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * However, when regularization is added to the loss function, the coefficients are indeed
  * identifiable because there is only one set of coefficients which minimizes the regularization
@@ -1314,7 +1314,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  * The loss of objective function for a single instance of data (we do not include the
  * regularization term here for simplicity) can be written as
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *    \ell\left(\beta, x_i\right) &= -log{P\left(y_i \middle| \vec{x}_i, \beta\right)} \\
@@ -1322,14 +1322,14 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    &= log\left(\sum_{k=0}^{K-1} e^{margins_k}\right) - margins_y
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * where ${margins}_k = \vec{x}_i^T \vec{\beta}_k$.
  *
  * For optimization, we have to calculate the first derivative of the loss function, and a simple
  * calculation shows that
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \begin{align}
  *    \frac{\partial \ell(\beta, \vec{x}_i, w_i)}{\partial \beta_{j, k}}
@@ -1338,54 +1338,54 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    &= x_{i, j} \cdot w_i \cdot multiplier_k
  *    \end{align}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * where $w_i$ is the sample weight, $I_{y=k}$ is an indicator function
  *
- *  <p><blockquote>
+ *  <blockquote>
  *    $$
  *    I_{y=k} = \begin{cases}
  *          1 & y = k \\
  *          0 & else
  *       \end{cases}
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * and
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    multiplier_k = \left(\frac{e^{\vec{x}_i \cdot \vec{\beta}_k}}{\sum_{k=0}^{K-1}
  *       e^{\vec{x}_i \cdot \vec{\beta}_k}} - I_{y=k}\right)
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * If any of margins is larger than 709.78, the numerical computation of multiplier and loss
  * function will suffer from arithmetic overflow. This issue occurs when there are outliers in
  * data which are far away from the hyperplane, and this will cause the failing of training once
- * infinity is introduced. Note that this is only a concern when max(margins) > 0.
+ * infinity is introduced. Note that this is only a concern when max(margins) &gt; 0.
  *
- * Fortunately, when max(margins) = maxMargin > 0, the loss function and the multiplier can easily
- * be rewritten into the following equivalent numerically stable formula.
+ * Fortunately, when max(margins) = maxMargin &gt; 0, the loss function and the multiplier can
+ * easily be rewritten into the following equivalent numerically stable formula.
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    \ell\left(\beta, x\right) = log\left(\sum_{k=0}^{K-1} e^{margins_k - maxMargin}\right) -
  *       margins_{y} + maxMargin
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * Note that each term, $(margins_k - maxMargin)$ in the exponential is no greater than zero; as a
  * result, overflow will not happen with this formula.
  *
  * For $multiplier$, a similar trick can be applied as the following,
  *
- * <p><blockquote>
+ * <blockquote>
  *    $$
  *    multiplier_k = \left(\frac{e^{\vec{x}_i \cdot \vec{\beta}_k - maxMargin}}{\sum_{k'=0}^{K-1}
  *       e^{\vec{x}_i \cdot \vec{\beta}_{k'} - maxMargin}} - I_{y=k}\right)
  *    $$
- * </blockquote></p>
+ * </blockquote>
  *
  * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
@@ -1513,7 +1513,7 @@ private class LogisticAggregator(
     }
 
     /**
-     * When maxMargin > 0, the original formula could cause overflow.
+     * When maxMargin &gt; 0, the original formula could cause overflow.
      * We address this by subtracting maxMargin from all the margins, so it's guaranteed
      * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
      */

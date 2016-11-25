@@ -163,7 +163,7 @@ trait MLWritable {
 /**
  * :: DeveloperApi ::
  *
- * Helper trait for making simple [[Params]] types writable.  If a [[Params]] class stores
+ * Helper trait for making simple `Params` types writable.  If a `Params` class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
  * a default implementation of writing saved instances of the class.
  * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
@@ -231,7 +231,7 @@ trait MLReadable[T] {
 /**
  * :: DeveloperApi ::
  *
- * Helper trait for making simple [[Params]] types readable.  If a [[Params]] class stores
+ * Helper trait for making simple `Params` types readable.  If a `Params` class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
  * a default implementation of reading saved instances of the class.
  * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
@@ -360,7 +360,7 @@ private[ml] object DefaultParamsReader {
 
     /**
      * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
-     * This can be useful for getting a Param value before an instance of [[Params]]
+     * This can be useful for getting a Param value before an instance of `Params`
      * is available.
      */
     def getParamValue(paramName: String): JValue = {
@@ -438,7 +438,7 @@ private[ml] object DefaultParamsReader {
   }
 
   /**
-   * Load a [[Params]] instance from the given path, and return it.
+   * Load a `Params` instance from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
   def loadParamsInstance[T](path: String, sc: SparkContext): T = {
@@ -454,7 +454,7 @@ private[ml] object DefaultParamsReader {
 private[ml] object MetaAlgorithmReadWrite {
   /**
    * Examine the given estimator (which may be a compound estimator) and extract a mapping
-   * from UIDs to corresponding [[Params]] instances.
+   * from UIDs to corresponding `Params` instances.
    */
   def getUidMap(instance: Params): Map[String, Params] = {
     val uidList = getUidMapImpl(instance)

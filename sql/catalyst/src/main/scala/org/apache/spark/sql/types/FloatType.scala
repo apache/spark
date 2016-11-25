@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.util.Utils
 
 /**
- * The data type representing `Float` values. Please use the singleton [[DataTypes.FloatType]].
+ * The data type representing `Float` values. Please use the singleton `DataTypes.FloatType`.
  *
  * @since 1.3.0
  */

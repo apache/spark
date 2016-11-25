@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * A class that implements a [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]]
+ * A class that implements a <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a>
  * learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
  *
@@ -46,9 +46,9 @@ import org.apache.spark.util.Utils
  *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
  *    package.
  *
- * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
- * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
- *     random forests]]
+ * @see <a href="http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf">Breiman (2001)</a>
+ * @see <a href="http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf">
+ * Breiman manual for random forests</a>
  * @param strategy The configuration parameters for the random forest algorithm which specify
  *                 the type of random forest (classification or regression), feature type
  *                 (continuous, categorical), depth of the tree, quantile calculation strategy,

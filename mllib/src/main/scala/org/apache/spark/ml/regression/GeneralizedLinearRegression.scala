@@ -123,9 +123,11 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
 /**
  * :: Experimental ::
  *
- * Fit a Generalized Linear Model ([[https://en.wikipedia.org/wiki/Generalized_linear_model]])
- * specified by giving a symbolic description of the linear predictor (link function) and
- * a description of the error distribution (family).
+ * Fit a Generalized Linear Model
+ * (see <a href="https://en.wikipedia.org/wiki/Generalized_linear_model">
+ * Generalized linear model (Wikipedia)</a>)
+ * specified by giving a symbolic description of the linear
+ * predictor (link function) and a description of the error distribution (family).
  * It supports "gaussian", "binomial", "poisson" and "gamma" as family.
  * Valid link functions for each family is listed below. The first link function of each family
  * is the default one.
@@ -196,11 +198,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the regularization parameter for L2 regularization.
    * The regularization term is
-   * <p><blockquote>
+   * <blockquote>
    *    $$
    *    0.5 * regParam * L2norm(coefficients)^2
    *    $$
-   * </blockquote></p>
+   * </blockquote>
    * Default is 0.0.
    *
    * @group setParam

@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
  */
 private[ml] trait CrossValidatorParams extends ValidatorParams {
   /**
-   * Param for number of folds for cross validation.  Must be >= 2.
+   * Param for number of folds for cross validation.  Must be &gt;= 2.
    * Default: 3
    *
    * @group param
@@ -198,7 +198,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
  *
  * @param bestModel The best model selected from k-fold cross validation.
  * @param avgMetrics Average cross-validation metrics for each paramMap in
- *                   [[CrossValidator.estimatorParamMaps]], in the corresponding order.
+ *                   `CrossValidator.estimatorParamMaps`, in the corresponding order.
  */
 @Since("1.2.0")
 class CrossValidatorModel private[ml] (

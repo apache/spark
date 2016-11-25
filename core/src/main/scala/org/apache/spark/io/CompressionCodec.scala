@@ -172,7 +172,7 @@ private final object SnappyCompressionCodec {
 }
 
 /**
- * Wrapper over [[SnappyOutputStream]] which guards against write-after-close and double-close
+ * Wrapper over `SnappyOutputStream` which guards against write-after-close and double-close
  * issues. See SPARK-7660 for more details. This wrapping can be removed if we upgrade to a version
  * of snappy-java that contains the fix for https://github.com/xerial/snappy-java/issues/107.
  */

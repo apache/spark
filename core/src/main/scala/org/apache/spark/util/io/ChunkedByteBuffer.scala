@@ -148,7 +148,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 /**
  * Reads data from a ChunkedByteBuffer.
  *
- * @param dispose if true, [[ChunkedByteBuffer.dispose()]] will be called at the end of the stream
+ * @param dispose if true, `ChunkedByteBuffer.dispose()` will be called at the end of the stream
  *                in order to close any memory-mapped files which back the buffer.
  */
 private class ChunkedByteBufferInputStream(

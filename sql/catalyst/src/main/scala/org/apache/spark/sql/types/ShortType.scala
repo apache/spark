@@ -24,7 +24,7 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 
 /**
- * The data type representing `Short` values. Please use the singleton [[DataTypes.ShortType]].
+ * The data type representing `Short` values. Please use the singleton `DataTypes.ShortType`.
  *
  * @since 1.3.0
  */

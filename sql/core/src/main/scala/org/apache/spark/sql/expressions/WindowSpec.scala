@@ -85,8 +85,8 @@ class WindowSpec private[sql](
    * "current row", while "-1" means the row before the current row, and "5" means the fifth row
    * after the current row.
    *
-   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
-   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
+   * and `[Window.currentRow` to specify special boundary values, rather than using integral
    * values directly.
    *
    * A row based boundary is based on the position of the row within the partition.
@@ -116,9 +116,9 @@ class WindowSpec private[sql](
    * }}}
    *
    * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value ([[Window.unboundedPreceding]]).
+   *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  ([[Window.unboundedFollowing]]).
+   *            maximum long value  (`Window.unboundedFollowing`).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rowsBetween.
@@ -133,8 +133,8 @@ class WindowSpec private[sql](
    * while "-1" means one off before the current row, and "5" means the five off after the
    * current row.
    *
-   * We recommend users use [[Window.unboundedPreceding]], [[Window.unboundedFollowing]],
-   * and [[Window.currentRow]] to specify special boundary values, rather than using integral
+   * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
+   * and `[Window.currentRow` to specify special boundary values, rather than using integral
    * values directly.
    *
    * A range based boundary is based on the actual value of the ORDER BY
@@ -167,9 +167,9 @@ class WindowSpec private[sql](
    * }}}
    *
    * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value ([[Window.unboundedPreceding]]).
+   *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  ([[Window.unboundedFollowing]]).
+   *            maximum long value  (`Window.unboundedFollowing`).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rangeBetween.

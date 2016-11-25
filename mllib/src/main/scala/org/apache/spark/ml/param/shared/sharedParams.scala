@@ -29,7 +29,7 @@ import org.apache.spark.ml.param._
 private[ml] trait HasRegParam extends Params {
 
   /**
-   * Param for regularization parameter (>= 0).
+   * Param for regularization parameter (&gt;= 0).
    * @group param
    */
   final val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter (>= 0)", ParamValidators.gtEq(0))
@@ -44,7 +44,7 @@ private[ml] trait HasRegParam extends Params {
 private[ml] trait HasMaxIter extends Params {
 
   /**
-   * Param for maximum number of iterations (>= 0).
+   * Param for maximum number of iterations (&gt;= 0).
    * @group param
    */
   final val maxIter: IntParam = new IntParam(this, "maxIter", "maximum number of iterations (>= 0)", ParamValidators.gtEq(0))
@@ -238,7 +238,7 @@ private[ml] trait HasOutputCol extends Params {
 private[ml] trait HasCheckpointInterval extends Params {
 
   /**
-   * Param for set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
+   * Param for set checkpoint interval (&gt;= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
    * @group param
    */
   final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations", (interval: Int) => interval == -1 || interval >= 1)
@@ -334,7 +334,7 @@ private[ml] trait HasElasticNetParam extends Params {
 private[ml] trait HasTol extends Params {
 
   /**
-   * Param for the convergence tolerance for iterative algorithms (>= 0).
+   * Param for the convergence tolerance for iterative algorithms (&gt;= 0).
    * @group param
    */
   final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms (>= 0)", ParamValidators.gtEq(0))
@@ -349,7 +349,7 @@ private[ml] trait HasTol extends Params {
 private[ml] trait HasStepSize extends Params {
 
   /**
-   * Param for Step size to be used for each iteration of optimization (> 0).
+   * Param for Step size to be used for each iteration of optimization (&gt; 0).
    * @group param
    */
   final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization (> 0)", ParamValidators.gt(0))
@@ -396,7 +396,7 @@ private[ml] trait HasSolver extends Params {
 private[ml] trait HasAggregationDepth extends Params {
 
   /**
-   * Param for suggested depth for treeAggregate (>= 2).
+   * Param for suggested depth for treeAggregate (&gt;= 2).
    * @group expertParam
    */
   final val aggregationDepth: IntParam = new IntParam(this, "aggregationDepth", "suggested depth for treeAggregate (>= 2)", ParamValidators.gtEq(2))

@@ -25,7 +25,7 @@ import org.apache.spark.annotation.InterfaceStability
 /**
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
  *
- * Please use [[DataTypes.createMapType()]] to create a specific instance.
+ * Please use `DataTypes.createMapType()` to create a specific instance.
  *
  * @param keyType The data type of map keys.
  * @param valueType The data type of map values.

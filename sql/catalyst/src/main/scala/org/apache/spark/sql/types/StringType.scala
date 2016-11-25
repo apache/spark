@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * The data type representing `String` values. Please use the singleton [[DataTypes.StringType]].
+ * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
  *
  * @since 1.3.0
  */

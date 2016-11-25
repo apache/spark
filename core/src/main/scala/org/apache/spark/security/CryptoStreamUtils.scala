@@ -46,7 +46,7 @@ private[spark] object CryptoStreamUtils extends Logging {
   val COMMONS_CRYPTO_CONF_PREFIX = "commons.crypto."
 
   /**
-   * Helper method to wrap [[OutputStream]] with [[CryptoOutputStream]] for encryption.
+   * Helper method to wrap `OutputStream` with `CryptoOutputStream` for encryption.
    */
   def createCryptoOutputStream(
       os: OutputStream,
@@ -62,7 +62,7 @@ private[spark] object CryptoStreamUtils extends Logging {
   }
 
   /**
-   * Helper method to wrap [[InputStream]] with [[CryptoInputStream]] for decryption.
+   * Helper method to wrap `InputStream` with `CryptoInputStream` for decryption.
    */
   def createCryptoInputStream(
       is: InputStream,
