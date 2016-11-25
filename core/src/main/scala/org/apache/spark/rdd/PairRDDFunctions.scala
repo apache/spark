@@ -399,12 +399,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
-   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero
-   *
-   * {{{
-   *   sp > p
-   * }}}
-   *
+   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (sp &gt; p)
    * would trigger sparse representation of registers, which may reduce the memory consumption
    * and increase accuracy when the cardinality is small.
    *
