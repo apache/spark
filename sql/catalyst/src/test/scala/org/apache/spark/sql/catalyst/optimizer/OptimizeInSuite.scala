@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Unresol
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -172,8 +173,8 @@ class OptimizeInSuite extends PlanTest {
       case _ => fail("Unexpected result for OptimizedIn")
     }
   }
-
-  test("OptimizedIn test: Replace In(null, list) with null literal.") {
+  
+  test("OptimizedIn test: In(null, list) should return null") {
     val originalQuery1 = testRelation
       .where(In(Literal.create(null, StringType), Seq(Literal(1), Literal(2))))
     val optimized1 = Optimize.execute(originalQuery1.analyze)
@@ -187,10 +188,10 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized2, correctAnswer2)
   }
 
-  test("OptimizedIn test: Replace In(value, Seq.empty) with false literal.") {
+  test("OptimizedIn test: Replace In(value, Seq.empty) with false literal if value is not null.") {
     val originalQuery = testRelation.where(In(UnresolvedAttribute("a"), Seq.empty))
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelation.where(false).analyze
+    val correctAnswer = testRelation.where(If(IsNull('a), 'a, FalseLiteral)).analyze
     comparePlans(optimized, correctAnswer)
   }
 }
