@@ -33,6 +33,13 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
+ *
+ * NaN handling:
+ * `Bucketizer` will raise an error when it finds NaN values in the dataset by default,
+ * but the user can also choose to either keep or remove NaN values within the dataset
+ * by setting `handleInvalid`. If the user chooses to keep NaN values, they will be handled
+ * specially and placed into their own bucket, for example, if 4 buckets are used, then
+ * non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
  */
 @Since("1.4.0")
 final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)

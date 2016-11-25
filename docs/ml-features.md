@@ -979,6 +979,12 @@ Note that if you have no idea of the upper and lower bounds of the targeted colu
 
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
+NaN values: Note also that `Bucketizer`
+will raise an error when it finds NaN values in the dataset by default, but the user can also choose to either
+keep or remove NaN values within the dataset by setting `handleInvalid`. If the user chooses to keep
+NaN values, they will be handled specially and placed into their own bucket, for example, if 4 buckets
+are used, then non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
+
 More details can be found in the API docs for [Bucketizer](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer).
 
 **Examples**
@@ -1187,12 +1193,6 @@ for more details on the API.
 categorical features. The number of bins is set by the `numBuckets` parameter. It is possible
 that the number of buckets used will be smaller than this value, for example, if there are too few
 distinct values of the input to create enough distinct quantiles.
-
-NaN values: Note also that QuantileDiscretizer
-will raise an error when it finds NaN values in the dataset, but the user can also choose to either
-keep or remove NaN values within the dataset by setting `handleInvalid`. If the user chooses to keep
-NaN values, they will be handled specially and placed into their own bucket, for example, if 4 buckets
-are used, then non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
 
 Algorithm: The bin ranges are chosen using an approximate algorithm (see the documentation for
 [approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions) for a

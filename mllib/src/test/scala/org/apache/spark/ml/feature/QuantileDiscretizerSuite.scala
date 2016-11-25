@@ -17,10 +17,9 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql._
 import org.apache.spark.sql.functions.udf
 
 class QuantileDiscretizerSuite
@@ -69,40 +68,6 @@ class QuantileDiscretizerSuite
     assert(observedNumBuckets == expectedNumBuckets,
       s"Observed number of buckets are not correct." +
         s" Expected $expectedNumBuckets but found $observedNumBuckets")
-  }
-
-  test("Test transform on data with NaN value") {
-    val spark = this.spark
-    import spark.implicits._
-
-    val numBuckets = 3
-    val validData = Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9, Double.NaN, Double.NaN, Double.NaN)
-    val expectedKeep = Array(0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0)
-    val expectedSkip = Array(0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 2.0)
-
-    val discretizer = new QuantileDiscretizer()
-      .setInputCol("input")
-      .setOutputCol("result")
-      .setNumBuckets(numBuckets)
-
-    withClue("QuantileDiscretizer with handleInvalid=error should throw exception for NaN values") {
-      val dataFrame: DataFrame = validData.toSeq.toDF("input")
-      intercept[SparkException] {
-        discretizer.fit(dataFrame).transform(dataFrame).collect()
-      }
-    }
-
-    List(("keep", expectedKeep), ("skip", expectedSkip)).foreach{
-      case(u, v) =>
-        discretizer.setHandleInvalid(u)
-        val dataFrame: DataFrame = validData.zip(v).toSeq.toDF("input", "expected")
-        val result = discretizer.fit(dataFrame).transform(dataFrame)
-        result.select("result", "expected").collect().foreach {
-          case Row(x: Double, y: Double) =>
-            assert(x === y,
-              s"The feature value is not correct after bucketing.  Expected $y but found $x")
-        }
-    }
   }
 
   test("Test transform method on unseen data") {
