@@ -989,7 +989,7 @@ class Analyzer(
               withPosition(u) {
                 try {
                   outer.resolve(nameParts, resolver) match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
+                    case Some(outerAttr) => OuterReference(outerAttr)()
                     case None => u
                   }
                 } catch {

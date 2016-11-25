@@ -356,17 +356,17 @@ case class PrettyAttribute(
  * A place holder used to hold a reference that has been resolved to a field outside of the current
  * plan. This is used for correlated subqueries.
  */
-case class OuterReference(e: NamedExpression)
+case class OuterReference(e: NamedExpression)(
+  val exprId: ExprId = NamedExpression.newExprId)
   extends LeafExpression with NamedExpression with Unevaluable {
   override def dataType: DataType = e.dataType
   override def nullable: Boolean = e.nullable
   override def prettyName: String = "outer"
 
-  override def name: String = throw new UnsupportedOperationException
-  override def exprId: ExprId = throw new UnsupportedOperationException
-  override def qualifier: Option[String] = throw new UnsupportedOperationException
+  override def name: String = e.name
+  override def qualifier: Option[String] = e.qualifier
   override def toAttribute: Attribute = e.toAttribute
-  override def newInstance(): NamedExpression = throw new UnsupportedOperationException
+  override def newInstance(): NamedExpression = OuterReference(e)()
 }
 
 object VirtualColumn {
