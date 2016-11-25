@@ -72,8 +72,8 @@ object KafkaUtils {
    * @param ssc         StreamingContext object
    * @param kafkaParams Map of kafka configuration parameters,
    *                    see http://kafka.apache.org/08/configuration.html
-   * @param topics      Map of (topic_name -&gt; numPartitions) to consume. Each partition is consumed
-   *                    in its own thread.
+   * @param topics      Map of (topic_name -&gt; numPartitions) to consume. Each partition is
+   *                    consumed in its own thread.
    * @param storageLevel Storage level to use for storing the received objects
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
