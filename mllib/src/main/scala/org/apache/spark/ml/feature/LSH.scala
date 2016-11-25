@@ -100,19 +100,26 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
   }
 
   /**
+   * Check prerequisite for nearest neighbor. This method will be overridden in subclasses.
+   *
+   * @param singleProbe True for using single-probe; false for multi-probe
+   */
+  protected[this] def checkNearestNeighbor(singleProbe: Boolean) = {}
+
+  /**
    * Given a large dataset and an item, approximately find at most k items which have the closest
    * distance to the item. If the [[outputCol]] is missing, the method will transform the data; if
    * the [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the
    * transformed data when necessary.
    *
    * This method implements two ways of fetching k nearest neighbors:
-   *  - Single Probing: Fast, return at most k elements (Probing only one buckets)
-   *  - Multiple Probing: Slow, return exact k elements (Probing multiple buckets close to the key)
+   *  - Single-probe: Fast, return at most k elements (Probing only one buckets)
+   *  - Multi-probe: Slow, return exact k elements (Probing multiple buckets close to the key)
    *
    * @param dataset the dataset to search for nearest neighbors of the key
    * @param key Feature vector representing the item to search for
    * @param numNearestNeighbors The maximum number of nearest neighbors
-   * @param singleProbing True for using Single Probing; false for multiple probing
+   * @param singleProbe True for using single-probe; false for multi-probe
    * @param distCol Output column for storing the distance between each result row and the key
    * @return A dataset containing at most k items closest to the key. A distCol is added to show
    *         the distance between each row and the key.
@@ -121,9 +128,10 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       dataset: Dataset[_],
       key: Vector,
       numNearestNeighbors: Int,
-      singleProbing: Boolean,
+      singleProbe: Boolean,
       distCol: String): Dataset[_] = {
     require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
+    checkNearestNeighbor(singleProbe)
     // Get Hash Value of the key
     val keyHash = hashFunction(key)
     val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
@@ -136,7 +144,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
     val hashDistUDF = udf((x: Vector) => hashDistance(x, keyHash), DataTypes.DoubleType)
     val hashDistCol = hashDistUDF(col($(outputCol)))
 
-    val modelSubset = if (singleProbing) {
+    val modelSubset = if (singleProbe) {
       modelDataset.filter(hashDistCol === 0.0)
     } else {
       // Compute threshold to get exact k elements.

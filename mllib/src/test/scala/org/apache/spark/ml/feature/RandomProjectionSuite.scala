@@ -138,7 +138,7 @@ class RandomProjectionSuite
       .setSeed(12345)
 
     val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, dataset, key, 100,
-      singleProbing = true)
+      singleProbe = true)
     assert(precision >= 0.6)
     assert(recall >= 0.6)
   }
@@ -154,7 +154,7 @@ class RandomProjectionSuite
       .setSeed(12345)
 
     val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, dataset, key, 100,
-      singleProbing = false)
+      singleProbe = false)
     assert(precision >= 0.7)
     assert(recall >= 0.7)
   }
