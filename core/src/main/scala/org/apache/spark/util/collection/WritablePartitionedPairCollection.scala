@@ -74,6 +74,31 @@ private[spark] object WritablePartitionedPairCollection {
     }
   }
 
+  /* Takes an optional parameter (keyComparator), use if provided
+   * and returns a comparator for the partitions
+   */
+  def getComparator[K](keyComparator: Option[Comparator[K]]) : Comparator[(Int, K)] = {
+    val comparator : Comparator[(Int, K)] =
+      if (keyComparator.isEmpty) {
+        partitionComparator
+      } else {
+        new Comparator[(Int, K)] {
+          // We know we have a non-empty comparator here
+          val ourKeyComp = keyComparator.get
+          override def compare(a: (Int, K), b: (Int, K)): Int = {
+            val partitionDiff = a._1 - b._1
+            if (partitionDiff != 0) {
+              partitionDiff
+            } else {
+              ourKeyComp.compare(a._2, b._2)
+            }
+          }
+        }
+      }
+    comparator
+  }
+
+
   /**
    * A comparator for (Int, K) pairs that orders them both by their partition ID and a key ordering.
    */
@@ -102,3 +127,4 @@ private[spark] trait WritablePartitionedIterator {
 
   def nextPartition(): Int
 }
+
