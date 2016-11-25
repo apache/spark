@@ -35,8 +35,8 @@ import org.apache.spark.rdd.RDD
  * high probability. This is achieved by maintaining a waitlist of size O(log(s)), where s is the
  * desired sample size for each stratum.
  *
- * Like in simple random sampling, we generate a random value for each item from the
- * uniform  distribution [0.0, 1.0]. All items with values <= min(values of items in the waitlist)
+ * Like in simple random sampling, we generate a random value for each item from the uniform
+ * distribution [0.0, 1.0]. All items with values &lt;= min(values of items in the waitlist)
  * are accepted into the sample instantly. The threshold for instant accept is designed so that
  * s - numAccepted = O(sqrt(s)), where s is again the desired sample size. Thus, by maintaining a
  * waitlist size = O(sqrt(s)), we will be able to create a sample of the exact size s by adding
@@ -165,7 +165,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
    * Most of the time, numAccepted &lt;= sampleSize &lt;= (numAccepted + numWaitlisted), which
    * means we need to sort the elements in the waitlist by their associated values in order to find
    * the value T s.t. |{elements in the stratum whose associated values &lt;= T}| = sampleSize.
-   * Note that all elements in the waitlist have values >= bound for instant accept, so a T value
+   * Note that all elements in the waitlist have values &gt;= bound for instant accept, so a T value
    * in the waitlist range would allow all elements that were instantly accepted on the first pass
    * to be included in the sample.
    */

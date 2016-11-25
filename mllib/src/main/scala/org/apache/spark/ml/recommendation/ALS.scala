@@ -878,7 +878,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   }
 
   /**
-   * Builder for [[RatingBlock]]. [[mutable.ArrayBuilder]] is used to avoid boxing/unboxing.
+   * Builder for [[RatingBlock]]. `mutable.ArrayBuilder` is used to avoid boxing/unboxing.
    */
   private[recommendation] class RatingBlockBuilder[@specialized(Int, Long) ID: ClassTag]
     extends Serializable {

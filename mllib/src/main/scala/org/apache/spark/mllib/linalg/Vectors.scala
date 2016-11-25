@@ -351,7 +351,7 @@ object Vectors {
   }
 
   /**
-   * Parses a string resulted from [[Vector.toString()]] into a [[Vector]].
+   * Parses a string resulted from `Vector.toString` into a [[Vector]].
    */
   @Since("1.1.0")
   def parse(s: String): Vector = {

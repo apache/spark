@@ -247,7 +247,7 @@ final class ShuffleBlockFetcherIterator(
 
   /**
    * Fetch the local blocks while we are fetching remote blocks. This is ok because
-   * [[ManagedBuffer]]'s memory is allocated lazily when we create the input stream, so all we
+   * `ManagedBuffer`'s memory is allocated lazily when we create the input stream, so all we
    * track in-memory are the ManagedBuffer references themselves.
    */
   private[this] def fetchLocalBlocks() {

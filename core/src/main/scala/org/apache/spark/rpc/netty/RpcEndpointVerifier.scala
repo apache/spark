@@ -20,7 +20,7 @@ package org.apache.spark.rpc.netty
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 
 /**
- * An [[RpcEndpoint]] for remote [[RpcEnv]]s to query if an [[RpcEndpoint]] exists.
+ * An [[RpcEndpoint]] for remote [[RpcEnv]]s to query if an `RpcEndpoint` exists.
  *
  * This is used when setting up a remote endpoint reference.
  */

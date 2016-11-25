@@ -345,7 +345,7 @@ private[ml] object DefaultParamsReader {
   /**
    * All info from metadata file.
    *
-   * @param params  paramMap, as a [[JValue]]
+   * @param params  paramMap, as a `JValue`
    * @param metadata  All metadata, including the other fields
    * @param metadataJson  Full metadata file String (for debugging)
    */

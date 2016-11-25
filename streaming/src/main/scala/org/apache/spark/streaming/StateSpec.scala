@@ -30,7 +30,7 @@ import org.apache.spark.util.ClosureCleaner
  * `mapWithState` operation of a
  * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
  * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
- * Use [[org.apache.spark.streaming.StateSpec.function() StateSpec.function]] factory methods
+ * Use `org.apache.spark.streaming.StateSpec.function()` factory methods
  * to create instances of this class.
  *
  * Example in Scala:
