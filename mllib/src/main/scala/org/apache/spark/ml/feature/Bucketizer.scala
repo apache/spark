@@ -178,7 +178,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
    * @throws SparkException if a feature is < splits.head or > splits.last
    */
 
-  private[Bucketizer] def binarySearchForBuckets(
+  private[feature] def binarySearchForBuckets(
       splits: Array[Double],
       feature: Double,
       keepInvalid: Boolean): Double = {
