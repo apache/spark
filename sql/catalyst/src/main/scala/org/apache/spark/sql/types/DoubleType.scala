@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.util.Utils
 
 /**
- * The data type representing `Double` values. Please use the singleton [[DataTypes.DoubleType]].
+ * The data type representing `Double` values. Please use the singleton `DataTypes.DoubleType`.
  *
  * @since 1.3.0
  */

@@ -70,8 +70,8 @@ import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, Poi
  * All of the scheduling and execution in Spark is done based on these methods, allowing each RDD
  * to implement its own way of computing itself. Indeed, users can implement custom RDDs (e.g. for
  * reading data from a new storage system) by overriding these functions. Please refer to the
- * [[http://people.csail.mit.edu/matei/papers/2012/nsdi_spark.pdf Spark paper]] for more details
- * on RDD internals.
+ * <a href="http://people.csail.mit.edu/matei/papers/2012/nsdi_spark.pdf">Spark paper</a>
+ * for more details on RDD internals.
  */
 abstract class RDD[T: ClassTag](
     @transient private var _sc: SparkContext,
@@ -469,7 +469,7 @@ abstract class RDD[T: ClassTag](
    * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
    * @param fraction expected size of the sample as a fraction of this RDD's size
    *  without replacement: probability that each element is chosen; fraction must be [0, 1]
-   *  with replacement: expected number of times each element is chosen; fraction must be >= 0
+   *  with replacement: expected number of times each element is chosen; fraction must be &gt;= 0
    * @param seed seed for the random number generator
    *
    * @note This is NOT guaranteed to provide exactly the fraction of the count
@@ -675,8 +675,8 @@ abstract class RDD[T: ClassTag](
    * may even differ each time the resulting RDD is evaluated.
    *
    * @note This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   * aggregation (such as a sum or average) over each key, using `PairRDDFunctions.aggregateByKey`
+   * or `PairRDDFunctions.reduceByKey` will provide much better performance.
    */
   def groupBy[K](f: T => K)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] = withScope {
     groupBy[K](f, defaultPartitioner(this))
@@ -688,8 +688,8 @@ abstract class RDD[T: ClassTag](
    * may even differ each time the resulting RDD is evaluated.
    *
    * @note This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   * aggregation (such as a sum or average) over each key, using `PairRDDFunctions.aggregateByKey`
+   * or `PairRDDFunctions.reduceByKey` will provide much better performance.
    */
   def groupBy[K](
       f: T => K,
@@ -703,8 +703,8 @@ abstract class RDD[T: ClassTag](
    * may even differ each time the resulting RDD is evaluated.
    *
    * @note This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   * aggregation (such as a sum or average) over each key, using `PairRDDFunctions.aggregateByKey`
+   * or `PairRDDFunctions.reduceByKey` will provide much better performance.
    */
   def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null)
       : RDD[(K, Iterable[T])] = withScope {

@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 
 /**
  * :: Experimental ::
- * A base class for user-defined aggregations, which can be used in [[Dataset]] operations to take
+ * A base class for user-defined aggregations, which can be used in `Dataset` operations to take
  * all of the elements of a group and reduce them to a single value.
  *
  * For example, the following aggregator extracts an `int` from a specific class and adds them up:
@@ -80,19 +80,19 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def finish(reduction: BUF): OUT
 
   /**
-   * Specifies the [[Encoder]] for the intermediate value type.
+   * Specifies the `Encoder` for the intermediate value type.
    * @since 2.0.0
    */
   def bufferEncoder: Encoder[BUF]
 
   /**
-   * Specifies the [[Encoder]] for the final ouput value type.
+   * Specifies the `Encoder` for the final ouput value type.
    * @since 2.0.0
    */
   def outputEncoder: Encoder[OUT]
 
   /**
-   * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]].
+   * Returns this `Aggregator` as a `TypedColumn` that can be used in `Dataset`.
    * operations.
    * @since 1.6.0
    */
