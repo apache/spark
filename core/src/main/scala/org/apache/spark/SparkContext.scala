@@ -2061,8 +2061,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given job if it's scheduled or running.
    *
    * @param jobId the job ID to cancel
-   * @note Throws `InterruptedException` if the cancel message cannot be sent
+   * @throws InterruptedException if the cancel message cannot be sent
    */
+  @throws(classOf[InterruptedException])
   def cancelJob(jobId: Int) {
     dagScheduler.cancelJob(jobId)
   }
@@ -2071,8 +2072,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given stage and all jobs associated with it.
    *
    * @param stageId the stage ID to cancel
-   * @note Throws `InterruptedException` if the cancel message cannot be sent
+   * @throws InterruptedException if the cancel message cannot be sent
    */
+  @throws(classOf[InterruptedException])
   def cancelStage(stageId: Int) {
     dagScheduler.cancelStage(stageId)
   }
