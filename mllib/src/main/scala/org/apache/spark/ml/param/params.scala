@@ -547,21 +547,6 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * Validates parameter values stored internally.
-   * Raise an exception if any parameter value is invalid.
-   *
-   * This only needs to check for interactions between parameters.
-   * Parameter value checks which do not depend on other parameters are handled by
-   * `Param.validate()`. This method does not handle input/output column parameters;
-   * those are checked during schema validation.
-   * @deprecated Will be removed in 2.1.0. All the checks should be merged into transformSchema
-   */
-  @deprecated("Will be removed in 2.1.0. Checks should be merged into transformSchema.", "2.0.0")
-  def validateParams(): Unit = {
-    // Do nothing by default.  Override to handle Param interactions.
-  }
-
-  /**
    * Explains a param.
    * @param param input param, must belong to this instance.
    * @return a string that contains the input param name, doc, and optionally its default value and
