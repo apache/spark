@@ -53,9 +53,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /**
    * Specifies the minimum number of different documents a term must appear in to be included
    * in the vocabulary.
-   * If this is an integer greater than or equal to 1, this specifies the number of documents
-   * the term must appear in; if this is a double in [0,1), then this specifies the fraction
-   * of documents.
+   * If this is an integer &gt;= 1, this specifies the number of documents the term must appear in;
+   * if this is a double in [0,1), then this specifies the fraction of documents.
    *
    * Default: 1.0
    * @group param

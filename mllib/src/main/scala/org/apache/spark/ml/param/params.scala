@@ -207,22 +207,14 @@ object ParamValidators {
 
   /**
    * Check for value in range lowerBound to upperBound.
-   * @param lowerInclusive If true, check for
-   *                       {{{
-   *                       value >= lowerBound
+   * @param lowerInclusive {{{
+   *                       If true, check for value >= lowerBound
+   *                       If false, check for value > lowerBound
    *                       }}}
-   *                       If false, check for
-   *                       {{{
-   *                       value > lowerBound
+   * @param upperInclusive {{{
+   *                       If true, check for value <= upperBound.
+   *                       If false, check for value < upperBound.
    *                       }}}
-   * @param upperInclusive  If true, check for
-   *                        {{{
-   *                        value <= upperBound.
-   *                        }}}
-   *                        If false, check for
-   *                        {{{
-   *                        value < upperBound.
-   *                        }}}
    */
   def inRange[T](
       lowerBound: Double,

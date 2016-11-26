@@ -60,9 +60,9 @@ import org.apache.spark.util.SerializableJobConf
  *
  *                  {{{
  *                  Map('a' -> Some('1'), 'b' -> Some('2'))
- *                  }}},
+ *                  }}}
  *
- *                  and `INSERT INTO tbl PARTITION (a=1, b) AS ...`
+ *                  , and `INSERT INTO tbl PARTITION (a=1, b) AS ...`
  *                  would have
  *
  *                  {{{

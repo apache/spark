@@ -366,15 +366,19 @@ object PrefixSpan extends Logging {
    * Items are represented by positive integers, and items in each itemset must be distinct and
    * ordered.
    * we use 0 as the delimiter between itemsets.
-   * For example, a sequence &lt;(12)(31)1&gt; is represented by `[0, 1, 2, 0, 1, 3, 0, 1, 0]`.
-   * The postfix of this sequence w.r.t. to prefix &lt;1&gt; is &lt;(_2)(13)1&gt;.
+   * For example,
+   *
+   * {{{
+   * a sequence <(12)(31)1> is represented by `[0, 1, 2, 0, 1, 3, 0, 1, 0]`.
+   * The postfix of this sequence w.r.t. to prefix <1> is <(_2)(13)1>.
    * We may reuse the original items array `[0, 1, 2, 0, 1, 3, 0, 1, 0]` to represent the postfix,
    * and mark the start index of the postfix, which is `2` in this example.
    * So the active items in this postfix are `[2, 0, 1, 3, 0, 1, 0]`.
    * We also remember the start indices of partial projections, the ones that split an itemset.
-   * For example, another possible partial projection w.r.t. &lt;1&gt; is &lt;(_3)1&gt;.
+   * For example, another possible partial projection w.r.t. <1> is <(_3)1>.
    * We remember the start indices of partial projections, which is `[2, 5]` in this example.
    * This data structure makes it easier to do projections.
+   * }}}
    *
    * @param items a sequence stored as `Array[Int]` containing this postfix
    * @param start the start index of this postfix in items

@@ -45,7 +45,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * More precisely,
    *
    * {{{
-   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N)
    * }}}
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed

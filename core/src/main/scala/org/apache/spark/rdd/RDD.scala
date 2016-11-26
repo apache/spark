@@ -1191,9 +1191,9 @@ abstract class RDD[T: ClassTag](
    *
    * {{{
    * rdd.map(x => (x, 1L)).reduceByKey(_ + _)
-   * }}},
+   * }}}
    *
-   * which returns an RDD[T, Long] instead of a map.
+   * , which returns an RDD[T, Long] instead of a map.
    */
   def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = withScope {
     map(value => (value, null)).countByKey()
@@ -1231,8 +1231,8 @@ abstract class RDD[T: ClassTag](
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
-   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (sp is greater
-   * than p) would trigger sparse representation of registers, which may reduce the memory
+   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (`sp` is greater
+   * than `p`) would trigger sparse representation of registers, which may reduce the memory
    * consumption and increase accuracy when the cardinality is small.
    *
    * @param p The precision value for the normal set.

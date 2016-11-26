@@ -35,7 +35,7 @@ private[mllib] object EigenValueDecomposition {
    * @param k number of leading eigenvalues required,
    *          {{{
    *          0 < k < n
-   *          }}}.
+   *          }}}
    * @param tol tolerance of the eigs computation.
    * @param maxIterations the maximum number of Arnoldi update iterations.
    * @return a dense vector of eigenvalues in descending order and a dense matrix of eigenvectors

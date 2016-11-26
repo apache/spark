@@ -1678,7 +1678,7 @@ private[spark] object Utils extends Logging {
    *
    * {{{
    * NaN == NaN and NaN > any non-NaN double
-   * }}}.
+   * }}}
    */
   def nanSafeCompareDoubles(x: Double, y: Double): Int = {
     val xIsNan: Boolean = java.lang.Double.isNaN(x)
@@ -1696,7 +1696,7 @@ private[spark] object Utils extends Logging {
    *
    * {{{
    * NaN == NaN and NaN > any non-NaN float
-   * }}}.
+   * }}}
    */
   def nanSafeCompareFloats(x: Float, y: Float): Int = {
     val xIsNan: Boolean = java.lang.Float.isNaN(x)
