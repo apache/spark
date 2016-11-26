@@ -91,7 +91,7 @@ private[rest] class StandaloneStatusRequestServlet(masterEndpoint: RpcEndpointRe
   protected def handleStatus(submissionId: String): SubmissionStatusResponse = {
     val response = masterEndpoint.askWithRetry[DeployMessages.DriverStatusResponse](
       DeployMessages.RequestDriverStatus(submissionId))
-    val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
+    val message = response.exception.map { "Exception from the cluster:\n" + formatException(_) }
     val d = new SubmissionStatusResponse
     d.serverSparkVersion = sparkVersion
     d.submissionId = submissionId

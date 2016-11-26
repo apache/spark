@@ -48,7 +48,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
       .makeRDD(1 to 10)
       .map(i => OrcData(i, s"part-$i"))
       .toDF()
-      .createOrReplaceTempView(s"orc_temp_table")
+      .createOrReplaceTempView("orc_temp_table")
 
     sql(
       s"""CREATE EXTERNAL TABLE normal_orc(

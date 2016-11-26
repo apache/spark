@@ -667,7 +667,7 @@ private[parquet] object ParquetRowConverter {
   }
 
   def binaryToSQLTimestamp(binary: Binary): SQLTimestamp = {
-    assert(binary.length() == 12, s"Timestamps (with nanoseconds) are expected to be stored in" +
+    assert(binary.length() == 12, "Timestamps (with nanoseconds) are expected to be stored in" +
       s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
     val buffer = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
     val timeOfDayNanos = buffer.getLong

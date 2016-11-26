@@ -1035,7 +1035,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
       }
 
-      sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
+      sql("INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
       checkAnswer(
         sql("SELECT key from explodeTest"),
         (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)

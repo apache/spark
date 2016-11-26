@@ -55,7 +55,7 @@ class LogisticRegressionModel @Since("1.3.0") (
 
   if (numClasses == 2) {
     require(weights.size == numFeatures,
-      s"LogisticRegressionModel with numClasses = 2 was given non-matching values:" +
+      "LogisticRegressionModel with numClasses = 2 was given non-matching values:" +
       s" numFeatures = $numFeatures, but weights.size = ${weights.size}")
   } else {
     val weightsSizeWithoutIntercept = (numClasses - 1) * numFeatures
@@ -191,7 +191,7 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
         }
         model
       case _ => throw new Exception(
-        s"LogisticRegressionModel.load did not recognize model with (className, format version):" +
+        "LogisticRegressionModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }

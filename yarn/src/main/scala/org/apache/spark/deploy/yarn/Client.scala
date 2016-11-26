@@ -297,7 +297,7 @@ private[spark] class Client(
       } catch {
         case NonFatal(e) =>
           logWarning(s"Ignoring ${ROLLED_LOG_INCLUDE_PATTERN.key} because the version of YARN " +
-            s"does not support it", e)
+            "does not support it", e)
       }
     }
 

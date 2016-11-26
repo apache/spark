@@ -31,7 +31,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
     val executorId = Option(request.getParameter("executorId")).map { executorId =>
       UIUtils.decodeURLParameter(executorId)
     }.getOrElse {
-      throw new IllegalArgumentException(s"Missing executorId parameter")
+      throw new IllegalArgumentException("Missing executorId parameter")
     }
     val time = System.currentTimeMillis()
     val maybeThreadDump = sc.get.getExecutorThreadDump(executorId)

@@ -454,7 +454,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def toLocalIteratorAndServe[T](rdd: RDD[T]): Int = {
-    serveIterator(rdd.toLocalIterator, s"serve toLocalIterator")
+    serveIterator(rdd.toLocalIterator, "serve toLocalIterator")
   }
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
@@ -703,7 +703,7 @@ private[spark] object PythonRDD extends Logging {
           }
         } catch {
           case NonFatal(e) =>
-            logError(s"Error while sending iterator", e)
+            logError("Error while sending iterator", e)
         } finally {
           serverSocket.close()
         }

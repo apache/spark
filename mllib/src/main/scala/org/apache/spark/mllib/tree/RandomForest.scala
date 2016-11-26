@@ -81,7 +81,7 @@ private class RandomForest (
     || Try(featureSubsetStrategy.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess,
     s"RandomForest given invalid featureSubsetStrategy: $featureSubsetStrategy." +
     s" Supported values: ${NewRFParams.supportedFeatureSubsetStrategies.mkString(", ")}," +
-    s" (0.0-1.0], [1-n].")
+    " (0.0-1.0], [1-n].")
 
   /**
    * Method to train a decision tree model over an RDD

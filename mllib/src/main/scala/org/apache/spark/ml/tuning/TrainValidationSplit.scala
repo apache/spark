@@ -103,7 +103,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     validationDataset.cache()
 
     // multi-model training
-    logDebug(s"Train split with multiple sets of parameters.")
+    logDebug("Train split with multiple sets of parameters.")
     val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
     trainingDataset.unpersist()
     var i = 0

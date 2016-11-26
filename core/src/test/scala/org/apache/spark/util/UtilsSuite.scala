@@ -458,8 +458,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt")
     assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt")
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt")
-    assertResolves("file:foo", s"file:foo")
-    assertResolves("file:foo:baby", s"file:foo:baby")
+    assertResolves("file:foo", "file:foo")
+    assertResolves("file:foo:baby", "file:foo:baby")
   }
 
   test("resolveURIs with multiple paths") {

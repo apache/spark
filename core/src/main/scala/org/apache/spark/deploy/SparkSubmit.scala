@@ -697,7 +697,7 @@ object SparkSubmit extends CommandLineUtils {
         e.printStackTrace(printStream)
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
           // scalastyle:off println
-          printStream.println(s"Failed to load hive class.")
+          printStream.println("Failed to load hive class.")
           printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
           // scalastyle:on println
         }
@@ -836,13 +836,13 @@ private[spark] object SparkSubmitUtils {
   def extractMavenCoordinates(coordinates: String): Seq[MavenCoordinate] = {
     coordinates.split(",").map { p =>
       val splits = p.replace("/", ":").split(":")
-      require(splits.length == 3, s"Provided Maven Coordinates must be in the form " +
+      require(splits.length == 3, "Provided Maven Coordinates must be in the form " +
         s"'groupId:artifactId:version'. The coordinate provided is: $p")
-      require(splits(0) != null && splits(0).trim.nonEmpty, s"The groupId cannot be null or " +
+      require(splits(0) != null && splits(0).trim.nonEmpty, "The groupId cannot be null or " +
         s"be whitespace. The groupId provided is: ${splits(0)}")
-      require(splits(1) != null && splits(1).trim.nonEmpty, s"The artifactId cannot be null or " +
+      require(splits(1) != null && splits(1).trim.nonEmpty, "The artifactId cannot be null or " +
         s"be whitespace. The artifactId provided is: ${splits(1)}")
-      require(splits(2) != null && splits(2).trim.nonEmpty, s"The version cannot be null or " +
+      require(splits(2) != null && splits(2).trim.nonEmpty, "The version cannot be null or " +
         s"be whitespace. The version provided is: ${splits(2)}")
       new MavenCoordinate(splits(0), splits(1), splits(2))
     }

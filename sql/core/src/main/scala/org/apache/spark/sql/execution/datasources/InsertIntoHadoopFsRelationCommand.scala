@@ -67,7 +67,7 @@ case class InsertIntoHadoopFsRelationCommand(
         case (x, ys) if ys.length > 1 => "\"" + x + "\""
       }.mkString(", ")
       throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
-          s"cannot save to file.")
+        "cannot save to file.")
     }
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
@@ -137,7 +137,7 @@ case class InsertIntoHadoopFsRelationCommand(
     // first clear the path determined by the static partition keys (e.g. /table/foo=1)
     val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
     if (fs.exists(staticPrefixPath) && !fs.delete(staticPrefixPath, true /* recursively */)) {
-      throw new IOException(s"Unable to clear output " +
+      throw new IOException("Unable to clear output " +
         s"directory $staticPrefixPath prior to writing to it")
     }
     // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
@@ -147,7 +147,7 @@ case class InsertIntoHadoopFsRelationCommand(
         "Custom partition location did not match static partitioning keys")
       val path = new Path(customLoc)
       if (fs.exists(path) && !fs.delete(path, true)) {
-        throw new IOException(s"Unable to clear partition " +
+        throw new IOException("Unable to clear partition " +
           s"directory $path prior to writing to it")
       }
     }

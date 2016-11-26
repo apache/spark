@@ -363,7 +363,7 @@ private[tree] object LearningNode {
    * Return the level of a tree which the given node is in.
    */
   def indexToLevel(nodeIndex: Int): Int = if (nodeIndex == 0) {
-    throw new IllegalArgumentException(s"0 is not a valid node index.")
+    throw new IllegalArgumentException("0 is not a valid node index.")
   } else {
     java.lang.Integer.numberOfTrailingZeros(java.lang.Integer.highestOneBit(nodeIndex))
   }

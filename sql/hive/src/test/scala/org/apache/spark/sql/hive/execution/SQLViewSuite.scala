@@ -35,7 +35,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   override def afterAll(): Unit = {
-    spark.sql(s"DROP TABLE IF EXISTS jt")
+    spark.sql("DROP TABLE IF EXISTS jt")
   }
 
   test("create a permanent view on a permanent view") {
@@ -76,8 +76,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       e = intercept[AnalysisException] {
         sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
       }.getMessage
-      assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
-        s"a temporary view `global_temp`.`global_temp_jtv1`"))
+      assert(e.contains("Not allowed to create a permanent view `jtv1` by referencing " +
+        "a temporary view `global_temp`.`global_temp_jtv1`"))
     }
   }
 
@@ -171,12 +171,12 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       e = intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE $viewName""")
       }.getMessage
-      assert(e.contains(s"Target table in LOAD DATA cannot be a view: `default`.`testview`"))
+      assert(e.contains("Target table in LOAD DATA cannot be a view: `default`.`testview`"))
 
       e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
       }.getMessage
-      assert(e.contains(s"Operation not allowed: TRUNCATE TABLE on views: `default`.`testview`"))
+      assert(e.contains("Operation not allowed: TRUNCATE TABLE on views: `default`.`testview`"))
     }
   }
 
@@ -282,7 +282,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test(s"correctly handle CREATE OR REPLACE TEMPORARY VIEW") {
+  test("correctly handle CREATE OR REPLACE TEMPORARY VIEW") {
     withTable("jt2") {
       withView("testView") {
         sql("CREATE OR REPLACE TEMPORARY VIEW testView AS SELECT id FROM jt")

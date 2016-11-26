@@ -254,7 +254,7 @@ class DDLCommandSuite extends PlanTest {
 
   test("create table - row format and table file format") {
     val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
-    val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
+    val fileFormat = "STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
     val query1 = s"$createTableStart SERDE 'anything' $fileFormat"
     val query2 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
 

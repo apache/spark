@@ -35,7 +35,7 @@ class BlockReplicationPolicySuite extends SparkFunSuite
    * Test if we get the required number of peers when using random sampling from
    * RandomBlockReplicationPolicy
    */
-  test(s"block replication - random block replication policy") {
+  test("block replication - random block replication policy") {
     val numBlockManagers = 10
     val storeSize = 1000
     val blockManagers = (1 to numBlockManagers).map { i =>

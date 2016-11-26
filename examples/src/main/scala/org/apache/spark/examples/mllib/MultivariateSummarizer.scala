@@ -83,8 +83,8 @@ object MultivariateSummarizer {
       (sum1, sum2) => sum1.merge(sum2))
 
     println()
-    println(s"Summary statistics")
-    println(s"\tLabel\tFeatures")
+    println("Summary statistics")
+    println("\tLabel\tFeatures")
     println(s"mean\t${labelSummary.mean(0)}\t${featureSummary.mean.toArray.mkString("\t")}")
     println(s"var\t${labelSummary.variance(0)}\t${featureSummary.variance.toArray.mkString("\t")}")
     println(

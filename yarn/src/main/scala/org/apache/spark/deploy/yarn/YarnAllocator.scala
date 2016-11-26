@@ -436,7 +436,7 @@ private[yarn] class YarnAllocator(
 
     if (!remainingAfterOffRackMatches.isEmpty) {
       logDebug(s"Releasing ${remainingAfterOffRackMatches.size} unneeded containers that were " +
-        s"allocated to us")
+        "allocated to us")
       for (container <- remainingAfterOffRackMatches) {
         internalReleaseContainer(container)
       }

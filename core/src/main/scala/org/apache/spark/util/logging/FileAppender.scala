@@ -137,7 +137,7 @@ private[spark] object FileAppender extends Logging {
           Some(seconds * 1000L, "--yyyy-MM-dd--HH-mm-ss")
         case _ =>
           logWarning(s"Illegal interval for rolling executor logs [$rollingInterval], " +
-              s"rolling logs not enabled")
+            "rolling logs not enabled")
           None
       }
       validatedParams.map {
@@ -171,7 +171,7 @@ private[spark] object FileAppender extends Logging {
       case _ =>
         logWarning(
           s"Illegal strategy [$rollingStrategy] for rolling executor logs, " +
-            s"rolling logs not enabled")
+            "rolling logs not enabled")
         new FileAppender(inputStream, file)
     }
   }

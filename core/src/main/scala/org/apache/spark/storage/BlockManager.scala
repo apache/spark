@@ -588,7 +588,7 @@ private[spark] class BlockManager(
             // or we've refreshed the list of locations from the master, and have still
             // hit failures after trying locations from the refreshed list.
             logWarning(s"Failed to fetch block after $totalFailureCount fetch failures. " +
-              s"Most recent failure cause:", e)
+              "Most recent failure cause:", e)
             return None
           }
 
@@ -601,7 +601,7 @@ private[spark] class BlockManager(
           // we refresh the block locations after a certain number of fetch failures
           if (runningFailureCount >= maxFailuresBeforeLocationRefresh) {
             locationIterator = getLocations(blockId).iterator
-            logDebug(s"Refreshed locations from the driver " +
+            logDebug("Refreshed locations from the driver " +
               s"after ${runningFailureCount} fetch failures.")
             runningFailureCount = 0
           }

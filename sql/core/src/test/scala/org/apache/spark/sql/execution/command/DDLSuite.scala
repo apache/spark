@@ -587,7 +587,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val csvFile =
       Thread.currentThread().getContextClassLoader.getResource("test-data/cars.csv").toString
     withView("testview") {
-      sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
+      sql("CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
         "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
         s"OPTIONS (PATH '$csvFile')")
 
@@ -597,7 +597,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
       // Fails if creating a new view with the same name
       intercept[TempTableAlreadyExistsException] {
-        sql(s"CREATE TEMPORARY VIEW testview USING " +
+        sql("CREATE TEMPORARY VIEW testview USING " +
           s"org.apache.spark.sql.execution.datasources.csv.CSVFileFormat OPTIONS (PATH '$csvFile')")
       }
     }
@@ -1661,7 +1661,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val path = Utils.createTempDir().getAbsolutePath
     (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
     sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '$path'")
-    sql(s"CREATE VIEW my_view AS SELECT 1")
+    sql("CREATE VIEW my_view AS SELECT 1")
     intercept[NoSuchTableException] {
       sql("TRUNCATE TABLE my_temp_tab")
     }

@@ -382,7 +382,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             clock.advance(timeToAdd)
             manualClockExpectedTime += timeToAdd
             verify(clock.getTimeMillis() === manualClockExpectedTime,
-              s"Unexpected clock time after updating: " +
+              "Unexpected clock time after updating: " +
                 s"expecting $manualClockExpectedTime, current ${clock.getTimeMillis()}")
 
           case StopStream =>
@@ -390,11 +390,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             try failAfter(streamingTimeout) {
               currentStream.stop()
               verify(!currentStream.microBatchThread.isAlive,
-                s"microbatch thread not stopped")
+                "microbatch thread not stopped")
               verify(!currentStream.isActive,
                 "query.isActive() is false even after stopping")
               verify(currentStream.exception.isEmpty,
-                s"query.exception() is not empty after clean stop: " +
+                "query.exception() is not empty after clean stop: " +
                   currentStream.exception.map(_.toString()).getOrElse(""))
             } catch {
               case _: InterruptedException =>
@@ -417,9 +417,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                 assert(!currentStream.microBatchThread.isAlive)
               }
               verify(thrownException.query.eq(currentStream),
-                s"incorrect query reference in exception")
+                "incorrect query reference in exception")
               verify(currentStream.exception === Some(thrownException),
-                s"incorrect exception returned by query.exception()")
+                "incorrect exception returned by query.exception()")
 
               val exception = currentStream.exception.get
               verify(exception.cause.getClass === ef.causeClass,

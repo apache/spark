@@ -108,17 +108,17 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   test("Event log name") {
     // without compression
-    assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath(
+    assert("file:/base-dir/app1" === EventLoggingListener.getLogPath(
       Utils.resolveURI("/base-dir"), "app1", None))
     // with compression
-    assert(s"file:/base-dir/app1.lzf" ===
+    assert("file:/base-dir/app1.lzf" ===
       EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"), "app1", None, Some("lzf")))
     // illegal characters in app ID
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1" ===
+    assert("file:/base-dir/a-fine-mind_dollar_bills__1" ===
       EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
         "a fine:mind$dollar{bills}.1", None))
     // illegal characters in app ID with compression
-    assert(s"file:/base-dir/a-fine-mind_dollar_bills__1.lz4" ===
+    assert("file:/base-dir/a-fine-mind_dollar_bills__1.lz4" ===
       EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
         "a fine:mind$dollar{bills}.1", None, Some("lz4")))
   }

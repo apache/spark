@@ -27,7 +27,7 @@ import org.apache.spark.util.Benchmark
 class KryoBenchmark extends SparkFunSuite {
   val benchmark = new Benchmark("Benchmark Kryo Unsafe vs safe Serialization", 1024 * 1024 * 15, 10)
 
-  ignore(s"Benchmark Kryo Unsafe vs safe Serialization") {
+  ignore("Benchmark Kryo Unsafe vs safe Serialization") {
     Seq (true, false).foreach (runBenchmark)
     benchmark.run()
 

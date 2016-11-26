@@ -157,7 +157,7 @@ private[spark] class DTStatsAggregator(
    */
   def merge(other: DTStatsAggregator): DTStatsAggregator = {
     require(allStatsSize == other.allStatsSize,
-      s"DTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
+      "DTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
         + s" This aggregator is of length $allStatsSize, but the other is ${other.allStatsSize}.")
     var i = 0
     // TODO: Test BLAS.axpy
@@ -167,7 +167,7 @@ private[spark] class DTStatsAggregator(
     }
 
     require(statsSize == other.statsSize,
-      s"DTStatsAggregator.merge requires that both aggregators have the same length parent " +
+      "DTStatsAggregator.merge requires that both aggregators have the same length parent " +
         s"stats vectors. This aggregator's parent stats are length $statsSize, " +
         s"but the other is ${other.statsSize}.")
     var j = 0

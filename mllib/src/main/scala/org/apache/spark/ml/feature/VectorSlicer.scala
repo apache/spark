@@ -134,9 +134,9 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     val indFeatures = $(indices)
     val numDistinctFeatures = (nameFeatures ++ indFeatures).distinct.length
     lazy val errMsg = "VectorSlicer requires indices and names to be disjoint" +
-      s" sets of features, but they overlap." +
+      " sets of features, but they overlap." +
       s" indices: ${indFeatures.mkString("[", ",", "]")}." +
-      s" names: " +
+      " names: " +
       nameFeatures.zip($(names)).map { case (i, n) => s"$i:$n" }.mkString("[", ",", "]")
     require(nameFeatures.length + indFeatures.length == numDistinctFeatures, errMsg)
     indFeatures ++ nameFeatures
@@ -145,7 +145,7 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     require($(indices).length > 0 || $(names).length > 0,
-      s"VectorSlicer requires that at least one feature be selected.")
+      "VectorSlicer requires that at least one feature be selected.")
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
 
     if (schema.fieldNames.contains($(outputCol))) {

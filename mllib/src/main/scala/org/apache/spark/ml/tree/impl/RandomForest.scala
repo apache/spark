@@ -187,7 +187,7 @@ private[spark] object RandomForest extends Logging {
         RandomForest.selectNodesToSplit(nodeStack, maxMemoryUsage, metadata, rng)
       // Sanity check (should never occur):
       assert(nodesForGroup.nonEmpty,
-        s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
+        "RandomForest selected empty nodesForGroup.  Error for unknown reason.")
 
       // Only send trees to worker if they contain nodes being split this iteration.
       val topNodesForGroup: Map[Int, LearningNode] =

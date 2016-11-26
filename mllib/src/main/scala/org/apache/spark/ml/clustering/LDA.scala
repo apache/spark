@@ -319,9 +319,9 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     if (isSet(docConcentration)) {
       if (getDocConcentration.length != 1) {
-        require(getDocConcentration.length == getK, s"LDA docConcentration was of length" +
+        require(getDocConcentration.length == getK, "LDA docConcentration was of length" +
           s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be an array of" +
-          s" length either 1 (scalar) or k (num topics).")
+          " length either 1 (scalar) or k (num topics).")
       }
       getOptimizer match {
         case "online" =>
@@ -337,10 +337,10 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     if (isSet(topicConcentration)) {
       getOptimizer match {
         case "online" =>
-          require(getTopicConcentration >= 0, s"For Online LDA optimizer, topicConcentration" +
+          require(getTopicConcentration >= 0, "For Online LDA optimizer, topicConcentration" +
             s" must be >= 0.  Found value: $getTopicConcentration")
         case "em" =>
-          require(getTopicConcentration >= 0, s"For EM optimizer, topicConcentration" +
+          require(getTopicConcentration >= 0, "For EM optimizer, topicConcentration" +
             s" must be >= 1.  Found value: $getTopicConcentration")
       }
     }

@@ -155,7 +155,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       ShutdownHookManager.removeShutdownHook(shutdownHook)
     } catch {
       case e: Exception =>
-        logError(s"Exception while removing shutdown hook.", e)
+        logError("Exception while removing shutdown hook.", e)
     }
     doStop()
   }

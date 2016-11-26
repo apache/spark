@@ -176,7 +176,7 @@ private[spark] class PipedRDD[T: ClassTag](
           cleanup()
           if (exitStatus != 0) {
             throw new IllegalStateException(s"Subprocess exited with status $exitStatus. " +
-              s"Command ran: " + command.mkString(" "))
+              "Command ran: " + command.mkString(" "))
           }
           false
         }

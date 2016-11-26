@@ -47,7 +47,7 @@ class ObjectHashAggregateSuite
   }
 
   protected override def afterAll(): Unit = {
-    sql(s"DROP TEMPORARY FUNCTION IF EXISTS hive_max")
+    sql("DROP TEMPORARY FUNCTION IF EXISTS hive_max")
   }
 
   test("typed_count without grouping keys") {
@@ -192,7 +192,7 @@ class ObjectHashAggregateSuite
         case row: Row => Row.fromSeq(i +: row.toSeq)
         case null => Row.fromSeq(i +: Seq.fill(schemaForGenerator.length)(null))
         case other => fail(
-          s"Row or null is expected to be generated, " +
+          "Row or null is expected to be generated, " +
             s"but a ${other.getClass.getCanonicalName} is generated."
         )
       }
@@ -328,7 +328,7 @@ class ObjectHashAggregateSuite
             if (!(aggs.contains(withoutPartial) && aggs.contains(withDistinct))) {
               // TODO Re-enables them after fixing SPARK-18403
               ignore(
-                s"randomized aggregation test - " +
+                "randomized aggregation test - " +
                   s"${names.mkString("[", ", ", "]")} - " +
                   s"${if (withGroupingKeys) "with" else "without"} grouping keys - " +
                   s"with ${if (emptyInput) "empty" else "non-empty"} input"

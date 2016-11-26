@@ -410,7 +410,7 @@ private[ml] object DefaultParamsReader {
     val sparkVersion = (metadata \ "sparkVersion").extract[String]
     val params = metadata \ "paramMap"
     if (expectedClassName.nonEmpty) {
-      require(className == expectedClassName, s"Error loading metadata: Expected class name" +
+      require(className == expectedClassName, "Error loading metadata: Expected class name" +
         s" $expectedClassName but found class name $className")
     }
 

@@ -361,7 +361,7 @@ class HiveSparkSubmitSuite
       case to: TestFailedDueToTimeoutException =>
         val historyLog = history.mkString("\n")
         fail(s"Timeout of $commandLine" +
-            s" See the log4j logs for more detail." +
+            " See the log4j logs for more detail." +
             s"\n$historyLog", to)
         case t: Throwable => throw t
     } finally {
@@ -392,7 +392,7 @@ object SetMetastoreURLTest extends Logging {
 
     if (expectedMetastoreURL == null) {
       throw new Exception(
-        s"spark.sql.test.expectedMetastoreURL should be set.")
+        "spark.sql.test.expectedMetastoreURL should be set.")
     }
 
     // HiveExternalCatalog is used when Hive support is enabled.

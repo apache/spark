@@ -39,7 +39,7 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
 
       val tmpDir = Files.createTempDir()
       // create the table for test
-      sql(s"CREATE TABLE table_with_partition(key int,value string) " +
+      sql("CREATE TABLE table_with_partition(key int,value string) " +
         s"PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
       sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
         "SELECT key,value FROM testData")

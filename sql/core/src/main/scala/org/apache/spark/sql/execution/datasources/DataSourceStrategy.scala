@@ -68,17 +68,17 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     // clause needs to match the number of columns of the target table.
     if (staticPartitions.size + sourceAttributes.size != targetAttributes.size) {
       throw new AnalysisException(
-        s"The data to be inserted needs to have the same number of " +
+        "The data to be inserted needs to have the same number of " +
           s"columns as the target table: target table has ${targetAttributes.size} " +
           s"column(s) but the inserted data has ${sourceAttributes.size + staticPartitions.size} " +
           s"column(s), which contain ${staticPartitions.size} partition column(s) having " +
-          s"assigned constant values.")
+          "assigned constant values.")
     }
 
     if (providedPartitions.size != targetPartitionSchema.fields.size) {
       throw new AnalysisException(
-        s"The data to be inserted needs to have the same number of " +
-          s"partition columns as the target table: target table " +
+        "The data to be inserted needs to have the same number of " +
+          "partition columns as the target table: target table " +
           s"has ${targetPartitionSchema.fields.size} partition column(s) but the inserted " +
           s"data has ${providedPartitions.size} partition columns specified.")
     }
@@ -113,7 +113,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
     partitionList.dropWhile(_.isDefined).collectFirst {
       case Some(_) =>
         throw new AnalysisException(
-          s"The ordering of partition columns is " +
+          "The ordering of partition columns is " +
             s"${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}. " +
             "All partition columns having constant values need to appear before other " +
             "partition columns that do not have an assigned constant value.")

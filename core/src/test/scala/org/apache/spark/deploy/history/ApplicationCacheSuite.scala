@@ -295,7 +295,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assertMetric("updateProbeCount", metrics.updateProbeCount, 1)
     assertMetric("updateTriggeredCount", metrics.updateTriggeredCount, 0)
     assert(1 === operations.updateProbeCount, s"refresh count in $cache")
-    assert(0 === operations.detachCount, s"detach count")
+    assert(0 === operations.detachCount, "detach count")
     assert(entry3.probeTime === checkTime)
 
     val updateTime = window * 3

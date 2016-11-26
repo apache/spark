@@ -67,7 +67,7 @@ class QuantileDiscretizerSuite
     val result = discretizer.fit(df).transform(df)
     val observedNumBuckets = result.select("result").distinct.count
     assert(observedNumBuckets == expectedNumBuckets,
-      s"Observed number of buckets are not correct." +
+      "Observed number of buckets are not correct." +
         s" Expected $expectedNumBuckets but found $observedNumBuckets")
   }
 

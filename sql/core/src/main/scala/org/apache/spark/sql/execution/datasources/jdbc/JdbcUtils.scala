@@ -413,7 +413,7 @@ object JdbcUtils extends Logging {
             }
 
         case LongType if metadata.contains("binarylong") =>
-          throw new IllegalArgumentException(s"Unsupported array element " +
+          throw new IllegalArgumentException("Unsupported array element " +
             s"type ${dt.simpleString} based on binary")
 
         case ArrayType(_, _) =>

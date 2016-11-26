@@ -190,7 +190,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        "test_parquet")
   }
 
-  test(s"conversion is working") {
+  test("conversion is working") {
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.sparkPlan.collect {
         case _: HiveTableScanExec => true
@@ -227,13 +227,13 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     // Insert into am empty table.
     sql("insert into table test_insert_parquet select a, b from jt where jt.a > 5")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField < 8"),
+      sql("SELECT intField, stringField FROM test_insert_parquet WHERE intField < 8"),
       Row(6, "str6") :: Row(7, "str7") :: Nil
     )
     // Insert overwrite.
     sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      sql("SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
       Row(3, "str3") :: Row(4, "str4") :: Nil
     )
     dropTables("test_insert_parquet")
@@ -254,13 +254,13 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     // Insert overwrite an empty table.
     sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      sql("SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
       Row(3, "str3") :: Row(4, "str4") :: Nil
     )
     // Insert into the table.
     sql("insert into table test_insert_parquet select a, b from jt")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet"),
+      sql("SELECT intField, stringField FROM test_insert_parquet"),
       (1 to 10).map(i => Row(i, s"str$i")) ++ (1 to 4).map(i => Row(i, s"str$i"))
     )
     dropTables("test_insert_parquet")
@@ -279,7 +279,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         """.stripMargin)
 
       checkAnswer(
-        sql(s"SELECT a, b FROM test_parquet_ctas WHERE a = 1"),
+        sql("SELECT a, b FROM test_parquet_ctas WHERE a = 1"),
         Seq(Row(1, "str1"))
       )
 
@@ -750,14 +750,14 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
               queryExecution.analyzed.collectFirst {
                 case _: LogicalRelation =>
               }.getOrElse {
-                fail(s"Expecting the query plan to convert parquet to data sources, " +
+                fail("Expecting the query plan to convert parquet to data sources, " +
                   s"but got:\n$queryExecution")
               }
             } else {
               queryExecution.analyzed.collectFirst {
                 case _: MetastoreRelation =>
               }.getOrElse {
-                fail(s"Expecting no conversion from parquet to data sources, " +
+                fail("Expecting no conversion from parquet to data sources, " +
                   s"but got:\n$queryExecution")
               }
             }
@@ -839,7 +839,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     sparkContext
       .makeRDD(1 to 10)
-      .map(i => ParquetData(i, s"part-1"))
+      .map(i => ParquetData(i, "part-1"))
       .toDF()
       .write.parquet(new File(normalTableDir, "normal").getCanonicalPath)
 

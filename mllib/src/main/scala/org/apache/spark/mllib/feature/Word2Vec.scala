@@ -687,13 +687,13 @@ object Word2VecModel extends Loader[Word2VecModel] {
         val vectorSize = model.getVectors.values.head.length
         val numWords = model.getVectors.size
         require(expectedVectorSize == vectorSize,
-          s"Word2VecModel requires each word to be mapped to a vector of size " +
+          "Word2VecModel requires each word to be mapped to a vector of size " +
           s"$expectedVectorSize, got vector of size $vectorSize")
         require(expectedNumWords == numWords,
           s"Word2VecModel requires $expectedNumWords words, but got $numWords")
         model
       case _ => throw new Exception(
-        s"Word2VecModel.load did not recognize model with (className, format version):" +
+        "Word2VecModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $loadedVersion).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }

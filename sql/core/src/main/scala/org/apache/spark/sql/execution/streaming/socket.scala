@@ -142,7 +142,7 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   override def commit(end: Offset): Unit = synchronized {
     val newOffset = LongOffset.convert(end).getOrElse(
       sys.error(s"TextSocketStream.commit() received an offset ($end) that did not " +
-        s"originate with an instance of this class")
+        "originate with an instance of this class")
     )
 
     val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt

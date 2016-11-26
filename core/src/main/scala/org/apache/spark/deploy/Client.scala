@@ -196,7 +196,7 @@ private class ClientEndpoint(
   }
 
   override def onError(cause: Throwable): Unit = {
-    logError(s"Error processing messages, exiting.")
+    logError("Error processing messages, exiting.")
     cause.printStackTrace()
     System.exit(-1)
   }

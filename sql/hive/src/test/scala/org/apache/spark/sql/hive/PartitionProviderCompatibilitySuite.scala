@@ -121,7 +121,7 @@ class PartitionProviderCompatibilitySuite
         // disabled
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
           val e = intercept[AnalysisException] {
-            spark.sql(s"show partitions test")
+            spark.sql("show partitions test")
           }
           assert(e.getMessage.contains("filesource partition management is disabled"))
           spark.sql("refresh table test")
@@ -212,7 +212,7 @@ class PartitionProviderCompatibilitySuite
       spark.sql(s"alter table test add partition (P1=0, P2=0) location '${a.getAbsolutePath}'")
       spark.sql(s"alter table test add partition (P1=0, P2=1) location '${b.getAbsolutePath}'")
       spark.sql(s"alter table test add partition (P1=1, P2=0) location '${c.getAbsolutePath}'")
-      spark.sql(s"alter table test add partition (P1=1, P2=1)")
+      spark.sql("alter table test add partition (P1=1, P2=1)")
 
       testFn
 

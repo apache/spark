@@ -586,7 +586,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val dataPath = "../hive/src/test/resources/data/files/kv1.txt"
 
         Seq(
-          s"CREATE TABLE test_udtf(key INT, value STRING)",
+          "CREATE TABLE test_udtf(key INT, value STRING)",
           s"LOAD DATA LOCAL INPATH '$dataPath' OVERWRITE INTO TABLE test_udtf"
         ).foreach(statement.execute)
 
@@ -945,7 +945,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         throw cause
     }.get
 
-    logInfo(s"HiveThriftServer2 started successfully")
+    logInfo("HiveThriftServer2 started successfully")
   }
 
   override protected def afterAll(): Unit = {

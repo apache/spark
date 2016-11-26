@@ -290,7 +290,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         sorter.insertKV(currentKey, getOutputRow(inputRow))
       }
 
-      logInfo(s"Sorting complete. Writing out partition files one at a time.")
+      logInfo("Sorting complete. Writing out partition files one at a time.")
       val sortedIterator = sorter.sortedIterator()
       var currentKey: InternalRow = null
       var currentWriter: FileSinkOperator.RecordWriter = null

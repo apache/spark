@@ -1253,7 +1253,7 @@ class DAGScheduler(
             markStageAsFinished(failedStage, Some(failureMessage))
           } else {
             logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
-              s"longer running")
+              "longer running")
           }
 
           if (disallowStageRetryForTest) {
@@ -1261,7 +1261,7 @@ class DAGScheduler(
               None)
           } else if (failedStage.failedOnFetchAndShouldAbort(task.stageAttemptId)) {
             abortStage(failedStage, s"$failedStage (${failedStage.name}) " +
-              s"has failed the maximum allowable number of " +
+              "has failed the maximum allowable number of " +
               s"times: ${Stage.MAX_CONSECUTIVE_FETCH_FAILURES}. " +
               s"Most recent failure reason: ${failureMessage}", None)
           } else {

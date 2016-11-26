@@ -65,7 +65,7 @@ private[spark] object SignalUtils extends Logging {
         })
         handler.register(action)
       } catch {
-        case ex: Exception => logWarning(s"Failed to register signal handler for " + signal, ex)
+        case ex: Exception => logWarning("Failed to register signal handler for " + signal, ex)
       }
     }
   }

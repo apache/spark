@@ -504,7 +504,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
       assert(sizes.size === 2 && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold
         && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
-        s"query should contain two relations, each of which has size smaller than autoConvertSize")
+        "query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
       // matched, other strategies need to be applied.
@@ -560,7 +560,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
     assert(sizes.size === 2 && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold
       && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
-      s"query should contain two relations, each of which has size smaller than autoConvertSize")
+      "query should contain two relations, each of which has size smaller than autoConvertSize")
 
     // Using `sparkPlan` because for relevant patterns in HashJoin to be
     // matched, other strategies need to be applied.

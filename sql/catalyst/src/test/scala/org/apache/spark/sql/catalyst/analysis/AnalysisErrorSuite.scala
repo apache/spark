@@ -302,7 +302,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "slide duration greater than window in time window",
     testRelation2.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "2 second", "0 second").as("window")),
-      s"The slide duration " :: " must be less than or equal to the windowDuration " :: Nil
+      "The slide duration " :: " must be less than or equal to the windowDuration " :: Nil
   )
 
   errorTest(

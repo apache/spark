@@ -191,7 +191,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
           s"got gaussians of length ${model.gaussians.length}")
         model
       case _ => throw new Exception(
-        s"GaussianMixtureModel.load did not recognize model with (className, format version):" +
+        "GaussianMixtureModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }

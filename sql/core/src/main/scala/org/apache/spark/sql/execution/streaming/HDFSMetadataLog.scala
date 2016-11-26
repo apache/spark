@@ -272,7 +272,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       case e: UnsupportedFileSystemException =>
         logWarning("Could not use FileContext API for managing metadata log files at path " +
           s"$metadataPath. Using FileSystem API instead for managing log files. The log may be " +
-          s"inconsistent under failures.")
+          "inconsistent under failures.")
         new FileSystemManager(metadataPath, hadoopConf)
     }
   }

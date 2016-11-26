@@ -91,7 +91,7 @@ class QuantileSummariesSuite extends SparkFunSuite {
     }
 
     test(s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression " +
-      s"(interleaved)") {
+      "(interleaved)") {
       val s = buildCompressSummary(data, epsi, compression)
       assert(s.count == data.size, s"Found count=${s.count} but data size=${data.size}")
       checkQuantile(0.9999, data, s)

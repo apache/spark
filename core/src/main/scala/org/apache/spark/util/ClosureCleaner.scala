@@ -197,7 +197,7 @@ private[spark] object ClosureCleaner extends Logging {
     // If accessed fields is not populated yet, we assume that
     // the closure we are trying to clean is the starting one
     if (accessedFields.isEmpty) {
-      logDebug(s" + populating accessed fields because this is the starting closure")
+      logDebug(" + populating accessed fields because this is the starting closure")
       // Initialize accessed fields with the outer classes first
       // This step is needed to associate the fields to the correct classes later
       for (cls <- outerClasses) {
@@ -211,7 +211,7 @@ private[spark] object ClosureCleaner extends Logging {
       }
     }
 
-    logDebug(s" + fields accessed by starting closure: " + accessedFields.size)
+    logDebug(" + fields accessed by starting closure: " + accessedFields.size)
     accessedFields.foreach { f => logDebug("     " + f) }
 
     // List of outer (class, object) pairs, ordered from outermost to innermost

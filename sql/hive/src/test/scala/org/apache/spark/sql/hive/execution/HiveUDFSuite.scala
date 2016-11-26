@@ -241,7 +241,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.createOrReplaceTempView("inputTable")
 
-    sql(s"CREATE TEMPORARY FUNCTION testUDFToStringIntMap " +
+    sql("CREATE TEMPORARY FUNCTION testUDFToStringIntMap " +
       s"AS '${classOf[UDFToStringIntMap].getName}'")
     val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToStringIntMap(s) FROM inputTable")
@@ -257,7 +257,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.createOrReplaceTempView("inputTable")
 
-    sql(s"CREATE TEMPORARY FUNCTION testUDFToIntIntMap " +
+    sql("CREATE TEMPORARY FUNCTION testUDFToIntIntMap " +
       s"AS '${classOf[UDFToIntIntMap].getName}'")
     val errMsg = intercept[AnalysisException] {
       sql("SELECT testUDFToIntIntMap(s) FROM inputTable")

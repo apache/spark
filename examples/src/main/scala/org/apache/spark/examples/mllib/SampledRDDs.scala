@@ -83,7 +83,7 @@ object SampledRDDs {
 
     // Example: RDD.sampleByKey() and RDD.sampleByKeyExact()
     val keyedRDD = examples.map { lp => (lp.label.toInt, lp.features) }
-    println(s"  Keyed data using label (Int) as key ==> Orig")
+    println("  Keyed data using label (Int) as key ==> Orig")
     //  Count examples per label in original data.
     val keyCounts = keyedRDD.countByKey()
 
@@ -104,8 +104,8 @@ object SampledRDDs {
       " ==> Exact Sample")
 
     //  Compare samples
-    println(s"   \tFractions of examples with key")
-    println(s"Key\tOrig\tApprox Sample\tExact Sample")
+    println("   \tFractions of examples with key")
+    println("Key\tOrig\tApprox Sample\tExact Sample")
     keyCounts.keys.toSeq.sorted.foreach { key =>
       val origFrac = keyCounts(key) / numExamples.toDouble
       val approxFrac = if (sizeB != 0) {

@@ -602,7 +602,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val fieldNames = getConstructorParameterNames(getClass)
     val fieldValues = productIterator.toSeq ++ otherCopyArgs
     assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
-      fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
+      fieldNames.mkString(", ") + ", values: " + fieldValues.map(_.toString).mkString(", "))
 
     fieldNames.zip(fieldValues).map {
       // If the field value is a child, then use an int to encode it, represents the index of

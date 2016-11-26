@@ -590,7 +590,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             """.stripMargin)
 
           checkAnswer(
-            sql(s"SELECT a FROM test_parquet_ctas WHERE a > 2 "),
+            sql("SELECT a FROM test_parquet_ctas WHERE a > 2 "),
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
@@ -1274,7 +1274,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         table(tableName).write.mode(SaveMode.Overwrite).insertInto(tableName)
       }.getMessage
-      assert(e.contains(s"Cannot overwrite a path that is also being read from"))
+      assert(e.contains("Cannot overwrite a path that is also being read from"))
     }
   }
 
@@ -1316,7 +1316,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       withTable("t") {
         sql(s"CREATE TABLE t USING json OPTIONS (PATH '$path')")
         sql("DROP TABLE t")
-        sql(s"CREATE TABLE t USING json AS SELECT 1 AS c")
+        sql("CREATE TABLE t USING json AS SELECT 1 AS c")
       }
     }
   }
@@ -1339,7 +1339,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         sharedState.externalCatalog.getTable("default", "t")
       }.getMessage
-      assert(e.contains(s"Could not read schema from the hive metastore because it is corrupted"))
+      assert(e.contains("Could not read schema from the hive metastore because it is corrupted"))
 
       withDebugMode {
         val tableMeta = sharedState.externalCatalog.getTable("default", "t")

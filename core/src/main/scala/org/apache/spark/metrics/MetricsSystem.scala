@@ -143,7 +143,7 @@ private[spark] class MetricsSystem private (
         }
         if (executorId.isEmpty) {
           logWarning(s"Using default name $defaultName for source because spark.executor.id is " +
-            s"not set.")
+            "not set.")
         }
         defaultName
       }

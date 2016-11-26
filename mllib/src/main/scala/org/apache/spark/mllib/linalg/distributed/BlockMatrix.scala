@@ -218,7 +218,7 @@ class BlockMatrix @Since("1.3.0") (
     // The first tuple is the index and the second tuple is the dimensions of the MatrixBlock
     val dimensionMsg = s"dimensions different than rowsPerBlock: $rowsPerBlock, and " +
       s"colsPerBlock: $colsPerBlock. Blocks on the right and bottom edges can have smaller " +
-      s"dimensions. You may use the repartition method to fix this issue."
+      "dimensions. You may use the repartition method to fix this issue."
     blockInfo.foreach { case ((blockRowIndex, blockColIndex), (m, n)) =>
       if ((blockRowIndex < numRowBlocks - 1 && m != rowsPerBlock) ||
           (blockRowIndex == numRowBlocks - 1 && (m <= 0 || m > rowsPerBlock))) {

@@ -86,7 +86,7 @@ object SynthBenchmark {
     val sc = new SparkContext(conf)
 
     // Create the graph
-    println(s"Creating graph...")
+    println("Creating graph...")
     val unpartitionedGraph = GraphGenerators.logNormalGraph(sc, numVertices,
       numEPart.getOrElse(sc.defaultParallelism), mu, sigma, seed)
     // Repartition the graph

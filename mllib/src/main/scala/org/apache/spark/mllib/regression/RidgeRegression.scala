@@ -70,7 +70,7 @@ object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
         val data = GLMRegressionModel.SaveLoadV1_0.loadData(sc, path, classNameV1_0, numFeatures)
         new RidgeRegressionModel(data.weights, data.intercept)
       case _ => throw new Exception(
-        s"RidgeRegressionModel.load did not recognize model with (className, format version):" +
+        "RidgeRegressionModel.load did not recognize model with (className, format version):" +
         s"($loadedClassName, $version).  Supported:\n" +
         s"  ($classNameV1_0, 1.0)")
     }

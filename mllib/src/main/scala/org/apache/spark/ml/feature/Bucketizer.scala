@@ -199,7 +199,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
         if (insertPos == 0 || insertPos == splits.length) {
           throw new SparkException(s"Feature value $feature out of Bucketizer bounds" +
             s" [${splits.head}, ${splits.last}].  Check your features, or loosen " +
-            s"the lower/upper bound constraints.")
+            "the lower/upper bound constraints.")
         } else {
           insertPos - 1
         }

@@ -109,7 +109,7 @@ private object PeriodicRDDCheckpointerSuite {
       }
     } catch {
       case _: AssertionError =>
-        throw new Exception(s"PeriodicRDDCheckpointerSuite.checkPersistence failed with:\n" +
+        throw new Exception("PeriodicRDDCheckpointerSuite.checkPersistence failed with:\n" +
           s"\t gIndex = $gIndex\n" +
           s"\t iteration = $iteration\n" +
           s"\t rdd.getStorageLevel = ${rdd.getStorageLevel}\n")
@@ -162,7 +162,7 @@ private object PeriodicRDDCheckpointerSuite {
       }
     } catch {
       case e: AssertionError =>
-        throw new Exception(s"PeriodicRDDCheckpointerSuite.checkCheckpoint failed with:\n" +
+        throw new Exception("PeriodicRDDCheckpointerSuite.checkCheckpoint failed with:\n" +
           s"\t gIndex = $gIndex\n" +
           s"\t iteration = $iteration\n" +
           s"\t checkpointInterval = $checkpointInterval\n" +

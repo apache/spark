@@ -986,9 +986,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
     // Set negative mapred.reduce.tasks for automatically determining
     // the number of reducers is not supported
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
+    intercept[IllegalArgumentException](sql("SET mapred.reduce.tasks=-1"))
+    intercept[IllegalArgumentException](sql("SET mapred.reduce.tasks=-01"))
+    intercept[IllegalArgumentException](sql("SET mapred.reduce.tasks=-2"))
     spark.sessionState.conf.clear()
   }
 
@@ -1625,39 +1625,39 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("Path does not exist"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
+      sql("select id from `org.apache.spark.sql.hive.orc`.`file_path`")
     }
     assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `com.databricks.spark.avro`.`file_path`")
+      sql("select id from `com.databricks.spark.avro`.`file_path`")
     }
     assert(e.message.contains("Failed to find data source: com.databricks.spark.avro."))
 
     // data source type is case insensitive
     e = intercept[AnalysisException] {
-      sql(s"select id from Avro.`file_path`")
+      sql("select id from Avro.`file_path`")
     }
     assert(e.message.contains("Failed to find data source: avro."))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from avro.`file_path`")
+      sql("select id from avro.`file_path`")
     }
     assert(e.message.contains("Failed to find data source: avro."))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
+      sql("select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
     assert(e.message.contains("Table or view not found: " +
       "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `Jdbc`.`file_path`")
+      sql("select id from `Jdbc`.`file_path`")
     }
     assert(e.message.contains("Unsupported data source type for direct query on files: Jdbc"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `org.apache.spark.sql.execution.datasources.jdbc`.`file_path`")
+      sql("select id from `org.apache.spark.sql.execution.datasources.jdbc`.`file_path`")
     }
     assert(e.message.contains("Unsupported data source type for direct query on files: " +
       "org.apache.spark.sql.execution.datasources.jdbc"))
