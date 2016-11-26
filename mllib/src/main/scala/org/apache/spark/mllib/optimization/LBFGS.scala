@@ -49,8 +49,18 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
    * Set the number of corrections used in the LBFGS update. Default 10.
    * Values of numCorrections less than 3 are not recommended; large values
    * of numCorrections will result in excessive computing time.
-   * 3 &lt; numCorrections &lt; 10 is recommended.
-   * Restriction: numCorrections &gt; 0
+   *
+   * {{{
+   * 3 < numCorrections < 10
+   * }}}
+   *
+   * is recommended.
+   *
+   * Restriction:
+   *
+   * {{{
+   * numCorrections > 0
+   * }}}
    */
   def setNumCorrections(corrections: Int): this.type = {
     require(corrections > 0,
