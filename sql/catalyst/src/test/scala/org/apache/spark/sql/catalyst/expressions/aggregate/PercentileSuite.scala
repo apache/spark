@@ -56,7 +56,7 @@ class PercentileSuite extends SparkFunSuite {
 
   test("class Countings, basic operations") {
     val valueCount = 10000
-    val percentages = Seq[Number](0, 0.25, 0.5, 0.75, 1)
+    val percentages = Seq[Double](0, 0.25, 0.5, 0.75, 1)
     val buffer = Countings()
     (1 to valueCount).grouped(10).foreach { group =>
       val partialBuffer = Countings()
@@ -172,8 +172,7 @@ class PercentileSuite extends SparkFunSuite {
   }
 
   test("fail analysis if childExpression is invalid") {
-    val validDataTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
-      NullType)
+    val validDataTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
     val percentage = Literal(0.5)
 
     validDataTypes.foreach { dataType =>
@@ -183,13 +182,14 @@ class PercentileSuite extends SparkFunSuite {
     }
 
     val invalidDataTypes = Seq(BooleanType, StringType, DateType, TimestampType,
-      CalendarIntervalType)
+      CalendarIntervalType, NullType)
 
     invalidDataTypes.foreach { dataType =>
       val child = AttributeReference("a", dataType)()
       val percentile = new Percentile(child, percentage)
       assertEqual(percentile.checkInputDataTypes(),
-        TypeCheckFailure(s"function percentile requires numeric types, not $dataType"))
+        TypeCheckFailure(s"argument 1 requires numeric type, however, " +
+            s"'`a`' is of ${dataType.simpleString} type."))
     }
   }
 
@@ -197,36 +197,44 @@ class PercentileSuite extends SparkFunSuite {
     val child = Cast(BoundReference(0, IntegerType, nullable = false), DoubleType)
     val input = InternalRow(1)
 
-    val validPercentages = Seq(Literal(0), Literal(0.5), Literal(1),
+    val validPercentages = Seq(Literal(0D), Literal(0.5), Literal(1D),
       CreateArray(Seq(0, 0.5, 1).map(Literal(_))))
 
     validPercentages.foreach { percentage =>
       val percentile1 = new Percentile(child, percentage)
-      val group1Buffer = percentile1.createAggregationBuffer()
-      // Make sure the inputs are not empty.
-      percentile1.update(group1Buffer, input)
-      // No exception should be thrown.
-      assert(percentile1.eval(group1Buffer) != null)
+      assertEqual(percentile1.checkInputDataTypes(), TypeCheckSuccess)
     }
 
-    val invalidPercentages = Seq(Literal(-0.5), Literal(1.5), Literal(2),
+    val invalidPercentages = Seq(Literal(-0.5), Literal(1.5), Literal(2D),
       CreateArray(Seq(-0.5, 0, 2).map(Literal(_))))
 
     invalidPercentages.foreach { percentage =>
       val percentile2 = new Percentile(child, percentage)
-      val group2Buffer = percentile2.createAggregationBuffer()
-      percentile2.update(group2Buffer, input)
-      intercept[IllegalArgumentException](percentile2.eval(group2Buffer),
-        s"Percentage values must be between 0.0 and 1.0")
+      assertEqual(percentile2.checkInputDataTypes(),
+        TypeCheckFailure(s"Percentage(s) must be between 0.0 and 1.0, " +
+        s"but got ${percentage.simpleString}"))
     }
 
-    val nonLiteralPercentage = Literal("val")
+    val nonFoldablePercentage = Seq(NonFoldableLiteral(0.5),
+      CreateArray(Seq(0, 0.5, 1).map(NonFoldableLiteral(_))))
 
-    val percentile3 = new Percentile(child, nonLiteralPercentage)
-    val group3Buffer = percentile3.createAggregationBuffer()
-    percentile3.update(group3Buffer, input)
-    intercept[AnalysisException](percentile3.eval(group3Buffer),
-      s"Invalid data type ${nonLiteralPercentage.dataType} for parameter percentage")
+    nonFoldablePercentage.foreach { percentage =>
+      val percentile3 = new Percentile(child, percentage)
+      assertEqual(percentile3.checkInputDataTypes(),
+        TypeCheckFailure(s"The percentage(s) must be a constant literal, " +
+          s"but got ${percentage}"))
+    }
+
+    val invalidDataTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType,
+      BooleanType, StringType, DateType, TimestampType, CalendarIntervalType, NullType)
+
+    invalidDataTypes.foreach { dataType =>
+      val percentage = Literal(0.5, dataType)
+      val percentile4 = new Percentile(child, percentage)
+      assertEqual(percentile4.checkInputDataTypes(),
+        TypeCheckFailure(s"argument 2 requires double type, however, " +
+          s"'0.5' is of ${dataType.simpleString} type."))
+    }
   }
 
   test("null handling") {
