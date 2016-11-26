@@ -657,7 +657,7 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       url: String,
       table: String,
-      options: JDBCOptions) {
+      options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       getJdbcType(field.dataType, dialect).jdbcNullType
