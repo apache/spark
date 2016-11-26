@@ -24,7 +24,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
     assert(StreamingQueryStatus.testStatus.sourceStatuses(0).toString ===
       """
         |Status of source MySource1
-        |    Available offset: #0
+        |    Available offset: 0
         |    Input rate: 15.5 rows/sec
         |    Processing rate: 23.5 rows/sec
         |    Trigger details:
@@ -36,7 +36,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
     assert(StreamingQueryStatus.testStatus.sinkStatus.toString ===
       """
         |Status of sink MySink
-        |    Committed offsets: [#1, -]
+        |    Committed offsets: [1, -]
       """.stripMargin.trim, "SinkStatus.toString does not match")
 
     assert(StreamingQueryStatus.testStatus.toString ===
@@ -48,15 +48,15 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
         |    Processing rate 23.5 rows/sec
         |    Latency: 345.0 ms
         |    Trigger details:
+        |        batchId: 5
         |        isDataPresentInTrigger: true
         |        isTriggerActive: true
         |        latency.getBatch.total: 20
         |        latency.getOffset.total: 10
         |        numRows.input.total: 100
-        |        triggerId: 5
         |    Source statuses [1 source]:
         |        Source 1 - MySource1
-        |            Available offset: #0
+        |            Available offset: 0
         |            Input rate: 15.5 rows/sec
         |            Processing rate: 23.5 rows/sec
         |            Trigger details:
@@ -64,7 +64,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
         |                latency.getOffset.source: 10
         |                latency.getBatch.source: 20
         |    Sink status - MySink
-        |        Committed offsets: [#1, -]
+        |        Committed offsets: [1, -]
       """.stripMargin.trim, "StreamingQueryStatus.toString does not match")
 
   }
@@ -72,10 +72,14 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
   test("json") {
     assert(StreamingQueryStatus.testStatus.json ===
       """
-        |{"sourceStatuses":[{"description":"MySource1","offsetDesc":"#0","inputRate":15.5,
+        |{"name":"query","id":1,"timestamp":123,"inputRate":15.5,"processingRate":23.5,
+        |"latency":345.0,"triggerDetails":{"latency.getBatch.total":"20",
+        |"numRows.input.total":"100","isTriggerActive":"true","batchId":"5",
+        |"latency.getOffset.total":"10","isDataPresentInTrigger":"true"},
+        |"sourceStatuses":[{"description":"MySource1","offsetDesc":"0","inputRate":15.5,
         |"processingRate":23.5,"triggerDetails":{"numRows.input.source":"100",
         |"latency.getOffset.source":"10","latency.getBatch.source":"20"}}],
-        |"sinkStatus":{"description":"MySink","offsetDesc":"[#1, -]"}}
+        |"sinkStatus":{"description":"MySink","offsetDesc":"[1, -]"}}
       """.stripMargin.replace("\n", "").trim)
   }
 
@@ -84,9 +88,23 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
       StreamingQueryStatus.testStatus.prettyJson ===
         """
           |{
+          |  "name" : "query",
+          |  "id" : 1,
+          |  "timestamp" : 123,
+          |  "inputRate" : 15.5,
+          |  "processingRate" : 23.5,
+          |  "latency" : 345.0,
+          |  "triggerDetails" : {
+          |    "latency.getBatch.total" : "20",
+          |    "numRows.input.total" : "100",
+          |    "isTriggerActive" : "true",
+          |    "batchId" : "5",
+          |    "latency.getOffset.total" : "10",
+          |    "isDataPresentInTrigger" : "true"
+          |  },
           |  "sourceStatuses" : [ {
           |    "description" : "MySource1",
-          |    "offsetDesc" : "#0",
+          |    "offsetDesc" : "0",
           |    "inputRate" : 15.5,
           |    "processingRate" : 23.5,
           |    "triggerDetails" : {
@@ -97,7 +115,7 @@ class StreamingQueryStatusSuite extends SparkFunSuite {
           |  } ],
           |  "sinkStatus" : {
           |    "description" : "MySink",
-          |    "offsetDesc" : "[#1, -]"
+          |    "offsetDesc" : "[1, -]"
           |  }
           |}
         """.stripMargin.trim)

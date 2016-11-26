@@ -742,8 +742,8 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
     For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
 
-    Note that since zero values will probably be transformed to non-zero values, output of the
-    transformer will be DenseVector even for sparse input.
+    .. note:: Since zero values will probably be transformed to non-zero values, output of the
+        transformer will be DenseVector even for sparse input.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
@@ -1014,9 +1014,9 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     :py:attr:`dropLast`) because it makes the vector entries sum up to
     one, and hence linearly dependent.
     So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
-    Note that this is different from scikit-learn's OneHotEncoder,
-    which keeps all categories.
-    The output vectors are sparse.
+
+    .. note:: This is different from scikit-learn's OneHotEncoder,
+        which keeps all categories. The output vectors are sparse.
 
     .. seealso::
 
@@ -1155,11 +1155,6 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
 
     `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
     categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
-    It is possible that the number of buckets used will be less than this value, for example, if
-    there are too few distinct values of the input to create enough distinct quantiles. Note also
-    that NaN values are handled specially and placed into their own bucket. For example, if 4
-    buckets are used, then non-NaN data will be put into buckets(0-3), but NaNs will be counted in
-    a special bucket(4).
     The bin ranges are chosen using an approximate algorithm (see the documentation for
     :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
     The precision of the approximation can be controlled with the
@@ -1703,7 +1698,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
 class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A feature transformer that filters out stop words from input.
-    Note: null values from input array are preserved unless adding null to stopWords explicitly.
+
+    .. note:: null values from input array are preserved unless adding null to stopWords explicitly.
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["text"])
     >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])
@@ -2611,42 +2607,43 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
 
     selectorType = Param(Params._dummy(), "selectorType",
                          "The selector type of the ChisqSelector. " +
-                         "Supported options: kbest (default), percentile and fpr.",
+                         "Supported options: numTopFeatures (default), percentile and fpr.",
                          typeConverter=TypeConverters.toString)
 
     numTopFeatures = \
         Param(Params._dummy(), "numTopFeatures",
-              "Number of features that selector will select, ordered by statistics value " +
-              "descending. If the number of features is < numTopFeatures, then this will select " +
+              "Number of features that selector will select, ordered by ascending p-value. " +
+              "If the number of features is < numTopFeatures, then this will select " +
               "all features.", typeConverter=TypeConverters.toInt)
 
     percentile = Param(Params._dummy(), "percentile", "Percentile of features that selector " +
-                       "will select, ordered by statistics value descending.",
+                       "will select, ordered by ascending p-value.",
                        typeConverter=TypeConverters.toFloat)
 
-    alpha = Param(Params._dummy(), "alpha", "The highest p-value for features to be kept.",
-                  typeConverter=TypeConverters.toFloat)
+    fpr = Param(Params._dummy(), "fpr", "The highest p-value for features to be kept.",
+                typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                 labelCol="label", selectorType="kbest", percentile=0.1, alpha=0.05):
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
         """
         __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                 labelCol="label", selectorType="kbest", percentile=0.1, alpha=0.05)
+                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05)
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
-        self._setDefault(numTopFeatures=50, selectorType="kbest", percentile=0.1, alpha=0.05)
+        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
+                         fpr=0.05)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels", selectorType="kbest", percentile=0.1, alpha=0.05):
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05):
         """
         setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectorType="kbest", percentile=0.1, alpha=0.05)
+                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05)
         Sets params for this ChiSqSelector.
         """
         kwargs = self.setParams._input_kwargs
@@ -2670,7 +2667,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     def setNumTopFeatures(self, value):
         """
         Sets the value of :py:attr:`numTopFeatures`.
-        Only applicable when selectorType = "kbest".
+        Only applicable when selectorType = "numTopFeatures".
         """
         return self._set(numTopFeatures=value)
 
@@ -2697,19 +2694,19 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         return self.getOrDefault(self.percentile)
 
     @since("2.1.0")
-    def setAlpha(self, value):
+    def setFpr(self, value):
         """
-        Sets the value of :py:attr:`alpha`.
+        Sets the value of :py:attr:`fpr`.
         Only applicable when selectorType = "fpr".
         """
-        return self._set(alpha=value)
+        return self._set(fpr=value)
 
     @since("2.1.0")
-    def getAlpha(self):
+    def getFpr(self):
         """
-        Gets the value of alpha or its default value.
+        Gets the value of fpr or its default value.
         """
-        return self.getOrDefault(self.alpha)
+        return self.getOrDefault(self.fpr)
 
     def _create_model(self, java_model):
         return ChiSqSelectorModel(java_model)

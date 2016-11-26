@@ -533,7 +533,7 @@ trait Params extends Identifiable with Serializable {
    * Returns all params sorted by their names. The default implementation uses Java reflection to
    * list all public methods that have no arguments and return [[Param]].
    *
-   * Note: Developer should not use this method in constructor because we cannot guarantee that
+   * @note Developer should not use this method in constructor because we cannot guarantee that
    * this variable gets initialized before other params.
    */
   lazy val params: Array[Param[_]] = {

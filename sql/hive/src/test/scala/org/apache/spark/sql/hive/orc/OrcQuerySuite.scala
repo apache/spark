@@ -20,11 +20,13 @@ package org.apache.spark.sql.hive.orc
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.ql.io.orc.{OrcStruct, SparkOrcNewRecordReader}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -88,6 +90,16 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       checkAnswer(
         read.orc(file),
         data.toDF().collect())
+    }
+  }
+
+  test("Read/write UserDefinedType") {
+    withTempPath { path =>
+      val data = Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
+      val udtDF = data.toDF("id", "vectors")
+      udtDF.write.orc(path.getAbsolutePath)
+      val readBack = spark.read.schema(udtDF.schema).orc(path.getAbsolutePath)
+      checkAnswer(udtDF, readBack)
     }
   }
 
@@ -575,6 +587,27 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       // Verify the schema
       val expectedFields = schema.fields.map(f => f.copy(nullable = true))
       assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
+    }
+  }
+
+  test("Empty schema does not read data from ORC file") {
+    val data = Seq((1, 1), (2, 2))
+    withOrcFile(data) { path =>
+      val requestedSchema = StructType(Nil)
+      val conf = new Configuration()
+      val physicalSchema = OrcFileOperator.readSchema(Seq(path), Some(conf)).get
+      OrcRelation.setRequiredColumns(conf, physicalSchema, requestedSchema)
+      val maybeOrcReader = OrcFileOperator.getFileReader(path, Some(conf))
+      assert(maybeOrcReader.isDefined)
+      val orcRecordReader = new SparkOrcNewRecordReader(
+        maybeOrcReader.get, conf, 0, maybeOrcReader.get.getContentLength)
+
+      val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
+      try {
+        assert(recordsIterator.next().toString == "{null, null}")
+      } finally {
+        recordsIterator.close()
+      }
     }
   }
 }

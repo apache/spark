@@ -691,6 +691,10 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 #' @export
 setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
 
+# @rdname storageLevel
+# @export
+setGeneric("storageLevel", function(x) { standardGeneric("storageLevel") })
+
 #' @rdname subset
 #' @export
 setGeneric("subset", function(x, ...) { standardGeneric("subset") })
@@ -715,7 +719,7 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
-#' @rdname unpersist-methods
+#' @rdname unpersist
 #' @export
 setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
 
@@ -1306,9 +1310,11 @@ setGeneric("window", function(x, ...) { standardGeneric("window") })
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
 
-#' @rdname spark.glm
+###################### Spark.ML Methods ##########################
+
+#' @rdname fitted
 #' @export
-setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
+setGeneric("fitted")
 
 #' @param x,y For \code{glm}: logical values indicating whether the response vector
 #'          and model matrix used in the fitting process should be returned as
@@ -1328,29 +1334,59 @@ setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 #' @export
 setGeneric("rbind", signature = "...")
 
+#' @rdname spark.als
+#' @export
+setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
+
+#' @rdname spark.gaussianMixture
+#' @export
+setGeneric("spark.gaussianMixture",
+           function(data, formula, ...) { standardGeneric("spark.gaussianMixture") })
+
+#' @rdname spark.gbt
+#' @export
+setGeneric("spark.gbt", function(data, formula, ...) { standardGeneric("spark.gbt") })
+
+#' @rdname spark.glm
+#' @export
+setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
+
+#' @rdname spark.isoreg
+#' @export
+setGeneric("spark.isoreg", function(data, formula, ...) { standardGeneric("spark.isoreg") })
+
 #' @rdname spark.kmeans
 #' @export
 setGeneric("spark.kmeans", function(data, formula, ...) { standardGeneric("spark.kmeans") })
 
-#' @rdname fitted
+#' @rdname spark.kstest
 #' @export
-setGeneric("fitted")
+setGeneric("spark.kstest", function(data, ...) { standardGeneric("spark.kstest") })
+
+#' @rdname spark.lda
+#' @export
+setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
+
+#' @rdname spark.logit
+#' @export
+setGeneric("spark.logit", function(data, formula, ...) { standardGeneric("spark.logit") })
 
 #' @rdname spark.mlp
 #' @export
-setGeneric("spark.mlp", function(data, ...) { standardGeneric("spark.mlp") })
+setGeneric("spark.mlp", function(data, formula, ...) { standardGeneric("spark.mlp") })
 
 #' @rdname spark.naiveBayes
 #' @export
 setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("spark.naiveBayes") })
 
+#' @rdname spark.randomForest
+#' @export
+setGeneric("spark.randomForest",
+           function(data, formula, ...) { standardGeneric("spark.randomForest") })
+
 #' @rdname spark.survreg
 #' @export
 setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
-
-#' @rdname spark.lda
-#' @export
-setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
 
 #' @rdname spark.lda
 #' @export
@@ -1360,16 +1396,6 @@ setGeneric("spark.posterior", function(object, newData) { standardGeneric("spark
 #' @export
 setGeneric("spark.perplexity", function(object, data) { standardGeneric("spark.perplexity") })
 
-#' @rdname spark.isoreg
-#' @export
-setGeneric("spark.isoreg", function(data, formula, ...) { standardGeneric("spark.isoreg") })
-
-#' @rdname spark.gaussianMixture
-#' @export
-setGeneric("spark.gaussianMixture",
-           function(data, formula, ...) {
-             standardGeneric("spark.gaussianMixture")
-           })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.
@@ -1377,11 +1403,3 @@ setGeneric("spark.gaussianMixture",
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
-
-#' @rdname spark.als
-#' @export
-setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
-
-#' @rdname spark.kstest
-#' @export
-setGeneric("spark.kstest", function(data, ...) { standardGeneric("spark.kstest") })

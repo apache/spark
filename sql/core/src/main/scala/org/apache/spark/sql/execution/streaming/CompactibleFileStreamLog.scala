@@ -24,6 +24,8 @@ import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{Path, PathFilter}
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
 
@@ -37,13 +39,18 @@ import org.apache.spark.sql.SparkSession
  * compact log files every 10 batches by default into a big file. When
  * doing a compaction, it will read all old log files and merge them with the new batch.
  */
-abstract class CompactibleFileStreamLog[T: ClassTag](
+abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     metadataLogVersion: String,
     sparkSession: SparkSession,
     path: String)
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
 
   import CompactibleFileStreamLog._
+
+  private implicit val formats = Serialization.formats(NoTypeHints)
+
+  /** Needed to serialize type T into JSON when using Jackson */
+  private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
   /**
    * If we delete the old files after compaction at once, there is a race condition in S3: other
@@ -56,17 +63,46 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
 
   protected def isDeletingExpiredLog: Boolean
 
-  protected def compactInterval: Int
+  protected def defaultCompactInterval: Int
 
-  /**
-   * Serialize the data into encoded string.
-   */
-  protected def serializeData(t: T): String
+  protected final lazy val compactInterval: Int = {
+    // SPARK-18187: "compactInterval" can be set by user via defaultCompactInterval.
+    // If there are existing log entries, then we should ensure a compatible compactInterval
+    // is used, irrespective of the defaultCompactInterval. There are three cases:
+    //
+    // 1. If there is no '.compact' file, we can use the default setting directly.
+    // 2. If there are two or more '.compact' files, we use the interval of patch id suffix with
+    // '.compact' as compactInterval. This case could arise if isDeletingExpiredLog == false.
+    // 3. If there is only one '.compact' file, then we must find a compact interval
+    // that is compatible with (i.e., a divisor of) the previous compact file, and that
+    // faithfully tries to represent the revised default compact interval i.e., is at least
+    // is large if possible.
+    // e.g., if defaultCompactInterval is 5 (and previous compact interval could have
+    // been any 2,3,4,6,12), then a log could be: 11.compact, 12, 13, in which case
+    // will ensure that the new compactInterval = 6 > 5 and (11 + 1) % 6 == 0
+    val compactibleBatchIds = fileManager.list(metadataPath, batchFilesFilter)
+      .filter(f => f.getPath.toString.endsWith(CompactibleFileStreamLog.COMPACT_FILE_SUFFIX))
+      .map(f => pathToBatchId(f.getPath))
+      .sorted
+      .reverse
 
-  /**
-   * Deserialize the string into data object.
-   */
-  protected def deserializeData(encodedString: String): T
+    // Case 1
+    var interval = defaultCompactInterval
+    if (compactibleBatchIds.length >= 2) {
+      // Case 2
+      val latestCompactBatchId = compactibleBatchIds(0)
+      val previousCompactBatchId = compactibleBatchIds(1)
+      interval = (latestCompactBatchId - previousCompactBatchId).toInt
+    } else if (compactibleBatchIds.length == 1) {
+      // Case 3
+      interval = CompactibleFileStreamLog.deriveCompactInterval(
+        defaultCompactInterval, compactibleBatchIds(0).toInt)
+    }
+    assert(interval > 0, s"intervalValue = $interval not positive value.")
+    logInfo(s"Set the compact interval to $interval " +
+      s"[defaultCompactInterval: $defaultCompactInterval]")
+    interval
+  }
 
   /**
    * Filter out the obsolete logs.
@@ -99,7 +135,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
     out.write(metadataLogVersion.getBytes(UTF_8))
     logData.foreach { data =>
       out.write('\n')
-      out.write(serializeData(data).getBytes(UTF_8))
+      out.write(Serialization.write(data).getBytes(UTF_8))
     }
   }
 
@@ -112,7 +148,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
     if (version != metadataLogVersion) {
       throw new IllegalStateException(s"Unknown log version: ${version}")
     }
-    lines.map(deserializeData).toArray
+    lines.map(Serialization.read[T]).toArray
   }
 
   override def add(batchId: Long, logs: Array[T]): Boolean = {
@@ -146,7 +182,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
    */
   def allFiles(): Array[T] = {
     var latestId = getLatest().map(_._1).getOrElse(-1L)
-    // There is a race condition when `FileStreamSink` is deleting old files and `StreamFileCatalog`
+    // There is a race condition when `FileStreamSink` is deleting old files and `StreamFileIndex`
     // is calling this method. This loop will retry the reading to deal with the
     // race condition.
     while (true) {
@@ -158,7 +194,7 @@ abstract class CompactibleFileStreamLog[T: ClassTag](
         } catch {
           case e: IOException =>
             // Another process using `CompactibleFileStreamLog` may delete the batch files when
-            // `StreamFileCatalog` are reading. However, it only happens when a compaction is
+            // `StreamFileIndex` are reading. However, it only happens when a compaction is
             // deleting old files. If so, let's try the next compaction batch and we should find it.
             // Otherwise, this is a real IO issue and we should throw it.
             latestId = nextCompactionBatchId(latestId, compactInterval)
@@ -248,4 +284,24 @@ object CompactibleFileStreamLog {
   def nextCompactionBatchId(batchId: Long, compactInterval: Long): Long = {
     (batchId + compactInterval + 1) / compactInterval * compactInterval - 1
   }
+
+  /**
+   * Derives a compact interval from the latest compact batch id and
+   * a default compact interval.
+   */
+  def deriveCompactInterval(defaultInterval: Int, latestCompactBatchId: Int) : Int = {
+    if (latestCompactBatchId + 1 <= defaultInterval) {
+      latestCompactBatchId + 1
+    } else if (defaultInterval < (latestCompactBatchId + 1) / 2) {
+      // Find the first divisor >= default compact interval
+      def properDivisors(min: Int, n: Int) =
+        (min to n/2).view.filter(i => n % i == 0) :+ n
+
+      properDivisors(defaultInterval, latestCompactBatchId + 1).head
+    } else {
+      // default compact interval > than any divisor other than latest compact id
+      latestCompactBatchId + 1
+    }
+  }
 }
+

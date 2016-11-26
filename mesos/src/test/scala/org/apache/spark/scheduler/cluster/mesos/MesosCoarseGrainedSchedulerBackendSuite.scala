@@ -388,9 +388,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     val dockerInfo = containerInfo.getDocker
 
-    assert(dockerInfo.getImage == "some_image")
-    assert(dockerInfo.getForcePullImage)
-
     val portMappings = dockerInfo.getPortMappingsList.asScala
     assert(portMappings.size == 1)
 
@@ -461,6 +458,50 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     val launchedTasks = verifyTaskLaunched(driver, "o1")
     assert(launchedTasks.head.getCommand.getUrisList.asScala(0).getValue == url)
+  }
+
+  test("mesos supports setting fetcher cache") {
+    val url = "spark.spark.spark.com"
+    setBackend(Map(
+      "spark.mesos.fetcherCache.enable" -> "true",
+      "spark.executor.uri" -> url
+    ), false)
+    val offers = List(Resources(backend.executorMemory(sc), 1))
+    offerResources(offers)
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+    val uris = launchedTasks.head.getCommand.getUrisList
+    assert(uris.size() == 1)
+    assert(uris.asScala.head.getCache)
+  }
+
+  test("mesos supports disabling fetcher cache") {
+    val url = "spark.spark.spark.com"
+    setBackend(Map(
+      "spark.mesos.fetcherCache.enable" -> "false",
+      "spark.executor.uri" -> url
+    ), false)
+    val offers = List(Resources(backend.executorMemory(sc), 1))
+    offerResources(offers)
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+    val uris = launchedTasks.head.getCommand.getUrisList
+    assert(uris.size() == 1)
+    assert(!uris.asScala.head.getCache)
+  }
+
+  test("mesos supports spark.mesos.network.name") {
+    setBackend(Map(
+      "spark.mesos.network.name" -> "test-network-name"
+    ))
+
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu)
+    backend.resourceOffers(driver, List(offer1).asJava)
+
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+    val networkInfos = launchedTasks.head.getContainer.getNetworkInfosList
+    assert(networkInfos.size == 1)
+    assert(networkInfos.get(0).getName == "test-network-name")
   }
 
   private case class Resources(mem: Int, cpus: Int, gpus: Int = 0)

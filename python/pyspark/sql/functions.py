@@ -359,8 +359,8 @@ def grouping_id(*cols):
 
        (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
 
-    Note: the list of columns should match with grouping columns exactly, or empty (means all the
-    grouping columns).
+    .. note:: The list of columns should match with grouping columns exactly, or empty (means all
+        the grouping columns).
 
     >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
     +-----+-------------+--------+
@@ -457,7 +457,8 @@ def nanvl(col1, col2):
 
 @since(1.4)
 def rand(seed=None):
-    """Generates a random column with i.i.d. samples from U[0.0, 1.0].
+    """Generates a random column with independent and identically distributed (i.i.d.) samples
+    from U[0.0, 1.0].
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -469,7 +470,8 @@ def rand(seed=None):
 
 @since(1.4)
 def randn(seed=None):
-    """Generates a column with i.i.d. samples from the standard normal distribution.
+    """Generates a column with independent and identically distributed (i.i.d.) samples from
+    the standard normal distribution.
     """
     sc = SparkContext._active_spark_context
     if seed is not None:
@@ -518,7 +520,7 @@ def shiftLeft(col, numBits):
 
 @since(1.5)
 def shiftRight(col, numBits):
-    """Shift the given value numBits right.
+    """(Signed) shift the given value numBits right.
 
     >>> spark.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
     [Row(r=21)]
@@ -543,9 +545,9 @@ def shiftRightUnsigned(col, numBits):
 
 @since(1.6)
 def spark_partition_id():
-    """A column for partition ID of the Spark task.
+    """A column for partition ID.
 
-    Note that this is indeterministic because it depends on data partitioning and task scheduling.
+    .. note:: This is indeterministic because it depends on data partitioning and task scheduling.
 
     >>> df.repartition(1).select(spark_partition_id().alias("pid")).collect()
     [Row(pid=0), Row(pid=0)]
@@ -777,8 +779,8 @@ def date_format(date, format):
     A pattern could be for instance `dd.MM.yyyy` and could return a string like '18.03.1993'. All
     pattern letters of the Java class `java.text.SimpleDateFormat` can be used.
 
-    NOTE: Use when ever possible specialized functions like `year`. These benefit from a
-    specialized implementation.
+    .. note:: Use when ever possible specialized functions like `year`. These benefit from a
+        specialized implementation.
 
     >>> df = spark.createDataFrame([('2015-04-08',)], ['a'])
     >>> df.select(date_format('a', 'MM/dd/yyy').alias('date')).collect()
@@ -1059,7 +1061,8 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 @since(1.5)
 def from_utc_timestamp(timestamp, tz):
     """
-    Assumes given timestamp is UTC and converts to given timezone.
+    Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
+    that corresponds to the same time of day in the given timezone.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(from_utc_timestamp(df.t, "PST").alias('t')).collect()
@@ -1072,7 +1075,8 @@ def from_utc_timestamp(timestamp, tz):
 @since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
-    Assumes given timestamp is in given timezone and converts to UTC.
+    Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
+    another timestamp that corresponds to the same time of day in UTC.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_utc_timestamp(df.t, "PST").alias('t')).collect()
@@ -1314,8 +1318,8 @@ def instr(str, substr):
     Locate the position of the first occurrence of substr column in the given string.
     Returns null if either of the arguments are null.
 
-    NOTE: The position is not zero based, but 1 based index, returns 0 if substr
-    could not be found in str.
+    .. note:: The position is not zero based, but 1 based index. Returns 0 if substr
+        could not be found in str.
 
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(instr(df.s, 'b').alias('s')).collect()
@@ -1379,8 +1383,8 @@ def locate(substr, str, pos=1):
     """
     Locate the position of the first occurrence of substr in a string column, after position pos.
 
-    NOTE: The position is not zero based, but 1 based index. returns 0 if substr
-    could not be found in str.
+    .. note:: The position is not zero based, but 1 based index. Returns 0 if substr
+        could not be found in str.
 
     :param substr: a string
     :param str: a Column of :class:`pyspark.sql.types.StringType`
@@ -1442,7 +1446,7 @@ def split(str, pattern):
     """
     Splits str around pattern (pattern is a regular expression).
 
-    NOTE: pattern is a string represent the regular expression.
+    .. note:: pattern is a string represent the regular expression.
 
     >>> df = spark.createDataFrame([('ab12cd',)], ['s',])
     >>> df.select(split(df.s, '[0-9]+').alias('s')).collect()
@@ -1744,6 +1748,29 @@ def from_json(col, schema, options={}):
     return Column(jc)
 
 
+@ignore_unicode_prefix
+@since(2.1)
+def to_json(col, options={}):
+    """
+    Converts a column containing a [[StructType]] into a JSON string. Throws an exception,
+    in the case of an unsupported type.
+
+    :param col: name of column containing the struct
+    :param options: options to control converting. accepts the same options as the json datasource
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.sql.types import *
+    >>> data = [(1, Row(name='Alice', age=2))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'{"age":2,"name":"Alice"}')]
+    """
+
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.to_json(_to_java_column(col), options)
+    return Column(jc)
+
+
 @since(1.5)
 def size(col):
     """
@@ -1762,7 +1789,8 @@ def size(col):
 @since(1.5)
 def sort_array(col, asc=True):
     """
-    Collection function: sorts the input array for the given column in ascending order.
+    Collection function: sorts the input array in ascending or descending order according
+    to the natural ordering of the array elements.
 
     :param col: name of column or expression
 
@@ -1824,9 +1852,10 @@ class UserDefinedFunction(object):
 @since(1.3)
 def udf(f, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
-    Note that the user-defined functions must be deterministic. Due to optimization,
-    duplicate invocations may be eliminated or the function may even be invoked more times than
-    it is present in the query.
+
+    .. note:: The user-defined functions must be deterministic. Due to optimization,
+        duplicate invocations may be eliminated or the function may even be invoked more times than
+        it is present in the query.
 
     :param f: python function
     :param returnType: a :class:`pyspark.sql.types.DataType` object

@@ -79,7 +79,7 @@ private[spark] class TaskSetManager(
   var minShare = 0
   var priority = taskSet.priority
   var stageId = taskSet.stageId
-  var name = "TaskSet_" + taskSet.stageId.toString
+  val name = "TaskSet_" + taskSet.id
   var parent: Pool = null
   var totalResultSize = 0L
   var calculatedTasks = 0

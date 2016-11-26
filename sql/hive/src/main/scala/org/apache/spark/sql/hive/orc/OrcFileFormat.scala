@@ -42,8 +42,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * [[FileFormat]] for reading ORC files. If this is moved or renamed, please update
- * [[DataSource]]'s backwardCompatibilityMap.
+ * `FileFormat` for reading ORC files. If this is moved or renamed, please update
+ * `DataSource`'s backwardCompatibilityMap.
  */
 class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable {
 
@@ -83,11 +83,19 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(stagingDir, fileNamePrefix, dataSchema, context)
+        new OrcOutputWriter(path, dataSchema, context)
+      }
+
+      override def getFileExtension(context: TaskAttemptContext): String = {
+        val compressionExtension: String = {
+          val name = context.getConfiguration.get(OrcRelation.ORC_COMPRESSION)
+          OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
+        }
+
+        compressionExtension + ".orc"
       }
     }
   }
@@ -210,22 +218,10 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 }
 
 private[orc] class OrcOutputWriter(
-    stagingDir: String,
-    fileNamePrefix: String,
+    path: String,
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter {
-
-  override val path: String = {
-    val compressionExtension: String = {
-      val name = context.getConfiguration.get(OrcRelation.ORC_COMPRESSION)
-      OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
-    }
-    // It has the `.orc` extension at the end because (de)compression tools
-    // such as gunzip would not be able to decompress this as the compression
-    // is not applied on this whole file but on each "stream" in ORC format.
-    new Path(stagingDir, fileNamePrefix + compressionExtension + ".orc").toString
-  }
 
   private[this] val serializer = new OrcSerializer(dataSchema, context.getConfiguration)
 
@@ -309,17 +305,7 @@ private[orc] object OrcRelation extends HiveInspectors {
 
   def setRequiredColumns(
       conf: Configuration, physicalSchema: StructType, requestedSchema: StructType): Unit = {
-    val caseInsensitiveFieldMap: Map[String, Int] = physicalSchema.fieldNames
-      .zipWithIndex
-      .map(f => (f._1.toLowerCase, f._2))
-      .toMap
-    val ids = requestedSchema.map { a =>
-      val exactMatch: Option[Int] = physicalSchema.getFieldIndex(a.name)
-      val res = exactMatch.getOrElse(
-        caseInsensitiveFieldMap.getOrElse(a.name,
-          throw new IllegalArgumentException(s"""Field "$a.name" does not exist.""")))
-      res: Integer
-    }
+    val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
   }

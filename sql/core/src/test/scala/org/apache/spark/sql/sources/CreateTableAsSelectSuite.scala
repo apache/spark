@@ -238,7 +238,7 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("CTAS of decimal calculation") {
+  test("SPARK-17409: CTAS of decimal calculation") {
     withTable("tab2") {
       withTempView("tab1") {
         spark.range(99, 101).createOrReplaceTempView("tab1")
@@ -247,6 +247,15 @@ class CreateTableAsSelectSuite
         sql(s"CREATE TABLE tab2 USING PARQUET AS $sqlStmt")
         checkAnswer(spark.table("tab2"), sql(sqlStmt))
       }
+    }
+  }
+
+  test("specifying the column list for CTAS") {
+    withTable("t") {
+      val e = intercept[ParseException] {
+        sql("CREATE TABLE t (a int, b int) USING parquet AS SELECT 1, 2")
+      }.getMessage
+      assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
     }
   }
 }
