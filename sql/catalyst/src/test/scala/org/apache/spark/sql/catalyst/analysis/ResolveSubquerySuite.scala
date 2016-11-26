@@ -37,6 +37,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     val m = intercept[AnalysisException] {
       SimpleAnalyzer.ResolveSubquery(expr)
     }.getMessage
-    assert(m.contains("Correlated predicates are not supported outside of WHERE/HAVING clauses"))
+    assert(m.contains(
+      "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses"))
   }
 }
