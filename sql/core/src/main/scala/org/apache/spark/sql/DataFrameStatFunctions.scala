@@ -44,7 +44,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * of `x` is close to (p * N).
    * More precisely,
    *
-   *   floor((p - err) * N) &lt;= rank(x) &lt;= ceil((p + err) * N).
+   * {{{
+   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+   * }}}
    *
    * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
    * optimizations).
@@ -55,7 +57,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
    *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
-   * @param relativeError The relative target precision to achieve (&gt;= 0).
+   * @param relativeError The relative target precision to achieve (greater or equal to 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities

@@ -120,11 +120,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *
    * Optimizer-specific parameter settings:
    *  - EM
-   *     - Value should be &gt; 1.0
+   *     - Value should be greater than 1.0
    *     - default = 0.1 + 1, where 0.1 gives a small amount of smoothing and +1 follows
    *       Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    *  - Online
-   *     - Value should be &gt;= 0
+   *     - Value should be greater than or equal to 0
    *     - default = (1.0 / k), following the implementation from
    *       <a href="https://github.com/Blei-Lab/onlineldavb">here</a>.
    *

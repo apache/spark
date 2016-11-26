@@ -165,32 +165,64 @@ object ParamValidators {
         s" of unexpected input type: ${value.getClass}")
   }
 
-  /** Check if value &gt; lowerBound */
+  /**
+   * Check if
+   * {{{
+   * value > lowerBound
+   * }}}
+   */
   def gt[T](lowerBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) > lowerBound
   }
 
-  /** Check if value &gt;= lowerBound */
+  /**
+   * Check if
+   * {{{
+   * value >= lowerBound
+   * }}}
+   */
   def gtEq[T](lowerBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) >= lowerBound
   }
 
-  /** Check if value &lt; upperBound */
+  /**
+   * Check if
+   * {{{
+   * value < upperBound
+   * }}}
+   */
   def lt[T](upperBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) < upperBound
   }
 
-  /** Check if value &lt;= upperBound */
+  /**
+   * Check if
+   * {{{
+   * value <= upperBound
+   * }}}
+   */
   def ltEq[T](upperBound: Double): T => Boolean = { (value: T) =>
     getDouble(value) <= upperBound
   }
 
   /**
    * Check for value in range lowerBound to upperBound.
-   * @param lowerInclusive  If true, check for value &gt;= lowerBound.
-   *                        If false, check for value &gt; lowerBound.
-   * @param upperInclusive  If true, check for value &lt;= upperBound.
-   *                        If false, check for value &lt; upperBound.
+   * @param lowerInclusive If true, check for
+   *                       {{{
+   *                       value >= lowerBound
+   *                       }}}
+   *                       If false, check for
+   *                       {{{
+   *                       value > lowerBound
+   *                       }}}
+   * @param upperInclusive  If true, check for
+   *                        {{{
+   *                        value <= upperBound.
+   *                        }}}
+   *                        If false, check for
+   *                        {{{
+   *                        value < upperBound.
+   *                        }}}
    */
   def inRange[T](
       lowerBound: Double,

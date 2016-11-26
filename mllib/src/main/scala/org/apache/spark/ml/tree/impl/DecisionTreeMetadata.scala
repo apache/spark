@@ -35,7 +35,7 @@ import org.apache.spark.rdd.RDD
  * @param numClasses    For classification: labels can take values {0, ..., numClasses - 1}.
  *                      For regression: fixed at 0 (no meaning).
  * @param maxBins  Maximum number of bins, for all features.
- * @param featureArity  Map: categorical feature index --&gt; arity.
+ * @param featureArity  Map: categorical feature index and arity.
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  * @param numBins  Number of bins for each feature.
  */

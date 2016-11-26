@@ -352,7 +352,10 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    *
    * @note This should be adjusted in synch with `LDA.setMaxIterations()`
    * so the entire corpus is used.  Specifically, set both so that
-   * maxIterations * miniBatchFraction &gt;= 1.
+   *
+   * {{{
+   * maxIterations * miniBatchFraction >= 1.
+   * }}}
    *
    * Default: 0.05, i.e., 5% of total documents.
    */

@@ -35,7 +35,7 @@ private[feature] trait QuantileDiscretizerBase extends Params
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
-   * be &gt;= 2.
+   * be greater than or equal to 2.
    *
    * See also [[handleInvalid]], which can optionally create an additional bucket for NaN values.
    *

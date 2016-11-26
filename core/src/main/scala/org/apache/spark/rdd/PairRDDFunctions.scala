@@ -399,9 +399,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
    * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
    *
-   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (sp &gt; p)
-   * would trigger sparse representation of registers, which may reduce the memory consumption
-   * and increase accuracy when the cardinality is small.
+   * The relative accuracy is approximately `1.054 / sqrt(2^p)`. Setting a nonzero (`sp` is
+   * greater than `p`) would trigger sparse representation of registers, which may reduce the
+   * memory consumption and increase accuracy when the cardinality is small.
    *
    * @param p The precision value for the normal set.
    *          `p` must be a value between 4 and `sp` if `sp` is not zero (32 max).
@@ -908,7 +908,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Return an RDD with the pairs from `this` whose keys are not in `other`.
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
-   * RDD will be &lt;= us.
+   * RDD will be less than or equal to us.
    */
   def subtractByKey[W: ClassTag](other: RDD[(K, W)]): RDD[(K, V)] = self.withScope {
     subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.length)))

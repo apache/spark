@@ -45,7 +45,7 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  * @param quantileCalculationStrategy Algorithm for calculating quantiles.  Supported:
  *                             `org.apache.spark.mllib.tree.configuration.QuantileStrategy.Sort`
  * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
- *                                number of discrete values they take. An entry (n -&gt; k)
+ *                                number of discrete values they take. An entry (n and k)
  *                                indicates that feature n is categorical with k categories
  *                                indexed from 0: {0, 1, ..., k-1}.
  * @param minInstancesPerNode Minimum number of instances each child must have after split.
