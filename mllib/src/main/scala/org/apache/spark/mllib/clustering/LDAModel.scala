@@ -171,7 +171,7 @@ abstract class LDAModel private[clustering] extends Saveable {
    *                   The term count vectors are "bags of words" with a fixed-size vocabulary
    *                   (where the vocabulary size is the length of the vector).
    *                   This must use the same vocabulary (ordering of term counts) as in training.
-   *                   Document IDs must be unique and >= 0.
+   *                   Document IDs must be unique and &gt;= 0.
    * @return  Estimated topic distribution for each document.
    *          The returned RDD may be zipped with the given RDD, where each returned vector
    *          is a multinomial distribution over topics.

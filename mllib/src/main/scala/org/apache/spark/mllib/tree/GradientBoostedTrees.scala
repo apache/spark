@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
 
 /**
  * A class that implements
- * [[http://en.wikipedia.org/wiki/Gradient_boosting  Stochastic Gradient Boosting]]
+ * <a href="http://en.wikipedia.org/wiki/Gradient_boosting">Stochastic Gradient Boosting</a>
  * for regression and binary classification.
  *
  * The implementation is based upon:

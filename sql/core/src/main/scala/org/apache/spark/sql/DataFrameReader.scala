@@ -239,8 +239,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a JSON file ([[http://jsonlines.org/ JSON Lines text format or newline-delimited JSON]])
-   * and returns the result as a [[DataFrame]].
+   * Loads a JSON file (<a href="http://jsonlines.org/">JSON Lines text format or
+   * newline-delimited JSON</a>) and returns the result as a [[DataFrame]].
    * See the documentation on the overloaded `json()` method with varargs for more details.
    *
    * @since 1.4.0
@@ -251,8 +251,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a JSON file ([[http://jsonlines.org/ JSON Lines text format or newline-delimited JSON]])
-   * and returns the result as a [[DataFrame]].
+   * Loads a JSON file (<a href="http://jsonlines.org/">JSON Lines text format or
+   * newline-delimited JSON</a>) and returns the result as a [[DataFrame]].
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -297,8 +297,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def json(paths: String*): DataFrame = format("json").load(paths : _*)
 
   /**
-   * Loads a `JavaRDD[String]` storing JSON objects ([[http://jsonlines.org/ JSON Lines text format
-   * or newline-delimited JSON]]) and returns the result as a [[DataFrame]].
+   * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
+   * Lines text format or newline-delimited JSON</a>) and returns the result as
+   * a [[DataFrame]].
    *
    * Unless the schema is specified using [[schema]] function, this function goes through the
    * input once to determine the input schema.
@@ -309,8 +310,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def json(jsonRDD: JavaRDD[String]): DataFrame = json(jsonRDD.rdd)
 
   /**
-   * Loads an `RDD[String]` storing JSON objects ([[http://jsonlines.org/ JSON Lines text format or
-   * newline-delimited JSON]]) and returns the result as a [[DataFrame]].
+   * Loads an `RDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
+   * text format or newline-delimited JSON</a>) and returns the result as a [[DataFrame]].
    *
    * Unless the schema is specified using [[schema]] function, this function goes through the
    * input once to determine the input schema.

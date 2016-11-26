@@ -42,8 +42,8 @@ class KinesisUtils(object):
         Create an input stream that pulls messages from a Kinesis stream. This uses the
         Kinesis Client Library (KCL) to pull messages from Kinesis.
 
-        Note: The given AWS credentials will get saved in DStream checkpoints if checkpointing is
-        enabled. Make sure that your checkpoint directory is secure.
+        .. note:: The given AWS credentials will get saved in DStream checkpoints if checkpointing
+            is enabled. Make sure that your checkpoint directory is secure.
 
         :param ssc:  StreamingContext object
         :param kinesisAppName:  Kinesis application name used by the Kinesis Client Library (KCL) to

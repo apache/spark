@@ -60,16 +60,20 @@ private[ml] trait NaiveBayesParams extends PredictorParams with HasWeightCol {
   final def getModelType: String = $(modelType)
 }
 
+// scalastyle:off line.size.limit
 /**
  * Naive Bayes Classifiers.
  * It supports Multinomial NB
- * ([[http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html]])
+ * (see <a href="http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html">
+ * here</a>)
  * which can handle finitely supported discrete data. For example, by converting documents into
  * TF-IDF vectors, it can be used for document classification. By making every vector a
  * binary (0/1) data, it can also be used as Bernoulli NB
- * ([[http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html]]).
+ * (see <a href="http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html">
+ * here</a>).
  * The input feature values must be nonnegative.
  */
+// scalastyle:on line.size.limit
 @Since("1.5.0")
 class NaiveBayes @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
