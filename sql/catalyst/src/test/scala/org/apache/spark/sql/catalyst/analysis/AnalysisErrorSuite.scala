@@ -515,7 +515,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       Exists(
         Join(
           LocalRelation(b),
-          Filter(EqualTo(OuterReference(a), c), LocalRelation(c)),
+          Filter(EqualTo(OuterReference(a)(), c), LocalRelation(c)),
           LeftOuter,
           Option(EqualTo(b, c)))),
       LocalRelation(a))
@@ -524,7 +524,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan2 = Filter(
       Exists(
         Join(
-          Filter(EqualTo(OuterReference(a), c), LocalRelation(c)),
+          Filter(EqualTo(OuterReference(a)(), c), LocalRelation(c)),
           LocalRelation(b),
           RightOuter,
           Option(EqualTo(b, c)))),
@@ -532,14 +532,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan3 = Filter(
-      Exists(Union(LocalRelation(b), Filter(EqualTo(OuterReference(a), c), LocalRelation(c)))),
+      Exists(Union(LocalRelation(b), Filter(EqualTo(OuterReference(a)(), c), LocalRelation(c)))),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan4 = Filter(
       Exists(
         Limit(1,
-          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))
+          Filter(EqualTo(OuterReference(a)(), b), LocalRelation(b)))
       ),
       LocalRelation(a))
     assertAnalysisError(plan4, "Accessing outer query column is not allowed in a LIMIT" :: Nil)
@@ -547,7 +547,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan5 = Filter(
       Exists(
         Sample(0.0, 0.5, false, 1L,
-          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))().select('b)
+          Filter(EqualTo(OuterReference(a)(), b), LocalRelation(b)))().select('b)
       ),
       LocalRelation(a))
     assertAnalysisError(plan5,

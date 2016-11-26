@@ -989,7 +989,7 @@ class Analyzer(
               withPosition(u) {
                 try {
                   outer.resolve(nameParts, resolver) match {
-                    case Some(outerAttr) => OuterReference(outerAttr)
+                    case Some(outerAttr) => OuterReference(outerAttr)()
                     case None => u
                   }
                 } catch {
@@ -1008,7 +1008,9 @@ class Analyzer(
      *
      * This method returns the rewritten subquery and correlated predicates.
      */
-    private def pullOutCorrelatedPredicates(sub: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
+    private def pullOutCorrelatedProjectionAndPredicates(sub: LogicalPlan)
+      : (LogicalPlan, Seq[NamedExpression], Seq[Expression]) = {
+      val outerProjectionSet = scala.collection.mutable.Set.empty[NamedExpression]
       val predicateMap = scala.collection.mutable.Map.empty[LogicalPlan, Seq[Expression]]
 
       /** Make sure a plans' subtree does not contain a tagged predicate. */
@@ -1077,7 +1079,7 @@ class Analyzer(
       // Simplify the predicates before pulling them out.
       val transformed = BooleanSimplification(sub) transformUp {
         // WARNING:
-        // Only Filter can host correlated expressions at this time
+        // Only Filter and Project can host correlated expressions at this time
         // Anyone adding a new "case" below needs to add the call to
         // "failOnOuterReference" to disallow correlated expressions in it.
         case f @ Filter(cond, child) =>
@@ -1102,12 +1104,19 @@ class Analyzer(
               child
           }
         case p @ Project(expressions, child) =>
-          failOnOuterReference(p)
+          outerProjectionSet ++= expressions.filter(containsOuter)
+
           val referencesToAdd = missingReferences(p)
-          if (referencesToAdd.nonEmpty) {
-            Project(expressions ++ referencesToAdd, child)
+          val newProjectList = if (referencesToAdd.nonEmpty) {
+            expressions ++ referencesToAdd
           } else {
-            p
+            expressions
+          }.filterNot(x => outerProjectionSet.contains(x))
+
+          if (newProjectList.isEmpty) {
+            p.copy(projectList = Seq(Alias(Literal(1), "1")()))
+          } else {
+            p.copy(projectList = newProjectList)
           }
         case a @ Aggregate(grouping, expressions, child) =>
           failOnOuterReference(a)
@@ -1162,7 +1171,7 @@ class Analyzer(
           failOnOuterReference(p)
           p
       }
-      (transformed, predicateMap.values.flatten.toSeq)
+      (transformed, outerProjectionSet.toSeq, predicateMap.values.flatten.toSeq)
     }
 
     /**
@@ -1171,9 +1180,9 @@ class Analyzer(
      */
     private def rewriteSubQuery(
         sub: LogicalPlan,
-        outer: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
+        outer: Seq[LogicalPlan]): (LogicalPlan, Seq[NamedExpression], Seq[Expression]) = {
       // Pull out the tagged predicates and rewrite the subquery in the process.
-      val (basePlan, baseConditions) = pullOutCorrelatedPredicates(sub)
+      val (basePlan, baseOutputs, baseConditions) = pullOutCorrelatedProjectionAndPredicates(sub)
 
       // Make sure the inner and the outer query attributes do not collide.
       val outputSet = outer.map(_.outputSet).reduce(_ ++ _)
@@ -1199,7 +1208,11 @@ class Analyzer(
       val conditions = deDuplicatedConditions.map(_.transform {
         case OuterReference(ref) => ref
       })
-      (plan, conditions)
+      val outputs = baseOutputs.map(_.transform {
+        case OuterReference(ref) => ref
+      }).asInstanceOf[Seq[NamedExpression]]
+
+      (plan, outputs, conditions)
     }
 
     /**
@@ -1213,7 +1226,8 @@ class Analyzer(
         e: SubqueryExpression,
         plans: Seq[LogicalPlan],
         requiredColumns: Int = 0)(
-        f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
+        f: (LogicalPlan, Seq[NamedExpression], Seq[Expression]) => SubqueryExpression)
+      : SubqueryExpression = {
       // Step 1: Resolve the outer expressions.
       var previous: LogicalPlan = null
       var current = e.plan
@@ -1252,18 +1266,26 @@ class Analyzer(
     private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
       plan transformExpressions {
         case s @ ScalarSubquery(sub, _, exprId) if !sub.resolved =>
-          resolveSubQuery(s, plans, 1)(ScalarSubquery(_, _, exprId))
+          resolveSubQuery(s, plans, 1) { (plan, _, children) =>
+            ScalarSubquery(plan, children, exprId)
+          }
         case e @ Exists(sub, exprId) =>
-          resolveSubQuery(e, plans)(PredicateSubquery(_, _, nullAware = false, exprId))
+          resolveSubQuery(e, plans) { (plan, _, children) =>
+            PredicateSubquery(plan, children, nullAware = false, exprId)
+          }
         case In(e, Seq(l @ ListQuery(_, exprId))) if e.resolved =>
           // Get the left hand side expressions.
           val expressions = e match {
             case cns : CreateNamedStruct => cns.valExprs
             case expr => Seq(expr)
           }
-          resolveSubQuery(l, plans, expressions.size) { (rewrite, conditions) =>
+          resolveSubQuery(l, plans, expressions.size) { (rewrite, exprs, conditions) =>
             // Construct the IN conditions.
-            val inConditions = expressions.zip(rewrite.output).map(EqualTo.tupled)
+            val inConditions = if (exprs.isEmpty) {
+              expressions.zip(rewrite.output).map(EqualTo.tupled)
+            } else {
+              expressions.zip(exprs).map(EqualTo.tupled)
+            }
             PredicateSubquery(rewrite, inConditions ++ conditions, nullAware = true, exprId)
           }
       }
