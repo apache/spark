@@ -216,13 +216,6 @@ final class ChiSqSelectorModel private[ml] (
   @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  /**
-   * @group setParam
-   */
-  @Since("1.6.0")
-  @deprecated("labelCol is not used by ChiSqSelectorModel.", "2.0.0")
-  def setLabelCol(value: String): this.type = set(labelCol, value)
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema, logging = true)
