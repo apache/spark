@@ -262,7 +262,7 @@ private[spark] object ChiSqSelector {
   val Percentile: String = "percentile"
 
   /** String name for `fpr` selector type. */
-  private[spark] val FPR: String = "fpr"
+  val FPR: String = "fpr"
 
   /** Set of selector types that ChiSqSelector supports. */
   val supportedSelectorTypes: Array[String] = Array(NumTopFeatures, Percentile, FPR)
