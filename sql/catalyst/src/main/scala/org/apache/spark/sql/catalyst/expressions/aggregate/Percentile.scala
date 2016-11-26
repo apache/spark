@@ -20,16 +20,13 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.Percentile.Countings
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
-
 
 /**
  * The Percentile aggregate function returns the exact percentile(s) of numeric column `expr` at
@@ -59,7 +56,7 @@ case class Percentile(
   child: Expression,
   percentageExpression: Expression,
   mutableAggBufferOffset: Int = 0,
-  inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[Countings] {
+  inputAggBufferOffset: Int = 0) extends TypedImperativeAggregate[OpenHashMap[Number, Long]] {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, 0, 0)
@@ -74,10 +71,14 @@ case class Percentile(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
+  @transient
   private lazy val returnPercentileArray = percentageExpression.dataType.isInstanceOf[ArrayType]
 
   @transient
-  private lazy val percentages = evalPercentages(percentageExpression)
+  private lazy val percentages = percentageExpression.eval() match {
+    case p: Double => Seq(p)
+    case a: ArrayData => a.toDoubleArray().toSeq
+  }
 
   override def children: Seq[Expression] = child :: percentageExpression :: Nil
 
@@ -104,45 +105,56 @@ case class Percentile(
       defaultCheck
     } else if (!percentageExpression.foldable) {
       // percentageExpression must be foldable
-      TypeCheckFailure(s"The percentage(s) must be a constant literal, " +
-        s"but got ${percentageExpression}")
+      TypeCheckFailure("The percentage(s) must be a constant literal, " +
+        s"but got $percentageExpression")
     } else if (percentages.exists(percentage => percentage < 0.0 || percentage > 1.0)) {
       // percentages(s) must be in the range [0.0, 1.0]
-      TypeCheckFailure(s"Percentage(s) must be between 0.0 and 1.0, " +
-        s"but got ${percentageExpression}")
+      TypeCheckFailure("Percentage(s) must be between 0.0 and 1.0, " +
+        s"but got $percentageExpression")
     } else {
       TypeCheckSuccess
     }
   }
 
-  override def createAggregationBuffer(): Countings = {
-    // Initialize new Countings instance here.
-    Countings()
+  override def createAggregationBuffer(): OpenHashMap[Number, Long] = {
+    // Initialize new counts map instance here.
+    new OpenHashMap[Number, Long]()
   }
 
-  private def evalPercentages(expr: Expression): Seq[Double] = (expr.dataType, expr.eval()) match {
-    case (_, n: Number) => Array(n.doubleValue())
-    case (_, d: Decimal) => Array(d.toDouble)
-    case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
-      val numericArray = arrayData.toObjectArray(baseType)
-      numericArray.map { x =>
-        baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType])
-      }
-    case other =>
-      throw new AnalysisException(s"Invalid data type ${other._1} for parameter percentage")
-  }
-
-  override def update(buffer: Countings, input: InternalRow): Unit = {
+  override def update(buffer: OpenHashMap[Number, Long], input: InternalRow): Unit = {
     val key = child.eval(input).asInstanceOf[Number]
-    buffer.add(key)
+
+    // Null values are ignored in counts map.
+    if (key != null) {
+      buffer.changeValue(key, 1L, _ + 1L)
+    }
   }
 
-  override def merge(buffer: Countings, other: Countings): Unit = {
-    buffer.merge(other)
+  override def merge(buffer: OpenHashMap[Number, Long], other: OpenHashMap[Number, Long]): Unit = {
+    other.foreach { case (key, count) =>
+      buffer.changeValue(key, count, _ + count)
+    }
   }
 
-  override def eval(buffer: Countings): Any = {
-    generateOutput(buffer.getPercentiles(percentages))
+  override def eval(buffer: OpenHashMap[Number, Long]): Any = {
+    generateOutput(getPercentiles(buffer))
+  }
+
+  private def getPercentiles(buffer: OpenHashMap[Number, Long]): Seq[Double] = {
+    if (buffer.isEmpty) {
+      return Seq.empty
+    }
+
+    val sortedCounts = buffer.toSeq.sortBy(_._1)(
+      child.dataType.asInstanceOf[NumericType].ordering.asInstanceOf[Ordering[Number]])
+    val aggreCounts = sortedCounts.scanLeft(sortedCounts.head._1, 0L) {
+      case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
+    }.tail
+    val maxPosition = aggreCounts.last._2 - 1
+
+    percentages.map { percentile =>
+      getPercentile(aggreCounts, maxPosition * percentile).doubleValue()
+    }
   }
 
   private def generateOutput(results: Seq[Double]): Any = {
@@ -155,172 +167,96 @@ case class Percentile(
     }
   }
 
-  override def serialize(obj: Countings): Array[Byte] = {
-    Percentile.serializer.serialize(obj, child.dataType)
-  }
-
-  override def deserialize(bytes: Array[Byte]): Countings = {
-    Percentile.serializer.deserialize(bytes, child.dataType)
-  }
-}
-
-object Percentile {
-
-  object Countings {
-    def apply(): Countings = Countings(new OpenHashMap[Number, Long])
-
-    def apply(counts: OpenHashMap[Number, Long]): Countings = new Countings(counts)
-  }
-
   /**
-   * A class that stores the numbers and their counts, used to support [[Percentile]] function.
-   */
-  class Countings(val counts: OpenHashMap[Number, Long]) extends Serializable {
-    /**
-     * Insert a key into countings map.
-     */
-    def add(key: Number): Unit = {
-      // Null values are ignored in countings.
-      if (key != null) {
-        counts.changeValue(key, 1L, _ + 1L)
-      }
-    }
-
-    /**
-     * In place merges in another Countings.
-     */
-    def merge(other: Countings): Unit = {
-      other.counts.foreach { pair =>
-        counts.changeValue(pair._1, pair._2, _ + pair._2)
-      }
-    }
-
-    /**
-     * Get the percentile value for every percentile in `percentages`.
-     */
-    def getPercentiles(percentages: Seq[Double]): Seq[Double] = {
-      if (counts.isEmpty) {
-        return Seq.empty
-      }
-
-      val sortedCounts = counts.toSeq.sortBy(_._1)(new Ordering[Number]() {
-        override def compare(a: Number, b: Number): Int =
-          scala.math.signum(a.doubleValue() - b.doubleValue()).toInt
-      })
-      var sum = 0L
-      val aggreCounts = sortedCounts.map { case (key, count) =>
-        sum += count
-        (key, sum)
-      }
-      val maxPosition = aggreCounts.last._2 - 1
-
-      percentages.map { percentile =>
-        getPercentile(aggreCounts, maxPosition * percentile).doubleValue()
-      }
-    }
-
-    /**
-     * Get the percentile value.
-     *
-     * This function has been based upon similar function from HIVE
-     * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
-     */
-    private def getPercentile(aggreCounts: Seq[(Number, Long)], position: Double): Number = {
-      // We may need to do linear interpolation to get the exact percentile
-      val lower = position.floor.toLong
-      val higher = position.ceil.toLong
-
-      // Use binary search to find the lower and the higher position.
-      val countsArray = aggreCounts.map(_._2).toArray[Long]
-      val lowerIndex = binarySearchCount(countsArray, 0, aggreCounts.size, lower + 1)
-      val higherIndex = binarySearchCount(countsArray, 0, aggreCounts.size, higher + 1)
-
-      val lowerKey = aggreCounts(lowerIndex)._1
-      if (higher == lower) {
-        // no interpolation needed because position does not have a fraction
-        return lowerKey
-      }
-
-      val higherKey = aggreCounts(higherIndex)._1
-      if (higherKey == lowerKey) {
-        // no interpolation needed because lower position and higher position has the same key
-        return lowerKey
-      }
-
-      // Linear interpolation to get the exact percentile
-      return (higher - position) * lowerKey.doubleValue() +
-        (position - lower) * higherKey.doubleValue()
-    }
-
-    /**
-     * use a binary search to find the index of the position closest to the current value.
-     */
-    private def binarySearchCount(
-        countsArray: Array[Long], start: Int, end: Int, value: Long): Int = {
-      util.Arrays.binarySearch(countsArray, 0, end, value) match {
-        case ix if ix < 0 => -(ix + 1)
-        case ix => ix
-      }
-    }
-  }
-
-  /**
-   * Serializer for class [[Countings]]
+   * Get the percentile value.
    *
-   * This class is thread safe.
+   * This function has been based upon similar function from HIVE
+   * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
    */
-  class CountingsSerializer {
+  private def getPercentile(aggreCounts: Seq[(Number, Long)], position: Double): Number = {
+    // We may need to do linear interpolation to get the exact percentile
+    val lower = position.floor.toLong
+    val higher = position.ceil.toLong
 
-    final def serialize(obj: Countings, dataType: DataType): Array[Byte] = {
-      val buffer = new Array[Byte](4 << 10)  // 4K
-      val bos = new ByteArrayOutputStream()
-      val out = new DataOutputStream(bos)
-      try {
-        val counts = obj.counts
-        val projection = UnsafeProjection.create(Array[DataType](dataType, LongType))
-        // Write pairs in counts map to byte buffer.
-        counts.foreach { case (key, count) =>
-          val row = InternalRow.apply(key, count)
-          val unsafeRow = projection.apply(row)
-          out.writeInt(unsafeRow.getSizeInBytes)
-          unsafeRow.writeToStream(out, buffer)
-        }
-        out.writeInt(-1)
-        out.flush()
+    // Use binary search to find the lower and the higher position.
+    val countsArray = aggreCounts.map(_._2).toArray[Long]
+    val lowerIndex = binarySearchCount(countsArray, 0, aggreCounts.size, lower + 1)
+    val higherIndex = binarySearchCount(countsArray, 0, aggreCounts.size, higher + 1)
 
-        bos.toByteArray
-      } finally {
-        out.close()
-        bos.close()
-      }
+    val lowerKey = aggreCounts(lowerIndex)._1
+    if (higher == lower) {
+      // no interpolation needed because position does not have a fraction
+      return lowerKey
     }
 
-    final def deserialize(bytes: Array[Byte], dataType: DataType): Countings = {
-      val bis = new ByteArrayInputStream(bytes)
-      val ins = new DataInputStream(bis)
-      try {
-        val counts = new OpenHashMap[Number, Long]
-        // Read unsafeRow size and content in bytes.
-        var sizeOfNextRow = ins.readInt()
-        while (sizeOfNextRow >= 0) {
-          val bs = new Array[Byte](sizeOfNextRow)
-          ins.readFully(bs)
-          val row = new UnsafeRow(2)
-          row.pointTo(bs, sizeOfNextRow)
-          // Insert the pairs into counts map.
-          val key = row.get(0, dataType).asInstanceOf[Number]
-          val count = row.get(1, LongType).asInstanceOf[Long]
-          counts.update(key, count)
-          sizeOfNextRow = ins.readInt()
-        }
+    val higherKey = aggreCounts(higherIndex)._1
+    if (higherKey == lowerKey) {
+      // no interpolation needed because lower position and higher position has the same key
+      return lowerKey
+    }
 
-        Countings(counts)
-      } finally {
-        ins.close()
-        bis.close()
-      }
+    // Linear interpolation to get the exact percentile
+    return (higher - position) * lowerKey.doubleValue() +
+      (position - lower) * higherKey.doubleValue()
+  }
+
+  /**
+   * use a binary search to find the index of the position closest to the current value.
+   */
+  private def binarySearchCount(
+      countsArray: Array[Long], start: Int, end: Int, value: Long): Int = {
+    util.Arrays.binarySearch(countsArray, 0, end, value) match {
+      case ix if ix < 0 => -(ix + 1)
+      case ix => ix
     }
   }
 
-  val serializer: CountingsSerializer = new CountingsSerializer
+  override def serialize(obj: OpenHashMap[Number, Long]): Array[Byte] = {
+    val buffer = new Array[Byte](4 << 10)  // 4K
+    val bos = new ByteArrayOutputStream()
+    val out = new DataOutputStream(bos)
+    try {
+      val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
+      // Write pairs in counts map to byte buffer.
+      obj.foreach { case (key, count) =>
+        val row = InternalRow.apply(key, count)
+        val unsafeRow = projection.apply(row)
+        out.writeInt(unsafeRow.getSizeInBytes)
+        unsafeRow.writeToStream(out, buffer)
+      }
+      out.writeInt(-1)
+      out.flush()
+
+      bos.toByteArray
+    } finally {
+      out.close()
+      bos.close()
+    }
+  }
+
+  override def deserialize(bytes: Array[Byte]): OpenHashMap[Number, Long] = {
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(bis)
+    try {
+      val counts = new OpenHashMap[Number, Long]
+      // Read unsafeRow size and content in bytes.
+      var sizeOfNextRow = ins.readInt()
+      while (sizeOfNextRow >= 0) {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(2)
+        row.pointTo(bs, sizeOfNextRow)
+        // Insert the pairs into counts map.
+        val key = row.get(0, child.dataType).asInstanceOf[Number]
+        val count = row.get(1, LongType).asInstanceOf[Long]
+        counts.update(key, count)
+        sizeOfNextRow = ins.readInt()
+      }
+
+      counts
+    } finally {
+      ins.close()
+      bis.close()
+    }
+  }
 }

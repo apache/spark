@@ -18,14 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.Percentile.Countings
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.OpenHashMap
 
 class PercentileSuite extends SparkFunSuite {
 
@@ -36,37 +35,17 @@ class PercentileSuite extends SparkFunSuite {
   }
 
   test("serialize and de-serialize") {
-    val serializer = Percentile.serializer
-
-    // Check empty serialize and de-serialize
-    val emptyBuffer = Countings()
-    assert(compareEquals(emptyBuffer,
-      serializer.deserialize(serializer.serialize(emptyBuffer, DoubleType), DoubleType)))
-
-    val buffer = Countings()
-    data.foreach { value =>
-      buffer.add(value)
-    }
-    assert(compareEquals(buffer,
-      serializer.deserialize(serializer.serialize(buffer, IntegerType), IntegerType)))
-
     val agg = new Percentile(BoundReference(0, IntegerType, true), Literal(0.5))
-    assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
-  }
 
-  test("class Countings, basic operations") {
-    val valueCount = 10000
-    val percentages = Seq[Double](0, 0.25, 0.5, 0.75, 1)
-    val buffer = Countings()
-    (1 to valueCount).grouped(10).foreach { group =>
-      val partialBuffer = Countings()
-      group.foreach(x => partialBuffer.add(x))
-      buffer.merge(partialBuffer)
+    // Check empty serialize and deserialize
+    val buffer = new OpenHashMap[Number, Long]()
+    assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
+
+    // Check non-empty buffer serializa and deserialize.
+    data.foreach { key =>
+      buffer.changeValue(key, 1L, _ + 1L)
     }
-    val expectedPercentiles = Seq(1, 2500.75, 5000.5, 7500.25, 10000)
-    val percentiles = buffer.getPercentiles(percentages)
-    assert(percentiles.zip(expectedPercentiles)
-      .forall(pair => pair._1 == pair._2))
+    assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
 
   test("class Percentile, high level interface, update, merge, eval...") {
@@ -253,9 +232,10 @@ class PercentileSuite extends SparkFunSuite {
     assert(agg.eval(buffer) != null)
   }
 
-  private def compareEquals(left: Countings, right: Countings): Boolean = {
-    left.counts.size == right.counts.size && left.counts.forall { pair =>
-      right.counts.apply(pair._1) == pair._2
+  private def compareEquals(
+      left: OpenHashMap[Number, Long], right: OpenHashMap[Number, Long]): Boolean = {
+    left.size == right.size && left.forall { case (key, count) =>
+      right.apply(key) == count
     }
   }
 
