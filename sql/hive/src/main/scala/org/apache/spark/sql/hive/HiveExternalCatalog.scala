@@ -191,42 +191,44 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
 
-    if (tableExists(db, table) && !ignoreIfExists) {
-      throw new TableAlreadyExistsException(db = db, table = table)
-    }
-
-    if (tableDefinition.tableType == VIEW) {
-      client.createTable(tableDefinition, ignoreIfExists)
-    } else {
-      // Ideally we should not create a managed table with location, but Hive serde table can
-      // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
-      // to create the table directory and write out data before we create this table, to avoid
-      // exposing a partial written table.
-      val needDefaultTableLocation = tableDefinition.tableType == MANAGED &&
-        tableDefinition.storage.locationUri.isEmpty
-
-      val tableLocation = if (needDefaultTableLocation) {
-        Some(defaultTablePath(tableDefinition.identifier))
-      } else {
-        tableDefinition.storage.locationUri
+    if (tableExists(db, table)) {
+      if (!ignoreIfExists) {
+        throw new TableAlreadyExistsException(db = db, table = table)
       }
-
-      if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
-        val tableWithDataSourceProps = tableDefinition.copy(
-          // We can't leave `locationUri` empty and count on Hive metastore to set a default table
-          // location, because Hive metastore uses hive.metastore.warehouse.dir to generate default
-          // table location for tables in default database, while we expect to use the location of
-          // default database.
-          storage = tableDefinition.storage.copy(locationUri = tableLocation),
-          // Here we follow data source tables and put table metadata like provider, schema, etc. in
-          // table properties, so that we can work around the Hive metastore issue about not case
-          // preserving and make Hive serde table support mixed-case column names.
-          properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
-        client.createTable(tableWithDataSourceProps, ignoreIfExists)
+    } else {
+      if (tableDefinition.tableType == VIEW) {
+        client.createTable(tableDefinition, ignoreIfExists)
       } else {
-        createDataSourceTable(
-          tableDefinition.withNewStorage(locationUri = tableLocation),
-          ignoreIfExists)
+        // Ideally we should not create a managed table with location, but Hive serde table can
+        // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]]
+        // we have to create the table directory and write out data before we create this table,
+        // to avoid exposing a partial written table.
+        val needDefaultTableLocation = tableDefinition.tableType == MANAGED &&
+          tableDefinition.storage.locationUri.isEmpty
+
+        val tableLocation = if (needDefaultTableLocation) {
+          Some(defaultTablePath(tableDefinition.identifier))
+        } else {
+          tableDefinition.storage.locationUri
+        }
+
+        if (tableDefinition.provider.get == DDLUtils.HIVE_PROVIDER) {
+          val tableWithDataSourceProps = tableDefinition.copy(
+            // We can't leave `locationUri` empty and count on Hive metastore to set a default table
+            // location, because Hive metastore uses hive.metastore.warehouse.dir to generate
+            // default table location for tables in default database, while we expect to use the
+            // location of default database.
+            storage = tableDefinition.storage.copy(locationUri = tableLocation),
+            // Here we follow data source tables and put table metadata like provider, schema, etc.
+            // in table properties, so that we can work around the Hive metastore issue about not
+            // case preserving and make Hive serde table support mixed-case column names.
+            properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
+          client.createTable(tableWithDataSourceProps, ignoreIfExists)
+        } else {
+          createDataSourceTable(
+            tableDefinition.withNewStorage(locationUri = tableLocation),
+            ignoreIfExists)
+        }
       }
     }
   }
