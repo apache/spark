@@ -111,7 +111,7 @@ private[storage] class TieredAllocator(
   }
 
   def hasEnoughSpace(file: File): Boolean = {
-    file.getParentFile.getFreeSpace / file.getParentFile.getTotalSpace >= threshold
+    file.getParentFile.getFreeSpace * 1.0 / file.getParentFile.getTotalSpace >= threshold
   }
 
   def apply(filename: String): File = {

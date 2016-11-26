@@ -54,8 +54,9 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     val allocatorClass = shortFileAllocatorNames
       .getOrElse(allocatorName.toLowerCase, allocatorName)
     val allocator = try {
-      val ctor = Utils.classForName(allocatorClass)
-        .getConstructor(classOf[SparkConf], classOf[Array[File]], java.lang.Integer.TYPE)
+      val clazz = Utils.classForName(allocatorClass)
+      val ctor = clazz.getConstructor(classOf[SparkConf],
+        classOf[Array[File]], java.lang.Integer.TYPE)
       Some(ctor.newInstance(conf, localDirs, new Integer(subDirsPerLocalDir))
         .asInstanceOf[FileAllocator])
     } catch {
