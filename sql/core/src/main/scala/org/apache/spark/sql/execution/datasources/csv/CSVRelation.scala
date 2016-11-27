@@ -29,9 +29,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile, WriterContainer}
+import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.text.TextOutputWriter
 import org.apache.spark.sql.types._
 
 object CSVRelation extends Logging {
@@ -88,7 +89,7 @@ object CSVRelation extends Logging {
       case (field, index) => safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
     }
     val requiredSize = requiredFields.length
-    val row = new GenericMutableRow(requiredSize)
+    val row = new GenericInternalRow(requiredSize)
 
     (tokens: Array[String], numMalformedRows) => {
       if (params.dropMalformed && schemaFields.length != tokens.length) {
@@ -123,6 +124,7 @@ object CSVRelation extends Logging {
             // value is not stored in the row.
             val value = CSVTypeCast.castTo(
               indexSafeTokens(index),
+              field.name,
               field.dataType,
               field.nullable,
               params)
@@ -171,11 +173,13 @@ object CSVRelation extends Logging {
 private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
       path: String,
-      bucketId: Option[Int],
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    if (bucketId.isDefined) sys.error("csv doesn't support bucketing")
     new CsvOutputWriter(path, dataSchema, context, params)
+  }
+
+  override def getFileExtension(context: TaskAttemptContext): String = {
+    ".csv" + TextOutputWriter.getCompressionExtension(context)
   }
 }
 
@@ -199,11 +203,7 @@ private[csv] class CsvOutputWriter(
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(WriterContainer.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.csv$extension")
+        new Path(path)
       }
     }.getRecordWriter(context)
   }

@@ -26,9 +26,10 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
@@ -1365,7 +1366,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = InferSchema.infer(empty, "", new JSONOptions(Map()))
+    val emptySchema = InferSchema.infer(empty, "", new JSONOptions(Map.empty[String, String]))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1389,7 +1390,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val emptySchema = InferSchema.infer(emptyRecords, "", new JSONOptions(Map()))
+    val emptySchema = InferSchema.infer(
+      emptyRecords, "", new JSONOptions(Map.empty[String, String]))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1747,5 +1749,19 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
     }
+  }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val records = sparkContext
+      .parallelize("""{"a": 3, "b": 1.1}""" :: """{"a": 3.1, "b": 0.000001}""" :: Nil)
+
+    val schema = StructType(
+      StructField("a", DecimalType(21, 1), true) ::
+      StructField("b", DecimalType(7, 6), true) :: Nil)
+
+    val df1 = spark.read.option("prefersDecimal", "true").json(records)
+    assert(df1.schema == schema)
+    val df2 = spark.read.option("PREfersdecimaL", "true").json(records)
+    assert(df2.schema == schema)
   }
 }

@@ -22,14 +22,14 @@ import scala.util.Random
 import breeze.linalg.{DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.ml.classification.NaiveBayesSuite._
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.classification.NaiveBayes.{Bernoulli, Multinomial}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
@@ -106,6 +106,11 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     }
   }
 
+  test("model types") {
+    assert(Multinomial === "multinomial")
+    assert(Bernoulli === "bernoulli")
+  }
+
   test("params") {
     ParamsSuite.checkParams(new NaiveBayes)
     val model = new NaiveBayesModel("nb", pi = Vectors.dense(Array(0.2, 0.8)),
@@ -152,6 +157,52 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     validateProbabilities(featureAndProbabilities, model, "multinomial")
   }
 
+  test("Naive Bayes Multinomial with weighted samples") {
+    val nPoints = 1000
+    val piArray = Array(0.5, 0.1, 0.4).map(math.log)
+    val thetaArray = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10) // label 2
+    ).map(_.map(math.log))
+
+    val testData = generateNaiveBayesInput(piArray, thetaArray, nPoints, 42, "multinomial").toDF()
+    val (overSampledData, weightedData) =
+      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(testData,
+        "label", "features", 42L)
+    val nb = new NaiveBayes().setModelType("multinomial")
+    val unweightedModel = nb.fit(weightedData)
+    val overSampledModel = nb.fit(overSampledData)
+    val weightedModel = nb.setWeightCol("weight").fit(weightedData)
+    assert(weightedModel.theta ~== overSampledModel.theta relTol 0.001)
+    assert(weightedModel.pi ~== overSampledModel.pi relTol 0.001)
+    assert(unweightedModel.theta !~= overSampledModel.theta relTol 0.001)
+    assert(unweightedModel.pi !~= overSampledModel.pi relTol 0.001)
+  }
+
+  test("Naive Bayes Bernoulli with weighted samples") {
+    val nPoints = 10000
+    val piArray = Array(0.5, 0.3, 0.2).map(math.log)
+    val thetaArray = Array(
+      Array(0.50, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.40), // label 0
+      Array(0.02, 0.70, 0.10, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02), // label 1
+      Array(0.02, 0.02, 0.60, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.30)  // label 2
+    ).map(_.map(math.log))
+
+    val testData = generateNaiveBayesInput(piArray, thetaArray, nPoints, 42, "bernoulli").toDF()
+    val (overSampledData, weightedData) =
+      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(testData,
+        "label", "features", 42L)
+    val nb = new NaiveBayes().setModelType("bernoulli")
+    val unweightedModel = nb.fit(weightedData)
+    val overSampledModel = nb.fit(overSampledData)
+    val weightedModel = nb.setWeightCol("weight").fit(weightedData)
+    assert(weightedModel.theta ~== overSampledModel.theta relTol 0.001)
+    assert(weightedModel.pi ~== overSampledModel.pi relTol 0.001)
+    assert(unweightedModel.theta !~= overSampledModel.theta relTol 0.001)
+    assert(unweightedModel.pi !~= overSampledModel.pi relTol 0.001)
+  }
+
   test("Naive Bayes Bernoulli") {
     val nPoints = 10000
     val piArray = Array(0.5, 0.3, 0.2).map(math.log)
@@ -180,6 +231,66 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val featureAndProbabilities = model.transform(validationDataset)
       .select("features", "probability")
     validateProbabilities(featureAndProbabilities, model, "bernoulli")
+  }
+
+  test("detect negative values") {
+    val dense = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(-1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0))))
+    intercept[SparkException] {
+      new NaiveBayes().fit(dense)
+    }
+    val sparse = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(-1.0))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
+    intercept[SparkException] {
+      new NaiveBayes().fit(sparse)
+    }
+    val nan = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(Double.NaN))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+      LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
+    intercept[SparkException] {
+      new NaiveBayes().fit(nan)
+    }
+  }
+
+  test("detect non zero or one values in Bernoulli") {
+    val badTrain = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0))))
+
+    intercept[SparkException] {
+      new NaiveBayes().setModelType(Bernoulli).setSmoothing(1.0).fit(badTrain)
+    }
+
+    val okTrain = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0))))
+
+    val model = new NaiveBayes().setModelType(Bernoulli).setSmoothing(1.0).fit(okTrain)
+
+    val badPredict = spark.createDataFrame(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(1.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0))))
+
+    intercept[SparkException] {
+      model.transform(badPredict).collect()
+    }
   }
 
   test("read/write") {

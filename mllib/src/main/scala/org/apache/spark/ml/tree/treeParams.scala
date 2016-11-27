@@ -73,11 +73,13 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 
   /**
    * Minimum information gain for a split to be considered at a tree node.
+   * Should be >= 0.0.
    * (default = 0.0)
    * @group param
    */
   final val minInfoGain: DoubleParam = new DoubleParam(this, "minInfoGain",
-    "Minimum information gain for a split to be considered at a tree node.")
+    "Minimum information gain for a split to be considered at a tree node.",
+    ParamValidators.gtEq(0.0))
 
   /**
    * Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be
@@ -340,9 +342,9 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    *  - sqrt: recommended by Breiman manual for random forests
    *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
    *    package.
-   * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
-   * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
-   *     random forests]]
+   * @see <a href="http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf">Breiman (2001)</a>
+   * @see <a href="http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf">
+   * Breiman manual for random forests</a>
    *
    * @group param
    */

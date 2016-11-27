@@ -26,10 +26,11 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{AccumulatorV2, ByteBufferInputStream, ByteBufferOutputStream, Utils}
+import org.apache.spark.util._
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
@@ -47,6 +48,11 @@ import org.apache.spark.util.{AccumulatorV2, ByteBufferInputStream, ByteBufferOu
  * @param partitionId index of the number in the RDD
  * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
+ *
+ * The parameters below are optional:
+ * @param jobId id of the job this task belongs to
+ * @param appId id of the app this task belongs to
+ * @param appAttemptId attempt id of the app this task belongs to
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
@@ -54,7 +60,10 @@ private[spark] abstract class Task[T](
     val partitionId: Int,
     // The default value is only used in tests.
     val metrics: TaskMetrics = TaskMetrics.registered,
-    @transient var localProperties: Properties = new Properties) extends Serializable {
+    @transient var localProperties: Properties = new Properties,
+    val jobId: Option[Int] = None,
+    val appId: Option[String] = None,
+    val appAttemptId: Option[String] = None) extends Serializable {
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.
@@ -79,9 +88,22 @@ private[spark] abstract class Task[T](
       metrics)
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
+
     if (_killed) {
       kill(interruptThread = false)
     }
+
+    new CallerContext(
+      "TASK",
+      SparkEnv.get.conf.get(APP_CALLER_CONTEXT),
+      appId,
+      appAttemptId,
+      jobId,
+      Option(stageId),
+      Option(stageAttemptId),
+      Option(taskAttemptId),
+      Option(attemptNumber)).setCurrentContext()
+
     try {
       runTask(context)
     } catch {

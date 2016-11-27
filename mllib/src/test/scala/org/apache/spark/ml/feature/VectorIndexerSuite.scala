@@ -88,9 +88,7 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
 
     densePoints1 = densePoints1Seq.map(FeatureData).toDF()
     sparsePoints1 = sparsePoints1Seq.map(FeatureData).toDF()
-    // TODO: If we directly use `toDF` without parallelize, the test in
-    // "Throws error when given RDDs with different size vectors" is failed for an unknown reason.
-    densePoints2 = sc.parallelize(densePoints2Seq, 2).map(FeatureData).toDF()
+    densePoints2 = densePoints2Seq.map(FeatureData).toDF()
     sparsePoints2 = sparsePoints2Seq.map(FeatureData).toDF()
     badPoints = badPointsSeq.map(FeatureData).toDF()
   }
@@ -121,8 +119,15 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
 
     model.transform(densePoints1) // should work
     model.transform(sparsePoints1) // should work
-    intercept[SparkException] {
+    // If the data is local Dataset, it throws AssertionError directly.
+    intercept[AssertionError] {
       model.transform(densePoints2).collect()
+      logInfo("Did not throw error when fit, transform were called on vectors of different lengths")
+    }
+    // If the data is distributed Dataset, it throws SparkException
+    // which is the wrapper of AssertionError.
+    intercept[SparkException] {
+      model.transform(densePoints2.repartition(2)).collect()
       logInfo("Did not throw error when fit, transform were called on vectors of different lengths")
     }
     intercept[SparkException] {
