@@ -11,57 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import print_function
-
-import os
 import unittest
-from datetime import datetime, time, timedelta
 
-from airflow import configuration
+from datetime import datetime
 
-configuration.load_test_config()
-from airflow import models, settings
-from airflow.www import app as application
-from airflow.settings import Session
-
-NUM_EXAMPLE_DAGS = 16
-DEV_NULL = '/dev/null'
-TEST_DAG_FOLDER = os.path.join(
-    os.path.dirname(os.path.realpath(__file__)), 'dags')
-DEFAULT_DATE = datetime(2015, 1, 1)
-DEFAULT_DATE_ISO = DEFAULT_DATE.isoformat()
-DEFAULT_DATE_DS = DEFAULT_DATE_ISO[:10]
-TEST_DAG_ID = 'unit_tests'
-
-
-try:
-    import cPickle as pickle
-except ImportError:
-    # Python 3
-    import pickle
-
-
-def reset(dag_id=TEST_DAG_ID):
-    session = Session()
-    tis = session.query(models.TaskInstance).filter_by(dag_id=dag_id)
-    tis.delete()
-    session.commit()
-    session.close()
+import json
 
 
 class ApiExperimentalTests(unittest.TestCase):
     def setUp(self):
-        reset()
+        from airflow import configuration
         configuration.load_test_config()
-        app = application.create_app()
-        app.config['TESTING'] = True
+        from airflow.www import app as application
+        app = application.create_app(testing=True)
         self.app = app.test_client()
-
-        self.dagbag = models.DagBag(
-            dag_folder=DEV_NULL, include_examples=True)
-        self.dag_bash = self.dagbag.dags['example_bash_operator']
-        self.runme_0 = self.dag_bash.get_task('runme_0')
 
     def test_task_info(self):
         url_template = '/api/experimental/dags/{}/tasks/{}'
@@ -79,5 +42,21 @@ class ApiExperimentalTests(unittest.TestCase):
         assert 'error' in response.data.decode('utf-8')
         self.assertEqual(404, response.status_code)
 
-    def tearDown(self):
-        self.dag_bash.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
+    def test_trigger_dag(self):
+        url_template = '/api/experimental/dags/{}/dag_runs'
+        response = self.app.post(
+            url_template.format('example_bash_operator'),
+            data=json.dumps(dict(run_id='my_run' + datetime.now().isoformat())),
+            content_type="application/json"
+        )
+
+        self.assertEqual(200, response.status_code)
+
+        response = self.app.post(
+            url_template.format('does_not_exist_dag'),
+            data=json.dumps(dict()),
+            content_type="application/json"
+        )
+        self.assertEqual(404, response.status_code)
+
+

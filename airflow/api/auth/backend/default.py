@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,13 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.name=TEST
-org.domain=LOCAL
-kdc.bind.address=localhost
-kdc.port=8888
-instance=DefaultKrbServer
-max.ticket.lifetime=86400000
-max.renewable.lifetime=604800000
-transport=TCP
-debug=true
+from functools import wraps
 
+client_auth = None
+
+
+def init_app(app):
+    pass
+
+
+def requires_authentication(function):
+    @wraps(function)
+    def decorated(*args, **kwargs):
+        return function(*args, **kwargs)
+
+    return decorated

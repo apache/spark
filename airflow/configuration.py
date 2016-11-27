@@ -173,6 +173,16 @@ security =
 # values at runtime)
 unit_test_mode = False
 
+[cli]
+# In what way should the cli access the API. The LocalClient will use the
+# database directly, while the json_client will use the api running on the
+# webserver
+api_client = airflow.api.client.local_client
+endpoint_url = http://localhost:8080
+
+[api]
+# How to authenticate users of the API
+auth_backend = airflow.api.auth.backend.default
 
 [operators]
 # The default owner assigned to each new operator, unless
@@ -426,6 +436,13 @@ dag_concurrency = 16
 dags_are_paused_at_creation = False
 fernet_key = {FERNET_KEY}
 non_pooled_task_slot_count = 128
+
+[cli]
+api_client = airflow.api.client.local_client
+endpoint_url = http://localhost:8080
+
+[api]
+auth_backend = airflow.api.auth.backend.default
 
 [operators]
 default_owner = airflow

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -10,14 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+from airflow.api.client import api_client
+from airflow.api.common.experimental import trigger_dag
 
-org.name=TEST
-org.domain=LOCAL
-kdc.bind.address=localhost
-kdc.port=8888
-instance=DefaultKrbServer
-max.ticket.lifetime=86400000
-max.renewable.lifetime=604800000
-transport=TCP
-debug=true
 
+class Client(api_client.Client):
+    def trigger_dag(self, dag_id, run_id=None, conf=None):
+        dr = trigger_dag.trigger_dag(dag_id=dag_id, run_id=run_id, conf=conf)
+        return "Created {}".format(dr)
