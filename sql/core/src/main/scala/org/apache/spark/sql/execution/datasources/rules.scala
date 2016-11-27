@@ -313,8 +313,8 @@ case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
     plan.foreach {
       case c @ CreateTable(tableDesc, mode, query) if c.resolved =>
         if (query.isDefined &&
-            mode == SaveMode.Overwrite &&
-            catalog.tableExists(tableDesc.identifier)) {
+          mode == SaveMode.Overwrite &&
+          catalog.tableExists(tableDesc.identifier)) {
           // Need to remove SubQuery operator.
           EliminateSubqueryAliases(catalog.lookupRelation(tableDesc.identifier)) match {
             // Only do the check if the table is a data source table
