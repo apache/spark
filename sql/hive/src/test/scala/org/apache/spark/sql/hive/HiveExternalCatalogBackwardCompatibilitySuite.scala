@@ -19,18 +19,20 @@ package org.apache.spark.sql.hive
 
 import java.net.URI
 
-import org.apache.hadoop.fs.Path
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 
-class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest with TestHiveSingleton {
+class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
+  with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
 
   // To test `HiveExternalCatalog`, we need to read/write the raw table meta from/to hive client.
   val hiveClient: HiveClient =
@@ -38,43 +40,51 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest with TestH
 
   val tempDir = Utils.createTempDir().getCanonicalFile
 
-  override def beforeAll(): Unit = {
-    for ((tbl, _, _) <- rawTablesAndExpectations) {
+  override def beforeEach(): Unit = {
+    sql("CREATE DATABASE test_db")
+    for ((tbl, _) <- rawTablesAndExpectations) {
       hiveClient.createTable(tbl, ignoreIfExists = false)
     }
   }
 
-  override def afterAll(): Unit = {
+  override def afterEach(): Unit = {
     Utils.deleteRecursively(tempDir)
-    for (i <- 1 to rawTablesAndExpectations.length) {
-      hiveClient.dropTable("default", s"tbl$i", ignoreIfNotExists = true, purge = false)
-    }
+    hiveClient.dropDatabase("test_db", ignoreIfNotExists = false, cascade = true)
+  }
+
+  private def getTableMetadata(tableName: String): CatalogTable = {
+    spark.sharedState.externalCatalog.getTable("test_db", tableName)
+  }
+
+  private def defaultTablePath(tableName: String): String = {
+    spark.sessionState.catalog.defaultTablePath(TableIdentifier(tableName, Some("test_db")))
   }
 
 
-  // Raw table metadata that are dumped from tables created by Spark 2.0
+  // Raw table metadata that are dumped from tables created by Spark 2.0. Note that, all spark
+  // versions prior to 2.1 would generate same raw table metadata for a specific table.
   val simpleSchema = new StructType().add("i", "int")
   val partitionedSchema = new StructType().add("i", "int").add("j", "int")
 
-  val hiveTable = CatalogTable(
-    identifier = TableIdentifier("tbl1", Some("default")),
+  lazy val hiveTable = CatalogTable(
+    identifier = TableIdentifier("tbl1", Some("test_db")),
     tableType = CatalogTableType.MANAGED,
     storage = CatalogStorageFormat.empty.copy(
       inputFormat = Some("org.apache.hadoop.mapred.TextInputFormat"),
       outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
     schema = simpleSchema)
 
-  val externalHiveTable = CatalogTable(
-    identifier = TableIdentifier("tbl2", Some("default")),
+  lazy val externalHiveTable = CatalogTable(
+    identifier = TableIdentifier("tbl2", Some("test_db")),
     tableType = CatalogTableType.EXTERNAL,
     storage = CatalogStorageFormat.empty.copy(
-      locationUri = Some(tempDir.getCanonicalPath),
+      locationUri = Some(tempDir.getAbsolutePath),
       inputFormat = Some("org.apache.hadoop.mapred.TextInputFormat"),
       outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
     schema = simpleSchema)
 
-  val partitionedHiveTable = CatalogTable(
-    identifier = TableIdentifier("tbl3", Some("default")),
+  lazy val partitionedHiveTable = CatalogTable(
+    identifier = TableIdentifier("tbl3", Some("test_db")),
     tableType = CatalogTableType.MANAGED,
     storage = CatalogStorageFormat.empty.copy(
       inputFormat = Some("org.apache.hadoop.mapred.TextInputFormat"),
@@ -115,12 +125,8 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest with TestH
       |}
     """.stripMargin
 
-  def defaultTablePath(tableName: String): String = {
-    spark.sessionState.catalog.defaultTablePath(TableIdentifier(tableName))
-  }
-
-  val dataSourceTable = CatalogTable(
-    identifier = TableIdentifier("tbl4", Some("default")),
+  lazy val dataSourceTable = CatalogTable(
+    identifier = TableIdentifier("tbl4", Some("test_db")),
     tableType = CatalogTableType.MANAGED,
     storage = CatalogStorageFormat.empty.copy(properties = Map("path" -> defaultTablePath("tbl4"))),
     schema = new StructType(),
@@ -129,8 +135,8 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest with TestH
       "spark.sql.sources.schema.numParts" -> "1",
       "spark.sql.sources.schema.part.0" -> simpleSchemaJson))
 
-  val hiveCompatibleDataSourceTable = CatalogTable(
-    identifier = TableIdentifier("tbl5", Some("default")),
+  lazy val hiveCompatibleDataSourceTable = CatalogTable(
+    identifier = TableIdentifier("tbl5", Some("test_db")),
     tableType = CatalogTableType.MANAGED,
     storage = CatalogStorageFormat.empty.copy(properties = Map("path" -> defaultTablePath("tbl5"))),
     schema = simpleSchema,
@@ -139,8 +145,8 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest with TestH
       "spark.sql.sources.schema.numParts" -> "1",
       "spark.sql.sources.schema.part.0" -> simpleSchemaJson))
 
-  val partitionedDataSourceTable = CatalogTable(
-    identifier = TableIdentifier("tbl6", Some("default")),
+  lazy val partitionedDataSourceTable = CatalogTable(
+    identifier = TableIdentifier("tbl6", Some("test_db")),
     tableType = CatalogTableType.MANAGED,
     storage = CatalogStorageFormat.empty.copy(properties = Map("path" -> defaultTablePath("tbl6"))),
     schema = new StructType(),
@@ -151,11 +157,11 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest with TestH
       "spark.sql.sources.schema.numPartCols" -> "1",
       "spark.sql.sources.schema.partCol.0" -> "j"))
 
-  val externalDataSourceTable = CatalogTable(
-    identifier = TableIdentifier("tbl7", Some("default")),
+  lazy val externalDataSourceTable = CatalogTable(
+    identifier = TableIdentifier("tbl7", Some("test_db")),
     tableType = CatalogTableType.EXTERNAL,
     storage = CatalogStorageFormat.empty.copy(
-      locationUri = Some(new Path(defaultTablePath("tbl7"), "-__PLACEHOLDER__").toString),
+      locationUri = Some(defaultTablePath("tbl7") + "-__PLACEHOLDER__"),
       properties = Map("path" -> tempDir.getAbsolutePath)),
     schema = new StructType(),
     properties = Map(
@@ -163,8 +169,8 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest with TestH
       "spark.sql.sources.schema.numParts" -> "1",
       "spark.sql.sources.schema.part.0" -> simpleSchemaJson))
 
-  val hiveCompatibleExternalDataSourceTable = CatalogTable(
-    identifier = TableIdentifier("tbl8", Some("default")),
+  lazy val hiveCompatibleExternalDataSourceTable = CatalogTable(
+    identifier = TableIdentifier("tbl8", Some("test_db")),
     tableType = CatalogTableType.EXTERNAL,
     storage = CatalogStorageFormat.empty.copy(
       locationUri = Some(tempDir.getAbsolutePath),
@@ -175,38 +181,71 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest with TestH
       "spark.sql.sources.schema.numParts" -> "1",
       "spark.sql.sources.schema.part.0" -> simpleSchemaJson))
 
-  val dataSourceTableWithoutSchema = CatalogTable(
-    identifier = TableIdentifier("tbl9", Some("default")),
+  lazy val dataSourceTableWithoutSchema = CatalogTable(
+    identifier = TableIdentifier("tbl9", Some("test_db")),
     tableType = CatalogTableType.EXTERNAL,
     storage = CatalogStorageFormat.empty.copy(
-      locationUri = Some(new Path(defaultTablePath("tbl9"), "-__PLACEHOLDER__").toString),
+      locationUri = Some(defaultTablePath("tbl9") + "-__PLACEHOLDER__"),
       properties = Map("path" -> tempDir.getAbsolutePath)),
     schema = new StructType(),
     properties = Map("spark.sql.sources.provider" -> "json"))
 
-  // A list of all raw tables we want to test, with their expected schema and table location.
-  val rawTablesAndExpectations = Seq(
-    (hiveTable, simpleSchema, None),
-    (externalHiveTable, simpleSchema, Some(tempDir.getCanonicalPath)),
-    (partitionedHiveTable, partitionedSchema, None),
-    (dataSourceTable, simpleSchema, None),
-    (hiveCompatibleDataSourceTable, simpleSchema, None),
-    (partitionedDataSourceTable, partitionedSchema, None),
-    (externalDataSourceTable, simpleSchema, Some(tempDir.getCanonicalPath)),
-    (hiveCompatibleExternalDataSourceTable, simpleSchema, Some(tempDir.getCanonicalPath)),
-    (dataSourceTableWithoutSchema, new StructType(), None))
+  // A list of all raw tables we want to test, with their expected schema.
+  lazy val rawTablesAndExpectations = Seq(
+    hiveTable -> simpleSchema,
+    externalHiveTable -> simpleSchema,
+    partitionedHiveTable -> partitionedSchema,
+    dataSourceTable -> simpleSchema,
+    hiveCompatibleDataSourceTable -> simpleSchema,
+    partitionedDataSourceTable -> partitionedSchema,
+    externalDataSourceTable -> simpleSchema,
+    hiveCompatibleExternalDataSourceTable -> simpleSchema,
+    dataSourceTableWithoutSchema -> new StructType())
 
   test("make sure we can read table created by old version of Spark") {
-    for ((tbl, expectedSchema, expectedLocation) <- rawTablesAndExpectations) {
-      val readBack = spark.sharedState.externalCatalog.getTable(
-        tbl.identifier.database.get, tbl.identifier.table)
-
+    for ((tbl, expectedSchema) <- rawTablesAndExpectations) {
+      val readBack = getTableMetadata(tbl.identifier.table)
       assert(readBack.schema == expectedSchema)
-      expectedLocation.foreach { loc =>
+
+      if (tbl.tableType == CatalogTableType.EXTERNAL) {
         // trim the URI prefix
         val tableLocation = new URI(readBack.storage.locationUri.get).getPath
-        assert(tableLocation == loc)
+        assert(tableLocation == tempDir.getAbsolutePath)
       }
+    }
+  }
+
+  test("make sure we can alter table location created by old version of Spark") {
+    withTempDir { dir =>
+      for ((tbl, _) <- rawTablesAndExpectations if tbl.tableType == CatalogTableType.EXTERNAL) {
+        sql(s"ALTER TABLE ${tbl.identifier} SET LOCATION '${dir.getAbsolutePath}'")
+
+        val readBack = getTableMetadata(tbl.identifier.table)
+
+        // trim the URI prefix
+        val actualTableLocation = new URI(readBack.storage.locationUri.get).getPath
+        assert(actualTableLocation == dir.getAbsolutePath)
+      }
+    }
+  }
+
+  test("make sure we can rename table created by old version of Spark") {
+    for ((tbl, expectedSchema) <- rawTablesAndExpectations) {
+      val newName = tbl.identifier.table + "_renamed"
+      sql(s"ALTER TABLE ${tbl.identifier} RENAME TO $newName")
+
+      val readBack = getTableMetadata(newName)
+      assert(readBack.schema == expectedSchema)
+
+      // trim the URI prefix
+      val actualTableLocation = new URI(readBack.storage.locationUri.get).getPath
+      val expectedLocation = if (tbl.tableType == CatalogTableType.EXTERNAL) {
+        tempDir.getAbsolutePath
+      } else {
+        // trim the URI prefix
+        new URI(defaultTablePath(newName)).getPath
+      }
+      assert(actualTableLocation == expectedLocation)
     }
   }
 }
