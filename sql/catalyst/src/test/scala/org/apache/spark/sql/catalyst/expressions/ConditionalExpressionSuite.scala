@@ -66,6 +66,19 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(If, BooleanType, dt, dt)
     }
+
+    checkEvaluation(
+      If(Literal.create(true, BooleanType),
+        Literal.create(identity(1L), TimestampType),
+        Literal.create(identity(2), DateType)),
+      identity(1L))
+
+    checkEvaluation(
+      If(Literal.create(true, BooleanType),
+        Literal.create(identity(1), DateType),
+        Literal.create(identity(2L), TimestampType)),
+      identity(1))
+
   }
 
   test("case when") {
