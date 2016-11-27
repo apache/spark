@@ -334,10 +334,8 @@ class KMeans @Since("1.5.0") (
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
+    if (handlePersistence) instances.unpersist()
     instr.logSuccess(model)
-    if (handlePersistence) {
-      instances.unpersist()
-    }
     model
   }
 
