@@ -413,7 +413,7 @@ case class LambdaVariable(value: String, isNull: String, dataType: DataType,
   override def nullable: Boolean = valueNullable
 
   override def genCode(ctx: CodegenContext): ExprCode = {
-    ExprCode(code = "", value = value, isNull = isNull)
+    ExprCode(code = "", value = value, isNull = if (nullable) isNull else "false")
   }
 }
 
@@ -604,7 +604,7 @@ object ExternalMapToCatalyst {
     ExternalMapToCatalyst(
       keyName,
       keyType,
-      keyConverter(LambdaVariable(keyName, "false", keyType)),
+      keyConverter(LambdaVariable(keyName, "false", keyType, false)),
       valueName,
       valueIsNull,
       valueType,
@@ -647,12 +647,7 @@ case class ExternalMapToCatalyst private(
   override def foldable: Boolean = false
 
   override def dataType: MapType = {
-    val isPrimitiveType = valueType match {
-      case BooleanType | ByteType | ShortType | IntegerType | LongType |
-            FloatType | DoubleType => true
-      case _ => false
-    }
-    MapType(keyConverter.dataType, valueConverter.dataType, !isPrimitiveType)
+    MapType(keyConverter.dataType, valueConverter.dataType, valueConverter.nullable)
   }
 
   override def eval(input: InternalRow): Any =
