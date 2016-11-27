@@ -73,8 +73,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       def answer(invocationOnMock: InvocationOnMock): Void = {
         val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]
         val dataFile: File = invocationOnMock.getArguments()(4).asInstanceOf[File]
-        if (tmp != null) {
-          if (dataFile != null) dataFile.delete
+        if (tmp != null && dataFile != null) {
+          dataFile.delete
           tmp.renameTo(dataFile)
         }
         null

@@ -183,7 +183,8 @@ private[spark] class IndexShuffleBlockResolver(
           if (!indexTmp.renameTo(indexFile)) {
             throw new IOException("fail to rename file " + indexTmp + " to " + indexFile)
           }
-          if (dataFileTmp != null && dataFileTmp.exists() && !dataFileTmp.renameTo(dataFile)) {
+          if (dataFile != null && dataFileTmp != null
+            && dataFileTmp.exists() && !dataFileTmp.renameTo(dataFile)) {
             throw new IOException("fail to rename file " + dataFileTmp + " to " + dataFile)
           }
         }

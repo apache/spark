@@ -151,6 +151,7 @@ public class UnsafeShuffleWriterSuite {
         partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
         File tmp = (File) invocationOnMock.getArguments()[3];
         File dataFile = (File) invocationOnMock.getArguments()[4];
+        dataFile.delete();
         tmp.renameTo(dataFile);
         return null;
       }
