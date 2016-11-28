@@ -876,4 +876,433 @@ public class JavaDatasetSuite implements Serializable {
       ds.collect();
     }
   }
+
+  public static class Nesting3 implements Serializable {
+    private Integer field3_1;
+    private Double field3_2;
+    private String field3_3;
+
+    public Nesting3() {
+    }
+
+    public Nesting3(Integer field3_1, Double field3_2, String field3_3) {
+      this.field3_1 = field3_1;
+      this.field3_2 = field3_2;
+      this.field3_3 = field3_3;
+    }
+
+    private Nesting3(Builder builder) {
+      setField3_1(builder.field3_1);
+      setField3_2(builder.field3_2);
+      setField3_3(builder.field3_3);
+    }
+
+    public static Builder newBuilder() {
+      return new Builder();
+    }
+
+    public Integer getField3_1() {
+      return field3_1;
+    }
+
+    public void setField3_1(Integer field3_1) {
+      this.field3_1 = field3_1;
+    }
+
+    public Double getField3_2() {
+      return field3_2;
+    }
+
+    public void setField3_2(Double field3_2) {
+      this.field3_2 = field3_2;
+    }
+
+    public String getField3_3() {
+      return field3_3;
+    }
+
+    public void setField3_3(String field3_3) {
+      this.field3_3 = field3_3;
+    }
+
+    public static final class Builder {
+      private Integer field3_1 = 0;
+      private Double field3_2 = 0.0;
+      private String field3_3 = "value";
+
+      private Builder() {
+      }
+
+      public Builder field3_1(Integer field3_1) {
+        this.field3_1 = field3_1;
+        return this;
+      }
+
+      public Builder field3_2(Double field3_2) {
+        this.field3_2 = field3_2;
+        return this;
+      }
+
+      public Builder field3_3(String field3_3) {
+        this.field3_3 = field3_3;
+        return this;
+      }
+
+      public Nesting3 build() {
+        return new Nesting3(this);
+      }
+    }
+  }
+
+  public static class Nesting2 implements Serializable {
+    private Nesting3 field2_1;
+    private Nesting3 field2_2;
+    private Nesting3 field2_3;
+
+    public Nesting2() {
+    }
+
+    public Nesting2(Nesting3 field2_1, Nesting3 field2_2, Nesting3 field2_3) {
+      this.field2_1 = field2_1;
+      this.field2_2 = field2_2;
+      this.field2_3 = field2_3;
+    }
+
+    private Nesting2(Builder builder) {
+      setField2_1(builder.field2_1);
+      setField2_2(builder.field2_2);
+      setField2_3(builder.field2_3);
+    }
+
+    public static Builder newBuilder() {
+      return new Builder();
+    }
+
+    public Nesting3 getField2_1() {
+      return field2_1;
+    }
+
+    public void setField2_1(Nesting3 field2_1) {
+      this.field2_1 = field2_1;
+    }
+
+    public Nesting3 getField2_2() {
+      return field2_2;
+    }
+
+    public void setField2_2(Nesting3 field2_2) {
+      this.field2_2 = field2_2;
+    }
+
+    public Nesting3 getField2_3() {
+      return field2_3;
+    }
+
+    public void setField2_3(Nesting3 field2_3) {
+      this.field2_3 = field2_3;
+    }
+
+
+    public static final class Builder {
+      private Nesting3 field2_1 = Nesting3.newBuilder().build();
+      private Nesting3 field2_2 = Nesting3.newBuilder().build();
+      private Nesting3 field2_3 = Nesting3.newBuilder().build();
+
+      private Builder() {
+      }
+
+      public Builder field2_1(Nesting3 field2_1) {
+        this.field2_1 = field2_1;
+        return this;
+      }
+
+      public Builder field2_2(Nesting3 field2_2) {
+        this.field2_2 = field2_2;
+        return this;
+      }
+
+      public Builder field2_3(Nesting3 field2_3) {
+        this.field2_3 = field2_3;
+        return this;
+      }
+
+      public Nesting2 build() {
+        return new Nesting2(this);
+      }
+    }
+  }
+
+  public static class Nesting1 implements Serializable {
+    private Nesting2 field1_1;
+    private Nesting2 field1_2;
+    private Nesting2 field1_3;
+
+    public Nesting1() {
+    }
+
+    public Nesting1(Nesting2 field1_1, Nesting2 field1_2, Nesting2 field1_3) {
+      this.field1_1 = field1_1;
+      this.field1_2 = field1_2;
+      this.field1_3 = field1_3;
+    }
+
+    private Nesting1(Builder builder) {
+      setField1_1(builder.field1_1);
+      setField1_2(builder.field1_2);
+      setField1_3(builder.field1_3);
+    }
+
+    public static Builder newBuilder() {
+      return new Builder();
+    }
+
+    public Nesting2 getField1_1() {
+      return field1_1;
+    }
+
+    public void setField1_1(Nesting2 field1_1) {
+      this.field1_1 = field1_1;
+    }
+
+    public Nesting2 getField1_2() {
+      return field1_2;
+    }
+
+    public void setField1_2(Nesting2 field1_2) {
+      this.field1_2 = field1_2;
+    }
+
+    public Nesting2 getField1_3() {
+      return field1_3;
+    }
+
+    public void setField1_3(Nesting2 field1_3) {
+      this.field1_3 = field1_3;
+    }
+
+
+    public static final class Builder {
+      private Nesting2 field1_1 = Nesting2.newBuilder().build();
+      private Nesting2 field1_2 = Nesting2.newBuilder().build();
+      private Nesting2 field1_3 = Nesting2.newBuilder().build();
+
+      private Builder() {
+      }
+
+      public Builder field1_1(Nesting2 field1_1) {
+        this.field1_1 = field1_1;
+        return this;
+      }
+
+      public Builder field1_2(Nesting2 field1_2) {
+        this.field1_2 = field1_2;
+        return this;
+      }
+
+      public Builder field1_3(Nesting2 field1_3) {
+        this.field1_3 = field1_3;
+        return this;
+      }
+
+      public Nesting1 build() {
+        return new Nesting1(this);
+      }
+    }
+  }
+
+  public static class NestedComplicatedJavaBean implements Serializable {
+    private Nesting1 field1;
+    private Nesting1 field2;
+    private Nesting1 field3;
+    private Nesting1 field4;
+    private Nesting1 field5;
+    private Nesting1 field6;
+    private Nesting1 field7;
+    private Nesting1 field8;
+    private Nesting1 field9;
+    private Nesting1 field10;
+
+    public NestedComplicatedJavaBean() {
+    }
+
+    private NestedComplicatedJavaBean(Builder builder) {
+      setField1(builder.field1);
+      setField2(builder.field2);
+      setField3(builder.field3);
+      setField4(builder.field4);
+      setField5(builder.field5);
+      setField6(builder.field6);
+      setField7(builder.field7);
+      setField8(builder.field8);
+      setField9(builder.field9);
+      setField10(builder.field10);
+    }
+
+    public static Builder newBuilder() {
+      return new Builder();
+    }
+
+    public Nesting1 getField1() {
+      return field1;
+    }
+
+    public void setField1(Nesting1 field1) {
+      this.field1 = field1;
+    }
+
+    public Nesting1 getField2() {
+      return field2;
+    }
+
+    public void setField2(Nesting1 field2) {
+      this.field2 = field2;
+    }
+
+    public Nesting1 getField3() {
+      return field3;
+    }
+
+    public void setField3(Nesting1 field3) {
+      this.field3 = field3;
+    }
+
+    public Nesting1 getField4() {
+      return field4;
+    }
+
+    public void setField4(Nesting1 field4) {
+      this.field4 = field4;
+    }
+
+    public Nesting1 getField5() {
+      return field5;
+    }
+
+    public void setField5(Nesting1 field5) {
+      this.field5 = field5;
+    }
+
+    public Nesting1 getField6() {
+      return field6;
+    }
+
+    public void setField6(Nesting1 field6) {
+      this.field6 = field6;
+    }
+
+    public Nesting1 getField7() {
+      return field7;
+    }
+
+    public void setField7(Nesting1 field7) {
+      this.field7 = field7;
+    }
+
+    public Nesting1 getField8() {
+      return field8;
+    }
+
+    public void setField8(Nesting1 field8) {
+      this.field8 = field8;
+    }
+
+    public Nesting1 getField9() {
+      return field9;
+    }
+
+    public void setField9(Nesting1 field9) {
+      this.field9 = field9;
+    }
+
+    public Nesting1 getField10() {
+      return field10;
+    }
+
+    public void setField10(Nesting1 field10) {
+      this.field10 = field10;
+    }
+
+    public static final class Builder {
+      private Nesting1 field1 = Nesting1.newBuilder().build();
+      private Nesting1 field2 = Nesting1.newBuilder().build();
+      private Nesting1 field3 = Nesting1.newBuilder().build();
+      private Nesting1 field4 = Nesting1.newBuilder().build();
+      private Nesting1 field5 = Nesting1.newBuilder().build();
+      private Nesting1 field6 = Nesting1.newBuilder().build();
+      private Nesting1 field7 = Nesting1.newBuilder().build();
+      private Nesting1 field8 = Nesting1.newBuilder().build();
+      private Nesting1 field9 = Nesting1.newBuilder().build();
+      private Nesting1 field10 = Nesting1.newBuilder().build();
+
+      private Builder() {
+      }
+
+      public Builder field1(Nesting1 field1) {
+        this.field1 = field1;
+        return this;
+      }
+
+      public Builder field2(Nesting1 field2) {
+        this.field2 = field2;
+        return this;
+      }
+
+      public Builder field3(Nesting1 field3) {
+        this.field3 = field3;
+        return this;
+      }
+
+      public Builder field4(Nesting1 field4) {
+        this.field4 = field4;
+        return this;
+      }
+
+      public Builder field5(Nesting1 field5) {
+        this.field5 = field5;
+        return this;
+      }
+
+      public Builder field6(Nesting1 field6) {
+        this.field6 = field6;
+        return this;
+      }
+
+      public Builder field7(Nesting1 field7) {
+        this.field7 = field7;
+        return this;
+      }
+
+      public Builder field8(Nesting1 field8) {
+        this.field8 = field8;
+        return this;
+      }
+
+      public Builder field9(Nesting1 field9) {
+        this.field9 = field9;
+        return this;
+      }
+
+      public Builder field10(Nesting1 field10) {
+        this.field10 = field10;
+        return this;
+      }
+
+      public NestedComplicatedJavaBean build() {
+        return new NestedComplicatedJavaBean(this);
+      }
+    }
+  }
+
+  @Test
+  public void test() {
+    /* SPARK-15285 Large numbers of Nested JavaBeans generates more than 64KB java bytecode */
+    List<NestedComplicatedJavaBean> data = new ArrayList<NestedComplicatedJavaBean>();
+    data.add(NestedComplicatedJavaBean.newBuilder().build());
+
+    NestedComplicatedJavaBean obj3 = new NestedComplicatedJavaBean();
+
+    Dataset<NestedComplicatedJavaBean> ds =
+      spark.createDataset(data, Encoders.bean(NestedComplicatedJavaBean.class));
+    ds.collectAsList();
+  }
 }
