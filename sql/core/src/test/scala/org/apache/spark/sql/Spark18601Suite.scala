@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.scalatest.{FunSuite, ShouldMatchers, Suite, Tag}
+import org.scalatest.{ShouldMatchers, Suite, Tag}
 
 import scala.collection.immutable.IndexedSeq
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -35,8 +35,6 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 * Created by eyalf on 11/4/2016.
 */
 class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers{
-  //import testImplicits._
-
   lazy val baseRelation = sqlContext.range( 1L, 1000L)
   lazy val baseOptimizedPlan = baseRelation.queryExecution.optimizedPlan
 
