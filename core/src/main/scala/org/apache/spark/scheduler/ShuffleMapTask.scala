@@ -22,6 +22,9 @@ import java.util.Properties
 
 import scala.language.existentials
 
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.{Input, Output}
+
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
@@ -47,8 +50,8 @@ import org.apache.spark.shuffle.ShuffleWriter
 private[spark] class ShuffleMapTask(
     stageId: Int,
     stageAttemptId: Int,
-    taskBinary: Broadcast[Array[Byte]],
-    partition: Partition,
+    private var taskBinary: Broadcast[Array[Byte]],
+    private var partition: Partition,
     @transient private var locs: Seq[TaskLocation],
     metrics: TaskMetrics,
     localProperties: Properties)
@@ -95,4 +98,16 @@ private[spark] class ShuffleMapTask(
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
   override def toString: String = "ShuffleMapTask(%d, %d)".format(stageId, partitionId)
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    super.write(kryo, output)
+    kryo.writeClassAndObject(output, taskBinary)
+    kryo.writeClassAndObject(output, partition)
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    super.read(kryo, input)
+    taskBinary = kryo.readClassAndObject(input).asInstanceOf[Broadcast[Array[Byte]]]
+    partition = kryo.readClassAndObject(input).asInstanceOf[Partition]
+  }
 }

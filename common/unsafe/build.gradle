@@ -20,7 +20,10 @@ description = 'Spark Project Unsafe'
 dependencies {
   compile project(subprojectBase + 'snappy-spark-tags_' + scalaBinaryVersion)
 
-  compile group: 'com.twitter', name: 'chill_' + scalaBinaryVersion, version: chillVersion
+  compile group: 'com.esotericsoftware', name: 'kryo-shaded', version: kryoVersion
+  compile(group: 'com.twitter', name: 'chill_' + scalaBinaryVersion, version: chillVersion) {
+    exclude(group: 'com.esotericsoftware', module: 'kryo-shaded')
+  }
   compile group: 'com.google.code.findbugs', name: 'jsr305', version: jsr305Version
   compile group: 'com.google.guava', name: 'guava', version: guavaVersion
 

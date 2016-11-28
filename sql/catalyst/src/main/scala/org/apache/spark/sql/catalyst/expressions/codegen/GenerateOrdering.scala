@@ -150,7 +150,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
 /**
  * A lazily generated row ordering comparator.
  */
-class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
+class LazilyGeneratedOrdering(private var ordering: Seq[SortOrder])
   extends Ordering[InternalRow] with KryoSerializable {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
@@ -173,7 +173,8 @@ class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
   }
 
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
-    generatedOrdering = GenerateOrdering.generate(kryo.readObject(in, classOf[Array[SortOrder]]))
+    ordering = kryo.readObject(in, classOf[Array[SortOrder]])
+    generatedOrdering = GenerateOrdering.generate(ordering)
   }
 }
 

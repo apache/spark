@@ -20,6 +20,9 @@ package org.apache.spark.executor
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
+
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
@@ -42,7 +45,7 @@ import org.apache.spark.util._
  * be sent to the driver.
  */
 @DeveloperApi
-class TaskMetrics private[spark] () extends Serializable {
+class TaskMetrics private[spark] () extends Serializable with KryoSerializable {
   // Each metric is internally represented as an accumulator
   private val _executorDeserializeTime = new LongAccumulator
   private val _executorRunTime = new LongAccumulator
@@ -240,6 +243,40 @@ class TaskMetrics private[spark] () extends Serializable {
     accumulators.find { acc =>
       acc.name.isDefined && acc.name.get == name
     }
+  }
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    _executorDeserializeTime.write(kryo, output)
+    _executorRunTime.write(kryo, output)
+    _resultSize.write(kryo, output)
+    _jvmGCTime.write(kryo, output)
+    _resultSerializationTime.write(kryo, output)
+    _memoryBytesSpilled.write(kryo, output)
+    _diskBytesSpilled.write(kryo, output)
+    _peakExecutionMemory.write(kryo, output)
+    _updatedBlockStatuses.write(kryo, output)
+    inputMetrics.write(kryo, output)
+    outputMetrics.write(kryo, output)
+    shuffleReadMetrics.write(kryo, output)
+    shuffleWriteMetrics.write(kryo, output)
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    // read the TaskContext thread-local once
+    val taskContext = TaskContext.get()
+    _executorDeserializeTime.read(kryo, input, taskContext)
+    _executorRunTime.read(kryo, input, taskContext)
+    _resultSize.read(kryo, input, taskContext)
+    _jvmGCTime.read(kryo, input, taskContext)
+    _resultSerializationTime.read(kryo, input, taskContext)
+    _memoryBytesSpilled.read(kryo, input, taskContext)
+    _diskBytesSpilled.read(kryo, input, taskContext)
+    _peakExecutionMemory.read(kryo, input, taskContext)
+    _updatedBlockStatuses.read(kryo, input, taskContext)
+    inputMetrics.read(kryo, input, taskContext)
+    outputMetrics.read(kryo, input, taskContext)
+    shuffleReadMetrics.read(kryo, input, taskContext)
+    shuffleWriteMetrics.read(kryo, input, taskContext)
   }
 }
 

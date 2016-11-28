@@ -523,7 +523,7 @@ private[spark] class TaskSetManager(
             s" $taskLocality, ${serializedTask.limit} bytes)")
 
           sched.dagScheduler.taskStarted(task, info)
-          return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
+          return Some(new TaskDescription(_taskId = taskId, _attemptNumber = attemptNum, execId,
             taskName, index, serializedTask))
         case _ =>
       }

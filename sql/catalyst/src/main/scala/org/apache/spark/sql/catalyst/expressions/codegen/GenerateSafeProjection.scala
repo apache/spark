@@ -55,16 +55,16 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val isHomogenousStruct = {
       var i = 1
       val ref = ctx.javaType(schema.fields(0).dataType)
-      var broken = false || !ctx.isPrimitiveType(ref) || schema.length <=1
-      while( !broken && i < schema.length) {
+      var broken = !ctx.isPrimitiveType(ref) || schema.length <= 1
+      while (!broken && i < schema.length) {
         if (ctx.javaType(schema.fields(i).dataType) != ref) {
           broken = true
         }
-        i +=1
+        i += 1
       }
       !broken
     }
-    val allFields = if (isHomogenousStruct){
+    val allFields = if (isHomogenousStruct) {
       val counter = ctx.freshName("counter")
       val converter = convertToSafe(ctx, ctx.getValue(tmp, schema.fields(0).dataType, counter),
         schema.fields(0).dataType)

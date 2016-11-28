@@ -167,6 +167,43 @@ object SparkEnv extends Logging {
     env
   }
 
+  // Create an instance of the class with the given name, possibly initializing it with our conf
+  def instantiateClass[T](className: String, conf: SparkConf,
+      isDriver: Boolean): T = {
+    val cls = Utils.classForName(className)
+    // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
+    // SparkConf, then one taking no arguments
+    try {
+      cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
+          .newInstance(conf, new java.lang.Boolean(isDriver))
+          .asInstanceOf[T]
+    } catch {
+      case _: NoSuchMethodException =>
+        try {
+          cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
+        } catch {
+          case _: NoSuchMethodException =>
+            cls.getConstructor().newInstance().asInstanceOf[T]
+        }
+    }
+  }
+
+  def getClosureSerializer(conf: SparkConf, doLog: Boolean = false): Serializer = {
+    val defaultClosureSerializerClass = classOf[JavaSerializer].getName
+    val closureSerializerClass = conf.get("spark.closure.serializer",
+      defaultClosureSerializerClass)
+    val closureSerializer = instantiateClass[Serializer](
+      closureSerializerClass, conf, isDriver = false)
+    if (doLog) {
+      if (closureSerializerClass != defaultClosureSerializerClass) {
+        logInfo(s"Using non-default closure serializer: $closureSerializerClass")
+      } else {
+        logDebug(s"Using closure serializer: $closureSerializerClass")
+      }
+    }
+    closureSerializer
+  }
+
   /**
    * Create a SparkEnv for the driver.
    */
@@ -251,26 +288,9 @@ object SparkEnv extends Logging {
       conf.set("spark.executor.port", rpcEnv.address.port.toString)
     }
 
-    // Create an instance of the class with the given name, possibly initializing it with our conf
     def instantiateClass[T](className: String): T = {
-      val cls = Utils.classForName(className)
-      // Look for a constructor taking a SparkConf and a boolean isDriver, then one taking just
-      // SparkConf, then one taking no arguments
-      try {
-        cls.getConstructor(classOf[SparkConf], java.lang.Boolean.TYPE)
-          .newInstance(conf, new java.lang.Boolean(isDriver))
-          .asInstanceOf[T]
-      } catch {
-        case _: NoSuchMethodException =>
-          try {
-            cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
-          } catch {
-            case _: NoSuchMethodException =>
-              cls.getConstructor().newInstance().asInstanceOf[T]
-          }
-      }
+      SparkEnv.instantiateClass(className, conf, isDriver)
     }
-
     // Create an instance of the class named by the given SparkConf property, or defaultClassName
     // if the property is not set, possibly initializing it with our conf
     def instantiateClassFromConf[T](propertyName: String, defaultClassName: String): T = {
@@ -283,7 +303,7 @@ object SparkEnv extends Logging {
 
     val serializerManager = new SerializerManager(serializer, conf)
 
-    val closureSerializer = new JavaSerializer(conf)
+    val closureSerializer = getClosureSerializer(conf, doLog = true)
 
     def registerOrLookupEndpoint(
         name: String, endpointCreator: => RpcEndpoint):

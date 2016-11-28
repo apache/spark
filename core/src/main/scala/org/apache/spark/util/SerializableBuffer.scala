@@ -21,12 +21,17 @@ import java.io.{EOFException, IOException, ObjectInputStream, ObjectOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
+
 /**
  * A wrapper around a java.nio.ByteBuffer that is serializable through Java serialization, to make
  * it easier to pass ByteBuffers in case class messages.
  */
 private[spark]
-class SerializableBuffer(@transient var buffer: ByteBuffer) extends Serializable {
+class SerializableBuffer(@transient var buffer: ByteBuffer)
+    extends Serializable with KryoSerializable {
+
   def value: ByteBuffer = buffer
 
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
@@ -50,5 +55,21 @@ class SerializableBuffer(@transient var buffer: ByteBuffer) extends Serializable
       throw new IOException("Could not fully write buffer to output stream")
     }
     buffer.rewind() // Allow us to write it again later
+  }
+
+  override def write(kryo: Kryo, output: Output) {
+    if (buffer.position() != 0) {
+      throw new IOException(s"Unexpected buffer position ${buffer.position()}")
+    }
+    output.writeInt(buffer.limit())
+    output.writeBytes(buffer.array(), buffer.arrayOffset(), buffer.limit())
+  }
+
+  override def read(kryo: Kryo, input: Input) {
+    val length = input.readInt()
+    val b = new Array[Byte](length)
+    input.readBytes(b)
+    buffer = ByteBuffer.wrap(b)
+    buffer.rewind() // Allow us to read it later
   }
 }

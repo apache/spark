@@ -19,6 +19,9 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
+
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -30,17 +33,59 @@ private[spark] object BlockManagerMessages {
 
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
-  case class RemoveBlock(blockId: BlockId) extends ToBlockManagerSlave
+  case class RemoveBlock(private var blockId: BlockId) extends ToBlockManagerSlave
+      with KryoSerializable {
+
+    override def write(kryo: Kryo, output: Output): Unit = {
+      output.writeString(blockId.name)
+    }
+
+    override def read(kryo: Kryo, input: Input): Unit = {
+      blockId = BlockId(input.readString())
+    }
+  }
 
   // Remove all blocks belonging to a specific RDD.
-  case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
+  case class RemoveRdd(private var rddId: Int) extends ToBlockManagerSlave
+      with KryoSerializable {
+
+    override def write(kryo: Kryo, output: Output): Unit = {
+      output.writeInt(rddId)
+    }
+
+    override def read(kryo: Kryo, input: Input): Unit = {
+      rddId = input.readInt()
+    }
+  }
 
   // Remove all blocks belonging to a specific shuffle.
-  case class RemoveShuffle(shuffleId: Int) extends ToBlockManagerSlave
+  case class RemoveShuffle(private var shuffleId: Int) extends ToBlockManagerSlave
+      with KryoSerializable {
+
+    override def write(kryo: Kryo, output: Output): Unit = {
+      output.writeInt(shuffleId)
+    }
+
+    override def read(kryo: Kryo, input: Input): Unit = {
+      shuffleId = input.readInt()
+    }
+  }
 
   // Remove all blocks belonging to a specific broadcast.
-  case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
-    extends ToBlockManagerSlave
+  case class RemoveBroadcast(private var broadcastId: Long,
+      private var removeFromDriver: Boolean = true)
+    extends ToBlockManagerSlave with KryoSerializable {
+
+    override def write(kryo: Kryo, output: Output): Unit = {
+      output.writeLong(broadcastId)
+      output.writeBoolean(removeFromDriver)
+    }
+
+    override def read(kryo: Kryo, input: Input): Unit = {
+      broadcastId = input.readLong()
+      removeFromDriver = input.readBoolean()
+    }
+  }
 
   /**
    * Driver -> Executor message to trigger a thread dump.

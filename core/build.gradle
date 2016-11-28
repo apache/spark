@@ -40,8 +40,13 @@ dependencies {
     exclude(group: 'org.apache.avro', module: 'avro-ipc')
   }
   compile group: 'com.google.guava', name: 'guava', version: guavaVersion
-  compile group: 'com.twitter', name: 'chill_' + scalaBinaryVersion, version: chillVersion
-  compile group: 'com.twitter', name: 'chill-java', version: chillVersion
+  compile group: 'com.esotericsoftware', name: 'kryo-shaded', version: kryoVersion
+  compile(group: 'com.twitter', name: 'chill_' + scalaBinaryVersion, version: chillVersion) {
+    exclude(group: 'com.esotericsoftware', module: 'kryo-shaded')
+  }
+  compile(group: 'com.twitter', name: 'chill-java', version: chillVersion) {
+    exclude(group: 'com.esotericsoftware', module: 'kryo-shaded')
+  }
   compile group: 'org.apache.xbean', name: 'xbean-asm5-shaded', version: '4.4'
   // explicitly include netty from akka-remote to not let zookeeper override it
   compile group: 'io.netty', name: 'netty', version: nettyVersion

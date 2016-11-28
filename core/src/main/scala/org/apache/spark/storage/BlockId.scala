@@ -19,6 +19,9 @@ package org.apache.spark.storage
 
 import java.util.UUID
 
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -49,8 +52,19 @@ sealed abstract class BlockId {
 }
 
 @DeveloperApi
-case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
-  override def name: String = "rdd_" + rddId + "_" + splitIndex
+case class RDDBlockId(var rddId: Int, var splitIndex: Int)
+    extends BlockId with KryoSerializable {
+  @transient override lazy val name: String = "rdd_" + rddId + "_" + splitIndex
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    output.writeInt(rddId)
+    output.writeVarInt(splitIndex, true)
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    rddId = input.readInt()
+    splitIndex = input.readVarInt(true)
+  }
 }
 
 // Format of the shuffle block ids (including data and index) should be kept in sync with

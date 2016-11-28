@@ -112,16 +112,16 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             val isHomogenousStruct = {
               var i = 1
               val ref = ctx.javaType(t.fields(0).dataType)
-              var broken = false || !ctx.isPrimitiveType(ref) || t.length <=1
-              while( !broken && i < t.length) {
-                if (ctx.javaType(t.fields(i).dataType) != ref){
+              var broken = !ctx.isPrimitiveType(ref) || t.length <= 1
+              while (!broken && i < t.length) {
+                if (ctx.javaType(t.fields(i).dataType) != ref) {
                   broken = true
                 }
-                i +=1
+                i += 1
               }
               !broken
             }
-            if(isHomogenousStruct) {
+            if (isHomogenousStruct) {
               val counter = ctx.freshName("counter")
               val rowWriterChild = ctx.freshName("rowWriterChild")
 

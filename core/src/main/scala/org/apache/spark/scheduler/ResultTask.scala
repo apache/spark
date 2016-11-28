@@ -21,6 +21,9 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.Properties
 
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.{Input, Output}
+
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
@@ -38,7 +41,7 @@ import org.apache.spark.rdd.RDD
  *                   (RDD[T], (TaskContext, Iterator[T]) => U).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
- * @param outputId index of the task in this job (a job can launch tasks on only a subset of the
+ * @param _outputId index of the task in this job (a job can launch tasks on only a subset of the
  *                 input RDD's partitions).
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
@@ -46,14 +49,16 @@ import org.apache.spark.rdd.RDD
 private[spark] class ResultTask[T, U](
     stageId: Int,
     stageAttemptId: Int,
-    taskBinary: Broadcast[Array[Byte]],
-    partition: Partition,
+    private var taskBinary: Broadcast[Array[Byte]],
+    private var partition: Partition,
     locs: Seq[TaskLocation],
-    val outputId: Int,
+    private var _outputId: Int,
     localProperties: Properties,
     metrics: TaskMetrics)
   extends Task[U](stageId, stageAttemptId, partition.index, metrics, localProperties)
   with Serializable {
+
+  final def outputId: Int = _outputId
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq
@@ -74,4 +79,18 @@ private[spark] class ResultTask[T, U](
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
   override def toString: String = "ResultTask(" + stageId + ", " + partitionId + ")"
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    super.write(kryo, output)
+    kryo.writeClassAndObject(output, taskBinary)
+    kryo.writeClassAndObject(output, partition)
+    output.writeInt(_outputId)
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    super.read(kryo, input)
+    taskBinary = kryo.readClassAndObject(input).asInstanceOf[Broadcast[Array[Byte]]]
+    partition = kryo.readClassAndObject(input).asInstanceOf[Partition]
+    _outputId = input.readInt()
+  }
 }

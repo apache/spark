@@ -17,6 +17,10 @@
 
 package org.apache.spark.executor
 
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
+
+import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.LongAccumulator
 
@@ -38,7 +42,7 @@ object DataWriteMethod extends Enumeration with Serializable {
  * A collection of accumulators that represents metrics about writing data to external systems.
  */
 @DeveloperApi
-class OutputMetrics private[spark] () extends Serializable {
+class OutputMetrics private[spark] () extends Serializable with KryoSerializable {
   private[executor] val _bytesWritten = new LongAccumulator
   private[executor] val _recordsWritten = new LongAccumulator
 
@@ -54,4 +58,18 @@ class OutputMetrics private[spark] () extends Serializable {
 
   private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
   private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    _bytesWritten.write(kryo, output)
+    _recordsWritten.write(kryo, output)
+  }
+
+  override final def read(kryo: Kryo, input: Input): Unit = {
+    read(kryo, input, context = null)
+  }
+
+  def read(kryo: Kryo, input: Input, context: TaskContext): Unit = {
+    _bytesWritten.read(kryo, input, context)
+    _recordsWritten.read(kryo, input, context)
+  }
 }

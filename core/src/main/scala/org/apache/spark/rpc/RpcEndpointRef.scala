@@ -27,12 +27,12 @@ import org.apache.spark.util.RpcUtils
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
  */
-private[spark] abstract class RpcEndpointRef(conf: SparkConf)
-  extends Serializable with Logging {
+private[spark] abstract class RpcEndpointRef(conf: SparkConf,
+  _env: RpcEnv) extends Serializable with Logging {
 
-  private[this] val maxRetries = RpcUtils.numRetries(conf)
-  private[this] val retryWaitMs = RpcUtils.retryWaitMs(conf)
-  private[this] val defaultAskTimeout = RpcUtils.askRpcTimeout(conf)
+  @transient protected var maxRetries = _env.maxRetries
+  @transient protected var retryWaitMs = _env.retryWaitMs
+  @transient protected var defaultAskTimeout = _env.defaultAskTimeout
 
   /**
    * return the address for the [[RpcEndpointRef]]

@@ -59,6 +59,10 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
 
   private[spark] val defaultLookupTimeout = RpcUtils.lookupRpcTimeout(conf)
 
+  private[spark] val maxRetries = RpcUtils.numRetries(conf)
+  private[spark] val retryWaitMs = RpcUtils.retryWaitMs(conf)
+  private[spark] val defaultAskTimeout = RpcUtils.askRpcTimeout(conf)
+
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
    * [[RpcEndpoint.self]]. Return `null` if the corresponding [[RpcEndpointRef]] does not exist.

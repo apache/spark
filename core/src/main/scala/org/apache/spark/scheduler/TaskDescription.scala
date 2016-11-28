@@ -19,25 +19,56 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.util.SerializableBuffer
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
+
+import org.apache.spark.util.{SerializableBuffer, Utils}
 
 /**
  * Description of a task that gets passed onto executors to be executed, usually created by
  * [[TaskSetManager.resourceOffer]].
  */
 private[spark] class TaskDescription(
-    val taskId: Long,
-    val attemptNumber: Int,
-    val executorId: String,
-    val name: String,
-    val index: Int,    // Index within this task's TaskSet
-    _serializedTask: ByteBuffer)
-  extends Serializable {
+    private var _taskId: Long,
+    private var _attemptNumber: Int,
+    private var _executorId: String,
+    private var _name: String,
+    private var _index: Int,    // Index within this task's TaskSet
+    @transient private var _serializedTask: ByteBuffer)
+  extends Serializable with KryoSerializable {
+
+  def taskId: Long = _taskId
+  def attemptNumber: Int = _attemptNumber
+  def executorId: String = _executorId
+  def name: String = _name
+  def index: Int = _index
 
   // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
-  private val buffer = new SerializableBuffer(_serializedTask)
+  private val buffer =
+    if (_serializedTask ne null) new SerializableBuffer(_serializedTask) else null
 
-  def serializedTask: ByteBuffer = buffer.value
+  def serializedTask: ByteBuffer =
+    if (_serializedTask ne null) _serializedTask else buffer.value
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    output.writeLong(_taskId)
+    output.writeVarInt(_attemptNumber, true)
+    output.writeString(_executorId)
+    output.writeString(_name)
+    output.writeInt(_index)
+    output.writeInt(_serializedTask.remaining())
+    Utils.writeByteBuffer(_serializedTask, output)
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    _taskId = input.readLong()
+    _attemptNumber = input.readVarInt(true)
+    _executorId = input.readString()
+    _name = input.readString()
+    _index = input.readInt()
+    val len = input.readInt()
+    _serializedTask = ByteBuffer.wrap(input.readBytes(len))
+  }
 
   override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
 }
