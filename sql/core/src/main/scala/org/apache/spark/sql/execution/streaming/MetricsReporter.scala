@@ -31,7 +31,7 @@ import org.apache.spark.util.Clock
  * Serves metrics from a [[org.apache.spark.sql.streaming.StreamingQuery]] to
  * Codahale/DropWizard metrics
  */
-class StreamMetricsReporter(
+class MetricsReporter(
     stream: StreamExecution,
     override val sourceName: String) extends CodahaleSource with Logging {
 
@@ -41,7 +41,7 @@ class StreamMetricsReporter(
   // together in Ganglia as a single metric group
   registerGauge("inputRate-total", () => stream.lastProgress.inputRecordsPerSecond)
   registerGauge("processingRate-total", () => stream.lastProgress.inputRecordsPerSecond)
-  registerGauge("latency", () => stream.lastProgress.durationMs.get("triggerExecution"))
+  registerGauge("latency", () => stream.lastProgress.durationMs.get("triggerExecution").longValue())
 
   private def registerGauge[T](name: String, f: () => T)(implicit num: Numeric[T]): Unit = {
     synchronized {

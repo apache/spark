@@ -22,6 +22,7 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 
+import org.apache.jute.compiler.JLong
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -31,10 +32,10 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * Holds statistics about state that is being stored for a given streaming query.
+ * Statistics about updates made to a stateful operators in a [[StreamingQuery]] in a trigger.
  */
 @Experimental
-class StateOperator private[sql](
+class StateOperatorProgress private[sql](
     val numEntries: Long,
     val numUpdated: Long) {
   private[sql] def jsonValue: JValue = {
@@ -68,12 +69,12 @@ class StreamingQueryProgress private[sql](
   val name: String,
   val timestamp: Long,
   val batchId: Long, // TODO: epoch?
-  val durationMs: ju.Map[String, Long],
+  val durationMs: ju.Map[String, java.lang.Long],
   val currentWatermark: Long,
-  val stateOperators: Array[StateOperator],
+  val stateOperators: Array[StateOperatorProgress],
   val sources: Array[SourceProgress]) {
 
-  /** The aggregate (across all sources) number of records processed. */
+  /** The aggregate (across all sources) number of records processed in a trigger. */
   def numRecords: Long = sources.map(_.numRecords).sum
 
   /** The aggregate (across all sources) rate of data arriving. */
@@ -98,7 +99,7 @@ class StreamingQueryProgress private[sql](
     ("processedRecordsPerSecond" -> JDouble(processedRecordsPerSecond)) ~
     ("durationMs" -> durationMs
         .asScala
-        .map { case (k, v) => k -> JInt(v): JObject }
+        .map { case (k, v) => k -> JInt(v.toLong): JObject }
         .reduce(_ ~ _)) ~
     ("currentWatermark" -> JInt(currentWatermark)) ~
     ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~

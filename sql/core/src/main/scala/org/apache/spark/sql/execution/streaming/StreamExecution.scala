@@ -52,7 +52,7 @@ class StreamExecution(
     val trigger: Trigger,
     val triggerClock: Clock,
     val outputMode: OutputMode)
-  extends StreamingQuery with ProgressReporting with Logging {
+  extends StreamingQuery with ProgressReporter with Logging {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
 
@@ -124,7 +124,7 @@ class StreamExecution(
   private val callSite = Utils.getCallSite()
 
   /** Used to report metrics to coda-hale. */
-  lazy val streamMetrics = new StreamMetricsReporter(this, s"spark.streaming.$name")
+  lazy val streamMetrics = new MetricsReporter(this, s"spark.streaming.$name")
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be

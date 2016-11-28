@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util
 import java.util.UUID
 
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.streaming.{SourceProgress, StateOperator, StreamingQueryProgress, StreamingQueryStatus}
+import org.apache.spark.sql.streaming.{SourceProgress, StateOperatorProgress, StreamingQueryProgress, StreamingQueryStatus}
 import org.apache.spark.util.Clock
 
 /**
@@ -36,7 +36,10 @@ import org.apache.spark.util.Clock
  * at the appropriate times. Additionally, the status can updated with `updateStatusMessage` to
  * allow reporting on the streams current state (i.e. "Fetching more data").
  */
-trait ProgressReporting extends Logging {
+trait ProgressReporter extends Logging {
+
+  case class ExecutionStats(
+    inputRows: Map[Source, Long], stateOperators: Seq[StateOperatorProgress])
 
   // Internal state of the stream, required for computing metrics.
   protected def id: UUID
@@ -57,7 +60,7 @@ trait ProgressReporting extends Logging {
   private var currentTriggerEndTimestamp = -1L
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
-  private var currentDurationsMs = new util.HashMap[String, Long]()
+  private val currentDurationsMs = new mutable.HashMap[String, Long]()
 
   /** Flag that signals whether any error with input metrics have already been logged */
   private var metricWarningLogged: Boolean = false
@@ -94,8 +97,6 @@ trait ProgressReporting extends Logging {
     currentDurationsMs.clear()
   }
 
-  case class ExecutionStats(inputRows: Map[Source, Long], stateOperators: Seq[StateOperator])
-
   /** Finalizes the query progress and adds it to list of recent status updates. */
   protected def finishTrigger(hasNewData: Boolean): Unit = {
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
@@ -106,23 +107,35 @@ trait ProgressReporting extends Logging {
       extractExecutionStats
     }
 
-    val totalProcessingTimeSec =
+    val processingTimeSec =
       (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / 1000
-    val totalInputTimeSec = if (lastTriggerStartTimestamp >= 0) {
+
+    val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
       (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / 1000
     } else {
       Double.NaN
     }
+    logDebug(s"Execution stats: $executionStats")
 
     val sourceProgress = sources.map { source =>
       val numRecords = executionStats.inputRows.getOrElse(source, 0L)
+      val inputRecordsPerSecond = if (inputTimeSec > 0) {
+        numRecords / inputTimeSec
+      } else {
+        Double.MaxValue
+      }
+      val processedRecordsPerSecond = if (processingTimeSec > 0) {
+        numRecords / processingTimeSec
+      } else {
+        Double.MaxValue
+      }
       new SourceProgress(
         description = source.toString,
         startOffset = committedOffsets.get(source).map(_.json).orNull,
         endOffset = availableOffsets.get(source).map(_.json).orNull,
         numRecords = numRecords,
-        inputRecordsPerSecond = numRecords / totalInputTimeSec,
-        processedRecordsPerSecond = numRecords / totalProcessingTimeSec
+        inputRecordsPerSecond = inputRecordsPerSecond,
+        processedRecordsPerSecond = processedRecordsPerSecond
       )
     }
 
@@ -131,7 +144,7 @@ trait ProgressReporting extends Logging {
       name = name,
       timestamp = currentTriggerStartTimestamp,
       batchId = currentBatchId,
-      durationMs = currentDurationsMs.clone().asInstanceOf[util.Map[String, Long]],
+      durationMs = currentDurationsMs.toMap.mapValues(long2Long).asJava,
       currentWatermark = currentEventTimeWatermark,
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray)
@@ -172,7 +185,7 @@ trait ProgressReporting extends Logging {
     }
     val allLogicalPlanLeaves = lastExecution.logical.collectLeaves() // includes non-streaming
     val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()
-    val sourceToNumInputRows: Map[Source, Long] =
+    val numInputRows: Map[Source, Long] =
       if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
         val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
           case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
@@ -200,12 +213,12 @@ trait ProgressReporting extends Logging {
       case p if p.isInstanceOf[StateStoreSaveExec] => p
     }
     val stateOperators = stateNodes.map { node =>
-      new StateOperator(
+      new StateOperatorProgress(
         numEntries = node.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L),
         numUpdated = node.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
     }
 
-    ExecutionStats(sourceToNumInputRows, stateOperators)
+    ExecutionStats(numInputRows, stateOperators)
   }
 
   /** Records the duration of running `body` for the next query progress update. */
@@ -215,7 +228,7 @@ trait ProgressReporting extends Logging {
     val endTime = triggerClock.getTimeMillis()
     val timeTaken = math.max(endTime - startTime, 0)
 
-    val previousTime = Option(currentDurationsMs.get(triggerDetailKey)).getOrElse(0L)
+    val previousTime = currentDurationsMs.getOrElse(triggerDetailKey, 0L)
     currentDurationsMs.put(triggerDetailKey, previousTime + timeTaken)
     logDebug(s"$triggerDetailKey took $timeTaken ms")
     result
