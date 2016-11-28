@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -75,9 +76,15 @@ case class Percentile(
   private lazy val returnPercentileArray = percentageExpression.dataType.isInstanceOf[ArrayType]
 
   @transient
-  private lazy val percentages = percentageExpression.eval() match {
-    case p: Double => Seq(p)
-    case a: ArrayData => a.toDoubleArray().toSeq
+  private lazy val percentages =
+    (percentageExpression.dataType, percentageExpression.eval()) match {
+      case (_, num: Double) => Seq(num)
+      case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
+        val numericArray = arrayData.toObjectArray(baseType)
+        numericArray.map { x =>
+          baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType])}.toSeq
+      case other =>
+        throw new AnalysisException(s"Invalid data type ${other._1} for parameter percentages")
   }
 
   override def children: Seq[Expression] = child :: percentageExpression :: Nil
@@ -91,7 +98,7 @@ case class Percentile(
   }
 
   override def inputTypes: Seq[AbstractDataType] = percentageExpression.dataType match {
-    case _: ArrayType => Seq(NumericType, ArrayType(DoubleType, false))
+    case _: ArrayType => Seq(NumericType, ArrayType)
     case _ => Seq(NumericType, DoubleType)
   }
 
@@ -147,13 +154,13 @@ case class Percentile(
 
     val sortedCounts = buffer.toSeq.sortBy(_._1)(
       child.dataType.asInstanceOf[NumericType].ordering.asInstanceOf[Ordering[Number]])
-    val aggreCounts = sortedCounts.scanLeft(sortedCounts.head._1, 0L) {
+    val accumlatedCounts = sortedCounts.scanLeft(sortedCounts.head._1, 0L) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
-    val maxPosition = aggreCounts.last._2 - 1
+    val maxPosition = accumlatedCounts.last._2 - 1
 
     percentages.map { percentile =>
-      getPercentile(aggreCounts, maxPosition * percentile).doubleValue()
+      getPercentile(accumlatedCounts, maxPosition * percentile).doubleValue()
     }
   }
 
