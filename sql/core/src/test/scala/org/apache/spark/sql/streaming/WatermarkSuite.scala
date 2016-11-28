@@ -104,8 +104,6 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
       .groupBy(window($"eventTime", "5 seconds") as 'window)
       .agg(count("*") as 'count)
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
-    val outputMode = OutputMode.Append
-    val memorySink = new MemorySink(df.schema, outputMode)
     testStream(df)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
       CheckLastBatch(),

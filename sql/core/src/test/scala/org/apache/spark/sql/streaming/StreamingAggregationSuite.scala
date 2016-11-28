@@ -260,10 +260,21 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(10 * 1000),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+      AdvanceManualClock(5 * 1000), // advance by 5 seconds i.e., 15 seconds total
+
+      // bounce stream and ensure correct batch timestamp is used
+      // i.e., we don't take it from the clock, which is at 15 seconds.
+      StopStream,
+      AssertOnQuery { q => // clear the sink
+        q.sink.asInstanceOf[MemorySink].clear()
+        true
+      },
+      StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
+      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
 
       // advance clock to 20 seconds, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
-      AdvanceManualClock(10 * 1000),
+      AdvanceManualClock(5 * 1000),
       CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
 
       // advance clock to 30 seconds, should retain keys >= 20
@@ -298,9 +309,20 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+      // advance by 5 days i.e., 15 days total
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 5),
+      // bounce stream and ensure correct batch timestamp is used
+      // i.e., we don't take it from the clock, which is at 15 seconds.
+      StopStream,
+      AssertOnQuery { q => // clear the sink
+        q.sink.asInstanceOf[MemorySink].clear()
+        true
+      },
+      StartStream(ProcessingTime("10 day"), triggerClock = clock),
+      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
       // advance clock to 20 days, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 5),
       CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
       // advance clock to 30 days, should retain keys >= 20
       AddData(inputData, 0L),
