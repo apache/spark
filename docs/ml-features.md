@@ -1398,24 +1398,23 @@ for more details on the API.
 </div>
 
 # Locality Sensitive Hashing
-[Locality Sensitive Hashing(LSH)](https://en.wikipedia.org/wiki/Locality-sensitive_hashing) Locality Sensitive Hashing(LSH) is an important class of hashing techniques, which is commonly used in clustering and outlier detection with large datasets. 
+[Locality Sensitive Hashing(LSH)](https://en.wikipedia.org/wiki/Locality-sensitive_hashing) is an important class of hashing techniques, which is commonly used in clustering, approximate nearest neighbor search and outlier detection with large datasets.
 
 The general idea of LSH is to use a family of functions (we call them LSH families) to hash data points into buckets, so that the data points which are close to each other are in the same buckets with high probability, while data points that are far away from each other are very likely in different buckets. A formal definition of LSH family is as follows:
 
-In a metric space `(M, d)`, an LSH family is a family of functions `h` that satisfy the following properties:
+In a metric space `(M, d)`, where `M` is a set and `d` is a distance function on `M`, an LSH family is a family of functions `h` that satisfy the following properties:
 `\[
 \forall p, q \in M,\\
 d(p,q) < r1 \Rightarrow Pr(h(p)=h(q)) \geq p1\\
-d(p,q) > r2 \Rightarrow Pr(h(p)=h(q)) \leq p1
+d(p,q) > r2 \Rightarrow Pr(h(p)=h(q)) \leq p2
 \]`
 This LSH family is called `(r1, r2, p1, p2)`-sensitive.
 
 In this section, we call a pair of input features a false positive if the two features are hashed into the same hash bucket but they are far away in distance, and we define false negative as the pair of features when their distance are close but they are not in the same hash bucket.
 
-## Random Projection for Euclidean Distance
-**Note:** Please note that this is different than the [Random Projection for cosine distance](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Random_projection).
+## Bucketed Random Projection for Euclidean Distance
 
-[Random Projection](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions) is the LSH family in `spark.ml` for Euclidean distance. The Euclidean distance is defined as follows:
+[Bucketed Random Projection](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions) is the LSH family in `spark.ml` for Euclidean distance. The Euclidean distance is defined as follows:
 `\[
 d(\mathbf{x}, \mathbf{y}) = \sqrt{\sum_i (x_i - y_i)^2}
 \]`
@@ -1425,7 +1424,7 @@ h(\mathbf{x}) = \lfloor \frac{\mathbf{x} \cdot \mathbf{v}}{r} \rfloor
 \]`
 where `v` is a normalized random unit vector and `r` is user-defined bucket length. The bucket length can be used to control the average size of hash buckets. A larger bucket length means higher probability for features to be in the same bucket.
 
-The input features in Euclidean space are represented in vectors. Both sparse and dense vectors are supported.
+Bucketed Random Projection accepts arbitrary vectors as input features, and supports both sparse and dense vectors.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1450,14 +1449,14 @@ for more details on the API.
 `\[
 d(\mathbf{A}, \mathbf{B}) = 1 - \frac{|\mathbf{A} \cap \mathbf{B}|}{|\mathbf{A} \cup \mathbf{B}|}
 \]`
-As its LSH family, MinHash applies a random perfect hash function `g` to each elements in the set and take the minimum of all hashed values:
+As its LSH family, MinHash applies a random hash function `g` to each elements in the set and take the minimum of all hashed values:
 `\[
 h(\mathbf{A}) = \min_{a \in \mathbf{A}}(g(a))
 \]`
 
-Input sets for MinHash is represented in vectors which dimension equals the total number of elements in the space. Each dimension of the vectors represents the status of an elements: zero value means the elements is not in the set; non-zero value means the set contains the corresponding elements. For example, `Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])` means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5.
+The input sets for MinHash are represented as binary vectors, where the vector indices represent the elements themselves and the non-zero values in the vector represent the presence of that element in the set. While both dense and sparse vectors are supported, typically sparse vectors are recommended for efficiency. For example, `Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])` means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5. All non-zero values are treated as binary "1" values.
 
-**Note:** Empty sets cannot be transformed by MinHash, which means any input vector must have at least 1 non-zero indices.
+**Note:** Empty sets cannot be transformed by MinHash, which means any input vector must have at least 1 non-zero entry.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1478,7 +1477,9 @@ for more details on the API.
 </div>
 
 ## Feature Transformation
-Feature Transformation is the base functionality to add hash results as a new column. Users can specify input column name and output column name by setting `inputCol` and `outputCol`. Also in `spark.ml`, all LSH families can pick multiple LSH hash functions. The number of hash functions could be set in `outputDim` in any LSH family.
+Feature Transformation is the base functionality to add hash results as a new column. Users can specify input column name and output column name by setting `inputCol` and `outputCol`. LSH in `spark.ml` also supports multiple LSH hash tables. Users can specify the number of hash tables by setting `numHashTables`.
+
+The output type of feature type is `Array[Vector]` where the dimension of the array equals `numHashTables`, and the dimensions of the vectors are currently set to 1.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1492,18 +1493,12 @@ Feature Transformation is the base functionality to add hash results as a new co
 </div>
 </div>
 
-When multiple hash functions are picked, it's very useful for users to apply [amplification](https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Amplification) to trade off between false positive and false negative rate.
-* AND-amplifications: Two input vectors are defined to be in the same bucket only if ALL of the hash values match. This will decrease the false positive rate but increase the false negative rate.
-* OR-amplifications: Two input vectors are defined to be in the same bucket as long as ANY one of the hash value matches. This will increase the false positive rate but decrease the false negative rate.
-
-Approximate nearest neighbor and approximate similarity join use OR-amplification.
-
 ## Approximate Similarity Join
-Approximate similarity join takes two datasets, and approximately returns row pairs which distance is smaller than a user-defined threshold. Approximate Similarity Join supports both joining two different datasets and self joining.
+Approximate similarity join takes two datasets, and approximately returns pairs of rows in the origin datasets which distance is smaller than a user-defined threshold. Approximate Similarity Join supports both joining two different datasets and self joining.
 
-Approximate similarity join allows users to cache the transformed columns when necessary: If the `outputCol` is missing, the method will transform the data; if the `outputCol` exists, it will use the `outputCol` directly.
+Approximate similarity join accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as outputCol.
 
-A distance column will be added in the output dataset of approximate similarity join to show the distance between each output row pairs.
+In the joined dataset, the origin datasets can be queried in `datasetA` and `datasetB`. A distance column will be added in the output dataset of approximate similarity join to show the distance between each output pairs of rows in the origin datasets .
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -1518,19 +1513,14 @@ A distance column will be added in the output dataset of approximate similarity 
 </div>
 
 ## Approximate Nearest Neighbor Search
-Approximate nearest neighbor search takes a dataset and a key, and approximately returns a number of rows in the dataset that are closest to the key. The number of rows to return are defined by user.
+Approximate nearest neighbor search takes a dataset and a vector, and approximately returns a specified number of rows in the dataset that are closest to the vector.
 
-Approximate nearest neighbor search allows users to cache the transformed columns when necessary: If the `outputCol` is missing, the method will transform the data; if the `outputCol` exists, it will use the `outputCol` directly.
+Approximate nearest neighbor accepts both transformed and untransformed datasets as input. If an untransformed dataset is used, it will be transformed automatically. In this case, the hash signature will be created as outputCol.
 
 A distance column will be added in the output dataset of approximate nearest neighbor search to show the distance between each output row and the searched key.
 
-There are two methods of approximate nearest neighbor search implemented in `spark.ml`:
-* Single-probe search: Only the hash bucket(s) where the key is hashed are searched. This method is time efficient but might return less than k rows.
-* [Multi-probe search](http://www.cs.princeton.edu/cass/papers/mplsh_vldb07.pdf): All nearby hash buckets are searched to ensure exactly k rows are returned when possible, but this method can take more time.
+**Note:** Approximate nearest neighbor search will return less than k rows when there aren't enough candidates in the hash bucket.
 
-**Note:** Multi-probe search will run brute force nearest neighbor for MinHash when there aren't enough candidates.
-
-The example code will show the difference between single and multi-probe search.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
