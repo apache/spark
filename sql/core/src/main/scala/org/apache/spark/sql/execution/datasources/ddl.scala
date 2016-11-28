@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -41,7 +43,25 @@ case class CreateTableUsing(
     partitionColumns: Array[String],
     bucketSpec: Option[BucketSpec],
     allowExisting: Boolean,
-    managedIfNoPath: Boolean) extends logical.Command
+    managedIfNoPath: Boolean) extends logical.Command {
+
+  override def argString: String = {
+    val partColumns = if (partitionColumns.isEmpty) {
+      ""
+    } else {
+      "partitionColumns:" + Utils.truncatedString(partitionColumns, "[", ", ", "]")
+    }
+    s"[tableIdent:$tableIdent " +
+      userSpecifiedSchema.map(_ + " ").getOrElse("") +
+      s"provider:$provider " +
+      (if (temporary) "temporary " else "persistent ") +
+      CatalogUtils.maskCredentials(options) + " " +
+      partColumns +
+      bucketSpec.map(_ + " ").getOrElse("") +
+      s"ignoreIfExists:$allowExisting " +
+      s"managedIfNoPath:$managedIfNoPath]"
+  }
+}
 
 /**
  * A node used to support CTAS statements and saveAsTable for the data source API.
@@ -69,6 +89,14 @@ case class CreateTempViewUsing(
   if (tableIdent.database.isDefined) {
     throw new AnalysisException(
       s"Temporary table '$tableIdent' should not have specified a database")
+  }
+
+  override def argString: String = {
+    s"[tableIdent:$tableIdent " +
+      userSpecifiedSchema.map(_ + " ").getOrElse("") +
+      s"replace:$replace " +
+      s"provider:$provider " +
+      CatalogUtils.maskCredentials(options)
   }
 
   def run(sparkSession: SparkSession): Seq[Row] = {
