@@ -119,3 +119,18 @@ object ExternalCatalogUtils {
     }
   }
 }
+
+object CatalogUtils {
+  /**
+   * Masking credentials in the option lists. For example, in the sql plan explain output
+   * for JDBC data sources.
+   */
+  def maskCredentials(options: Map[String, String]): Map[String, String] = {
+    options.map {
+      case (key, _) if key.toLowerCase == "password" => (key, "###")
+      case (key, value) if key.toLowerCase == "url" && value.toLowerCase.contains("password") =>
+        (key, "###")
+      case o => o
+    }
+  }
+}
