@@ -416,18 +416,17 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("Partitioning on column where numPartitions is zero") {
-    val e = intercept[IllegalArgumentException] {
-      spark.read.jdbc(
-        url = urlWithUserAndPass,
-        table = "TEST.seq",
-        columnName = "id",
-        lowerBound = 0,
-        upperBound = 4,
-        numPartitions = 0,
-        connectionProperties = new Properties()
-      )
-    }.getMessage
-    assert(e.contains("Invalid value `0` for parameter `numPartitions`. The minimum value is 1."))
+    val res = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.seq",
+      columnName = "id",
+      lowerBound = 0,
+      upperBound = 4,
+      numPartitions = 0,
+      connectionProperties = new Properties()
+    )
+    checkNumPartitions(res, expectedNumPartitions = 1)
+    assert(res.count() === 8)
   }
 
   test("Partitioning on column where numPartitions are more than the number of total rows") {
