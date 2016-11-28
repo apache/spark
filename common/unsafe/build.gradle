@@ -34,5 +34,5 @@ sourceSets.main.java.srcDirs = [ 'src/main/java' ]
 tasks.withType(JavaCompile) {
   options.compilerArgs << '-XDignore.symbol.file'
   options.fork = true
-  options.forkOptions.executable = 'javac'
+  options.forkOptions.executable = "${System.properties['java.home']}/../bin/javac"
 }
