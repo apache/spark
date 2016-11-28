@@ -24,7 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
-import org.apache.spark.sql.catalyst.expressions.{Generator, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
@@ -1103,24 +1103,24 @@ class Analyzer(
         // These operators can be anywhere in a correlated subquery.
         // so long as they do not host outer references in the operators.
         // SubqueryAlias can be anywhere in a correlated subquery.
-        case n: SubqueryAlias =>
-          failOnOuterReference(n)
-          n
-        case n: Distinct =>
-          failOnOuterReference(n)
-          n
-        case n: Sort =>
-          failOnOuterReference(n)
-          n
-        case n: Repartition =>
-          failOnOuterReference(n)
-          n
-        case n: RedistributeData =>
-          failOnOuterReference(n)
-          n
-        case n: BroadcastHint =>
-          failOnOuterReference(n)
-          n
+        case p: SubqueryAlias =>
+          failOnOuterReference(p)
+          p
+        case p: Distinct =>
+          failOnOuterReference(p)
+          p
+        case p: Sort =>
+          failOnOuterReference(p)
+          p
+        case p: Repartition =>
+          failOnOuterReference(p)
+          p
+        case p: RedistributeData =>
+          failOnOuterReference(p)
+          p
+        case p: BroadcastHint =>
+          failOnOuterReference(p)
+          p
 
         // Category 3:
         // Filter is one of the two operators allowed to host correlated expressions.
@@ -1207,16 +1207,13 @@ class Analyzer(
         // LATERAL VIEW [OUTER], similar to inner join,
         // allows to have correlation under it
         // but must not host any outer references.
-        case n @ Generate(generator, join, _, _, _, _) if (join) =>
+        // Note:
+        // Generator with join=false is treated as Category 4.
+        case p @ Generate(generator, join, _, _, _, _) if (join) =>
           if (containsOuter(generator)) {
-            failOnOuterReference(n)
+            failOnOuterReference(p)
           }
-          n
-
-        case n @ Generate(_, _, _, _, _, _) =>
-          // Generator with join=false is treated as Category 4.
-          failOnOuterReferenceInSubTree(n)
-          n
+          p
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only
