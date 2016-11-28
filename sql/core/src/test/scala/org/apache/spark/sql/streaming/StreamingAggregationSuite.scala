@@ -278,7 +278,6 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-
   test("prune results by current_date, complete mode") {
     import testImplicits._
     import StreamingAggregationSuite._
@@ -291,8 +290,6 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
         .toDF("value")
         .groupBy($"value")
         .agg(count("*"))
-        // .select('value, date_sub(current_date(), 10).cast("timestamp").alias("t"))
-        // .select('value, 't, 'value >= 't)
         .where($"value".cast("date") >= date_sub(current_date(), 10))
         .select(($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
@@ -309,7 +306,7 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       AddData(inputData, 0L),
       AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((20L, 1)),
-      // advance clock to 40 seconds, should retain keys >= 30
+      // advance clock to 40 days, should retain keys >= 30
       AddData(inputData, 25L, 30L, 40L, 45L),
       AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((30L, 1), (40L, 1), (45L, 1))

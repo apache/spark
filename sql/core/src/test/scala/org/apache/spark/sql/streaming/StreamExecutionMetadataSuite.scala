@@ -19,7 +19,11 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecutionMetadata}
 import org.apache.spark.sql.functions._
 import org.apache.spark.util.{SystemClock, Utils}
@@ -54,7 +58,7 @@ class StreamExecutionMetadataSuite extends StreamTest {
     // Query that prunes timestamps less than current_timestamp, making
     // it easy to use for ensuring that a batch is re-processed with the
     // timestamp used when it was first processed.
-    def startQuery: StreamingQuery = {
+    def startQuery(): StreamingQuery = {
       df.groupBy("a")
         .count()
         .where('a >= current_timestamp().cast("long"))
@@ -65,10 +69,11 @@ class StreamExecutionMetadataSuite extends StreamTest {
         .outputMode("complete")
         .start()
     }
-    // no exception here
-    val t1 = clock.getTimeMillis() + 60L * 1000L
-    val t2 = clock.getTimeMillis() + 60L * 1000L + 1000L
-    val q = startQuery
+    // Create two timestamps that are far enough out into the future
+    // so that the query can finish processing i.e., within 10 seconds
+    val t1 = clock.getTimeMillis() + 10000L
+    val t2 = clock.getTimeMillis() + 11000L
+    val q = startQuery()
     ms.addData(t1, t2)
     q.processAllAvailable()
 
@@ -77,23 +82,28 @@ class StreamExecutionMetadataSuite extends StreamTest {
       Seq(Row(t1, 1), Row(t2, 1))
     )
 
+    // Stop the query and wait for the timestamps to expire
+    // i.e., timestamp < clock.getTimeMillis()
     q.stop()
-    Thread.sleep(60L * 1000L + 5000L) // Expire t1 and t2
-    assert(t1 < clock.getTimeMillis())
-    assert(t2 < clock.getTimeMillis())
+    // Expire t1 and t2
+    Eventually.eventually(Timeout(11.seconds)) {
+      assert(t1 < clock.getTimeMillis())
+      assert(t2 < clock.getTimeMillis())
+      true
+    }
 
+    // Drop the output, so that it is recreated when we start
     spark.sql(s"drop table $tableName")
-
-    // verify table is dropped
-    intercept[AnalysisException](spark.table(tableName).collect())
-    val q2 = startQuery
+    // Verify table is dropped
+    assert(false == spark.catalog.tableExists(tableName))
+    // Restart query and ensure that previous batch timestamp
+    // is used to derive the same result.
+    val q2 = startQuery()
     q2.processAllAvailable()
     checkAnswer(
       spark.table(tableName),
       Seq(Row(t1, 1), Row(t2, 1))
     )
-
     q2.stop()
-
   }
 }

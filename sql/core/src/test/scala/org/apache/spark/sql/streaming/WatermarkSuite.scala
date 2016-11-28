@@ -108,7 +108,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
     val memorySink = new MemorySink(df.schema, outputMode)
     testStream(df)(
       AddData(inputData, 10, 11, 12, 13, 14, 15),
-      CheckAnswer(),
+      CheckLastBatch(),
       AddData(inputData, 25), // Advance watermark to 15 seconds
       StopStream,
       StartStream(),
@@ -121,7 +121,7 @@ class WatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
         true
       },
       StartStream(),
-      CheckLastBatch((10, 5)),
+      CheckLastBatch((10, 5)), // Recompute last batch and re-evict timestamp 10
       AddData(inputData, 30), // Advance watermark to 20 seconds
       CheckLastBatch(),
       StopStream,
