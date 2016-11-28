@@ -61,7 +61,6 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
       this.$values = new Object[${children.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
@@ -78,7 +77,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
       s"""
         final ArrayData ${ev.value} = new $arrayClass($values);
         this.$values = null;
-      """)
+      """, isNull = "false")
   }
 
   override def prettyName: String = "array"
@@ -144,7 +143,6 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val keyData = s"new $arrayClass($keyArray)"
     val valueData = s"new $arrayClass($valueArray)"
     ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
       $keyArray = new Object[${keys.size}];
       $valueArray = new Object[${values.size}];""" +
       ctx.splitExpressions(
@@ -177,7 +175,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
         final MapData ${ev.value} = new $mapClass($keyData, $valueData);
         this.$keyArray = null;
         this.$valueArray = null;
-      """)
+      """, isNull = "false")
   }
 
   override def prettyName: String = "map"
@@ -301,7 +299,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
       $values = new Object[${valExprs.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
@@ -317,7 +314,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
         this.$values = null;
-      """)
+      """, isNull = "false")
   }
 
   override def prettyName: String = "named_struct"
@@ -333,7 +330,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
 case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateNamedStructLike {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
+    ExprCode(code = eval.code, isNull = "false", value = eval.value)
   }
 
   override def prettyName: String = "named_struct_unsafe"
