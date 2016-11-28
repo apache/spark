@@ -514,6 +514,39 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 
+  test("joins: push down where clause into left anti join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery =
+      x.join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
+        .where("x.a".attr > 10)
+        .analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      x.where("x.a".attr > 10)
+        .join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
+        .analyze
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
+
+  test("joins: only push down join conditions to the right of a left anti join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery =
+      x.join(y,
+        LeftAnti,
+        Some("x.b".attr === "y.b".attr && "y.a".attr > 10 && "x.a".attr > 10)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      x.join(
+        y.where("y.a".attr > 10),
+        LeftAnti,
+        Some("x.b".attr === "y.b".attr && "x.a".attr > 10))
+        .analyze
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
+
+
   val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
 
   test("generate: predicate referenced no generated column") {
