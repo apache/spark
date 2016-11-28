@@ -637,7 +637,7 @@ class JDBCSuite extends SparkFunSuite
     assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === """"col0" >= 3""")
     assert(doCompileFilter(In("col1", Array("jkl"))) === """"col1" IN ('jkl')""")
     assert(doCompileFilter(In("col1", Array.empty)) ===
-      "CASE WHEN col1 IS NULL THEN NULL ELSE FALSE END")
+      """CASE WHEN "col1" IS NULL THEN NULL ELSE FALSE END""")
     assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
       === """(NOT ("col1" IN ('mno', 'pqr')))""")
     assert(doCompileFilter(IsNull("col1")) === """"col1" IS NULL""")
@@ -855,6 +855,8 @@ class JDBCSuite extends SparkFunSuite
     assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%re%'").collect().size == 1)
     assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NULL").collect().size == 1)
     assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NOT NULL").collect().size == 2)
+    assert(sql("SELECT * FROM mixedCaseCols")
+      .filter($"Name".isin(Array[String]() : _*)).collect().size == 0)
     assert(sql("SELECT * FROM mixedCaseCols WHERE Name IN ('mary', 'fred')").collect().size == 2)
     assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").collect().size == 1)
     assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").collect().size == 2)
