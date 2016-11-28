@@ -29,8 +29,7 @@ object SimplifyCreateStructOps extends Rule[LogicalPlan]{
     plan.transformExpressionsUp{
       // push down field extraction
       case GetStructField( createNamedStructLike : CreateNamedStructLike, ordinal, _ ) =>
-        val value = createNamedStructLike.valExprs(ordinal)
-        value
+        createNamedStructLike.valExprs(ordinal)
     }
   }
 }

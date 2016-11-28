@@ -17,19 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, CreateArray, CreateMap, CreateNamedStruct, CreateNamedStructLike, CreateNamedStructUnsafe, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, IntegerLiteral, Literal}
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types._
-import org.scalatest.{ShouldMatchers, Suite, Tag}
-
-import scala.collection.immutable.IndexedSeq
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, CreateNamedStruct, Literal}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
+import org.scalatest.ShouldMatchers
 
 /**
 * Created by eyalf on 11/4/2016.
@@ -45,7 +39,7 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
   val idRefColumn = Column( "id" )
   val struct1RefColumn = Column( "struct1" )
 
-  test( "explicit" ) {
+  test("explicit") {
     val rel = baseRelation.select(
       functions.struct( idRefColumn as "att" ).getField("att") as "outerAtt"
     )
@@ -54,17 +48,13 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
 
     val optimized = rel.queryExecution.optimizedPlan
 
-    val expected = baseOptimizedPlan.select(
-      idRef as "outerAtt"
-    )
+    val expected = baseOptimizedPlan.select(idRef as "outerAtt")
 
     comparePlans(optimized, expected)
   }
 
-  test( "explicit - deduced att name") {
-    val rel = baseRelation.select(
-      functions.struct( idRefColumn as "att" ).getField("att")
-    )
+  test("explicit - deduced att name") {
+    val rel = baseRelation.select(functions.struct( idRefColumn as "att" ).getField("att"))
     rel.schema shouldEqual
       StructType(
         StructField( "named_struct(att, id AS `att`).att", LongType, nullable = false ) :: Nil
@@ -72,14 +62,12 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
 
     val optimized = rel.queryExecution.optimizedPlan
 
-    val expected = baseOptimizedPlan.select(
-      idRef as "named_struct(att, id AS `att`).att"
-    )
+    val expected = baseOptimizedPlan.select(idRef as "named_struct(att, id AS `att`).att")
 
     comparePlans(optimized, expected)
   }
 
-  test( "collapsed" ) {
+  test("collapsed") {
     val rel = baseRelation.select(
       functions.struct( idRefColumn as "att" ) as "struct1"
     )
@@ -87,13 +75,7 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
       StructType(
         StructField(
           "struct1",
-          StructType(
-            StructField(
-              "att",
-              LongType,
-              false
-            ) :: Nil
-          ),
+          StructType(StructField("att", LongType, false) :: Nil),
           false
         ) :: Nil
       )
@@ -107,14 +89,12 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
 
     val optimized = rel2.queryExecution.optimizedPlan
     val expected =
-      baseOptimizedPlan.select(
-        idRef as "struct1Att"
-      )
+      baseOptimizedPlan.select(idRef as "struct1Att"  )
 
     comparePlans( optimized, expected )
   }
 
-  test( "collapsed2" ) {
+  test("collapsed2") {
     val rel = baseRelation.select(
       functions.struct( idRefColumn as "att1", (idRefColumn * idRefColumn) as "att2" ) as "struct1"
     )
@@ -123,16 +103,8 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
         StructField(
           "struct1",
           StructType(
-            StructField(
-              "att1",
-              LongType,
-              false
-            ) ::
-              StructField(
-                "att2",
-                LongType,
-                false
-              ) :: Nil
+            StructField("att1", LongType, false) ::
+            StructField("att2", LongType, false ) :: Nil
           ),
           false
         ) :: Nil
@@ -145,8 +117,8 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
     rel2.schema shouldEqual
       StructType(
         StructField( "struct1Att1", LongType, false ) ::
-          StructField( "struct1Att2", LongType, false ) ::
-          Nil
+        StructField( "struct1Att2", LongType, false ) ::
+        Nil
       )
 
     val optimized = rel2.queryExecution.optimizedPlan
@@ -159,7 +131,7 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
     comparePlans( optimized, expected )
   }
 
-  test( "collapsed2 - deduced names" ) {
+  test("collapsed2 - deduced names") {
     val rel = baseRelation.select(
       functions.struct( idRefColumn as "att1", (idRefColumn * idRefColumn) as "att2" ) as "struct1"
     )
@@ -168,16 +140,8 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
         StructField(
           "struct1",
           StructType(
-            StructField(
-              "att1",
-              LongType,
-              false
-            ) ::
-              StructField(
-                "att2",
-                LongType,
-                false
-              ) :: Nil
+            StructField("att1", LongType, false) ::
+            StructField("att2", LongType, false) :: Nil
           ),
           false
         ) :: Nil
@@ -190,8 +154,8 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
     rel2.schema shouldEqual
       StructType(
         StructField( "struct1.att1", LongType, false ) ::
-          StructField( "struct1.att2", LongType, false ) ::
-          Nil
+        StructField( "struct1.att2", LongType, false ) ::
+        Nil
       )
 
     val optimized = rel2.queryExecution.optimizedPlan
@@ -204,7 +168,7 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
     comparePlans( optimized, expected )
   }
 
-  test( "simplified array ops") {
+  test("simplified array ops") {
     val arrRefColumn = Column("arr")
     val rel = baseRelation.select(
       functions.array(
@@ -221,16 +185,9 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
           "arr",
           ArrayType(
             StructType(
-              StructField(
-                "att1",
-                LongType,
-                false
-              ) ::
-                StructField(
-                  "att2",
-                  LongType,
-                  false
-                ) :: Nil
+              StructField("att1", LongType, false) ::
+              StructField("att2", LongType, false) ::
+              Nil
             ),
             false
           ),
@@ -251,8 +208,8 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
           StructField( "a2",
             StructType(
               StructField( "att1", LongType, nullable = false ) ::
-                StructField( "att2", LongType, nullable = false ) ::
-                Nil
+              StructField( "att2", LongType, nullable = false ) ::
+              Nil
             ),
             nullable = true
           ) ::
@@ -276,7 +233,7 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
     comparePlans( optimized, expected )
   }
 
-  test( "simplify map ops" ) {
+  test("simplify map ops") {
     val mRefColumn = Column("m")
     val rel = baseRelation.select(
       functions.map(
@@ -292,19 +249,12 @@ class Spark18601Suite extends PlanTest with SharedSQLContext with ShouldMatchers
           "m",
           MapType(
             StringType,
-            StructType(
-              StructField(
-                "att1",
-                LongType,
-                nullable = false
-              )
-                :: Nil
-            ),
+            StructType( StructField ("att1", LongType, nullable = false) :: Nil),
             valueContainsNull = false
           ),
           nullable = false
         )
-          :: Nil
+        :: Nil
       )
 
     val rel2 = rel.select(
