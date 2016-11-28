@@ -84,7 +84,7 @@ private[spark] class TaskSetManager(
   var totalResultSize = 0L
   var calculatedTasks = 0
 
-  private val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
+  private[scheduler] val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
     if (BlacklistTracker.isBlacklistEnabled(conf)) {
       Some(new TaskSetBlacklist(conf, stageId, clock))
     } else {
