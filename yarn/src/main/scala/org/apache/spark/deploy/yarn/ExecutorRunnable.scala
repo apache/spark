@@ -36,7 +36,6 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
@@ -75,7 +74,7 @@ private[yarn] class ExecutorRunnable(
     |===============================================================================
     |YARN executor launch context:
     |  env:
-    |${env.map { case (k, v) => s"    $k -> $v\n" }.mkString}
+    |${Utils.redact(sparkConf, env.toSeq).map { case (k, v) => s"    $k -> $v\n" }.mkString}
     |  command:
     |    ${commands.mkString(" \\ \n      ")}
     |
