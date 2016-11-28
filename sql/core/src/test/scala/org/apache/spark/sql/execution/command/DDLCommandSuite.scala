@@ -21,7 +21,6 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -613,12 +612,8 @@ class DDLCommandSuite extends PlanTest {
     val expected1_table = AlterTableDropPartitionCommand(
       tableIdent,
       Seq(
-        And(
-          EqualTo(AttributeReference("dt", StringType)(), Literal.create("2008-08-08", StringType)),
-          EqualTo(AttributeReference("country", StringType)(), Literal.create("us", StringType))),
-        And(
-          EqualTo(AttributeReference("dt", StringType)(), Literal.create("2009-09-09", StringType)),
-          EqualTo(AttributeReference("country", StringType)(), Literal.create("uk", StringType)))),
+        Map("dt" -> "2008-08-08", "country" -> "us"),
+        Map("dt" -> "2009-09-09", "country" -> "uk")),
       ifExists = true,
       purge = false)
     val expected2_table = expected1_table.copy(ifExists = false)
