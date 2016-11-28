@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Generator, _}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
@@ -1011,19 +1010,19 @@ class Analyzer(
     private def pullOutCorrelatedPredicates(sub: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
       val predicateMap = scala.collection.mutable.Map.empty[LogicalPlan, Seq[Expression]]
 
-      /** Make sure a plans' subtree does not contain a tagged predicate. */
+      // Make sure a plan's subtree does not contain outer references
       def failOnOuterReferenceInSubTree(p: LogicalPlan, msg: String): Unit = {
         if (p.collect(predicateMap).nonEmpty) {
           failAnalysis(s"Accessing outer query column is not allowed in $msg: $p")
         }
       }
 
-      /** Helper function for locating outer references. */
+      // Helper function for locating outer references.
       def containsOuter(e: Expression): Boolean = {
         e.find(_.isInstanceOf[OuterReference]).isDefined
       }
 
-      /** Make sure a plans' expressions do not contain a tagged predicate. */
+      // Make sure a plan's expressions do not contain outer references
       def failOnOuterReference(p: LogicalPlan): Unit = {
         if (p.expressions.exists(containsOuter)) {
           failAnalysis(
@@ -1076,10 +1075,54 @@ class Analyzer(
 
       // Simplify the predicates before pulling them out.
       val transformed = BooleanSimplification(sub) transformUp {
-        // WARNING:
-        // Only Filter can host correlated expressions at this time
-        // Anyone adding a new "case" below needs to add the call to
-        // "failOnOuterReference" to disallow correlated expressions in it.
+
+        // Whitelist operators allowed in a correlated subquery
+        // There are 3 categories:
+        // 1. Operators that are allowed anywhere in a correlated subquery
+        //    and, by definition, they cannot host outer references.
+        // 2. Operators that are allowed anywhere in a correlated subquery
+        //    so long as they do not host outer references.
+        // 3. Operators that need special treatment. These operators are
+        //    Project, Filter, Join, Aggregate, Window(?).
+        //
+        // Any operators that are not in the above list are allowed
+        // in a correlated subquery only if they are not on a correlation path.
+        // In other word, these operators are allowed only under a correlation point.
+        //
+        // A correlation path is defined as the sub-tree of all the operators that
+        // are on the path from the operator hosting the correlated expressions
+        // up to the operator producing the correlated values.
+
+        // Category 1:
+        // Leaf node can be anywhere in a correlated subquery.
+        case n: LeafNode =>
+          n
+        // Category 2:
+        // These operators can be anywhere in a correlated subquery.
+        // so long as they do not host outer references in the operators.
+        // SubqueryAlias can be anywhere in a correlated subquery.
+        case n: SubqueryAlias =>
+          failOnOuterReference(n)
+          n
+        case n: Distinct =>
+          failOnOuterReference(n)
+          n
+        case n: Sort =>
+          failOnOuterReference(n)
+          n
+        case n: Repartition =>
+          failOnOuterReference(n)
+          n
+        case n: RedistributeData =>
+          failOnOuterReference(n)
+          n
+        case n: BroadcastHint =>
+          failOnOuterReference(n)
+          n
+
+        // Category 3:
+        // Filter is the ONLY operator allowed to host correlated expressions.
+        // Filter can be anywhere in a correlated subquery.
         case f @ Filter(cond, child) =>
           // Find all predicates with an outer reference.
           val (correlated, local) = splitConjunctivePredicates(cond).partition(containsOuter)
@@ -1101,6 +1144,9 @@ class Analyzer(
               predicateMap += child -> xs
               child
           }
+
+        // Project cannot host any correlated expressions
+        // but can be anywhere in a correlated subquery.
         case p @ Project(expressions, child) =>
           failOnOuterReference(p)
           val referencesToAdd = missingReferences(p)
@@ -1109,6 +1155,12 @@ class Analyzer(
           } else {
             p
           }
+
+        // Aggregate cannot host any correlated expressions
+        // It can be on a correlation path if the correlation has
+        // only equality correlated predicates.
+        // It cannot be on a correlation path if the correlation has
+        // non-equality correlated predicates.
         case a @ Aggregate(grouping, expressions, child) =>
           failOnOuterReference(a)
           failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
@@ -1119,47 +1171,93 @@ class Analyzer(
           } else {
             a
           }
-        case w : Window =>
-          failOnOuterReference(w)
-          failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, w)
-          w
+
+        // Join cannot host any correlated expressions.
+        // Inner join, like Project, can be anywhere.
+        case j @ Join(_, _, jt, _) if jt.isInstanceOf[InnerLike] =>
+          failOnOuterReference(j)
+          j
+        // Right outer join's left operand cannot be on a correlation path.
         case j @ Join(left, _, RightOuter, _) =>
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(left, "a RIGHT OUTER JOIN")
           j
-        // SPARK-18578: Do not allow any correlated predicate
-        // in a Full (Outer) Join operator and its descendants
-        case j @ Join(_, _, FullOuter, _) =>
-          failOnOuterReferenceInSubTree(j, "a FULL OUTER JOIN")
-          j
-        case j @ Join(_, right, jt, _) if !jt.isInstanceOf[InnerLike] =>
+        // Likewise, Left outer join's right operand cannot be on a correlation path.
+        case j @ Join(_, right, LeftOuter, _) =>
           failOnOuterReference(j)
           failOnOuterReferenceInSubTree(right, "a LEFT (OUTER) JOIN")
           j
-        case u: Union =>
-          failOnOuterReferenceInSubTree(u, "a UNION")
-          u
-        case s: SetOperation =>
-          failOnOuterReferenceInSubTree(s.right, "an INTERSECT/EXCEPT")
-          s
-        case e: Expand =>
-          failOnOuterReferenceInSubTree(e, "an EXPAND")
-          e
-        case l : LocalLimit =>
-          failOnOuterReferenceInSubTree(l, "a LIMIT")
-          l
-        // Since LIMIT <n> is represented as GlobalLimit(<n>, (LocalLimit (<n>, child))
-        // and we are walking bottom up, we will fail on LocalLimit before
-        // reaching GlobalLimit.
-        // The code below is just a safety net.
-        case g : GlobalLimit =>
-          failOnOuterReferenceInSubTree(g, "a LIMIT")
-          g
-        case s : Sample =>
-          failOnOuterReferenceInSubTree(s, "a TABLESAMPLE")
-          s
+        // LeftSemi, LeftAnti and ExistenceJoin are special cases of LeftOuter.
+        // ExistenceJoin cannot be used externally in both SQL and DataFrame
+        // so it should not show up here in Analysis phase.
+        case j @ Join(_, right, LeftSemi, _) =>
+          failOnOuterReference(j)
+          failOnOuterReferenceInSubTree(right, "a LEFT (OUTER) JOIN")
+          j
+        case j @ Join(_, right, LeftAnti, _) =>
+          failOnOuterReference(j)
+          failOnOuterReferenceInSubTree(right, "a LEFT (OUTER) JOIN")
+          j
+        // Any other join types not explicitly listed above,
+        // including Full outer join, are treated as Category 4.
+        case j @ Join(_, _, _, _) =>
+          failOnOuterReferenceInSubTree(j, "other JOIN")
+          j
+
+        // ??
+        // Window cannot host any correlated expressions
+        // Window cannot be on or above any non-equality correlated expressions
+        case w : Window =>
+          failOnOuterReference(w)
+          failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, w)
+          w
+
+        // ??
+        case n @ Generate(generator, join, _, _, _, _) =>
+          // generator which is a derived class of Expression must not host
+          // any outer references
+        if (containsOuter(generator)) {
+          failOnOuterReference(n)
+        } else if (join) {
+          // LATERAL VIEW [OUTER]
+          failOnOuterReference(n)
+        } else {
+          failOnOuterReferenceInSubTree(n, "")
+        }
+        n
+
+        /*
+                // These operators are permitted under a correlation point
+                // They are not permitted between a correlation point and their outer reference.
+                case u: Union =>
+                  failOnOuterReferenceInSubTree(u, "a UNION")
+                  u
+                case s: SetOperation =>
+                  failOnOuterReferenceInSubTree(s.right, "an INTERSECT/EXCEPT")
+                  s
+                case e: Expand =>
+                  failOnOuterReferenceInSubTree(e, "an EXPAND")
+                  e
+                case l : LocalLimit =>
+                  failOnOuterReferenceInSubTree(l, "a LIMIT")
+                  l
+                // Since LIMIT <n> is represented as GlobalLimit(<n>, (LocalLimit (<n>, child))
+                // and we are walking bottom up, we will fail on LocalLimit before
+                // reaching GlobalLimit.
+                // The code below is just a safety net.
+                case g : GlobalLimit =>
+                  failOnOuterReferenceInSubTree(g, "a LIMIT")
+                  g
+                case s : Sample =>
+                  failOnOuterReferenceInSubTree(s, "a TABLESAMPLE")
+                  s
+        */
+        // Category 4: Any other operators not in the above 3 categories
+        // cannot be on a correlation path, that is they are allowed
+        // under a correlation point but they and their descendant operators
+        // are not allowed to have any correlated expressions.
         case p =>
-          failOnOuterReference(p)
+          failOnOuterReferenceInSubTree(p, "")
           p
       }
       (transformed, predicateMap.values.flatten.toSeq)
