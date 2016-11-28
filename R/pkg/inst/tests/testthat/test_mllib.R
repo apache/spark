@@ -662,15 +662,15 @@ test_that("spark.logit", {
   blr_summary <- summary(blr_model)
   blr_fmeasure <- collect(select(blr_summary$fMeasureByThreshold, "threshold", "F-Measure"))
   expect_equal(blr_fmeasure$threshold, c(0.6565513, 0.6214563, 0.3325291, 0.2115995, 0.1778653),
-  tolerance = 1e-4)
+               tolerance = 1e-4)
   expect_equal(blr_fmeasure$"F-Measure", c(0.6666667, 0.5000000, 0.8000000, 0.6666667, 0.5714286),
-  tolerance = 1e-4)
+               tolerance = 1e-4)
   blr_precision <- collect(select(blr_summary$precisionByThreshold, "threshold", "precision"))
   expect_equal(blr_precision$precision, c(1.0000000, 0.5000000, 0.6666667, 0.5000000, 0.4000000),
-  tolerance = 1e-4)
+               tolerance = 1e-4)
   blr_recall <- collect(select(blr_summary$recallByThreshold, "threshold", "recall"))
   expect_equal(blr_recall$recall, c(0.5000000, 0.5000000, 1.0000000, 1.0000000, 1.0000000),
-  tolerance = 1e-4)
+               tolerance = 1e-4)
 
   # test model save and read
   modelPath <- tempfile(pattern = "spark-logisticRegression", fileext = ".tmp")
