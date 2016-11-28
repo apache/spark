@@ -256,36 +256,40 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
     testStream(aggregated, Complete)(
       StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
 
-      // advance clock to 10 seconds
+      // advance clock to 10 seconds, all keys retained
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(10 * 1000),
-      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
-      AdvanceManualClock(5 * 1000), // advance by 5 seconds i.e., 15 seconds total
-
-      // bounce stream and ensure correct batch timestamp is used
-      // i.e., we don't take it from the clock, which is at 15 seconds.
-      StopStream,
-      AssertOnQuery { q => // clear the sink
-        q.sink.asInstanceOf[MemorySink].clear()
-        true
-      },
-      StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
 
       // advance clock to 20 seconds, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
-      AdvanceManualClock(5 * 1000),
+      AdvanceManualClock(10 * 1000),
       CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
 
       // advance clock to 30 seconds, should retain keys >= 20
-      AddData(inputData, 0L),
+      AddData(inputData, 0L, 85L),
       AdvanceManualClock(10 * 1000),
-      CheckLastBatch((20L, 1)),
+      CheckLastBatch((20L, 1), (85L, 1)),
 
-      // advance clock to 40 seconds, should retain keys >= 30
-      AddData(inputData, 25L, 30L, 40L, 45L),
+      // bounce stream and ensure correct batch timestamp is used
+      // i.e., we don't take it from the clock, which is at 90 seconds.
+      StopStream,
+      AssertOnQuery { q => // clear the sink
+        q.sink.asInstanceOf[MemorySink].clear()
+        // advance by a minute i.e., 90 seconds total
+        clock.advance(60 * 1000L)
+        true
+      },
+      StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
+      CheckLastBatch((20L, 1), (85L, 1)),
+      AssertOnQuery { q =>
+        clock.getTimeMillis() == 90000L
+      },
+
+      // advance clock to 100 seconds, should retain keys >= 90
+      AddData(inputData, 85L, 90L, 100L, 105L),
       AdvanceManualClock(10 * 1000),
-      CheckLastBatch((30L, 1), (40L, 1), (45L, 1))
+      CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
     )
   }
 
@@ -309,29 +313,31 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
-      // advance by 5 days i.e., 15 days total
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 5),
+      // advance clock to 20 days, should retain keys >= 10
+      AddData(inputData, 15L, 15L, 20L),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
+      // advance clock to 30 days, should retain keys >= 20
+      AddData(inputData, 85L),
+      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
+      CheckLastBatch((20L, 1), (85L, 1)),
+
       // bounce stream and ensure correct batch timestamp is used
-      // i.e., we don't take it from the clock, which is at 15 seconds.
+      // i.e., we don't take it from the clock, which is at 90 days.
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
+        // advance by 60 days i.e., 90 days total
+        clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
         true
       },
       StartStream(ProcessingTime("10 day"), triggerClock = clock),
-      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
-      // advance clock to 20 days, should retain keys >= 10
-      AddData(inputData, 15L, 15L, 20L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 5),
-      CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
-      // advance clock to 30 days, should retain keys >= 20
-      AddData(inputData, 0L),
+      CheckLastBatch((20L, 1), (85L, 1)),
+
+      // advance clock to 100 days, should retain keys >= 90
+      AddData(inputData, 85L, 90L, 100L, 105L),
       AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
-      CheckLastBatch((20L, 1)),
-      // advance clock to 40 days, should retain keys >= 30
-      AddData(inputData, 25L, 30L, 40L, 45L),
-      AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
-      CheckLastBatch((30L, 1), (40L, 1), (45L, 1))
+      CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
     )
   }
 }
