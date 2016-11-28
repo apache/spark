@@ -171,6 +171,7 @@ case class StaticInvoke(
  * @param arguments An optional list of expressions, whos evaluation will be passed to the function.
  * @param propagateNull When true, and any of the arguments is null, null will be returned instead
  *                      of calling the function.
+ * @param returnNullable When false, return value must be non-null.
  */
 case class Invoke(
     targetObject: Expression,
@@ -180,7 +181,7 @@ case class Invoke(
     propagateNull: Boolean = true,
     returnNullable : Boolean = true) extends InvokeLike {
 
-  override def nullable: Boolean = targetObject.nullable || returnNullable
+  override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
 
   override def eval(input: InternalRow): Any =
@@ -406,8 +407,8 @@ case class WrapOption(child: Expression, optType: DataType)
  * A place holder for the loop variable used in [[MapObjects]].  This should never be constructed
  * manually, but will instead be passed into the provided lambda function.
  */
-case class LambdaVariable(value: String, isNull: String, dataType: DataType,
-    valueNullable: Boolean = true) extends LeafExpression
+case class LambdaVariable(value: String, isNull: String, dataType: DataType, valueNullable: Boolean)
+    extends LeafExpression
   with Unevaluable with NonSQLExpression {
 
   override def nullable: Boolean = valueNullable
@@ -433,7 +434,7 @@ object MapObjects {
       elementType: DataType): MapObjects = {
     val loopValue = "MapObjects_loopValue" + curId.getAndIncrement()
     val loopIsNull = "MapObjects_loopIsNull" + curId.getAndIncrement()
-    val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
+    val loopVar = LambdaVariable(loopValue, loopIsNull, elementType, true)
     MapObjects(loopValue, loopIsNull, elementType, function(loopVar), inputData)
   }
 }
