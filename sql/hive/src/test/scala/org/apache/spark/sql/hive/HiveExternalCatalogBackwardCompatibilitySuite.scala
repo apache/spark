@@ -62,7 +62,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
 
 
   // Raw table metadata that are dumped from tables created by Spark 2.0. Note that, all spark
-  // versions prior to 2.1 would generate same raw table metadata for a specific table.
+  // versions prior to 2.1 would generate almost same raw table metadata for a specific table.
   val simpleSchema = new StructType().add("i", "int")
   val partitionedSchema = new StructType().add("i", "int").add("j", "int")
 
