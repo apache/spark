@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DecimalType, DoubleType}
+import org.apache.spark.sql.types.{ArrayType, DecimalType, DoubleType}
 import org.apache.spark.util.Utils
 
 
@@ -166,8 +166,13 @@ private[sql] class HiveSessionCatalog(
     } catch {
       case NonFatal(_) =>
         // SPARK-16228 ExternalCatalog may recognize `double`-type only.
+        // SPARK-18527 Percentile needs explicit cast to array<double>
         val newChildren = children.map { child =>
-          if (child.dataType.isInstanceOf[DecimalType]) Cast(child, DoubleType) else child
+          child.dataType match {
+            case ArrayType(DecimalType(), nullable) => Cast(child, ArrayType(DoubleType, nullable))
+            case DecimalType() => Cast(child, DoubleType)
+            case _ => child
+          }
         }
         lookupFunction0(name, newChildren)
     }
