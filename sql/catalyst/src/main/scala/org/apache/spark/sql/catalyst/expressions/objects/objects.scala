@@ -905,7 +905,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
         val fieldGen = fieldValue.genCode(ctx)
         s"""
            ${fieldGen.code}
-           this.${javaBeanInstance}.$setterMethod(${fieldGen.value});
+           ${javaBeanInstance}.$setterMethod(${fieldGen.value});
          """
     }
     val initializeCode = ctx.splitExpressions(ctx.INPUT_ROW, initialize.toSeq)
