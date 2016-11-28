@@ -8,7 +8,8 @@ same URI formats as in Hadoop. You can specify a path in Swift as input through 
 URI of the form <code>swift://container.PROVIDER/path</code>. You will also need to set your 
 Swift security credentials, through <code>core-site.xml</code> or via
 <code>SparkContext.hadoopConfiguration</code>.
-Current Swift driver requires Swift to use Keystone authentication method.
+The current Swift driver requires Swift to use the Keystone authentication method, or
+its Rackspace-specific predecessor.
 
 # Configuring Swift for Better Data Locality
 
@@ -40,7 +41,7 @@ If using the Scala 2.10-compatible version of Spark, the artifact is of course `
 # Configuration Parameters
 
 Create <code>core-site.xml</code> and place it inside Spark's <code>conf</code> directory.
-Ther main category of parameters that should to be configured are the authentication parameters
+The main category of parameters that should to be configured are the authentication parameters
 required by Keystone.
 
 The following table  contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be
