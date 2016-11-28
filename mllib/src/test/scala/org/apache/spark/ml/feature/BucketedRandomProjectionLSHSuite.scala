@@ -28,7 +28,7 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
 
-class RandomProjectionSuite
+class BucketedRandomProjectionLSHSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   @transient var dataset: Dataset[_] = _
@@ -43,70 +43,72 @@ class RandomProjectionSuite
   }
 
   test("params") {
-    ParamsSuite.checkParams(new RandomProjection)
-    val model = new RandomProjectionModel("rp", randUnitVectors = Array(Vectors.dense(1.0, 0.0)))
+    ParamsSuite.checkParams(new BucketedRandomProjectionLSH)
+    val model = new BucketedRandomProjectionLSHModel(
+      "brp", randUnitVectors = Array(Vectors.dense(1.0, 0.0)))
     ParamsSuite.checkParams(model)
   }
 
-  test("RandomProjection: default params") {
-    val rp = new RandomProjection
-    assert(rp.getOutputDim === 1.0)
+  test("BucketedRandomProjectionLSH: default params") {
+    val brp = new BucketedRandomProjectionLSH
+    assert(brp.getNumHashTables === 1.0)
   }
 
   test("read/write") {
-    def checkModelData(model: RandomProjectionModel, model2: RandomProjectionModel): Unit = {
+    def checkModelData(
+      model: BucketedRandomProjectionLSHModel,
+      model2: BucketedRandomProjectionLSHModel): Unit = {
       model.randUnitVectors.zip(model2.randUnitVectors)
         .foreach(pair => assert(pair._1 === pair._2))
     }
-    val mh = new RandomProjection()
+    val mh = new BucketedRandomProjectionLSH()
     val settings = Map("inputCol" -> "keys", "outputCol" -> "values", "bucketLength" -> 1.0)
     testEstimatorAndModelReadWrite(mh, dataset, settings, checkModelData)
   }
 
   test("hashFunction") {
     val randUnitVectors = Array(Vectors.dense(0.0, 1.0), Vectors.dense(1.0, 0.0))
-    val model = new RandomProjectionModel("rp", randUnitVectors)
+    val model = new BucketedRandomProjectionLSHModel("brp", randUnitVectors)
     model.set(model.bucketLength, 0.5)
     val res = model.hashFunction(Vectors.dense(1.23, 4.56))
-    assert(res.equals(Vectors.dense(9.0, 2.0)))
+    assert(res.length == 2)
+    assert(res(0).equals(Vectors.dense(9.0)))
+    assert(res(1).equals(Vectors.dense(2.0)))
   }
 
-  test("keyDistance and hashDistance") {
-    val model = new RandomProjectionModel("rp", Array(Vectors.dense(0.0, 1.0)))
+  test("keyDistance") {
+    val model = new BucketedRandomProjectionLSHModel("brp", Array(Vectors.dense(0.0, 1.0)))
     val keyDist = model.keyDistance(Vectors.dense(1, 2), Vectors.dense(-2, -2))
-    val hashDist = model.hashDistance(Vectors.dense(-5, 5), Vectors.dense(1, 2))
     assert(keyDist === 5)
-    assert(hashDist === 3)
   }
 
-  test("RandomProjection: randUnitVectors") {
-    val rp = new RandomProjection()
-      .setOutputDim(20)
+  test("BucketedRandomProjectionLSH: randUnitVectors") {
+    val brp = new BucketedRandomProjectionLSH()
+      .setNumHashTables(20)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
       .setSeed(12345)
-    val unitVectors = rp.fit(dataset).randUnitVectors
+    val unitVectors = brp.fit(dataset).randUnitVectors
     unitVectors.foreach { v: Vector =>
       assert(Vectors.norm(v, 2.0) ~== 1.0 absTol 1e-14)
     }
   }
 
-  test("RandomProjection: test of LSH property") {
+  test("BucketedRandomProjectionLSH: test of LSH property") {
     // Project from 2 dimensional Euclidean Space to 1 dimensions
-    val rp = new RandomProjection()
-      .setOutputDim(1)
+    val brp = new BucketedRandomProjectionLSH()
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
       .setSeed(12345)
 
-    val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(dataset, rp, 8.0, 2.0)
+    val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(dataset, brp, 8.0, 2.0)
     assert(falsePositive < 0.4)
     assert(falseNegative < 0.4)
   }
 
-  test("RandomProjection with high dimension data: test of LSH property") {
+  test("BucketedRandomProjectionLSH with high dimension data: test of LSH property") {
     val numDim = 100
     val data = {
       for (i <- 0 until numDim; j <- Seq(-2, -1, 1, 2))
@@ -115,30 +117,30 @@ class RandomProjectionSuite
     val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
 
     // Project from 100 dimensional Euclidean Space to 10 dimensions
-    val rp = new RandomProjection()
-      .setOutputDim(10)
+    val brp = new BucketedRandomProjectionLSH()
+      .setNumHashTables(10)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(2.5)
       .setSeed(12345)
 
-    val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, rp, 3.0, 2.0)
+    val (falsePositive, falseNegative) = LSHTest.calculateLSHProperty(df, brp, 3.0, 2.0)
     assert(falsePositive < 0.3)
     assert(falseNegative < 0.3)
   }
 
-  test("approxNearestNeighbors for random projection") {
+  test("approxNearestNeighbors for bucketed random projection") {
     val key = Vectors.dense(1.2, 3.4)
 
-    val rp = new RandomProjection()
-      .setOutputDim(2)
+    val brp = new BucketedRandomProjectionLSH()
+      .setNumHashTables(2)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
       .setSeed(12345)
 
-    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, dataset, key, 100,
-      singleProbing = true)
+    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(brp, dataset, key, 100,
+      singleProbe = true)
     assert(precision >= 0.6)
     assert(recall >= 0.6)
   }
@@ -146,33 +148,47 @@ class RandomProjectionSuite
   test("approxNearestNeighbors with multiple probing") {
     val key = Vectors.dense(1.2, 3.4)
 
-    val rp = new RandomProjection()
-      .setOutputDim(20)
+    val brp = new BucketedRandomProjectionLSH()
+      .setNumHashTables(20)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(1.0)
       .setSeed(12345)
 
-    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(rp, dataset, key, 100,
-      singleProbing = false)
+    val (precision, recall) = LSHTest.calculateApproxNearestNeighbors(brp, dataset, key, 100,
+      singleProbe = false)
     assert(precision >= 0.7)
     assert(recall >= 0.7)
   }
 
-  test("approxSimilarityJoin for random projection on different dataset") {
+  test("approxNearestNeighbors for numNeighbors <= 0") {
+    val key = Vectors.dense(1.2, 3.4)
+
+    val model = new BucketedRandomProjectionLSHModel(
+      "brp", randUnitVectors = Array(Vectors.dense(1.0, 0.0)))
+
+    intercept[IllegalArgumentException] {
+      model.approxNearestNeighbors(dataset, key, 0)
+    }
+    intercept[IllegalArgumentException] {
+      model.approxNearestNeighbors(dataset, key, -1)
+    }
+  }
+
+  test("approxSimilarityJoin for bucketed random projection on different dataset") {
     val data2 = {
       for (i <- 0 until 24) yield Vectors.dense(10 * sin(Pi / 12 * i), 10 * cos(Pi / 12 * i))
     }
     val dataset2 = spark.createDataFrame(data2.map(Tuple1.apply)).toDF("keys")
 
-    val rp = new RandomProjection()
-      .setOutputDim(2)
+    val brp = new BucketedRandomProjectionLSH()
+      .setNumHashTables(2)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
       .setSeed(12345)
 
-    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(rp, dataset, dataset2, 1.0)
+    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(brp, dataset, dataset2, 1.0)
     assert(precision == 1.0)
     assert(recall >= 0.7)
   }
@@ -183,14 +199,14 @@ class RandomProjectionSuite
     }
     val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
 
-    val rp = new RandomProjection()
-      .setOutputDim(2)
+    val brp = new BucketedRandomProjectionLSH()
+      .setNumHashTables(2)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
       .setSeed(12345)
 
-    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(rp, df, df, 3.0)
+    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(brp, df, df, 3.0)
     assert(precision == 1.0)
     assert(recall >= 0.7)
   }
