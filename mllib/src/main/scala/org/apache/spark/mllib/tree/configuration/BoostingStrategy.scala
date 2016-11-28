@@ -39,7 +39,7 @@ import org.apache.spark.mllib.tree.loss.{LogLoss, Loss, SquaredError}
  *                      If the current loss on the validation set is greater than 0.01, the diff
  *                      of validation error is compared to relative tolerance which is
  *                      validationTol * (current loss on the validation set).
- *                      If the current loss on the validation set is less than or euqal to 0.01,
+ *                      If the current loss on the validation set is less than or equal to 0.01,
  *                      the diff of validation error is compared to absolute tolerance which is
  *                      validationTol * 0.01.
  *                      Ignored when
