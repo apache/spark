@@ -602,8 +602,9 @@ private[spark] class BlockManager(
           numFetchFailures += 1
           if (numFetchFailures == locations.size) {
             // An exception is thrown while fetching this block from all locations
-            throw new BlockFetchException(s"Failed to fetch block from" +
+            logWarning(s"Failed to fetch block from" +
               s" ${locations.size} locations. Most recent failure cause:", e)
+            return None
           } else {
             // This location failed, so we retry fetch from a different one by returning null here
             logWarning(s"Failed to fetch remote block $blockId " +

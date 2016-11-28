@@ -485,6 +485,13 @@ object ScalaReflection extends ScalaReflection {
                 extractorFor(unwrapped, optType, newPath))
           }
 
+        // Since List[_] also belongs to localTypeOf[Product], we put this case before
+        // "case t if t <:< localTypeOf[Product]" to make sure it will match to the
+        // case "localTypeOf[Seq[_]]"
+        case t if t <:< localTypeOf[Seq[_]] =>
+          val TypeRef(_, _, Seq(elementType)) = t
+          toCatalystArray(inputObject, elementType)
+
         case t if t <:< localTypeOf[Product] =>
           val params = getConstructorParameters(t)
           val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
@@ -497,10 +504,6 @@ object ScalaReflection extends ScalaReflection {
           expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
         case t if t <:< localTypeOf[Array[_]] =>
-          val TypeRef(_, _, Seq(elementType)) = t
-          toCatalystArray(inputObject, elementType)
-
-        case t if t <:< localTypeOf[Seq[_]] =>
           val TypeRef(_, _, Seq(elementType)) = t
           toCatalystArray(inputObject, elementType)
 

@@ -1,7 +1,7 @@
 Package: SparkR
 Type: Package
 Title: R frontend for Spark
-Version: 1.6.1
+Version: 1.6.3
 Date: 2013-09-09
 Author: The Apache Software Foundation
 Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>

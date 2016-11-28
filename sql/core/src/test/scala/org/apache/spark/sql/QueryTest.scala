@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.{LogicalRDD, Queryable}
+import org.apache.spark.sql.types.Metadata
 
 abstract class QueryTest extends PlanTest {
 
@@ -224,6 +225,13 @@ abstract class QueryTest extends PlanTest {
     val normalized1 = logicalPlan.transformAllExpressions {
       case udf: ScalaUDF => udf.copy(function = null)
       case gen: UserDefinedGenerator => gen.copy(function = null)
+      // After SPARK-17356: the JSON representation no longer has the Metadata. We need to remove
+      // the Metadata from the normalized plan so that we can compare this plan with the
+      // JSON-deserialzed plan.
+      case a @ Alias(child, name) if a.explicitMetadata.isDefined =>
+        Alias(child, name)(a.exprId, a.qualifiers, Some(Metadata.empty))
+      case a: AttributeReference if a.metadata != Metadata.empty =>
+        AttributeReference(a.name, a.dataType, a.nullable, Metadata.empty)(a.exprId, a.qualifiers)
     }
 
     // RDDs/data are not serializable to JSON, so we need to collect LogicalPlans that contains

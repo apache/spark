@@ -96,6 +96,7 @@ case class Window(
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def canProcessUnsafeRows: Boolean = true
+  override def outputsUnsafeRows: Boolean = false
 
   /**
    * Create a bound ordering object for a given frame type and offset. A bound ordering object is

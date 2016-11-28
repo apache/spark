@@ -1119,9 +1119,9 @@ test_that("date functions on a DataFrame", {
                c(as.POSIXlt("2012-12-13 21:34:00 UTC"), as.POSIXlt("2014-12-15 10:24:34 UTC")))
   expect_equal(collect(select(df2, to_utc_timestamp(df2$b, "JST")))[, 1],
                c(as.POSIXlt("2012-12-13 03:34:00 UTC"), as.POSIXlt("2014-12-14 16:24:34 UTC")))
-  expect_more_than(collect(select(df2, unix_timestamp()))[1, 1], 0)
-  expect_more_than(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
-  expect_more_than(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
+  expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
+  expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
+  expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
 
   l3 <- list(list(a = 1000), list(a = -1000))
   df3 <- createDataFrame(sqlContext, l3)
@@ -1389,7 +1389,6 @@ test_that("toJSON() returns an RDD of the correct values", {
 
 test_that("showDF()", {
   df <- read.json(sqlContext, jsonPath)
-  s <- capture.output(showDF(df))
   expected <- paste("+----+-------+\n",
                     "| age|   name|\n",
                     "+----+-------+\n",
@@ -1397,7 +1396,7 @@ test_that("showDF()", {
                     "|  30|   Andy|\n",
                     "|  19| Justin|\n",
                     "+----+-------+\n", sep = "")
-  expect_output(s, expected)
+  expect_output(showDF(df), expected)
 })
 
 test_that("isLocal()", {
@@ -1749,6 +1748,9 @@ test_that("Method as.data.frame as a synonym for collect()", {
   expect_equal(as.data.frame(irisDF), collect(irisDF))
   irisDF2 <- irisDF[irisDF$Species == "setosa", ]
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
+
+  # Make sure as.data.frame in the R base package is not covered
+  expect_error(as.data.frame(c(1, 2)), NA)
 })
 
 test_that("attach() on a DataFrame", {

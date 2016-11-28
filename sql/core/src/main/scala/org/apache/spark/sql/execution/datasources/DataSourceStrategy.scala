@@ -255,9 +255,18 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       predicates: Seq[Expression],
       partitionSpec: PartitionSpec): Seq[Partition] = {
     val PartitionSpec(partitionColumns, partitions) = partitionSpec
-    val partitionColumnNames = partitionColumns.map(_.name).toSet
+    val isCaseSensitive = SQLContext.getActive().get.conf.caseSensitiveAnalysis
+    val partitionColumnNames = if (isCaseSensitive) {
+      partitionColumns.map(_.name).toSet
+    } else {
+      partitionColumns.map(_.name.toLowerCase).toSet
+    }
     val partitionPruningPredicates = predicates.filter {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+      if (isCaseSensitive) {
+        _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+      } else {
+        _.references.map(_.name.toLowerCase).toSet.subsetOf(partitionColumnNames)
+      }
     }
 
     if (partitionPruningPredicates.nonEmpty) {
@@ -268,7 +277,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       val boundPredicate = InterpretedPredicate.create(predicate.transform {
         case a: AttributeReference =>
-          val index = partitionColumns.indexWhere(a.name == _.name)
+          val index = if (isCaseSensitive) {
+            partitionColumns.indexWhere(a.name == _.name)
+          } else {
+            partitionColumns.indexWhere(c => a.name.equalsIgnoreCase(c.name))
+          }
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
       })
 

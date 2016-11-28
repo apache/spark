@@ -17,7 +17,8 @@
 
 package org.apache.spark
 
-import java.io.{File, FileWriter}
+import java.io._
+import java.util.zip.GZIPOutputStream
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.PortableDataStream
@@ -540,4 +541,63 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
         }.collect()
     assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
   }
+
+  test("spark.files.ignoreCorruptFiles should work both HadoopRDD and NewHadoopRDD") {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+
+      // Spark job should ignore corrupt files by default
+      sc = new SparkContext("local", "test")
+      // Test HadoopRDD
+      assert(sc.textFile(inputFile.toURI.toString).collect().isEmpty)
+      // Test NewHadoopRDD
+      assert {
+        sc.newAPIHadoopFile(
+          inputFile.toURI.toString,
+          classOf[NewTextInputFormat],
+          classOf[LongWritable],
+          classOf[Text]).collect().isEmpty
+      }
+      sc.stop()
+
+      // Reading a corrupt gzip file should throw EOFException
+      val conf = new SparkConf().set("spark.files.ignoreCorruptFiles", "false")
+      sc = new SparkContext("local", "test", conf)
+      // Test HadoopRDD
+      var e = intercept[SparkException] {
+        sc.textFile(inputFile.toURI.toString).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+      // Test NewHadoopRDD
+      e = intercept[SparkException] {
+        sc.newAPIHadoopFile(
+          inputFile.toURI.toString,
+          classOf[NewTextInputFormat],
+          classOf[LongWritable],
+          classOf[Text]).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+    } finally {
+      inputFile.delete()
+    }
+  }
+
 }

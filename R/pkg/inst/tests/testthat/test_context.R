@@ -109,6 +109,6 @@ test_that("sparkJars sparkPackages as comma-separated strings", {
 
   # check normalizePath
   f <- dir()[[1]]
-  expect_that(processSparkJars(f), not(gives_warning()))
+  expect_warning(processSparkJars(f), NA)
   expect_match(processSparkJars(f), f)
 })
