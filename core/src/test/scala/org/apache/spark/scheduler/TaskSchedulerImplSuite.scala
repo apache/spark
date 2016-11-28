@@ -307,7 +307,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     assert(taskScheduler.runningTasksByExecutors().get("executor0").isEmpty)
   }
 
-  test("if a task finishes with TaskState.LOST then mark its executor as dead") {
+  test("if a task finishes with TaskState.LOST its executor is marked as dead") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
     taskScheduler.initialize(new FakeSchedulerBackend)
