@@ -57,7 +57,7 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(mesos, yarn, sparkGangliaLgpl,
-    streamingKinesisAsl, dockerIntegrationTests) =
+    streamingKinesisAsl, dockerIntegrationTests, cloud) =
     Seq("mesos", "yarn", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
