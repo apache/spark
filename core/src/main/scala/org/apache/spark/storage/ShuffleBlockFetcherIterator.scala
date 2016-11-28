@@ -24,7 +24,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -32,7 +31,7 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.Utils
-import org.apache.spark.util.io.{ChunkedByteBufferInputStream, ChunkedByteBufferOutputStream}
+import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -50,8 +49,10 @@ import org.apache.spark.util.io.{ChunkedByteBufferInputStream, ChunkedByteBuffer
  * @param blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
  *                        For each block we also require the size (in bytes as a long field) in
  *                        order to throttle the memory usage.
+ * @param streamWrapper A function to wrap the returned input stream.
  * @param maxBytesInFlight max size (in bytes) of remote blocks to fetch at any given point.
  * @param maxReqsInFlight max number of remote requests to fetch blocks at any given point.
+ * @param detectCorrupt whether to detect any corruption in fetched blocks.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -113,7 +114,10 @@ final class ShuffleBlockFetcherIterator(
   /** Current number of requests in flight */
   private[this] var reqsInFlight = 0
 
-  /** The blocks that can't be decompressed successfully */
+  /**
+   * The blocks that can't be decompressed successfully, it is used to guarantee that we retry
+   * at most once for those corrupted blocks.
+   */
   private[this] val corruptedBlocks = mutable.HashSet[BlockId]()
 
   private[this] val shuffleMetrics = context.taskMetrics().createTempShuffleReadMetrics()
@@ -359,7 +363,7 @@ final class ShuffleBlockFetcherIterator(
               // TODO: manage the memory used here, and spill it into disk in case of OOM.
               Utils.copyStream(input, out)
               out.close()
-              input = out.toChunkedByteBuffer.toInputStream(true)
+              input = out.toChunkedByteBuffer.toInputStream(dispose = true)
             } catch {
               case e: IOException =>
                 buf.release()
@@ -367,13 +371,14 @@ final class ShuffleBlockFetcherIterator(
                   || corruptedBlocks.contains(blockId)) {
                   throwFetchFailedException(blockId, address, e)
                 } else {
-                  logWarning(s"got an corrupted block $blockId from $address, fetch again")
+                  logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
                   corruptedBlocks += blockId
                   fetchRequests += FetchRequest(address, Array((blockId, size)))
                   result = null
                 }
             } finally {
               // TODO: release the buf here to free memory earlier
+              input.close()
               in.close()
             }
           }
