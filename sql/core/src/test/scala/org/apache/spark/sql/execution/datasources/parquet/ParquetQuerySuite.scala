@@ -769,6 +769,32 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+
+  test("Ensure file with multiple blocks splits properly with filters") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1024",
+      ParquetOutputFormat.BLOCK_SIZE -> "1") {
+      withTempPath { path =>
+        spark.sparkContext.parallelize((1 to 1000).map(x => x.toString), 1)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val column: Column = df.col("x").isNotNull
+        assert(df.filter(column).count == df.count)
+      }
+    }
+  }
+
+  test("Ensure unconvertable filters don't break splitting") {
+    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+      withTempPath { path =>
+        spark.sparkContext.parallelize((1 to 1000).map(x => x.toString), 1)
+          .toDF("x").write.parquet(path.getCanonicalPath)
+        val df = spark.read.parquet(path.getCanonicalPath)
+        val column: Column = df.col("x").startsWith("1000")
+        assert(df.filter(column).count == 1)
+      }
+    }
+  }
 }
 
 class CountingFileSystem extends RawLocalFileSystem {

@@ -78,9 +78,9 @@ class ParquetMetadataFileSplitter(
       (applied, unapplied, filteredBlocks)
     }
 
-    val eligible = parquetFilter(unapplied, filteredBlocks).map { bmd =>
+    val eligible = applyParquetFilter(unapplied, filteredBlocks).map { bmd =>
       val blockPath = new Path(root, bmd.getPath)
-      new FileSplit(blockPath, bmd.getStartingPos, bmd.getTotalByteSize, Array.empty)
+      new FileSplit(blockPath, bmd.getStartingPos, bmd.getCompressedSize, Array.empty)
     }
 
     val statFilter: (FileStatus => Seq[FileSplit]) = { stat =>
@@ -95,19 +95,20 @@ class ParquetMetadataFileSplitter(
     statFilter
   }
 
-  private def parquetFilter(
+  private def applyParquetFilter(
       filters: Seq[Filter],
       blocks: Seq[BlockMetaData]): Seq[BlockMetaData] = {
-    if (filters.nonEmpty) {
+    val predicates = filters.flatMap {
+      ParquetFilters.createFilter(schema, _)
+    }
+    if (predicates.nonEmpty) {
       // Asynchronously build bitmaps
       Future {
         buildFilterBitMaps(filters)
       }(ParquetMetadataFileSplitter.executionContext)
 
-      val predicate = filters.flatMap {
-        ParquetFilters.createFilter(schema, _)
-      }.reduce(FilterApi.and)
-      blocks.filter(bmd => !StatisticsFilter.canDrop(predicate, bmd.getColumns))
+      val predicate = predicates.reduce(FilterApi.and)
+      blocks.filterNot(bmd => StatisticsFilter.canDrop(predicate, bmd.getColumns))
     } else {
       blocks
     }
