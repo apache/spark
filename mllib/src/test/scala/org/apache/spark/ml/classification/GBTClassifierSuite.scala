@@ -70,6 +70,14 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     ParamsSuite.checkParams(model)
   }
 
+  test("GBT parameter stepSize should be in interval (0, 1]") {
+    withClue("GBT parameter stepSize should be in interval (0, 1]") {
+      intercept[IllegalArgumentException] {
+        new GBTClassifier().setStepSize(10)
+      }
+    }
+  }
+
   test("Binary classification with continuous features: Log Loss") {
     val categoricalFeatures = Map.empty[Int, Int]
     testCombinations.foreach {

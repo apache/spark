@@ -52,12 +52,10 @@ case class CatalogStorageFormat(
     properties: Map[String, String]) {
 
   override def toString: String = {
-    val serdePropsToString =
-      if (properties.nonEmpty) {
-        s"Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-      } else {
-        ""
-      }
+    val serdePropsToString = CatalogUtils.maskCredentials(properties) match {
+      case props if props.isEmpty => ""
+      case props => "Properties: " + props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    }
     val output =
       Seq(locationUri.map("Location: " + _).getOrElse(""),
         inputFormat.map("InputFormat: " + _).getOrElse(""),
