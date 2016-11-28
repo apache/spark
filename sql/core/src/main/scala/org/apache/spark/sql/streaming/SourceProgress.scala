@@ -33,9 +33,9 @@ import org.apache.spark.annotation.Experimental
  * @param description Description of the source.
  * @param startOffset The starting offset for data being read.
  * @param endOffset The ending offset for data being read.
- * @param numRecords The number of records read from this source.
- * @param inputRecordsPerSecond The rate at which data is arriving from this source.
- * @param processedRecordsPerSecond The rate at which data from this source is being procressed by
+ * @param numInputRows The number of records read from this source.
+ * @param inputRowsPerSecond The rate at which data is arriving from this source.
+ * @param processedRowsPerSecond The rate at which data from this source is being procressed by
  *                                  Spark.
  * @since 2.1.0
  */
@@ -44,9 +44,9 @@ class SourceProgress protected[sql](
     val description: String,
     val startOffset: String,
     val endOffset: String,
-    val numRecords: Long,
-    val inputRecordsPerSecond: Double,
-    val processedRecordsPerSecond: Double) {
+    val numInputRows: Long,
+    val inputRowsPerSecond: Double,
+    val processedRowsPerSecond: Double) {
 
   /** The compact JSON representation of this status. */
   def json: String = compact(render(jsonValue))
@@ -60,9 +60,9 @@ class SourceProgress protected[sql](
     ("description" -> JString(description)) ~
     ("startOffset" -> tryParse(startOffset)) ~
     ("endOffset" -> tryParse(endOffset)) ~
-    ("numRecords" -> JInt(numRecords)) ~
-    ("inputRecordsPerSecond" -> JDouble(inputRecordsPerSecond)) ~
-    ("processedRecordsPerSecond" -> JDouble(processedRecordsPerSecond))
+    ("numInputRows" -> JInt(numInputRows)) ~
+    ("inputRowsPerSecond" -> JDouble(inputRowsPerSecond)) ~
+    ("processedRowsPerSecond" -> JDouble(processedRowsPerSecond))
   }
 
   private def tryParse(json: String) = try {

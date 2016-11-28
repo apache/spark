@@ -133,9 +133,9 @@ trait ProgressReporter extends Logging {
         description = source.toString,
         startOffset = committedOffsets.get(source).map(_.json).orNull,
         endOffset = availableOffsets.get(source).map(_.json).orNull,
-        numRecords = numRecords,
-        inputRecordsPerSecond = inputRecordsPerSecond,
-        processedRecordsPerSecond = processedRecordsPerSecond
+        numInputRows = numRecords,
+        inputRowsPerSecond = inputRecordsPerSecond,
+        processedRowsPerSecond = processedRecordsPerSecond
       )
     }
 
@@ -214,8 +214,8 @@ trait ProgressReporter extends Logging {
     }
     val stateOperators = stateNodes.map { node =>
       new StateOperatorProgress(
-        numEntries = node.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L),
-        numUpdated = node.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
+        numRowsTotal = node.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L),
+        numRowsUpdated = node.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
     }
 
     ExecutionStats(numInputRows, stateOperators)

@@ -38,23 +38,24 @@ class StreamingQueryProgressSuite extends SparkFunSuite {
         |  "id" : "${testProgress.id.toString}",
         |  "name" : "name",
         |  "timestamp" : 1,
-        |  "inputRecordsPerSecond" : 10.0,
-        |  "processedRecordsPerSecond" : 1.7976931348623157E308,
+        |  "numInputRows" : 678,
+        |  "inputRowsPerSecond" : 10.0,
+        |  "processedRowsPerSecond" : 1.7976931348623157E308,
         |  "durationMs" : {
         |    "total" : 0
         |  },
         |  "currentWatermark" : 3,
         |  "stateOperators" : [ {
-        |    "numEntries" : 0,
-        |    "numUpdated" : 1
+        |    "numRowsTotal" : 0,
+        |    "numRowsUpdated" : 1
         |  } ],
         |  "sources" : [ {
         |    "description" : "source",
         |    "startOffset" : 123,
         |    "endOffset" : 456,
-        |    "numRecords" : 678,
-        |    "inputRecordsPerSecond" : 10.0,
-        |    "processedRecordsPerSecond" : 1.7976931348623157E308
+        |    "numInputRows" : 678,
+        |    "inputRowsPerSecond" : 10.0,
+        |    "processedRowsPerSecond" : 1.7976931348623157E308
         |  } ]
         |}
       """.stripMargin.trim)
@@ -79,15 +80,15 @@ object StreamingQueryProgressSuite {
     batchId = 2L,
     durationMs = Map("total" -> 0L).mapValues(long2Long).asJava,
     currentWatermark = 3L,
-    stateOperators = Array(new StateOperatorProgress(numEntries = 0, numUpdated = 1)),
+    stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
     sources = Array(
       new SourceProgress(
         description = "source",
         startOffset = "123",
         endOffset = "456",
-        numRecords = 678,
-        inputRecordsPerSecond = 10.0,
-        processedRecordsPerSecond = Double.MaxValue
+        numInputRows = 678,
+        inputRowsPerSecond = 10.0,
+        processedRowsPerSecond = Double.MaxValue
       )
     )
   )

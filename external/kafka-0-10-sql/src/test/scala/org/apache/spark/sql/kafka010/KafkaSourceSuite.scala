@@ -408,7 +408,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
       AssertOnQuery { query =>
-        val recordsRead = query.recentProgress.map(_.numRecords).sum
+        val recordsRead = query.recentProgress.map(_.numInputRows).sum
         recordsRead == 3
       }
     )

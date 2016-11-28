@@ -36,11 +36,11 @@ import org.apache.spark.annotation.Experimental
  */
 @Experimental
 class StateOperatorProgress private[sql](
-    val numEntries: Long,
-    val numUpdated: Long) {
+    val numRowsTotal: Long,
+    val numRowsUpdated: Long) {
   private[sql] def jsonValue: JValue = {
-    ("numEntries" -> JInt(numEntries)) ~
-    ("numUpdated" -> JInt(numUpdated))
+    ("numRowsTotal" -> JInt(numRowsTotal)) ~
+    ("numRowsUpdated" -> JInt(numRowsUpdated))
   }
 }
 
@@ -75,13 +75,13 @@ class StreamingQueryProgress private[sql](
   val sources: Array[SourceProgress]) {
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
-  def numRecords: Long = sources.map(_.numRecords).sum
+  def numInputRows: Long = sources.map(_.numInputRows).sum
 
   /** The aggregate (across all sources) rate of data arriving. */
-  def inputRecordsPerSecond: Double = sources.map(_.inputRecordsPerSecond).sum
+  def inputRowsPerSecond: Double = sources.map(_.inputRowsPerSecond).sum
 
   /** The aggregate (across all sources) rate at which Spark is processing data. */
-  def processedRecordsPerSecond: Double = sources.map(_.processedRecordsPerSecond).sum
+  def processedRowsPerSecond: Double = sources.map(_.processedRowsPerSecond).sum
 
   /** The compact JSON representation of this status. */
   def json: String = compact(render(jsonValue))
@@ -95,8 +95,9 @@ class StreamingQueryProgress private[sql](
     ("id" -> JString(id.toString)) ~
     ("name" -> JString(name)) ~
     ("timestamp" -> JInt(timestamp)) ~
-    ("inputRecordsPerSecond" -> JDouble(inputRecordsPerSecond)) ~
-    ("processedRecordsPerSecond" -> JDouble(processedRecordsPerSecond)) ~
+    ("numInputRows" -> JInt(numInputRows)) ~
+    ("inputRowsPerSecond" -> JDouble(inputRowsPerSecond)) ~
+    ("processedRowsPerSecond" -> JDouble(processedRowsPerSecond)) ~
     ("durationMs" -> durationMs
         .asScala
         .map { case (k, v) => k -> JInt(v.toLong): JObject }
